@@ -12,10 +12,8 @@ import firebase_admin
 from fastapi import FastAPI
 
 from routers import (
-    workflow,
     chat,
     firmware,
-    plugins,
     transcribe,
     notifications,
     speech_profile,
@@ -24,7 +22,6 @@ from routers import (
     trends,
     sync,
     apps,
-    custom_auth,
     payment,
     integration,
     conversations,
@@ -40,7 +37,6 @@ from routers import (
     developer,
     updates,
     calendar_meetings,
-    calendar_onboarding,
     imports,
     knowledge_graph,
     wrapped,
@@ -86,11 +82,9 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
-app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 # app.include_router(screenpipe.router)
 app.include_router(notifications.router)
-app.include_router(workflow.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
@@ -103,9 +97,7 @@ app.include_router(updates.router)
 app.include_router(sync.router)
 
 app.include_router(apps.router)
-app.include_router(custom_auth.router)
 app.include_router(calendar_meetings.router)
-app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 
@@ -146,7 +138,6 @@ app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 @app.on_event("shutdown")
 async def shutdown_event():
     await close_all_clients()
-
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

@@ -143,11 +143,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
-  - name: WORKFLOW_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: WORKFLOW_API_KEY
   - name: STT_SERVICE_MODELS
     valueFrom:
       secretKeyRef:

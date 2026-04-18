@@ -705,19 +705,6 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     return persona_data
 
 
-@router.get('/v1/apps/check-username', tags=['v1'])
-def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
-    is_taken = is_username_taken(username)
-    return {'is_taken': is_taken}
-
-
-@router.get('/v1/personas/generate-username', tags=['v1'])
-def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
-    username = handle.replace(' ', '')
-    username = increment_username(username)
-    return {'username': username}
-
-
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)

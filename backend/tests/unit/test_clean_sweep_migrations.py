@@ -16,7 +16,6 @@ Covers round 2:
 
 Covers round 3:
 - routers/action_items.py: threading.Thread → critical_executor
-- routers/calendar_onboarding.py: requests → httpx, threading → critical_executor
 - routers/chat.py: threading.Thread → critical_executor for goal progress
 - routers/developer.py: threading.Thread → critical_executor for persona update
 - routers/mcp.py: threading.Thread → critical_executor for persona update
@@ -256,23 +255,6 @@ class TestActionItemsExecutorMigration:
     def test_uses_critical_executor(self):
         src = _read_source('routers/action_items.py')
         assert 'critical_executor.submit(' in src
-
-
-class TestCalendarOnboardingMigration:
-    """Verify calendar_onboarding uses httpx and critical_executor."""
-
-    def test_uses_httpx(self):
-        src = _read_source('routers/calendar_onboarding.py')
-        assert 'import httpx' in src
-        assert 'import requests' not in src
-
-    def test_no_threading_thread(self):
-        src = _read_source('routers/calendar_onboarding.py')
-        assert 'threading.Thread' not in src
-
-    def test_uses_critical_executor(self):
-        src = _read_source('routers/calendar_onboarding.py')
-        assert 'critical_executor' in src
 
 
 class TestChatExecutorMigration:

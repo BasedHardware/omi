@@ -60,11 +60,6 @@ class TestAuthNoBlockingRequests:
         violations = _get_async_functions_with_requests(filepath)
         assert violations == [], f"Blocking requests calls in async oauth.py: {violations}"
 
-    def test_custom_auth_no_blocking_requests(self):
-        filepath = os.path.join(BACKEND_DIR, 'routers', 'custom_auth.py')
-        violations = _get_async_functions_with_requests(filepath)
-        assert violations == [], f"Blocking requests calls in async custom_auth.py: {violations}"
-
 
 class TestSocialNoBlockingPatterns:
     """Verify social.py has no blocking patterns in async functions."""
