@@ -766,7 +766,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     const sendPrompt = async (): Promise<void> => {
       const promptBlocks: Array<Record<string, unknown>> = [];
       if (msg.imageBase64) {
-        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/jpeg" });
+        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/webp" });
       }
       promptBlocks.push({ type: "text", text: fullPrompt });
 
