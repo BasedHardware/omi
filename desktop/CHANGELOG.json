@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Pause Rewind screen capture while screenshot apps (CleanShot, Shottr, macOS screenshot, Loom, OBS, etc.) are frontmost so their capture no longer stalls on WindowServer contention"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.334",
+      "date": "2026-04-18",
+      "changes": [
+        "Pause Rewind screen capture while screenshot apps (CleanShot, Shottr, macOS screenshot, Loom, OBS, etc.) are frontmost so their capture no longer stalls on WindowServer contention"
+      ]
+    },
     {
       "version": "0.11.332",
       "date": "2026-04-18",
