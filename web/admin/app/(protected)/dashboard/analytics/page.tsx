@@ -101,6 +101,7 @@ interface RetentionData {
 interface DailyNewUsersData {
   data: { date: string; users: number; cumulative: number }[];
   totalUsers: number;
+  windowUsers: number;
   days: number;
 }
 
@@ -600,6 +601,11 @@ export default function AnalyticsPage() {
         <div className="flex items-start justify-between mb-1">
           <div>
             <h2 className="text-lg font-semibold">Cumulative Users</h2>
+            {dailyNewUsers?.totalUsers != null && (
+              <div className="text-3xl font-bold mt-1">
+                {dailyNewUsers.totalUsers.toLocaleString()}
+              </div>
+            )}
             <p className="text-sm text-muted-foreground">Total users across all platforms</p>
           </div>
           <div className="flex rounded-md border border-input overflow-hidden">
@@ -1449,15 +1455,22 @@ export default function AnalyticsPage() {
 
       {/* Daily New Users + Rolling Avg */}
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Daily New Users</h2>
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <h2 className="text-lg font-semibold">Daily New Users</h2>
+            {dailyNewUsers?.totalUsers != null && (
+              <div className="text-3xl font-bold mt-1">
+                {dailyNewUsers.totalUsers.toLocaleString()}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">First-time sign-ins with 7-day rolling average</p>
+          </div>
           {dailyWithRollingAvg.length > 0 && (
             <span className="text-sm text-muted-foreground">
               {dailyWithRollingAvg.reduce((s, p) => s + p.users, 0).toLocaleString()} in last 30d
             </span>
           )}
         </div>
-        <p className="text-sm text-muted-foreground mb-4">First-time sign-ins with 7-day rolling average</p>
         <div className="h-[350px]">
           {dailyNewUsersLoading ? (
             <div className="flex items-center justify-center h-full">

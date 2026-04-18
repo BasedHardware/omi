@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
 import { getUserGrowthSeries, sliceSeries } from "@/lib/services/user-growth";
 
 export const dynamic = "force-dynamic";
 
+// Public, unauthenticated endpoint. Returns only aggregate counts —
+// no UIDs, emails, or any other user-level data.
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
-
   try {
     const { searchParams } = new URL(request.url);
     const series = await getUserGrowthSeries();
-    return NextResponse.json(sliceSeries(series, searchParams.get("days")));
+    const body = sliceSeries(series, searchParams.get("days"));
+    return NextResponse.json(body, {
+      headers: {
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+      },
+    });
   } catch (error: any) {
-    console.error("Daily new users error:", error);
+    console.error("Public user-growth error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to fetch daily new users" },
+      { error: "Failed to fetch user growth" },
       { status: 500 },
     );
   }
