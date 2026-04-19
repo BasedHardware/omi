@@ -779,11 +779,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
 
         let barFrame = self.frame
-        // Check if the bar's center point is on any visible screen
-        let center = NSPoint(x: barFrame.midX, y: barFrame.midY)
-        let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(center) }
-        if !onScreen {
-            log("FloatingControlBarWindow: bar center \(center) is off-screen after monitor change, re-centering")
+        // Match the clamp approach used elsewhere in this window: prefer an
+        // on-screen clamp over unconditional re-centering, so the bar stays
+        // near where the user left it when a monitor is plugged/unplugged.
+        // visibleFrame already excludes the Dock and menu bar, so clamping
+        // also fixes the same Dock-encroachment scenario the rest of the PR
+        // addresses.
+        if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(barFrame) }) {
+            let clamped = FloatingControlBarWindow.clamp(barFrame, to: targetScreen.visibleFrame)
+            if clamped != barFrame {
+                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after monitor change")
+                self.setFrameOrigin(clamped.origin)
+                UserDefaults.standard.set(NSStringFromPoint(clamped.origin), forKey: FloatingControlBarWindow.positionKey)
+            }
+        } else {
+            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering")
             UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
             centerOnMainScreen()
         }
