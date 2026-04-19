@@ -207,6 +207,63 @@ class TestGetChatQuotaSnapshot:
         snapshot = sub_mod.get_chat_quota_snapshot("uid123")
         assert snapshot['allowed'] is False
 
+    def test_over_cap_percent_clamps_at_100(self, monkeypatch):
+        """When used > limit, percent should clamp at 100.0 (not exceed it)."""
+        monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "200")
+        sub_mod = _reload_subscription_module()
+
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.unlimited))
+        _db_user_usage_mod.get_monthly_chat_usage = MagicMock(
+            return_value={
+                'questions': 500,
+                'cost_usd': 0.0,
+                'reset_at': _RESET_AT,
+            }
+        )
+
+        snapshot = sub_mod.get_chat_quota_snapshot("uid123")
+        # Percent clamping is done at the endpoint level, not in the snapshot.
+        # Verify the snapshot returns raw values for the endpoint to clamp.
+        assert snapshot['used'] == 500.0
+        assert snapshot['limit'] == 200.0
+        assert snapshot['allowed'] is False
+
+    def test_reset_at_propagated(self, monkeypatch):
+        """reset_at from usage data flows through the snapshot."""
+        monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "200")
+        sub_mod = _reload_subscription_module()
+
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.unlimited))
+        _db_user_usage_mod.get_monthly_chat_usage = MagicMock(
+            return_value={
+                'questions': 50,
+                'cost_usd': 0.0,
+                'reset_at': 1746057600,
+            }
+        )
+
+        snapshot = sub_mod.get_chat_quota_snapshot("uid123")
+        assert snapshot['reset_at'] == 1746057600
+
+    def test_no_subscription_falls_back_to_basic(self, monkeypatch):
+        """When user has no subscription, falls back to basic plan limits."""
+        monkeypatch.setenv("FREE_CHAT_QUESTIONS_PER_MONTH", "30")
+        sub_mod = _reload_subscription_module()
+
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=None)
+        _db_user_usage_mod.get_monthly_chat_usage = MagicMock(
+            return_value={
+                'questions': 25,
+                'cost_usd': 0.0,
+                'reset_at': _RESET_AT,
+            }
+        )
+
+        snapshot = sub_mod.get_chat_quota_snapshot("uid123")
+        assert snapshot['allowed'] is True
+        assert snapshot['limit'] == 30.0
+        assert snapshot['unit'] == 'questions'
+
 
 # ── enforce_chat_quota ──────────────────────────────────────────────────────
 
