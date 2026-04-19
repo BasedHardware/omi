@@ -152,7 +152,7 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    user_language = users_db.get_user_language_preference(uid)
+    output_language = user_profile.get('language', '') or 'en'
 
     all_person_ids = []
     for m in conversations:
@@ -213,6 +213,7 @@ def generate_comprehensive_daily_summary(
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
+OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
 
 Today's date: {date_str}
 Conversations: {total_conversations}
@@ -264,7 +265,7 @@ RULES:
 - conversation_number: Reference which conversation (1-{total_conversations}) it came from.
 - SKIP sections entirely if no quality content.
 - Be snappy. No fluff. No corporate speak. Only include sections that are genuinely useful and relevant.
-{f'- IMPORTANT: You MUST write the ENTIRE summary in {user_language}. All text including headline, overview, highlights, questions, decisions, and knowledge nuggets MUST be in {user_language}. Do NOT write in English.' if user_language and user_language != 'en' else ''}
+- OUTPUT LANGUAGE: Every word — headline, overview, highlights, questions, decisions, knowledge nuggets — MUST be in {output_language}. Do not use any other language.
 
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
