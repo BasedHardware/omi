@@ -250,6 +250,22 @@ mod tests {
         assert_eq!(s.to_decision(), RateDecision::Allow);
     }
 
+    // --- Boundary: just below thresholds ---
+
+    #[test]
+    fn snapshot_allow_just_below_soft_limit() {
+        let soft = model_qos::daily_soft_limit();
+        let s = RateSnapshot { daily_count: soft - 1, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::Allow);
+    }
+
+    #[test]
+    fn snapshot_degrade_just_below_hard_limit() {
+        let hard = model_qos::daily_hard_limit();
+        let s = RateSnapshot { daily_count: hard - 1, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
+    }
+
     // --- No Redis → unmetered (cache bypassed entirely) ---
 
     #[tokio::test]
