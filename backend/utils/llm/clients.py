@@ -1,5 +1,5 @@
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import anthropic
 import httpx
@@ -11,28 +11,108 @@ from models.structured import Structured
 from utils.byok import get_byok_key
 from utils.llm.usage_tracker import get_usage_callback
 
-# Anthropic client for chat agent
-anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+# ---------------------------------------------------------------------------
+# BYOK routing proxies
+#
+# The backend has ~50 call sites that use module-level `llm_medium`, `llm_mini`,
+# etc. directly (e.g. `llm_medium.invoke(prompt)` or `llm_medium.bind_tools(...).ainvoke(...)`).
+# Rewriting every site to go through a factory would be a massive sweep.
+#
+# Instead we wrap each default client in a transparent proxy: every attribute
+# access resolves to either the default client or a BYOK-keyed client built
+# on the fly, keyed by (model, api_key) so we build each BYOK client once.
+# `__getattr__` forwards `bind_tools`, `with_structured_output`, `|` chaining,
+# etc. to the resolved client so tool-use/structured-output still route right.
+# ---------------------------------------------------------------------------
+
+
+class _OpenAIChatProxy:
+    """Forwards every attribute and call to the appropriate ChatOpenAI for the request."""
+
+    __slots__ = ('_model', '_default', '_ctor_kwargs')
+
+    def __init__(self, model: str, default: ChatOpenAI, ctor_kwargs: Dict[str, Any]):
+        object.__setattr__(self, '_model', model)
+        object.__setattr__(self, '_default', default)
+        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _resolve(self) -> ChatOpenAI:
+        byok = get_byok_key('openai')
+        if byok:
+            return _cached_openai_chat(self._model, byok, self._ctor_kwargs)
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    # Needed for `prompt | model | parser`-style chain composition.
+    def __or__(self, other):
+        return self._resolve() | other
+
+    def __ror__(self, other):
+        return other | self._resolve()
+
+
+class _AnthropicClientProxy:
+    """Forwards every attribute to the appropriate anthropic.AsyncAnthropic for the request."""
+
+    __slots__ = ('_default',)
+
+    def __init__(self, default: anthropic.AsyncAnthropic):
+        object.__setattr__(self, '_default', default)
+
+    def _resolve(self) -> anthropic.AsyncAnthropic:
+        byok = get_byok_key('anthropic')
+        if byok:
+            return _cached_anthropic(byok)
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+
+_openai_cache: Dict[str, ChatOpenAI] = {}
+_anthropic_cache: Dict[str, anthropic.AsyncAnthropic] = {}
+
+
+def _cached_openai_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]) -> ChatOpenAI:
+    cache_key = f"{model}:{hash(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
+    inst = _openai_cache.get(cache_key)
+    if inst is None:
+        inst = ChatOpenAI(model=model, api_key=api_key, **ctor_kwargs)
+        _openai_cache[cache_key] = inst
+    return inst
+
+
+def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
+    inst = _anthropic_cache.get(api_key)
+    if inst is None:
+        inst = anthropic.AsyncAnthropic(api_key=api_key)
+        _anthropic_cache[api_key] = inst
+    return inst
+
+
+def _byok_openai(model: str, **ctor_kwargs) -> _OpenAIChatProxy:
+    """Build a module-level ChatOpenAI that transparently routes to BYOK if set."""
+    default = ChatOpenAI(model=model, **ctor_kwargs)
+    return _OpenAIChatProxy(model=model, default=default, ctor_kwargs=ctor_kwargs)
+
+
+# Anthropic client for chat agent (module-level, BYOK-aware)
+_default_anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
 
 
 def get_anthropic_client() -> anthropic.AsyncAnthropic:
-    """Return an Anthropic client keyed to the current request's BYOK key, if present.
-
-    Falls back to the process-wide client (which uses ANTHROPIC_API_KEY env var).
-    Callers on hot paths should switch to this helper so BYOK users pay their
-    own Anthropic bill.
-    """
-    key = get_byok_key('anthropic')
-    if key:
-        return anthropic.AsyncAnthropic(api_key=key)
-    return anthropic_client
+    """Kept as a factory for callers that prefer explicit routing over the module proxy."""
+    return anthropic_client._resolve()
 
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
-    """Return a ChatOpenAI instance keyed to the current request's BYOK key, if present."""
+    """Explicit factory; equivalent to using the module-level proxies."""
     byok = get_byok_key('openai')
     if byok:
-        return ChatOpenAI(model=model, api_key=byok, **kwargs)
+        return _cached_openai_chat(model, byok, kwargs)
     return ChatOpenAI(model=model, **kwargs)
 
 
@@ -42,39 +122,39 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()
 
-# Base models for general use
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
-llm_mini_stream = ChatOpenAI(
-    model='gpt-4.1-mini',
+# Base models for general use — proxies route to BYOK OpenAI key per-request when set.
+llm_mini = _byok_openai('gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini_stream = _byok_openai(
+    'gpt-4.1-mini',
     streaming=True,
     stream_options={"include_usage": True},
     callbacks=[_usage_callback],
 )
-llm_large = ChatOpenAI(model='o1-preview', callbacks=[_usage_callback])
-llm_large_stream = ChatOpenAI(
-    model='o1-preview',
-    streaming=True,
-    stream_options={"include_usage": True},
-    temperature=1,
-    callbacks=[_usage_callback],
-)
-llm_high = ChatOpenAI(model='o4-mini', callbacks=[_usage_callback])
-llm_high_stream = ChatOpenAI(
-    model='o4-mini',
+llm_large = _byok_openai('o1-preview', callbacks=[_usage_callback])
+llm_large_stream = _byok_openai(
+    'o1-preview',
     streaming=True,
     stream_options={"include_usage": True},
     temperature=1,
     callbacks=[_usage_callback],
 )
-llm_medium = ChatOpenAI(model='gpt-5.2', callbacks=[_usage_callback])
-llm_medium_stream = ChatOpenAI(
-    model='gpt-5.2',
+llm_high = _byok_openai('o4-mini', callbacks=[_usage_callback])
+llm_high_stream = _byok_openai(
+    'o4-mini',
+    streaming=True,
+    stream_options={"include_usage": True},
+    temperature=1,
+    callbacks=[_usage_callback],
+)
+llm_medium = _byok_openai('gpt-5.2', callbacks=[_usage_callback])
+llm_medium_stream = _byok_openai(
+    'gpt-5.2',
     streaming=True,
     stream_options={"include_usage": True},
     callbacks=[_usage_callback],
 )
-llm_medium_experiment = ChatOpenAI(
-    model='gpt-5.1',
+llm_medium_experiment = _byok_openai(
+    'gpt-5.1',
     extra_body={"prompt_cache_retention": "24h"},
     callbacks=[_usage_callback],
 )
@@ -85,14 +165,14 @@ llm_medium_experiment = ChatOpenAI(
 _agent_cache_kwargs = {
     "prompt_cache_key": "omi-agent-v1",
 }
-llm_agent = ChatOpenAI(
-    model='gpt-5.1',
+llm_agent = _byok_openai(
+    'gpt-5.1',
     extra_body={"prompt_cache_retention": "24h"},
     callbacks=[_usage_callback],
     model_kwargs=_agent_cache_kwargs,
 )
-llm_agent_stream = ChatOpenAI(
-    model='gpt-5.1',
+llm_agent_stream = _byok_openai(
+    'gpt-5.1',
     streaming=True,
     stream_options={"include_usage": True},
     extra_body={"prompt_cache_retention": "24h"},
