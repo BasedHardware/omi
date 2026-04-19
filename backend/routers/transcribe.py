@@ -327,6 +327,12 @@ async def _stream_handler(
         user_language_preference=user_language_preference,
     )
 
+    # Screen-aware deferral and mid-session translate toggle state
+    screen_active = True  # Assume screen is on at session start
+    translation_enabled_mid_session = translation_language is not None  # Tracks mid-session toggle
+    deferred_segments: Dict[str, dict] = {}  # seg_id -> segment dict, accumulated while screen off
+    deferred_removed_ids: set = set()
+
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
@@ -1632,10 +1638,55 @@ async def _stream_handler(
     translation_flushing = False
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str, removed_ids: List[str] = None):
-        """Route updated segments to the TranslationCoordinator."""
+        """Route updated segments to the TranslationCoordinator, with screen-aware deferral."""
+        nonlocal screen_active, translation_coordinator
         if not translation_coordinator:
             return
+
+        if not screen_active:
+            # Screen is off — defer translation to save cost
+            for seg in segments:
+                seg_id = seg.id if hasattr(seg, 'id') else seg.get('id', '')
+                seg_text = seg.text if hasattr(seg, 'text') else seg.get('text', '')
+                if seg_id and seg_text:
+                    deferred_segments[seg_id] = {
+                        'id': seg_id,
+                        'text': seg_text,
+                        'conversation_id': conversation_id,
+                    }
+            if removed_ids:
+                for rid in removed_ids:
+                    deferred_removed_ids.add(rid)
+                    deferred_segments.pop(rid, None)
+            return
+
         await translation_coordinator.observe(segments, removed_ids or [], conversation_id)
+
+    async def _flush_deferred_translations():
+        """Batch-translate all segments deferred while screen was off."""
+        nonlocal translation_coordinator
+        if not deferred_segments or not translation_coordinator:
+            return
+
+        # Group deferred segments by conversation_id
+        by_conv: Dict[str, list] = {}
+        for seg_id, info in deferred_segments.items():
+            conv_id = info['conversation_id']
+            if conv_id not in by_conv:
+                by_conv[conv_id] = []
+            by_conv[conv_id].append((seg_id, info['text']))
+
+        for conv_id, units in by_conv.items():
+            try:
+                results = translation_service.translate_units_batch(translation_coordinator.target_language, units)
+                for seg_id, translated_text, detected_lang in results:
+                    if translated_text and detected_lang:
+                        await _on_translation_ready(seg_id, translated_text, detected_lang, conv_id)
+            except Exception as e:
+                logger.error(f"Deferred translation batch error: {e} {uid} {session_id}")
+
+        deferred_segments.clear()
+        deferred_removed_ids.clear()
 
     async def flush_pending_translations():
         """Flush all pending translations before cleanup."""
@@ -2301,6 +2352,8 @@ async def _stream_handler(
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal audio_ring_buffer, dg_usage_ms_pending
+        nonlocal translation_coordinator, translation_language, translation_language_base, translation_enabled_mid_session
+        nonlocal conversation_language_state, screen_active
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2487,6 +2540,67 @@ async def _stream_handler(
                                         for seg in suggested_segments:
                                             seg['stt_provider'] = stt_provider
                                     stream_transcript(suggested_segments)
+                        elif json_data.get('type') == 'translate_toggle':
+                            # Mid-session translation toggle (issue #6837)
+                            enabled = json_data.get('enabled', False)
+                            logger.info(f"translate_toggle enabled={enabled} {uid} {session_id}")
+                            if enabled and not translation_coordinator:
+                                # Lazily create coordinator on first enable
+                                lang_pref = user_db.get_user_language_preference(uid)
+                                if lang_pref:
+                                    translation_language = lang_pref
+                                    translation_language_base = lang_pref.split('-')[0]
+                                    translation_enabled_mid_session = True
+                                    conversation_language_state = ConversationLanguageState(lang_pref)
+                                    translation_coordinator = TranslationCoordinator(
+                                        target_language=lang_pref,
+                                        translation_service=translation_service,
+                                        on_translation_ready=_on_translation_ready,
+                                        language_state=conversation_language_state,
+                                    )
+                                    # Batch-translate existing segments for the current conversation
+                                    if current_conversation_id:
+                                        conv = _get_cached_conversation()
+                                        if conv:
+                                            existing = conv.get('transcript_segments', [])
+                                            units = [
+                                                (s['id'], s['text'])
+                                                for s in existing
+                                                if s.get('text') and not s.get('translations')
+                                            ]
+                                            if units:
+                                                try:
+                                                    results = translation_service.translate_units_batch(
+                                                        lang_pref, units
+                                                    )
+                                                    for seg_id, translated_text, detected_lang in results:
+                                                        if translated_text and detected_lang:
+                                                            await _on_translation_ready(
+                                                                seg_id,
+                                                                translated_text,
+                                                                detected_lang,
+                                                                current_conversation_id,
+                                                            )
+                                                except Exception as e:
+                                                    logger.error(
+                                                        f"Batch translate on toggle error: {e} {uid} {session_id}"
+                                                    )
+                                else:
+                                    logger.info(f"translate_toggle: no language preference set {uid} {session_id}")
+                            elif not enabled and translation_coordinator:
+                                # Disable translation — flush pending then stop
+                                await flush_pending_translations()
+                                translation_coordinator = None
+                                translation_enabled_mid_session = False
+                        elif json_data.get('type') == 'screen_state':
+                            # Screen on/off tracking for translation cost deferral (issue #6837)
+                            active = json_data.get('active', True)
+                            if active != screen_active:
+                                screen_active = active
+                                logger.info(f"screen_state active={active} {uid} {session_id}")
+                                if active and deferred_segments:
+                                    # Screen turned on — flush deferred translations
+                                    await _flush_deferred_translations()
                         elif json_data.get('type') == 'speaker_assigned':
                             segment_ids = json_data.get('segment_ids', [])
                             can_assign = False
