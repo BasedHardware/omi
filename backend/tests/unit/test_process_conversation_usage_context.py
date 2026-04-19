@@ -46,6 +46,7 @@ for submodule in [
     "apps",
     "llm_usage",
     "_client",
+    "auth",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -73,6 +74,9 @@ for attr in ["get_user_language_preference", "get_people_by_ids"]:
 
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="Test User")
 
 from utils.llm import usage_tracker
 
@@ -424,6 +428,43 @@ def test_action_items_skipped_on_discard():
     assert discarded is True
     # extract_action_items should NOT have been called
     extract_mock.assert_not_called()
+
+
+def test_process_conversation_filters_shared_ids_before_people_lookup():
+    """process_conversation() must not pass shared:{uid} IDs into get_people_by_ids()."""
+    conversation = MagicMock()
+    conversation.id = None
+    conversation.get_person_ids.return_value = ['person-alice', 'shared:owner_uid', 'shared:owner_uid']
+
+    final_conversation = MagicMock()
+    final_conversation.id = 'conv-123'
+    final_conversation.private_cloud_sync_enabled = False
+    final_conversation.dict.return_value = {'id': 'conv-123'}
+
+    users_mod = sys.modules["database.users"]
+    users_mod.get_people_by_ids = MagicMock(return_value=[])
+
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_conversation_meeting_id = MagicMock(return_value=None)
+
+    conversations_mod = sys.modules["database.conversations"]
+    conversations_mod.upsert_conversation = MagicMock()
+
+    with patch.object(
+        process_conversation, "_get_structured", MagicMock(return_value=(MagicMock(), True))
+    ), patch.object(
+        process_conversation, "_get_conversation_obj", MagicMock(return_value=final_conversation)
+    ), patch.object(
+        process_conversation, "resolve_shared_people", MagicMock(return_value=[])
+    ) as resolve_shared_mock:
+        result = process_conversation.process_conversation("user-6", "en", conversation, is_reprocess=True)
+
+    assert result is final_conversation
+    users_mod.get_people_by_ids.assert_called_once_with("user-6", ["person-alice"])
+    resolve_shared_mock.assert_called_once()
+    resolved_person_ids = resolve_shared_mock.call_args[0][0]
+    assert "shared:owner_uid" in resolved_person_ids
+    assert "person-alice" in resolved_person_ids
 
 
 def test_models_unchanged_for_llm_calls():

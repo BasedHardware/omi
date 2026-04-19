@@ -72,7 +72,9 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from database.auth import get_user_name
 from utils.other.storage import precache_conversation_audio
+from utils.shared_profiles import get_local_person_ids, resolve_shared_people
 
 logger = logging.getLogger(__name__)
 
@@ -484,7 +486,6 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database.auth import get_user_name
 
             user_name = get_user_name(uid)
 
@@ -656,8 +657,13 @@ def process_conversation(
     person_ids = conversation.get_person_ids()
     people = []
     if person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        unique_person_ids = list(set(person_ids))
+        local_person_ids = get_local_person_ids(unique_person_ids)
+        people_data = users_db.get_people_by_ids(uid, local_person_ids)
         people = [Person(**p) for p in people_data]
+
+        # Resolve shared profile names for LLM transcript
+        people.extend(resolve_shared_people(unique_person_ids, uid))
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)

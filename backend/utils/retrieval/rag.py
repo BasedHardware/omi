@@ -9,6 +9,7 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
+from utils.shared_profiles import get_local_person_ids, resolve_shared_people
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
@@ -90,8 +91,11 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
 
     people = []
     if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        unique_person_ids = list(set(all_person_ids))
+        local_person_ids = get_local_person_ids(unique_person_ids)
+        people_data = users_db.get_people_by_ids(uid, local_person_ids)
         people = [Person(**p) for p in people_data]
+        people.extend(resolve_shared_people(unique_person_ids, uid))
 
     user_name = get_user_name(uid, use_default=False)
 

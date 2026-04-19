@@ -62,6 +62,8 @@ notifications-job (modal/job.py)  [cron]
 
 Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
 
+Speech profile sharing (`backend/routers/speech_profile.py`, `backend/database/users.py`): owner can share/revoke/remove speech-profile access via `users/{owner}/shared_speech_profiles/{target}` (`shared_with_uid`, `revoked_at`). `/v4/listen` loads active shared owner embeddings into `person_embeddings_cache` as `shared:{owner_uid}` at session start. Shared IDs are valid for transcript/retrieval name resolution, but are excluded from pusher speaker-sample extraction.
+
 See service descriptions in AGENTS.md. Update both files when service boundaries change.
 
 ---

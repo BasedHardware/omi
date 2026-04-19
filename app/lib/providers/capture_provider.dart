@@ -248,6 +248,7 @@ class CaptureProvider extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  Map<int, String> sharedSpeakerNames = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -328,6 +329,7 @@ class CaptureProvider extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    sharedSpeakerNames = {};
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
@@ -399,9 +401,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -415,13 +416,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -514,24 +515,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -619,8 +616,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -723,9 +720,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1466,7 +1462,10 @@ class CaptureProvider extends ChangeNotifier
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
-    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+    if (!isUser &&
+        event.personId.isNotEmpty &&
+        !event.personId.startsWith('shared:') &&
+        SharedPreferencesUtil().getPersonById(event.personId) == null) {
       SharedPreferencesUtil().addCachedPerson(
         Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
       );
@@ -1479,6 +1478,10 @@ class CaptureProvider extends ChangeNotifier
           seg.isUser = isUser;
           seg.personId = isUser ? null : event.personId;
         }
+      }
+      // cache shared speaker names for transcript display
+      if (event.personId.startsWith('shared:')) {
+        sharedSpeakerNames[event.speakerId] = event.personName;
       }
       _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
     }
@@ -1507,9 +1510,15 @@ class CaptureProvider extends ChangeNotifier
         }
       }
 
+      // Cache shared speaker names for display
+      if (finalPersonId.startsWith('shared:')) {
+        sharedSpeakerNames[speakerId] = personName;
+      }
+
       // Add person to local cache if not exists (backward compatibility for old apps)
       if (finalPersonId.isNotEmpty &&
           finalPersonId != 'user' &&
+          !finalPersonId.startsWith('shared:') &&
           SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
         SharedPreferencesUtil().addCachedPerson(
           Person(id: finalPersonId, name: personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),

@@ -10251,6 +10251,82 @@
             }
         }
     },
+    "shareSpeechProfile": "Share Speech Profile",
+    "@shareSpeechProfile": {
+        "description": "Title for the share speech profile dialog"
+    },
+    "enterUserIdToShare": "Enter the user ID to share your speech profile with",
+    "@enterUserIdToShare": {
+        "description": "Instruction text in the share speech profile dialog"
+    },
+    "profileSharedSuccess": "Speech profile shared successfully",
+    "@profileSharedSuccess": {
+        "description": "Snackbar message after successfully sharing a speech profile"
+    },
+    "profileSharedFail": "Failed to share speech profile",
+    "@profileSharedFail": {
+        "description": "Snackbar message when sharing a speech profile fails"
+    },
+    "cannotShareWithSelf": "You cannot share your speech profile with yourself",
+    "@cannotShareWithSelf": {
+        "description": "Error message when user tries to share with their own ID"
+    },
+    "userNotFound": "User not found",
+    "@userNotFound": {
+        "description": "Error when the target user ID does not exist"
+    },
+    "noSharedProfiles": "You haven't shared your speech profile with anyone yet",
+    "@noSharedProfiles": {
+        "description": "Empty state text when user has not shared their profile"
+    },
+    "noProfilesSharedWithYou": "No one has shared their speech profile with you yet",
+    "@noProfilesSharedWithYou": {
+        "description": "Empty state text when no profiles shared with user"
+    },
+    "revokeShareConfirmation": "Stop sharing your speech profile with this user?",
+    "@revokeShareConfirmation": {
+        "description": "Confirmation message for revoking speech profile sharing"
+    },
+    "speechProfileSharing": "Speech Profile Sharing",
+    "@speechProfileSharing": {
+        "description": "Menu title and page title for speech profile sharing management"
+    },
+    "noSpeechProfileRecorded": "You need to record your speech profile before sharing",
+    "@noSpeechProfileRecorded": {
+        "description": "Message when user tries to share without a speech profile"
+    },
+    "recordNow": "Record Now",
+    "@recordNow": {
+        "description": "Button text to navigate to speech profile recording"
+    },
+    "sharedWithSection": "Shared With",
+    "@sharedWithSection": {
+        "description": "Section header for users you have shared your profile with"
+    },
+    "sharedWithYouSection": "Shared With You",
+    "@sharedWithYouSection": {
+        "description": "Section header for users who shared their profile with you"
+    },
+    "removeSharedProfile": "Remove",
+    "@removeSharedProfile": {
+        "description": "Button text to remove a shared profile"
+    },
+    "removeSharedProfileConfirmation": "Stop using this shared speech profile?",
+    "@removeSharedProfileConfirmation": {
+        "description": "Confirmation message for removing a shared profile"
+    },
+    "alreadySharedWithUser": "You have already shared your speech profile with this user",
+    "@alreadySharedWithUser": {
+        "description": "Error when trying to share with someone you already shared with"
+    },
+    "revokeShareFail": "Failed to revoke shared profile",
+    "@revokeShareFail": {
+        "description": "Error message when revoking a shared speech profile fails"
+    },
+    "removeShareFail": "Failed to remove shared profile",
+    "@removeShareFail": {
+        "description": "Error message when removing a shared speech profile fails"
+    },
     "omisStorage": "Omi's Storage",
     "@omisStorage": {
         "description": "Label for device storage tier in sync pipeline"

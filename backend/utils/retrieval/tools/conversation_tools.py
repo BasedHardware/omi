@@ -17,6 +17,7 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
+from utils.shared_profiles import get_local_person_ids, resolve_shared_people
 from utils.llm.clients import embeddings
 import logging
 
@@ -213,8 +214,10 @@ def get_conversations_tool(
 
             # Fetch people data
             if all_person_ids:
-                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+                local_person_ids = get_local_person_ids(list(all_person_ids))
+                people_data = users_db.get_people_by_ids(uid, local_person_ids)
                 people = [Person(**p) for p in people_data]
+                people.extend(resolve_shared_people(list(all_person_ids), uid))
                 logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
@@ -434,8 +437,10 @@ def search_conversations_tool(
 
             # Fetch people data
             if all_person_ids:
-                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+                local_person_ids = get_local_person_ids(list(all_person_ids))
+                people_data = users_db.get_people_by_ids(uid, local_person_ids)
                 people = [Person(**p) for p in people_data]
+                people.extend(resolve_shared_people(list(all_person_ids), uid))
                 logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
