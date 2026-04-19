@@ -843,7 +843,8 @@ async fn merge_conversations(
     // If reprocessing is requested and we have an LLM client, process the merged conversation
     if request.reprocess {
         if let Some(api_key) = &state.config.gemini_api_key {
-            let llm = LlmClient::new(api_key.clone());
+            let llm = LlmClient::new(api_key.clone())
+                .with_model(crate::llm::model_qos::gemini_extraction());
 
             // Get existing data for deduplication
             let existing_memories = state
