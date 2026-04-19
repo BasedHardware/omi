@@ -467,3 +467,186 @@ class TestRollbackScenario:
     def test_override_persona_to_different_model(self, monkeypatch):
         monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'anthropic/claude-3.5-sonnet')
         assert get_model('persona_chat') == 'anthropic/claude-3.5-sonnet'
+
+
+class TestProfileSelectionAtImportTime:
+    """Verify MODEL_QOS env var selects the correct profile at module load time."""
+
+    def test_premium_profile_selected_via_env(self):
+        """MODEL_QOS=premium should select premium profile at import time."""
+        import subprocess
+
+        result = subprocess.run(
+            [
+                'python3',
+                '-c',
+                (
+                    "import sys; from unittest.mock import MagicMock; "
+                    "[sys.modules.setdefault(m, MagicMock()) for m in "
+                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
+                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
+                    "'database','database._client','database.llm_usage']]; "
+                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
+                    "os.environ['MODEL_QOS']='premium'; "
+                    "from utils.llm.clients import _active_profile_name; "
+                    "assert _active_profile_name == 'premium', f'Expected premium, got {_active_profile_name}'"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+        )
+        assert result.returncode == 0, f"premium profile test failed: {result.stderr}"
+
+    def test_invalid_profile_falls_back_to_max(self):
+        """MODEL_QOS=bogus should fall back to max profile."""
+        import subprocess
+
+        result = subprocess.run(
+            [
+                'python3',
+                '-c',
+                (
+                    "import sys; from unittest.mock import MagicMock; "
+                    "[sys.modules.setdefault(m, MagicMock()) for m in "
+                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
+                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
+                    "'database','database._client','database.llm_usage']]; "
+                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
+                    "os.environ['MODEL_QOS']='bogus'; "
+                    "from utils.llm.clients import _active_profile_name; "
+                    "assert _active_profile_name == 'max', f'Expected max fallback, got {_active_profile_name}'"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+        )
+        assert result.returncode == 0, f"invalid profile fallback test failed: {result.stderr}"
+
+
+class TestExpandedCallsiteCoverage:
+    """Verify all wired files use get_llm/get_model with correct feature keys."""
+
+    def _read_source(self, rel_path: str) -> str:
+        from pathlib import Path
+
+        backend_dir = Path(__file__).resolve().parent.parent.parent
+        return (backend_dir / rel_path).read_text()
+
+    def test_chat_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/chat.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'chat_responses' in calls
+        assert 'fair_use' in calls or 'chat_extraction' in calls
+        assert 'llm_mini.invoke' not in source
+        assert 'llm_medium_experiment' not in source
+
+    def test_persona_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/persona.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'persona_clone' in calls
+        assert 'llm_mini' not in source or 'llm_mini' in source.split('import')[0]
+
+    def test_goals_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/goals.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'goals' in calls
+
+    def test_notifications_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/notifications.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'notifications' in calls
+
+    def test_app_generator_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/app_generator.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'app_generator' in calls
+
+    def test_graph_py_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/retrieval/graph.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'chat_graph' in calls
+
+    def test_perplexity_tools_uses_get_model(self):
+        import re
+
+        source = self._read_source("utils/retrieval/tools/perplexity_tools.py")
+        calls = re.findall(r"get_model\('(\w+)'", source)
+        assert 'web_search' in calls
+
+    def test_chat_sessions_router_uses_get_llm(self):
+        source = self._read_source("routers/chat_sessions.py")
+        assert "get_llm('session_titles')" in source
+
+    def test_apps_router_uses_get_llm(self):
+        source = self._read_source("routers/apps.py")
+        assert "get_llm('app_integration')" in source
+
+    def test_app_integrations_uses_get_llm(self):
+        source = self._read_source("utils/app_integrations.py")
+        assert "get_llm('app_integration')" in source
+
+    def test_external_integrations_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/external_integrations.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'external_structure' in calls
+        assert 'daily_summary' in calls or 'daily_summary_simple' in calls
+
+    def test_proactive_notification_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/llm/proactive_notification.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'proactive_notification' in calls
+
+    def test_generate_2025_uses_get_llm(self):
+        import re
+
+        source = self._read_source("utils/wrapped/generate_2025.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert 'wrapped_analysis' in calls
+
+    def test_onboarding_uses_get_llm(self):
+        source = self._read_source("utils/onboarding.py")
+        assert "get_llm('onboarding')" in source
+
+    def test_no_legacy_llm_mini_invocations_in_wired_files(self):
+        """No wired file should still call llm_mini.invoke or llm_medium_experiment.invoke."""
+        wired_files = [
+            "utils/llm/chat.py",
+            "utils/llm/conversation_processing.py",
+            "utils/llm/memories.py",
+            "utils/llm/knowledge_graph.py",
+            "utils/llm/proactive_notification.py",
+            "utils/llm/external_integrations.py",
+            "utils/llm/goals.py",
+            "utils/llm/notifications.py",
+            "utils/llm/persona.py",
+            "utils/llm/followup.py",
+            "utils/llm/app_generator.py",
+            "utils/llm/trends.py",
+            "utils/onboarding.py",
+            "utils/retrieval/graph.py",
+        ]
+        for path in wired_files:
+            source = self._read_source(path)
+            assert 'llm_mini.invoke' not in source, f"{path} still uses llm_mini.invoke"
+            assert 'llm_medium_experiment.invoke' not in source, f"{path} still uses llm_medium_experiment.invoke"
+            assert 'llm_high.invoke' not in source, f"{path} still uses llm_high.invoke"
