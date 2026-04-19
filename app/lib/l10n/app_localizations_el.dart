@@ -9152,4 +9152,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get currentPlan => 'Τρέχον';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count ερωτήσεις ανά μήνα';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count ερωτήσεις ανά μήνα';
+  }
+
+  @override
+  String get architectSubtitle => 'AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί';
 }

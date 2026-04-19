@@ -9075,4 +9075,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get currentPlan => 'Aktuálny';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count otázok mesačne';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count otázok mesačne';
+  }
+
+  @override
+  String get architectSubtitle => 'Pokročilé AI — tisíce chatov + agentná automatizácia';
 }

@@ -9086,4 +9086,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get currentPlan => 'Nykyinen';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count kysymystä kuukaudessa';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count kysymystä kuukaudessa';
+  }
+
+  @override
+  String get architectSubtitle => 'Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi';
 }

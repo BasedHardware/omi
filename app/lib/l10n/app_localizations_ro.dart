@@ -9130,4 +9130,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get currentPlan => 'Curent';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count întrebări pe lună';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count întrebări pe lună';
+  }
+
+  @override
+  String get architectSubtitle => 'AI avansat — mii de conversații + automatizare agent';
 }

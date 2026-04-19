@@ -9098,4 +9098,17 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get currentPlan => 'सध्याचा';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'दरमहा $count प्रश्न';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'दरमहा $count प्रश्न';
+  }
+
+  @override
+  String get architectSubtitle => 'पॉवर-यूजर AI — हजारो चॅट + एजेंटिक ऑटोमेशन';
 }

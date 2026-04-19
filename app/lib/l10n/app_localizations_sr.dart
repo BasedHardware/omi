@@ -9100,4 +9100,17 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get currentPlan => 'Тренутни';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count питања месечно';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count питања месечно';
+  }
+
+  @override
+  String get architectSubtitle => 'Напредни AI — хиљаде разговора + агентна аутоматизација';
 }

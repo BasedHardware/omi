@@ -9100,4 +9100,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get currentPlan => 'Mevcut';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'Ayda $count soru';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'Ayda $count soru';
+  }
+
+  @override
+  String get architectSubtitle => 'Güçlü AI — binlerce sohbet + ajans otomasyonu';
 }

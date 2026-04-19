@@ -9141,4 +9141,17 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get currentPlan => 'Actual';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count preguntes al mes';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count preguntes al mes';
+  }
+
+  @override
+  String get architectSubtitle => 'IA avançada — milers de xats + automatitzacions d\'agent';
 }

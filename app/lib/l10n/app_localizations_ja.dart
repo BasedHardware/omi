@@ -8938,4 +8938,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get currentPlan => '現在';
+
+  @override
+  String neoSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String get architectSubtitle => 'パワーユーザーAI — 数千のチャット + エージェント自動化';
 }

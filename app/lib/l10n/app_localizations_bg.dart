@@ -9122,4 +9122,17 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get currentPlan => 'Текущ';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count въпроса на месец';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count въпроса на месец';
+  }
+
+  @override
+  String get architectSubtitle => 'AI за напреднали — хиляди чатове + агентна автоматизация';
 }

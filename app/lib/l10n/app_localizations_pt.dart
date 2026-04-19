@@ -9091,4 +9091,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get currentPlan => 'Atual';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count perguntas por mês';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count perguntas por mês';
+  }
+
+  @override
+  String get architectSubtitle => 'IA avançada — milhares de chats + automações de agente';
 }

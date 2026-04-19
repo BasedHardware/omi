@@ -9089,4 +9089,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get currentPlan => 'فعلی';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count پرسش در ماه';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count پرسش در ماه';
+  }
+
+  @override
+  String get architectSubtitle => 'هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی';
 }

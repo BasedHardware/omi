@@ -9097,4 +9097,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get currentPlan => 'Saat ini';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count pertanyaan per bulan';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count pertanyaan per bulan';
+  }
+
+  @override
+  String get architectSubtitle => 'AI canggih — ribuan chat + otomatisasi agen';
 }

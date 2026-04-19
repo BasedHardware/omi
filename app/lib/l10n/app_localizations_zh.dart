@@ -8923,4 +8923,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get currentPlan => '当前';
+
+  @override
+  String neoSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String get architectSubtitle => '高级用户 AI — 数千次对话 + 代理自动化';
 }

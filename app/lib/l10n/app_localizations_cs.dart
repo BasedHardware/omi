@@ -9083,4 +9083,17 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get currentPlan => 'Aktuální';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String get architectSubtitle => 'AI pro pokročilé — tisíce chatů + agentní automatizace';
 }

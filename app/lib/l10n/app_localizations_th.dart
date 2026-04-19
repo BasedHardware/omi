@@ -9041,4 +9041,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get currentPlan => 'ปัจจุบัน';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count คำถามต่อเดือน';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count คำถามต่อเดือน';
+  }
+
+  @override
+  String get architectSubtitle => 'AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ';
 }

@@ -9015,4 +9015,17 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get currentPlan => 'נוכחי';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count שאלות בחודש';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count שאלות בחודש';
+  }
+
+  @override
+  String get architectSubtitle => 'AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה';
 }

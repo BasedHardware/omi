@@ -9073,4 +9073,17 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get currentPlan => 'Nuværende';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count spørgsmål om måneden';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count spørgsmål om måneden';
+  }
+
+  @override
+  String get architectSubtitle => 'Avanceret AI — tusindvis af chats + agentautomatisering';
 }

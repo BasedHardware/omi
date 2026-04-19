@@ -9105,4 +9105,17 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get currentPlan => 'Pašreizējais';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String get architectSubtitle => 'Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija';
 }

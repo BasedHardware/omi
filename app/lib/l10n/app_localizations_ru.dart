@@ -9116,4 +9116,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get currentPlan => 'Текущий';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count вопросов в месяц';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count вопросов в месяц';
+  }
+
+  @override
+  String get architectSubtitle => 'AI для продвинутых — тысячи чатов + агентная автоматизация';
 }

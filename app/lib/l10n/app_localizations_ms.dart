@@ -9111,4 +9111,17 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get currentPlan => 'Semasa';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count soalan sebulan';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count soalan sebulan';
+  }
+
+  @override
+  String get architectSubtitle => 'AI kuasa — ribuan sembang + automasi ejen';
 }
