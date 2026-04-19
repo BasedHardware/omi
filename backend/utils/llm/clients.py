@@ -66,9 +66,9 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
     },
     'medium': {
         # OpenAI — conversation processing
-        'conv_action_items': 'gpt-4.1-mini',
+        'conv_action_items': 'gpt-5.1',
         'conv_structure': 'gpt-5.1',
-        'conv_apps': 'gpt-4.1-mini',
+        'conv_apps': 'gpt-5.1',
         'daily_summary': 'gpt-5.1',
         # OpenAI — memories & knowledge
         'memories': 'gpt-4.1-mini',
@@ -213,7 +213,7 @@ def _get_or_create_openrouter_llm(
     model_name: str, streaming: bool = False, temperature: Optional[float] = None
 ) -> ChatOpenAI:
     """Get or create a ChatOpenAI instance for an OpenRouter model."""
-    key = (model_name, streaming, 'openrouter')
+    key = (model_name, streaming, 'openrouter', temperature)
     if key not in _llm_cache:
         kwargs: Dict[str, Any] = {
             'model': model_name,
@@ -249,6 +249,15 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         llm_stream = get_llm('chat_responses', streaming=True)
         response = llm_stream.invoke(prompt, {'callbacks': callbacks})
     """
+    if feature in _ANTHROPIC_FEATURES:
+        raise ValueError(
+            f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
+        )
+    if feature in _PERPLEXITY_FEATURES:
+        raise ValueError(
+            f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
+        )
+
     model = get_model(feature)
 
     if feature in _OPENROUTER_FEATURES:
