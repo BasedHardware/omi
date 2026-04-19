@@ -596,12 +596,13 @@ class TestExpandedCallsiteCoverage:
         # Dynamic persona_chat/persona_chat_premium routing via feature variable
         assert "get_llm(feature" in source, "persona.py should pass dynamic feature for chat routing"
 
-    def test_goals_py_key(self):
+    def test_goals_py_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/goals.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
-        assert 'goals' in calls
+        assert 'goals' in calls, "Missing get_llm('goals') in goals.py"
+        assert 'goals_advice' in calls, "Missing get_llm('goals_advice') in goals.py"
 
     def test_notifications_py_key(self):
         import re
