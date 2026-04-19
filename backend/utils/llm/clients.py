@@ -1,5 +1,6 @@
+import logging
 import os
-from typing import List
+from typing import Dict, List, Optional
 
 import anthropic
 import httpx
@@ -10,6 +11,8 @@ import tiktoken
 from models.structured import Structured
 from utils.llm.usage_tracker import get_usage_callback
 
+logger = logging.getLogger(__name__)
+
 # Anthropic client for chat agent
 anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
 
@@ -19,7 +22,117 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()
 
-# Base models for general use
+# ---------------------------------------------------------------------------
+# QoS Tier System
+#
+# Maps feature names to model tiers. Each tier resolves to a concrete
+# ChatOpenAI instance.  Override per-feature via env vars:
+#   LLM_TIER_CONV_ACTION_ITEMS=medium   (use gpt-5.1 for action items)
+#   LLM_TIER_KNOWLEDGE_GRAPH=nano       (use gpt-4.1-nano for KG)
+#
+# Tier names: nano, mini, medium, high
+# ---------------------------------------------------------------------------
+
+TIER_NANO = 'nano'
+TIER_MINI = 'mini'
+TIER_MEDIUM = 'medium'
+TIER_HIGH = 'high'
+
+_TIER_MODELS = {
+    TIER_NANO: 'gpt-4.1-nano',
+    TIER_MINI: 'gpt-4.1-mini',
+    TIER_MEDIUM: 'gpt-5.1',
+    TIER_HIGH: 'o4-mini',
+}
+
+# Default tier for each feature.  Change these to downgrade/upgrade features.
+# Current defaults set cost-optimized tiers for high-volume features while
+# preserving quality on features that need it.
+_FEATURE_TIER_DEFAULTS: Dict[str, str] = {
+    # Conversation processing — high volume, structured extraction
+    'conv_action_items': TIER_MINI,
+    'conv_structure': TIER_MEDIUM,
+    'conv_events': TIER_MEDIUM,
+    'conv_apps': TIER_MINI,
+    'conv_discard': TIER_MINI,
+    'conv_folder': TIER_MINI,
+    'conv_suggested_apps': TIER_MINI,
+    'daily_summary': TIER_MEDIUM,
+    # Memories
+    'memories': TIER_MINI,
+    'memory_conflict': TIER_MINI,
+    'memory_category': TIER_MINI,
+    # Knowledge graph
+    'knowledge_graph': TIER_MINI,
+    # Notifications
+    'proactive_notification': TIER_MINI,
+    # Goals
+    'goals': TIER_MINI,
+    'goal_advice': TIER_MEDIUM,
+    # Other
+    'trends': TIER_MINI,
+    'followup': TIER_MINI,
+    'onboarding': TIER_MINI,
+    'openglass': TIER_MINI,
+    'fair_use_classifier': TIER_MEDIUM,
+    'chat_routing': TIER_MINI,
+    'chat_qa': TIER_MEDIUM,
+    'app_generator': TIER_MEDIUM,
+    'external_integrations': TIER_MINI,
+    'external_integrations_complex': TIER_MEDIUM,
+    'persona_condensing': TIER_MEDIUM,
+}
+
+
+def _resolve_tier(feature: str) -> str:
+    """Resolve the tier for a feature: env var override > default > mini fallback."""
+    env_key = f'LLM_TIER_{feature.upper()}'
+    tier = os.environ.get(env_key, '').strip().lower()
+    if tier and tier in _TIER_MODELS:
+        return tier
+    return _FEATURE_TIER_DEFAULTS.get(feature, TIER_MINI)
+
+
+# Cache of ChatOpenAI instances per model name to avoid re-creating them.
+_llm_cache: Dict[str, ChatOpenAI] = {}
+
+
+def _get_or_create_llm(model_name: str) -> ChatOpenAI:
+    """Get or create a ChatOpenAI instance for the given model name."""
+    if model_name not in _llm_cache:
+        kwargs = {'model': model_name, 'callbacks': [_usage_callback]}
+        if model_name == 'gpt-5.1':
+            kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
+        _llm_cache[model_name] = ChatOpenAI(**kwargs)
+    return _llm_cache[model_name]
+
+
+def get_llm(feature: str) -> ChatOpenAI:
+    """Get the ChatOpenAI instance for a feature based on its QoS tier.
+
+    Usage:
+        llm = get_llm('conv_action_items')
+        response = llm.invoke(prompt)
+
+    Override via env var:
+        LLM_TIER_CONV_ACTION_ITEMS=medium  -> uses gpt-5.1
+        LLM_TIER_CONV_ACTION_ITEMS=nano    -> uses gpt-4.1-nano
+    """
+    tier = _resolve_tier(feature)
+    model_name = _TIER_MODELS[tier]
+    return _get_or_create_llm(model_name)
+
+
+def get_llm_tier_info() -> Dict[str, Dict[str, str]]:
+    """Return current feature-to-tier-to-model mapping for debugging/monitoring."""
+    info = {}
+    for feature in _FEATURE_TIER_DEFAULTS:
+        tier = _resolve_tier(feature)
+        info[feature] = {'tier': tier, 'model': _TIER_MODELS[tier]}
+    return info
+
+
+# Base models for general use (preserved for backward compatibility)
 llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
 llm_mini_stream = ChatOpenAI(
     model='gpt-4.1-mini',
