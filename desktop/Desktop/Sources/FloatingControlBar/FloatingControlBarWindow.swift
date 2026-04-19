@@ -1549,7 +1549,7 @@ class FloatingControlBarManager {
             }
 
         let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? "claude-sonnet-4-6"
+            ? ModelQoS.Claude.defaultSelection
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         await provider.sendMessage(
