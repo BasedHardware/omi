@@ -468,7 +468,9 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? ModelQoS.Claude.defaultSelection
+        let savedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? ModelQoS.Claude.defaultSelection
+        let allowedIDs = ModelQoS.Claude.availableModels.map(\.id)
+        self.selectedModel = allowedIDs.contains(savedModel) ? savedModel : ModelQoS.Claude.defaultSelection
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode"),
            let mode = PTTTranscriptionMode(rawValue: saved) {
             self.pttTranscriptionMode = mode
