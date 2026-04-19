@@ -20,6 +20,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/models/chat_quota.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
@@ -53,11 +54,25 @@ class MessageProvider extends ChangeNotifier {
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
 
+  // Chat quota state
+  ChatUsageQuota? _chatQuota;
+  ChatUsageQuota? get chatQuota => _chatQuota;
+  bool get isChatQuotaExceeded => _chatQuota != null && !_chatQuota!.allowed;
+
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
+
+  Future<void> checkChatQuota() async {
+    try {
+      _chatQuota = await getUserChatQuota();
+      notifyListeners();
+    } catch (e) {
+      Logger.debug('Failed to check chat quota: $e');
+    }
+  }
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
@@ -546,6 +561,19 @@ class MessageProvider extends ChangeNotifier {
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
+    }
+
+    // Check chat quota before sending
+    try {
+      _chatQuota = await getUserChatQuota();
+      if (_chatQuota != null && !_chatQuota!.allowed) {
+        setShowTypingIndicator(false);
+        setSendingMessage(false);
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      Logger.debug('Chat quota check failed, allowing send: $e');
     }
 
     String chatTargetId = currentAppId ?? 'omi';
