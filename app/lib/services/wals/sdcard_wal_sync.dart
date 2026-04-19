@@ -854,7 +854,11 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     IWalSyncProgressListener? progress,
     IWifiConnectionListener? connectionListener,
   }) async {
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    var walToSync = _wals.where((w) => w == wal).firstOrNull;
+    if (walToSync == null) {
+      Logger.debug("SDCardWalSync: WAL not found in _wals, skipping sync");
+      return null;
+    }
 
     _resetSyncState();
     _isSyncing = true;
