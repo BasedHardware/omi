@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/models/chat_quota.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/logger.dart';
@@ -345,6 +346,20 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
     return UserUsageResponse.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<ChatUsageQuota?> getUserChatQuota() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/me/usage-quota',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return ChatUsageQuota.fromJson(jsonDecode(response.body));
   }
   return null;
 }
