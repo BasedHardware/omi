@@ -1140,12 +1140,12 @@ def get_user_transcription_preferences(uid: str) -> dict:
         user_data = user_doc.to_dict()
         prefs = user_data.get('transcription_preferences', {})
         return {
-            'single_language_mode': prefs.get('single_language_mode', False),
+            'single_language_mode': prefs.get('single_language_mode', True),
             'vocabulary': prefs.get('vocabulary', []),
             'language': user_data.get('language', ''),
         }
 
-    return {'single_language_mode': False, 'vocabulary': [], 'language': ''}
+    return {'single_language_mode': True, 'vocabulary': [], 'language': ''}
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
