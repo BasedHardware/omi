@@ -17,6 +17,51 @@ from models.transcript_segment import SENTENCE_FINDALL_RE
 logger = logging.getLogger(__name__)
 
 
+def resolve_translation_language(
+    source: Optional[str],
+    translate_param: str,
+    single_language_mode: bool,
+    stt_language: str,
+    language: str,
+    user_language_preference: str,
+) -> Optional[str]:
+    """Determine the target translation language for a listen session.
+
+    Precedence (highest to lowest):
+    1. source=desktop → None (desktop doesn't display translations)
+    2. translate=disabled → None (client explicitly opted out)
+    3. single_language_mode=True → None (user prefers single-language accuracy)
+    4. translate param empty (legacy clients) → use settings-based default
+    5. stt_language != 'multi' → None (single-language STT, no translation needed)
+    6. No user_language_preference → None (no target language to translate to)
+    7. Otherwise → user_language_preference or language
+    """
+    # Desktop never needs translation — it doesn't display it
+    if source == 'desktop':
+        return None
+
+    # Client explicitly disabled translation
+    if translate_param == 'disabled':
+        return None
+
+    # User prefers single-language mode (higher accuracy, no translation)
+    if single_language_mode:
+        return None
+
+    # For legacy clients (empty translate param), fall through to settings-based logic
+    # For clients sending translate=enabled, also fall through
+
+    # Single-language STT doesn't produce multi-language output
+    if stt_language != 'multi':
+        return None
+
+    # Determine target language
+    if language == 'multi':
+        return user_language_preference if user_language_preference else None
+    else:
+        return language
+
+
 # LRU Cache for language detection (local, free via langdetect)
 detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
