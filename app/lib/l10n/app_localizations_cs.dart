@@ -1707,7 +1707,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZAŘÍZENÍ',
+      one: 'ZAŘÍZENÍ',
+    );
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -4551,7 +4556,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get alreadyBestValuePlan => 'Již máte plán s nejlepší hodnotou. Nejsou potřeba žádné změny.';
 
   @override
-  String get unableToLoadPlans => 'Nelze načíst plány';
+  String get unableToLoadPlans => 'Nepodařilo se načíst plány';
 
   @override
   String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
@@ -9012,4 +9017,103 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Máte placený plán.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'zpráv';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neomezené chatové zprávy tento měsíc';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used z $limit výpočetního rozpočtu využito';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used z $limit zpráv využito tento měsíc';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit využito';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Dosažen limit chatu. Upgradujte pro více zpráv.';
+
+  @override
+  String get chatLimitReachedTitle => 'Dosažen limit chatu';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Využili jste $used z $limitDisplay na plánu $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Obnoví se za $count dní';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Obnoví se za $count hodin';
+  }
+
+  @override
+  String get resetsSoon => 'Brzy se obnoví';
+
+  @override
+  String get upgradePlan => 'Upgradovat plán';
+
+  @override
+  String get billingMonthly => 'Měsíční';
+
+  @override
+  String get billingYearly => 'Roční';
+
+  @override
+  String get savePercent => 'Ušetřete ~17%';
+
+  @override
+  String get popular => 'Oblíbené';
+
+  @override
+  String get currentPlan => 'Aktuální';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String get architectSubtitle => 'AI pro pokročilé — tisíce chatů + agentní automatizace';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit využito tento měsíc';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used využito tento měsíc';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit zpráv tento měsíc';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used zpráv tento měsíc';
+  }
 }

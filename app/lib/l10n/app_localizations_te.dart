@@ -1711,7 +1711,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -1795,7 +1800,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get rateOnGooglePlay => 'Google Play లో రేట్ చేయండి';
 
   @override
-  String get maybeLater => 'బహుశా తరువాత';
+  String get maybeLater => 'బహుశా తర్వాత';
 
   @override
   String get speechProfileIntro => 'Omi మీ లక్ష్యాలు మరియు మీ గతిని నేర్చుకోవాలి. మీరు దీన్ని తరువాత సవరించగలరు.';
@@ -4584,10 +4589,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get alreadyBestValuePlan => 'మీరు ఇప్పటికే ఉత్తమ విలువ ప్లాన్‌ను కలిగి ఉన్నారు. ఎటువంటి మార్పులు అవసరం లేవు.';
 
   @override
-  String get unableToLoadPlans => 'ప్లాన్‌లను లోడ్ చేయలేకపోయాను';
+  String get unableToLoadPlans => 'ప్లాన్‌లు లోడ్ చేయలేకపోయాము';
 
   @override
-  String get checkConnectionTryAgain => 'దయచేసి మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి';
+  String get checkConnectionTryAgain => 'కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి';
 
   @override
   String get useFreePlan => 'ఉచిత ప్లాన్‌ను ఉపయోగించండి';
@@ -8608,7 +8613,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9062,4 +9072,103 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'మీరు చెల్లింపు ప్లాన్‌లో ఉన్నారు.';
+
+  @override
+  String get chatTitle => 'చాట్';
+
+  @override
+  String get chatMessages => 'సందేశాలు';
+
+  @override
+  String get unlimitedChatThisMonth => 'ఈ నెల అపరిమిత చాట్ సందేశాలు';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit కంప్యూట్ బడ్జెట్ వాడారు';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return 'ఈ నెల $used / $limit సందేశాలు వాడారు';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit వాడారు';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'చాట్ పరిమితి చేరుకుంది. మరిన్ని సందేశాల కోసం అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get chatLimitReachedTitle => 'చాట్ పరిమితి చేరుకుంది';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan ప్లాన్‌లో $limitDisplay నుండి $used వాడారు.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count రోజుల్లో రీసెట్ అవుతుంది';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count గంటల్లో రీసెట్ అవుతుంది';
+  }
+
+  @override
+  String get resetsSoon => 'త్వరలో రీసెట్ అవుతుంది';
+
+  @override
+  String get upgradePlan => 'ప్లాన్ అప్‌గ్రేడ్';
+
+  @override
+  String get billingMonthly => 'నెలవారీ';
+
+  @override
+  String get billingYearly => 'సంవత్సరానికి';
+
+  @override
+  String get savePercent => '~17% ఆదా చేయండి';
+
+  @override
+  String get popular => 'ప్రజాదరణ';
+
+  @override
+  String get currentPlan => 'ప్రస్తుత';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'నెలకు $count ప్రశ్నలు';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'నెలకు $count ప్రశ్నలు';
+  }
+
+  @override
+  String get architectSubtitle => 'పవర్-యూజర్ AI — వేల చాట్‌లు + ఏజెంటిక్ ఆటోమేషన్';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'చాట్: \$$used / \$$limit ఈ నెల ఉపయోగించబడింది';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'చాట్: \$$used ఈ నెల ఉపయోగించబడింది';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'చాట్: $used / $limit సందేశాలు ఈ నెల';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'చాట్: $used సందేశాలు ఈ నెల';
+  }
 }

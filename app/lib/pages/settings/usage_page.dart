@@ -305,8 +305,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -673,6 +672,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 color: Colors.purple.shade300,
                 subscription: provider.subscription,
               ),
+              if (provider.chatQuotaUnit != null && period == 'monthly') ...[
+                const SizedBox(height: 12),
+                _buildChatQuotaLine(context, provider),
+              ],
             ],
           ),
         ),
@@ -997,6 +1000,33 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildChatQuotaLine(BuildContext context, UsageProvider provider) {
+    final sub = provider.subscription;
+    if (sub == null) return const SizedBox.shrink();
+
+    final used = sub.chatQuotaUsed;
+    final unit = sub.chatQuotaUnit;
+    final limits = sub.subscription.limits;
+
+    String text;
+    if (unit == 'cost_usd') {
+      final limit = limits.chatCostUsdPerMonth;
+      text = limit != null
+          ? context.l10n.chatUsageCost('\$${used.toStringAsFixed(2)}', '\$${limit.toStringAsFixed(0)}')
+          : context.l10n.chatUsageCostNoLimit('\$${used.toStringAsFixed(2)}');
+    } else {
+      final limit = limits.chatQuestionsPerMonth;
+      text = limit != null
+          ? context.l10n.chatUsageMessages('${used.toInt()}', '$limit')
+          : context.l10n.chatUsageMessagesNoLimit('${used.toInt()}');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+    );
+  }
+
   Widget _buildUsageCard(
     BuildContext context, {
     required IconData icon,
@@ -1048,8 +1078,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

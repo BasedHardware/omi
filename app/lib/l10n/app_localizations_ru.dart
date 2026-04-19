@@ -1802,7 +1802,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get rateOnGooglePlay => 'Оценить в Google Play';
 
   @override
-  String get maybeLater => 'Может быть, позже';
+  String get maybeLater => 'Может позже';
 
   @override
   String get speechProfileIntro => 'Omi нужно узнать ваши цели и ваш голос. Вы сможете изменить это позже.';
@@ -4574,7 +4574,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get alreadyBestValuePlan => 'У вас уже самый выгодный план. Изменения не требуются.';
 
   @override
-  String get unableToLoadPlans => 'Не удается загрузить планы';
+  String get unableToLoadPlans => 'Не удалось загрузить планы';
 
   @override
   String get checkConnectionTryAgain => 'Проверьте подключение и попробуйте снова';
@@ -9050,4 +9050,103 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вы на платном плане.';
+
+  @override
+  String get chatTitle => 'Чат';
+
+  @override
+  String get chatMessages => 'сообщений';
+
+  @override
+  String get unlimitedChatThisMonth => 'Безлимитные сообщения в чате в этом месяце';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used из $limit бюджета вычислений использовано';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used из $limit сообщений использовано в этом месяце';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit использовано';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Лимит чата достигнут. Обновите план для увеличения.';
+
+  @override
+  String get chatLimitReachedTitle => 'Лимит чата достигнут';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Вы использовали $used из $limitDisplay на плане $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Сброс через $count дней';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Сброс через $count часов';
+  }
+
+  @override
+  String get resetsSoon => 'Скоро сбросится';
+
+  @override
+  String get upgradePlan => 'Обновить план';
+
+  @override
+  String get billingMonthly => 'Ежемесячно';
+
+  @override
+  String get billingYearly => 'Ежегодно';
+
+  @override
+  String get savePercent => 'Экономия ~17%';
+
+  @override
+  String get popular => 'Популярный';
+
+  @override
+  String get currentPlan => 'Текущий';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count вопросов в месяц';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count вопросов в месяц';
+  }
+
+  @override
+  String get architectSubtitle => 'AI для продвинутых — тысячи чатов + агентная автоматизация';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Чат: \$$used / \$$limit использовано в этом месяце';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Чат: \$$used использовано в этом месяце';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Чат: $used / $limit сообщений в этом месяце';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Чат: $used сообщений в этом месяце';
+  }
 }

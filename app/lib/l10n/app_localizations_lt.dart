@@ -1704,7 +1704,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ĮRENGINIAI',
+      one: 'ĮRENGINYS',
+    );
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -4556,7 +4561,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get alreadyBestValuePlan => 'Jau turite geriausios vertės planą. Pakeitimų nereikia.';
 
   @override
-  String get unableToLoadPlans => 'Nepavyksta įkelti planų';
+  String get unableToLoadPlans => 'Nepavyko įkelti planų';
 
   @override
   String get checkConnectionTryAgain => 'Patikrinkite ryšį ir bandykite dar kartą';
@@ -9024,4 +9029,103 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Jūs naudojate mokamą planą.';
+
+  @override
+  String get chatTitle => 'Pokalbis';
+
+  @override
+  String get chatMessages => 'žinučių';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neriboti pokalbių pranešimai šį mėnesį';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used iš $limit skaičiavimo biudžeto panaudota';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used iš $limit žinučių panaudota šį mėnesį';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit panaudota';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Pokalbio limitas pasiektas. Atnaujinkite daugiau žinučių.';
+
+  @override
+  String get chatLimitReachedTitle => 'Pokalbio limitas pasiektas';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Panaudojote $used iš $limitDisplay plane $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Atsistatys po $count dienų';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Atsistatys po $count valandų';
+  }
+
+  @override
+  String get resetsSoon => 'Greitai atsistatys';
+
+  @override
+  String get upgradePlan => 'Atnaujinti planą';
+
+  @override
+  String get billingMonthly => 'Mėnesinis';
+
+  @override
+  String get billingYearly => 'Metinis';
+
+  @override
+  String get savePercent => 'Sutaupykite ~17%';
+
+  @override
+  String get popular => 'Populiarus';
+
+  @override
+  String get currentPlan => 'Dabartinis';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count klausimų per mėnesį';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count klausimų per mėnesį';
+  }
+
+  @override
+  String get architectSubtitle => 'Pažangus AI — tūkstančiai pokalbių + agentinė automatizacija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Pokalbis: \$$used / \$$limit panaudota šį mėnesį';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Pokalbis: \$$used panaudota šį mėnesį';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Pokalbis: $used / $limit žinučių šį mėnesį';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Pokalbis: $used žinučių šį mėnesį';
+  }
 }

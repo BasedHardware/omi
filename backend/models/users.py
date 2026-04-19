@@ -47,17 +47,6 @@ class ChatQuotaUnit(str, Enum):
     cost_usd = 'cost_usd'
 
 
-class ChatUsageQuota(BaseModel):
-    plan: str  # display name: "Free", "Plus", "Architect"
-    plan_type: str  # internal id: "basic" | "unlimited" | "architect"
-    unit: ChatQuotaUnit
-    used: float
-    limit: Optional[float] = None  # None = unlimited (fallback)
-    percent: float = 0.0
-    allowed: bool = True
-    reset_at: Optional[int] = None  # unix seconds — start of next month UTC
-
-
 class Subscription(BaseModel):
     plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
@@ -101,3 +90,9 @@ class UserSubscriptionResponse(BaseModel):
     memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # Chat quota usage — derived from llm_usage collection
+    chat_quota_used: float = 0.0
+    chat_quota_unit: Optional[ChatQuotaUnit] = None
+    chat_quota_percent: float = 0.0
+    chat_quota_allowed: bool = True
+    chat_quota_reset_at: Optional[int] = None

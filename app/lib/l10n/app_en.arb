@@ -5349,13 +5349,11 @@
     "@cancelSubscription": {
         "description": "Button text to cancel a subscription"
     },
-    "endsOnDate": "Ends on {date}",
+    "endsOnDate": "Ends {date}",
     "@endsOnDate": {
-        "description": "Shows end date",
         "placeholders": {
             "date": {
-                "type": "String",
-                "example": "January 15, 2026"
+                "type": "String"
             }
         }
     },
@@ -10744,5 +10742,135 @@
     "youAreOnAPaidPlan": "You are on a paid plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "messages",
+    "unlimitedChatThisMonth": "Unlimited chat messages this month",
+    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "@chatUsedOfLimitCompute": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
+    "@chatUsedOfLimitMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageProgress": "{used} / {limit} used",
+    "@chatUsageProgress": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatLimitReachedUpgrade": "Chat limit reached. Upgrade for more messages.",
+    "chatLimitReachedTitle": "Chat Limit Reached",
+    "chatUsageDescription": "You've used {used} of your {limitDisplay} on the {plan} plan.",
+    "@chatUsageDescription": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limitDisplay": {
+                "type": "String"
+            },
+            "plan": {
+                "type": "String"
+            }
+        }
+    },
+    "resetsInDays": "Resets in {count} day(s)",
+    "@resetsInDays": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsInHours": "Resets in {count} hour(s)",
+    "@resetsInHours": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsSoon": "Resets soon",
+    "upgradePlan": "Upgrade Plan",
+    "billingMonthly": "Monthly",
+    "billingYearly": "Yearly",
+    "savePercent": "Save ~17%",
+    "popular": "Popular",
+    "currentPlan": "Current",
+    "neoSubtitle": "{count} questions per month",
+    "@neoSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "operatorSubtitle": "{count} questions per month",
+    "@operatorSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "@chatUsageCost": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "@chatUsageCostNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "@chatUsageMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month",
+    "@chatUsageMessagesNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
     }
 }

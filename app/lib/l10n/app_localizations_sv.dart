@@ -1708,7 +1708,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -4559,7 +4564,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get alreadyBestValuePlan => 'Du har redan den bästa värdeplanen. Inga ändringar behövs.';
 
   @override
-  String get unableToLoadPlans => 'Kan inte ladda planer';
+  String get unableToLoadPlans => 'Kunde inte ladda planer';
 
   @override
   String get checkConnectionTryAgain => 'Kontrollera din anslutning och försök igen';
@@ -9020,4 +9025,103 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du har en betald plan.';
+
+  @override
+  String get chatTitle => 'Chatt';
+
+  @override
+  String get chatMessages => 'meddelanden';
+
+  @override
+  String get unlimitedChatThisMonth => 'Obegränsade chattmeddelanden denna månad';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used av $limit beräkningsbudget använd';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used av $limit meddelanden använda denna månad';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit använt';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Chattgränsen nådd. Uppgradera för fler meddelanden.';
+
+  @override
+  String get chatLimitReachedTitle => 'Chattgränsen nådd';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Du har använt $used av dina $limitDisplay på $plan-planen.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Återställs om $count dagar';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Återställs om $count timmar';
+  }
+
+  @override
+  String get resetsSoon => 'Återställs snart';
+
+  @override
+  String get upgradePlan => 'Uppgradera plan';
+
+  @override
+  String get billingMonthly => 'Månadsvis';
+
+  @override
+  String get billingYearly => 'Årsvis';
+
+  @override
+  String get savePercent => 'Spara ~17%';
+
+  @override
+  String get popular => 'Populärt';
+
+  @override
+  String get currentPlan => 'Nuvarande';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count frågor per månad';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count frågor per månad';
+  }
+
+  @override
+  String get architectSubtitle => 'Avancerad AI — tusentals chattar + agentautomatisering';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chatt: \$$used / \$$limit använt denna månad';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chatt: \$$used använt denna månad';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chatt: $used / $limit meddelanden denna månad';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chatt: $used meddelanden denna månad';
+  }
 }

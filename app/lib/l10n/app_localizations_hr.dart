@@ -1708,7 +1708,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -1792,7 +1797,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get rateOnGooglePlay => 'Ocijeni na Google Play';
 
   @override
-  String get maybeLater => 'Možda Kasnije';
+  String get maybeLater => 'Možda kasnije';
 
   @override
   String get speechProfileIntro => 'Omi trebalo nauči tvoje ciljeve i tvoj glas. Moći ćeš ga later promijeniti.';
@@ -4578,7 +4583,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get unableToLoadPlans => 'Nije moguće učitati planove';
 
   @override
-  String get checkConnectionTryAgain => 'Provjerite vašu vezu i pokušajte ponovno';
+  String get checkConnectionTryAgain => 'Provjerite vezu i pokušajte ponovo';
 
   @override
   String get useFreePlan => 'Koristi besplatni plan';
@@ -8587,7 +8592,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9041,4 +9051,103 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Na plaćenom ste planu.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'poruka';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neograničene poruke ovog mjeseca';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used od $limit proračuna korišteno';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used od $limit poruka korišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit korišteno';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Dostignut limit chata. Nadogradite za više poruka.';
+
+  @override
+  String get chatLimitReachedTitle => 'Dostignut limit chata';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Koristili ste $used od $limitDisplay na planu $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Resetira se za $count dana';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Resetira se za $count sati';
+  }
+
+  @override
+  String get resetsSoon => 'Uskoro se resetira';
+
+  @override
+  String get upgradePlan => 'Nadogradi plan';
+
+  @override
+  String get billingMonthly => 'Mjesečno';
+
+  @override
+  String get billingYearly => 'Godišnje';
+
+  @override
+  String get savePercent => 'Uštedite ~17%';
+
+  @override
+  String get popular => 'Popularno';
+
+  @override
+  String get currentPlan => 'Trenutni';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count pitanja mjesečno';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count pitanja mjesečno';
+  }
+
+  @override
+  String get architectSubtitle => 'Napredni AI — tisuće razgovora + agentna automatizacija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit iskorišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used iskorišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit poruka ovog mjeseca';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used poruka ovog mjeseca';
+  }
 }

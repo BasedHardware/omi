@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "ಯೋಜನೆಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ",
+    "unableToLoadPlans": "ಯೋಜನೆಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+    "checkConnectionTryAgain": "ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,30 @@
     "youAreOnAPaidPlan": "ನೀವು ಪಾವತಿಸಿದ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "ಚಾಟ್",
+    "chatMessages": "ಸಂದೇಶಗಳು",
+    "unlimitedChatThisMonth": "ಈ ತಿಂಗಳು ಅನಿಯಮಿತ ಚಾಟ್ ಸಂದೇಶಗಳು",
+    "chatUsedOfLimitCompute": "{used} / {limit} ಗಣನ ಬಜೆಟ್ ಬಳಸಲಾಗಿದೆ",
+    "chatUsedOfLimitMessages": "ಈ ತಿಂಗಳು {used} / {limit} ಸಂದೇಶಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageProgress": "{used} / {limit} ಬಳಸಲಾಗಿದೆ",
+    "chatLimitReachedUpgrade": "ಚಾಟ್ ಮಿತಿ ತಲುಪಿದೆ. ಹೆಚ್ಚಿನ ಸಂದೇಶಗಳಿಗಾಗಿ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.",
+    "chatLimitReachedTitle": "ಚಾಟ್ ಮಿತಿ ತಲುಪಿದೆ",
+    "chatUsageDescription": "{plan} ಯೋಜನೆಯಲ್ಲಿ {limitDisplay} ನಲ್ಲಿ {used} ಬಳಸಿದ್ದೀರಿ.",
+    "resetsInDays": "{count} ದಿನಗಳಲ್ಲಿ ಮರುಹೊಂದಿಸಲಾಗುವುದು",
+    "resetsInHours": "{count} ಗಂಟೆಗಳಲ್ಲಿ ಮರುಹೊಂದಿಸಲಾಗುವುದು",
+    "resetsSoon": "ಶೀಘ್ರದಲ್ಲೇ ಮರುಹೊಂದಿಸಲಾಗುವುದು",
+    "upgradePlan": "ಯೋಜನೆ ಅಪ್‌ಗ್ರೇಡ್",
+    "billingMonthly": "ಮಾಸಿಕ",
+    "billingYearly": "ವಾರ್ಷಿಕ",
+    "savePercent": "~17% ಉಳಿಸಿ",
+    "popular": "ಜನಪ್ರಿಯ",
+    "currentPlan": "ಪ್ರಸ್ತುತ",
+    "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
+    "operatorSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
+    "architectSubtitle": "ಪವರ್-ಯೂಸರ್ AI — ಸಾವಿರಾರು ಚಾಟ್‌ಗಳು + ಏಜೆಂಟಿಕ್ ಆಟೋಮೇಶನ್",
+    "chatUsageCost": "ಚಾಟ್: ${used} / ${limit} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageCostNoLimit": "ಚಾಟ್: ${used} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageMessages": "ಚಾಟ್: {used} / {limit} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು",
+    "chatUsageMessagesNoLimit": "ಚಾಟ್: {used} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು"
 }

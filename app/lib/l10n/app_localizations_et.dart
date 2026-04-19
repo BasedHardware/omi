@@ -1705,7 +1705,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'SEADET',
+      one: 'SEADE',
+    );
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -4556,10 +4561,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get alreadyBestValuePlan => 'Teil on juba parima väärtusega plaan. Muudatusi pole vaja.';
 
   @override
-  String get unableToLoadPlans => 'Plaane ei saa laadida';
+  String get unableToLoadPlans => 'Plaanide laadimine ebaõnnestus';
 
   @override
-  String get checkConnectionTryAgain => 'Palun kontrollige ühendust ja proovige uuesti';
+  String get checkConnectionTryAgain => 'Kontrolli ühendust ja proovi uuesti';
 
   @override
   String get useFreePlan => 'Kasuta tasuta plaani';
@@ -9013,4 +9018,103 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Oled tasulisel plaanil.';
+
+  @override
+  String get chatTitle => 'Vestlus';
+
+  @override
+  String get chatMessages => 'sõnumit';
+
+  @override
+  String get unlimitedChatThisMonth => 'Piiramatu arv vestlussõnumeid sel kuul';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit arvutuseelarvet kasutatud';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used / $limit sõnumit kasutatud sel kuul';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit kasutatud';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Vestluse limiit täis. Uuenda rohkemate sõnumite jaoks.';
+
+  @override
+  String get chatLimitReachedTitle => 'Vestluse limiit täis';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Oled kasutanud $used oma $limitDisplay plaanist $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Lähtestub $count päeva pärast';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Lähtestub $count tunni pärast';
+  }
+
+  @override
+  String get resetsSoon => 'Lähtestub peagi';
+
+  @override
+  String get upgradePlan => 'Uuenda plaani';
+
+  @override
+  String get billingMonthly => 'Kuine';
+
+  @override
+  String get billingYearly => 'Aastane';
+
+  @override
+  String get savePercent => 'Säästa ~17%';
+
+  @override
+  String get popular => 'Populaarne';
+
+  @override
+  String get currentPlan => 'Praegune';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count küsimust kuus';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count küsimust kuus';
+  }
+
+  @override
+  String get architectSubtitle => 'Võimas AI — tuhanded vestlused + agentne automatiseerimine';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Vestlus: \$$used / \$$limit kasutatud sel kuul';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Vestlus: \$$used kasutatud sel kuul';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Vestlus: $used / $limit sõnumit sel kuul';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Vestlus: $used sõnumit sel kuul';
+  }
 }

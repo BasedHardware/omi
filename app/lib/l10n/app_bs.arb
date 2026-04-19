@@ -5321,7 +5321,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Molimo provjerite vašu konekciju i pokušajte ponovno",
+    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,30 @@
     "youAreOnAPaidPlan": "Na plaćenom ste planu.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "poruka",
+    "unlimitedChatThisMonth": "Neograničene poruke ovog mjeseca",
+    "chatUsedOfLimitCompute": "{used} od {limit} budžeta korišteno",
+    "chatUsedOfLimitMessages": "{used} od {limit} poruka korišteno ovog mjeseca",
+    "chatUsageProgress": "{used} / {limit} korišteno",
+    "chatLimitReachedUpgrade": "Limit chata dostignut. Nadogradite za više poruka.",
+    "chatLimitReachedTitle": "Limit chata dostignut",
+    "chatUsageDescription": "Koristili ste {used} od {limitDisplay} na planu {plan}.",
+    "resetsInDays": "Resetuje se za {count} dana",
+    "resetsInHours": "Resetuje se za {count} sati",
+    "resetsSoon": "Uskoro se resetuje",
+    "upgradePlan": "Nadogradi plan",
+    "billingMonthly": "Mjesečno",
+    "billingYearly": "Godišnje",
+    "savePercent": "Uštedite ~17%",
+    "popular": "Popularno",
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} pitanja mjesečno",
+    "operatorSubtitle": "{count} pitanja mjesečno",
+    "architectSubtitle": "Napredni AI — hiljade razgovora + agentna automatizacija",
+    "chatUsageCost": "Chat: ${used} / ${limit} iskorišteno ovog mjeseca",
+    "chatUsageCostNoLimit": "Chat: ${used} iskorišteno ovog mjeseca",
+    "chatUsageMessages": "Chat: {used} / {limit} poruka ovog mjeseca",
+    "chatUsageMessagesNoLimit": "Chat: {used} poruka ovog mjeseca"
 }

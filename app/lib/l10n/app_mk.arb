@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не може да се вчитаат планови",
+    "unableToLoadPlans": "Не можат да се вчитаат плановите",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Проверете ја вашата врска и обидете се повторно",
+    "checkConnectionTryAgain": "Проверете ја врската и обидете се повторно",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,30 @@
     "youAreOnAPaidPlan": "Вие сте на платен план.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Чат",
+    "chatMessages": "пораки",
+    "unlimitedChatThisMonth": "Неограничени пораки овој месец",
+    "chatUsedOfLimitCompute": "{used} од {limit} буџет за пресметка искористен",
+    "chatUsedOfLimitMessages": "{used} од {limit} пораки искористени овој месец",
+    "chatUsageProgress": "{used} / {limit} искористено",
+    "chatLimitReachedUpgrade": "Лимитот за чат е достигнат. Надградете за повеќе пораки.",
+    "chatLimitReachedTitle": "Лимитот за чат е достигнат",
+    "chatUsageDescription": "Искористивте {used} од {limitDisplay} на планот {plan}.",
+    "resetsInDays": "Се ресетира за {count} дена",
+    "resetsInHours": "Се ресетира за {count} часа",
+    "resetsSoon": "Наскоро се ресетира",
+    "upgradePlan": "Надгради план",
+    "billingMonthly": "Месечно",
+    "billingYearly": "Годишно",
+    "savePercent": "Заштедете ~17%",
+    "popular": "Популарно",
+    "currentPlan": "Тековен",
+    "neoSubtitle": "{count} прашања месечно",
+    "operatorSubtitle": "{count} прашања месечно",
+    "architectSubtitle": "Напреден AI — илјадници разговори + агентна автоматизација",
+    "chatUsageCost": "Разговор: ${used} / ${limit} искористено овој месец",
+    "chatUsageCostNoLimit": "Разговор: ${used} искористено овој месец",
+    "chatUsageMessages": "Разговор: {used} / {limit} пораки овој месец",
+    "chatUsageMessagesNoLimit": "Разговор: {used} пораки овој месец"
 }

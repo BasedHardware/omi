@@ -1709,7 +1709,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'IERĪCES',
+      one: 'IERĪCE',
+    );
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -4565,10 +4570,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get alreadyBestValuePlan => 'Jums jau ir vislabākās vērtības plāns. Nav nepieciešamas izmaiņas.';
 
   @override
-  String get unableToLoadPlans => 'Nevar ielādēt plānus';
+  String get unableToLoadPlans => 'Neizdevās ielādēt plānus';
 
   @override
-  String get checkConnectionTryAgain => 'Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz';
+  String get checkConnectionTryAgain => 'Pārbaudiet savienojumu un mēģiniet vēlreiz';
 
   @override
   String get useFreePlan => 'Izmantot bezmaksas plānu';
@@ -9034,4 +9039,103 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Jums ir maksas plāns.';
+
+  @override
+  String get chatTitle => 'Tērzēšana';
+
+  @override
+  String get chatMessages => 'ziņas';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neierobežotas tērzēšanas ziņas šomēnes';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used no $limit skaitļošanas budžeta izmantots';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used no $limit ziņām izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit izmantots';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Tērzēšanas limits sasniegts. Jauniniet vairāk ziņām.';
+
+  @override
+  String get chatLimitReachedTitle => 'Tērzēšanas limits sasniegts';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Esat izmantojis $used no $limitDisplay plānā $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Atiestatīsies pēc $count dienām';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Atiestatīsies pēc $count stundām';
+  }
+
+  @override
+  String get resetsSoon => 'Drīz atiestatīsies';
+
+  @override
+  String get upgradePlan => 'Jaunināt plānu';
+
+  @override
+  String get billingMonthly => 'Mēnesī';
+
+  @override
+  String get billingYearly => 'Gadā';
+
+  @override
+  String get savePercent => 'Ietaupiet ~17%';
+
+  @override
+  String get popular => 'Populārs';
+
+  @override
+  String get currentPlan => 'Pašreizējais';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String get architectSubtitle => 'Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Tērzēšana: \$$used / \$$limit izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Tērzēšana: \$$used izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Tērzēšana: $used / $limit ziņojumi šomēnes';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Tērzēšana: $used ziņojumi šomēnes';
+  }
 }

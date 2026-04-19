@@ -1761,7 +1761,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rateOnGooglePlay => '在 Google Play 评价';
 
   @override
-  String get maybeLater => '稍后再说';
+  String get maybeLater => '以后再说';
 
   @override
   String get speechProfileIntro => 'Omi需要学习您的目标和声音。您稍后可以修改它。';
@@ -4477,7 +4477,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToLoadPlans => '无法加载计划';
 
   @override
-  String get checkConnectionTryAgain => '请检查您的连接并重试';
+  String get checkConnectionTryAgain => '请检查连接并重试';
 
   @override
   String get useFreePlan => '使用免费计划';
@@ -8407,7 +8407,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -8852,4 +8857,103 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '你正在使用付费计划。';
+
+  @override
+  String get chatTitle => '聊天';
+
+  @override
+  String get chatMessages => '条消息';
+
+  @override
+  String get unlimitedChatThisMonth => '本月无限聊天消息';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '已使用 $used / $limit 计算预算';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '本月已使用 $used / $limit 条消息';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '已使用 $used / $limit';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => '聊天限额已用完。升级以获取更多消息。';
+
+  @override
+  String get chatLimitReachedTitle => '聊天限额已用完';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '您已在 $plan 计划中使用了 $limitDisplay 中的 $used。';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count 天后重置';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count 小时后重置';
+  }
+
+  @override
+  String get resetsSoon => '即将重置';
+
+  @override
+  String get upgradePlan => '升级计划';
+
+  @override
+  String get billingMonthly => '月付';
+
+  @override
+  String get billingYearly => '年付';
+
+  @override
+  String get savePercent => '节省约17%';
+
+  @override
+  String get popular => '热门';
+
+  @override
+  String get currentPlan => '当前';
+
+  @override
+  String neoSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String get architectSubtitle => '高级用户 AI — 数千次对话 + 代理自动化';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return '聊天：\$$used / \$$limit 本月已使用';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return '聊天：\$$used 本月已使用';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return '聊天：$used / $limit 条消息本月';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return '聊天：$used 条消息本月';
+  }
 }

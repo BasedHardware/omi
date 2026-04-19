@@ -4483,7 +4483,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToLoadPlans => 'プランを読み込めません';
 
   @override
-  String get checkConnectionTryAgain => '接続を確認してもう一度お試しください';
+  String get checkConnectionTryAgain => '接続を確認して再試行してください';
 
   @override
   String get useFreePlan => '無料プランを使用';
@@ -8419,7 +8419,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -8867,4 +8872,103 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get chatTitle => 'チャット';
+
+  @override
+  String get chatMessages => 'メッセージ';
+
+  @override
+  String get unlimitedChatThisMonth => '今月のチャットメッセージは無制限です';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit のコンピュート予算を使用';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '今月 $used / $limit メッセージ使用済み';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit 使用済み';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'チャット上限に達しました。アップグレードしてください。';
+
+  @override
+  String get chatLimitReachedTitle => 'チャット上限に達しました';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$planプランで$limitDisplayのうち$usedを使用しました。';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count日後にリセット';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count時間後にリセット';
+  }
+
+  @override
+  String get resetsSoon => 'まもなくリセット';
+
+  @override
+  String get upgradePlan => 'プランをアップグレード';
+
+  @override
+  String get billingMonthly => '月額';
+
+  @override
+  String get billingYearly => '年額';
+
+  @override
+  String get savePercent => '約17%お得';
+
+  @override
+  String get popular => '人気';
+
+  @override
+  String get currentPlan => '現在';
+
+  @override
+  String neoSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String get architectSubtitle => 'パワーユーザーAI — 数千のチャット + エージェント自動化';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'チャット: \$$used / \$$limit 今月の使用量';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'チャット: \$$used 今月の使用量';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'チャット: $used / $limit 件の今月のメッセージ';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'チャット: $used 件の今月のメッセージ';
+  }
 }

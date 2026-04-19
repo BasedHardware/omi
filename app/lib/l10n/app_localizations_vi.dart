@@ -1711,7 +1711,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -1795,7 +1800,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get rateOnGooglePlay => 'Đánh giá trên Google Play';
 
   @override
-  String get maybeLater => 'Có thể Sau';
+  String get maybeLater => 'Có thể sau';
 
   @override
   String get speechProfileIntro => 'Omi cần học mục tiêu và giọng nói của bạn. Bạn có thể sửa đổi sau.';
@@ -4568,7 +4573,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get unableToLoadPlans => 'Không thể tải các gói';
 
   @override
-  String get checkConnectionTryAgain => 'Vui lòng kiểm tra kết nối và thử lại';
+  String get checkConnectionTryAgain => 'Kiểm tra kết nối và thử lại';
 
   @override
   String get useFreePlan => 'Sử dụng gói miễn phí';
@@ -9016,4 +9021,103 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
+
+  @override
+  String get chatTitle => 'Trò chuyện';
+
+  @override
+  String get chatMessages => 'tin nhắn';
+
+  @override
+  String get unlimitedChatThisMonth => 'Tin nhắn trò chuyện không giới hạn tháng này';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used trong $limit ngân sách tính toán đã dùng';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used trong $limit tin nhắn đã dùng tháng này';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit đã dùng';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Đã đạt giới hạn trò chuyện. Nâng cấp để có thêm tin nhắn.';
+
+  @override
+  String get chatLimitReachedTitle => 'Đã đạt giới hạn trò chuyện';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Bạn đã sử dụng $used trong $limitDisplay của gói $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Đặt lại sau $count ngày';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Đặt lại sau $count giờ';
+  }
+
+  @override
+  String get resetsSoon => 'Sắp đặt lại';
+
+  @override
+  String get upgradePlan => 'Nâng cấp gói';
+
+  @override
+  String get billingMonthly => 'Hàng tháng';
+
+  @override
+  String get billingYearly => 'Hàng năm';
+
+  @override
+  String get savePercent => 'Tiết kiệm ~17%';
+
+  @override
+  String get popular => 'Phổ biến';
+
+  @override
+  String get currentPlan => 'Hiện tại';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count câu hỏi mỗi tháng';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count câu hỏi mỗi tháng';
+  }
+
+  @override
+  String get architectSubtitle => 'AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Trò chuyện: \$$used đã dùng tháng này';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Trò chuyện: $used / $limit tin nhắn tháng này';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Trò chuyện: $used tin nhắn tháng này';
+  }
 }

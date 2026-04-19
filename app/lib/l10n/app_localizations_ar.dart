@@ -1693,7 +1693,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -1776,7 +1781,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get rateOnGooglePlay => 'التقييم على Google Play';
 
   @override
-  String get maybeLater => 'ربما لاحقًا';
+  String get maybeLater => 'ربما لاحقاً';
 
   @override
   String get speechProfileIntro => 'يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقًا.';
@@ -8955,4 +8960,103 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
+
+  @override
+  String get chatTitle => 'الدردشة';
+
+  @override
+  String get chatMessages => 'رسائل';
+
+  @override
+  String get unlimitedChatThisMonth => 'رسائل دردشة غير محدودة هذا الشهر';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used من $limit ميزانية الحوسبة مستخدمة';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used من $limit رسالة مستخدمة هذا الشهر';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit مستخدم';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'تم الوصول لحد الدردشة. قم بالترقية لمزيد من الرسائل.';
+
+  @override
+  String get chatLimitReachedTitle => 'تم الوصول لحد الدردشة';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'لقد استخدمت $used من $limitDisplay في خطة $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'يُعاد التعيين خلال $count يوم';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'يُعاد التعيين خلال $count ساعة';
+  }
+
+  @override
+  String get resetsSoon => 'يُعاد التعيين قريباً';
+
+  @override
+  String get upgradePlan => 'ترقية الخطة';
+
+  @override
+  String get billingMonthly => 'شهري';
+
+  @override
+  String get billingYearly => 'سنوي';
+
+  @override
+  String get savePercent => 'وفّر ~17%';
+
+  @override
+  String get popular => 'شائع';
+
+  @override
+  String get currentPlan => 'الحالي';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count سؤال شهرياً';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count سؤال شهرياً';
+  }
+
+  @override
+  String get architectSubtitle => 'ذكاء اصطناعي متقدم — آلاف المحادثات + أتمتة ذكية';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'الدردشة: \$$used / \$$limit مُستخدم هذا الشهر';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'الدردشة: \$$used مُستخدم هذا الشهر';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'الدردشة: $used / $limit رسالة هذا الشهر';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'الدردشة: $used رسالة هذا الشهر';
+  }
 }

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
@@ -24,6 +25,9 @@ from utils.subscription import (
     get_plan_type_from_price_id,
     get_plan_limits,
     is_paid_plan,
+    filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -59,9 +63,12 @@ class UpgradeSubscriptionRequest(BaseModel):
 
 class PricingOption(BaseModel):
     id: str  # price_id
+    plan_id: str = ''  # "unlimited", "operator", "architect"
     title: str  # "Monthly" or "Annual"
     price_string: str  # "$19/month" or "$199/year"
     description: Optional[str] = None
+    subtitle: Optional[str] = None  # e.g. "2000 questions per month"
+    eyebrow: Optional[str] = None  # e.g. "Starter", "Most popular"
     interval: str  # "month" or "year"
     unit_amount: int  # amount in cents
     is_active: bool = False  # Added for active status
@@ -153,8 +160,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 users_db.update_user_subscription(uid, current_subscription.dict())
 
                 # Calculate next billing date
-                from datetime import datetime
-
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
 
                 return {
@@ -222,12 +227,6 @@ def get_available_plans_endpoint(
         # Version-gate the new Operator + Architect catalog. Mobile and older
         # desktop builds see the pre-rollout plan shape. Then legacy-filter so
         # existing subscribers still see their current plan.
-        from utils.subscription import (
-            filter_plans_for_user,
-            should_show_new_plans,
-            adapt_plans_for_legacy_client,
-        )
-
         new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
         all_definitions = get_paid_plan_definitions()
         if not new_plans_enabled:
@@ -258,9 +257,12 @@ def get_available_plans_endpoint(
                     pricing_options.append(
                         PricingOption(
                             id=monthly_price.id,
+                            plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
                             price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
                             description=None,
+                            subtitle=definition.get("subtitle"),
+                            eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
                             unit_amount=monthly_price.unit_amount,
                             is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
@@ -277,9 +279,12 @@ def get_available_plans_endpoint(
                     pricing_options.append(
                         PricingOption(
                             id=annual_price.id,
+                            plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
                             price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
                             description=definition["annual_description"],
+                            subtitle=definition.get("subtitle"),
+                            eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
                             unit_amount=annual_price.unit_amount,
                             is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,

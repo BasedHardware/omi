@@ -1710,7 +1710,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -4571,7 +4576,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get alreadyBestValuePlan => 'Вече имате плана с най-добра стойност. Не са необходими промени.';
 
   @override
-  String get unableToLoadPlans => 'Не може да се заредят планове';
+  String get unableToLoadPlans => 'Неуспешно зареждане на планове';
 
   @override
   String get checkConnectionTryAgain => 'Моля, проверете връзката си и опитайте отново';
@@ -9051,4 +9056,103 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вие сте на платен план.';
+
+  @override
+  String get chatTitle => 'Чат';
+
+  @override
+  String get chatMessages => 'съобщения';
+
+  @override
+  String get unlimitedChatThisMonth => 'Неограничени чат съобщения този месец';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used от $limit изчислителен бюджет използван';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used от $limit съобщения използвани този месец';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit използвани';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Лимитът за чат е достигнат. Надградете за повече съобщения.';
+
+  @override
+  String get chatLimitReachedTitle => 'Лимитът за чат е достигнат';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Използвали сте $used от $limitDisplay в план $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Нулиране след $count дни';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Нулиране след $count часа';
+  }
+
+  @override
+  String get resetsSoon => 'Нулиране скоро';
+
+  @override
+  String get upgradePlan => 'Надграждане на плана';
+
+  @override
+  String get billingMonthly => 'Месечно';
+
+  @override
+  String get billingYearly => 'Годишно';
+
+  @override
+  String get savePercent => 'Спестете ~17%';
+
+  @override
+  String get popular => 'Популярен';
+
+  @override
+  String get currentPlan => 'Текущ';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count въпроса на месец';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count въпроса на месец';
+  }
+
+  @override
+  String get architectSubtitle => 'AI за напреднали — хиляди чатове + агентна автоматизация';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Чат: \$$used / \$$limit използвани този месец';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Чат: \$$used използвани този месец';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Чат: $used / $limit съобщения този месец';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Чат: $used съобщения този месец';
+  }
 }

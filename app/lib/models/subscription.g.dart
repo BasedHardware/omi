@@ -6,6 +6,27 @@ part of 'subscription.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+PlanLimits _$PlanLimitsFromJson(Map<String, dynamic> json) => PlanLimits(
+      transcriptionSeconds: (json['transcription_seconds'] as num?)?.toInt(),
+      wordsTranscribed: (json['words_transcribed'] as num?)?.toInt(),
+      insightsGained: (json['insights_gained'] as num?)?.toInt(),
+      memoriesCreated: (json['memories_created'] as num?)?.toInt(),
+      chatQuestionsPerMonth:
+          (json['chat_questions_per_month'] as num?)?.toInt(),
+      chatCostUsdPerMonth:
+          (json['chat_cost_usd_per_month'] as num?)?.toDouble(),
+    );
+
+Map<String, dynamic> _$PlanLimitsToJson(PlanLimits instance) =>
+    <String, dynamic>{
+      'transcription_seconds': instance.transcriptionSeconds,
+      'words_transcribed': instance.wordsTranscribed,
+      'insights_gained': instance.insightsGained,
+      'memories_created': instance.memoriesCreated,
+      'chat_questions_per_month': instance.chatQuestionsPerMonth,
+      'chat_cost_usd_per_month': instance.chatCostUsdPerMonth,
+    };
+
 Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
       plan: $enumDecode(_$PlanTypeEnumMap, json['plan']),
       status: $enumDecode(_$SubscriptionStatusEnumMap, json['status']),
@@ -19,6 +40,9 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
       cancelAtPeriodEnd: json['cancel_at_period_end'] as bool? ?? false,
       deprecated: json['deprecated'] as bool? ?? false,
       deprecationMessage: json['deprecation_message'] as String?,
+      limits: json['limits'] == null
+          ? null
+          : PlanLimits.fromJson(json['limits'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
@@ -32,6 +56,7 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
       'cancel_at_period_end': instance.cancelAtPeriodEnd,
       'deprecated': instance.deprecated,
       'deprecation_message': instance.deprecationMessage,
+      'limits': instance.limits,
     };
 
 const _$PlanTypeEnumMap = {
@@ -104,6 +129,11 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               .toList() ??
           [],
       showSubscriptionUi: json['show_subscription_ui'] as bool? ?? true,
+      chatQuotaUsed: (json['chat_quota_used'] as num?)?.toDouble() ?? 0.0,
+      chatQuotaUnit: json['chat_quota_unit'] as String?,
+      chatQuotaPercent: (json['chat_quota_percent'] as num?)?.toDouble() ?? 0.0,
+      chatQuotaAllowed: json['chat_quota_allowed'] as bool? ?? true,
+      chatQuotaResetAt: (json['chat_quota_reset_at'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$UserSubscriptionResponseToJson(
@@ -120,4 +150,9 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'memories_created_limit': instance.memoriesCreatedLimit,
       'available_plans': instance.availablePlans,
       'show_subscription_ui': instance.showSubscriptionUi,
+      'chat_quota_used': instance.chatQuotaUsed,
+      'chat_quota_unit': instance.chatQuotaUnit,
+      'chat_quota_percent': instance.chatQuotaPercent,
+      'chat_quota_allowed': instance.chatQuotaAllowed,
+      'chat_quota_reset_at': instance.chatQuotaResetAt,
     };

@@ -1707,7 +1707,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4567,10 +4572,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get alreadyBestValuePlan => 'आपल्याकडे आधीच सर्वोत्तम मूल्य योजना आहे. कोणतेही बदल आवश्यक नाही.';
 
   @override
-  String get unableToLoadPlans => 'योजना लोड करू शकत नाही';
+  String get unableToLoadPlans => 'प्लॅन लोड करता आले नाहीत';
 
   @override
-  String get checkConnectionTryAgain => 'कृपया आपला जोडणी तपासा आणि पुन्हा प्रयत्न करा';
+  String get checkConnectionTryAgain => 'कनेक्शन तपासा आणि पुन्हा प्रयत्न करा';
 
   @override
   String get useFreePlan => 'मोफत योजना वापरा';
@@ -8569,7 +8574,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count संभाषण$_temp0 तयार केले गेले';
   }
 
@@ -9022,4 +9032,103 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'तुम्ही सशुल्क प्लॅनवर आहात.';
+
+  @override
+  String get chatTitle => 'चॅट';
+
+  @override
+  String get chatMessages => 'संदेश';
+
+  @override
+  String get unlimitedChatThisMonth => 'या महिन्यात अमर्यादित चॅट संदेश';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit गणना बजेट वापरले';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return 'या महिन्यात $used / $limit संदेश वापरले';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit वापरले';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'चॅट मर्यादा गाठली. अधिक संदेशांसाठी अपग्रेड करा.';
+
+  @override
+  String get chatLimitReachedTitle => 'चॅट मर्यादा गाठली';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan प्लॅनवर $limitDisplay पैकी $used वापरले.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count दिवसांत रीसेट होईल';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count तासांत रीसेट होईल';
+  }
+
+  @override
+  String get resetsSoon => 'लवकरच रीसेट होईल';
+
+  @override
+  String get upgradePlan => 'प्लॅन अपग्रेड करा';
+
+  @override
+  String get billingMonthly => 'मासिक';
+
+  @override
+  String get billingYearly => 'वार्षिक';
+
+  @override
+  String get savePercent => '~17% बचत करा';
+
+  @override
+  String get popular => 'लोकप्रिय';
+
+  @override
+  String get currentPlan => 'सध्याचा';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'दरमहा $count प्रश्न';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'दरमहा $count प्रश्न';
+  }
+
+  @override
+  String get architectSubtitle => 'पॉवर-यूजर AI — हजारो चॅट + एजेंटिक ऑटोमेशन';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'चॅट: \$$used / \$$limit या महिन्यात वापरले';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'चॅट: \$$used या महिन्यात वापरले';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'चॅट: $used / $limit संदेश या महिन्यात';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'चॅट: $used संदेश या महिन्यात';
+  }
 }

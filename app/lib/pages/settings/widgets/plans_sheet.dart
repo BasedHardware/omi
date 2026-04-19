@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -44,7 +45,8 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
-  String selectedPlan = 'yearly'; // 'yearly' or 'monthly'
+  String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
+  String? selectedTierId; // 'unlimited', 'operator', 'architect'
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
@@ -363,10 +365,19 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final plans = availablePlans['plans'] as List;
-    final selectedPlanData = plans.firstWhere(
-      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-      orElse: () => null,
-    );
+    final tierId = selectedTierId;
+
+    // Find the matching plan: match tier + billing period
+    Map<String, dynamic>? selectedPlanData;
+    if (tierId != null) {
+      selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
+            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+          );
+    }
+    // Fallback to old behavior (first plan matching interval) for backwards compat
+    selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
+          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+        );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -378,7 +389,11 @@ class _PlansSheetState extends State<PlansSheet> {
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
-    final isUpgradingFromMonthlyToAnnual =
+    // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
+    // Cross-tier changes are immediate+prorated on the backend, not deferred.
+    final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
+    final isSameTier = currentTierName == tierId;
+    final isUpgradingFromMonthlyToAnnual = isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -925,8 +940,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded =
-                                  sub?.currentPeriodEnd != null &&
+                              final periodEnded = sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1028,8 +1042,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption =
-                                _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1122,75 +1135,19 @@ class _PlansSheetState extends State<PlansSheet> {
                                 // User is on monthly plan - show upgrade options
                                 return Consumer<UsageProvider>(
                                   builder: (context, usageProvider, child) {
-                                    return Column(
-                                      children: [
-                                        if (usageProvider.isLoadingPlans) ...[
+                                    if (usageProvider.isLoadingPlans) {
+                                      return Column(
+                                        children: [
                                           _buildShimmerPlanOption(),
                                           const SizedBox(height: 18),
                                           _buildShimmerPlanOption(),
-                                        ] else if (usageProvider.availablePlans != null) ...[
-                                          _buildDynamicPlanOption(
-                                            isSelected: selectedPlan == 'yearly',
-                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                              (plan) => plan['interval'] == 'year',
-                                            ),
-                                            saveTag: '2 Months Free',
-                                            isPopular: true,
-                                            onTap: () {
-                                              HapticFeedback.lightImpact();
-                                              setState(() => selectedPlan = 'yearly');
-                                            },
-                                          ),
-                                          const SizedBox(height: 18),
-                                          _buildDynamicPlanOption(
-                                            isSelected: selectedPlan == 'monthly',
-                                            planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                              (plan) => plan['interval'] == 'month',
-                                            ),
-                                            onTap: () {
-                                              HapticFeedback.lightImpact();
-                                              setState(() => selectedPlan = 'monthly');
-                                            },
-                                          ),
-                                        ] else ...[
-                                          Container(
-                                            padding: const EdgeInsets.all(20),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(16),
-                                              border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                            ),
-                                            child: Column(
-                                              children: [
-                                                const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                  'Unable to load plans',
-                                                  style: TextStyle(
-                                                    color: Colors.red.shade300,
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Please check your connection and try again',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(color: Colors.red.shade400, fontSize: 14),
-                                                ),
-                                                const SizedBox(height: 12),
-                                                TextButton(
-                                                  onPressed: () {
-                                                    _loadAvailablePlans();
-                                                  },
-                                                  child: const Text('Retry', style: TextStyle(color: Colors.red)),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
                                         ],
-                                      ],
-                                    );
+                                      );
+                                    }
+                                    if (usageProvider.availablePlans != null) {
+                                      return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
+                                    }
+                                    return _buildPlansErrorCard();
                                   },
                                 );
                               }
@@ -1200,150 +1157,38 @@ class _PlansSheetState extends State<PlansSheet> {
                           // User has canceled subscription - show available plans to resubscribe
                           Consumer<UsageProvider>(
                             builder: (context, usageProvider, child) {
-                              return Column(
-                                children: [
-                                  if (usageProvider.isLoadingPlans) ...[
+                              if (usageProvider.isLoadingPlans) {
+                                return Column(
+                                  children: [
                                     _buildShimmerPlanOption(),
                                     const SizedBox(height: 18),
                                     _buildShimmerPlanOption(),
-                                  ] else if (usageProvider.availablePlans != null) ...[
-                                    _buildDynamicPlanOption(
-                                      isSelected: selectedPlan == 'yearly',
-                                      planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                        (plan) => plan['interval'] == 'year',
-                                      ),
-                                      saveTag: '2 Months Free',
-                                      isPopular: true,
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        setState(() => selectedPlan = 'yearly');
-                                      },
-                                    ),
-                                    const SizedBox(height: 18),
-                                    _buildDynamicPlanOption(
-                                      isSelected: selectedPlan == 'monthly',
-                                      planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                        (plan) => plan['interval'] == 'month',
-                                      ),
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        setState(() => selectedPlan = 'monthly');
-                                      },
-                                    ),
-                                  ] else ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Unable to load plans',
-                                            style: TextStyle(
-                                              color: Colors.red.shade300,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Please check your connection and try again',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(color: Colors.red.shade400, fontSize: 14),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          TextButton(
-                                            onPressed: () {
-                                              _loadAvailablePlans();
-                                            },
-                                            child: const Text('Retry', style: TextStyle(color: Colors.red)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                   ],
-                                ],
-                              );
+                                );
+                              }
+                              if (usageProvider.availablePlans != null) {
+                                return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
+                              }
+                              return _buildPlansErrorCard();
                             },
                           ),
                         ] else if (!isUnlimited) ...[
                           // User is on basic plan - show upgrade options
                           Consumer<UsageProvider>(
                             builder: (context, usageProvider, child) {
-                              return Column(
-                                children: [
-                                  if (usageProvider.isLoadingPlans) ...[
+                              if (usageProvider.isLoadingPlans) {
+                                return Column(
+                                  children: [
                                     _buildShimmerPlanOption(),
                                     const SizedBox(height: 18),
                                     _buildShimmerPlanOption(),
-                                  ] else if (usageProvider.availablePlans != null) ...[
-                                    _buildDynamicPlanOption(
-                                      isSelected: selectedPlan == 'yearly',
-                                      planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                        (plan) => plan['interval'] == 'year',
-                                      ),
-                                      saveTag: '2 Months Free',
-                                      isPopular: true,
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        setState(() => selectedPlan = 'yearly');
-                                      },
-                                    ),
-                                    const SizedBox(height: 18),
-                                    _buildDynamicPlanOption(
-                                      isSelected: selectedPlan == 'monthly',
-                                      planData: (usageProvider.availablePlans!['plans'] as List).firstWhere(
-                                        (plan) => plan['interval'] == 'month',
-                                      ),
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        setState(() => selectedPlan = 'monthly');
-                                      },
-                                    ),
-                                  ] else ...[
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(color: Colors.red.withOpacity(0.3)),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          const Icon(Icons.error_outline, color: Colors.red, size: 32),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Unable to load plans',
-                                            style: TextStyle(
-                                              color: Colors.red.shade300,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Please check your connection and try again',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(color: Colors.red.shade400, fontSize: 14),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          TextButton(
-                                            onPressed: () {
-                                              _loadAvailablePlans();
-                                            },
-                                            child: const Text('Retry', style: TextStyle(color: Colors.red)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                   ],
-                                ],
-                              );
+                                );
+                              }
+                              if (usageProvider.availablePlans != null) {
+                                return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
+                              }
+                              return _buildPlansErrorCard();
                             },
                           ),
                         ],
@@ -1357,8 +1202,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton =
-                                !isOnAnnualPlan &&
+                            final shouldShowContinueButton = !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1519,9 +1363,9 @@ class _PlansSheetState extends State<PlansSheet> {
                                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                       ),
                                     ] else ...[
-                                      const Text(
-                                        'Resubscribe',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                                      Text(
+                                        context.l10n.resubscribe,
+                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                                       ),
                                       const SizedBox(width: 8),
                                       AnimatedBuilder(
@@ -1593,6 +1437,400 @@ class _PlansSheetState extends State<PlansSheet> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildPlansErrorCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            context.l10n.unableToLoadPlans,
+            style: TextStyle(color: Colors.red.shade300, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.checkConnectionTryAgain,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.red.shade400, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _loadAvailablePlans,
+            child: Text(context.l10n.retry, style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Groups available plans by plan_id and shows a tier selector + billing period toggle.
+  Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
+    final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
+
+    // Group plans by plan_id
+    final Map<String, List<Map<String, dynamic>>> grouped = {};
+    for (final plan in plans) {
+      final planId = plan['plan_id'] as String? ?? '';
+      grouped.putIfAbsent(planId, () => []).add(plan);
+    }
+
+    // If only 1 tier, fallback to old behavior (monthly/yearly cards)
+    if (grouped.length <= 1) {
+      return _buildLegacyPlanCards(plans: plans);
+    }
+
+    // Tier ordering
+    const tierOrder = ['unlimited', 'operator', 'architect'];
+    final sortedTierIds = grouped.keys.toList()
+      ..sort((a, b) {
+        final ai = tierOrder.indexOf(a);
+        final bi = tierOrder.indexOf(b);
+        return (ai == -1 ? 999 : ai).compareTo(bi == -1 ? 999 : bi);
+      });
+
+    // Auto-select current plan's tier, or first tier if none selected
+    if (selectedTierId == null) {
+      final activeTier = sortedTierIds.firstWhereOrNull(
+        (tid) => grouped[tid]!.any((p) => p['is_active'] == true),
+      );
+      selectedTierId = activeTier ?? sortedTierIds.first;
+    }
+
+    final isYearly = selectedPlan == 'yearly';
+
+    return Column(
+      children: [
+        // Billing period toggle
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    setState(() => selectedPlan = 'monthly');
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: !isYearly ? Colors.deepPurple : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      context.l10n.billingMonthly,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: !isYearly ? Colors.white : Colors.grey.shade400,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    setState(() => selectedPlan = 'yearly');
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isYearly ? Colors.deepPurple : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          context.l10n.billingYearly,
+                          style: TextStyle(
+                            color: isYearly ? Colors.white : Colors.grey.shade400,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            context.l10n.savePercent,
+                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        // Tier cards
+        ...sortedTierIds.map((tierId) {
+          final tierPlans = grouped[tierId]!;
+          final planForPeriod = tierPlans.firstWhereOrNull(
+            (p) => p['interval'] == (isYearly ? 'year' : 'month'),
+          );
+          if (planForPeriod == null) return const SizedBox.shrink();
+
+          final isSelected = selectedTierId == tierId;
+          final title = _tierDisplayName(tierId);
+          final eyebrow = planForPeriod['eyebrow'] as String?;
+          final subtitle = _localizedSubtitle(context, tierId, planForPeriod['subtitle'] as String?);
+          final priceString = planForPeriod['price_string'] as String? ?? '';
+          final isActive = planForPeriod['is_active'] as bool? ?? false;
+
+          // Check cancellation
+          final provider = context.read<UsageProvider>();
+          final sub = provider.subscription?.subscription;
+          final isCancelled = sub?.cancelAtPeriodEnd ?? false;
+          final planPriceId = planForPeriod['id'] as String;
+          String? endsOnDate;
+          if (isCancelled && sub?.currentPeriodEnd != null && sub?.currentPriceId == planPriceId) {
+            final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
+            endsOnDate = '${date.month}/${date.day}/${date.year}';
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildTierCard(
+              isSelected: isSelected,
+              title: title,
+              eyebrow: eyebrow,
+              subtitle: subtitle,
+              priceString: priceString,
+              isActive: isActive && !isCancelled,
+              endsOnDate: endsOnDate,
+              onTap: isActive && !isCancelled
+                  ? () {}
+                  : () {
+                      HapticFeedback.lightImpact();
+                      setState(() => selectedTierId = tierId);
+                    },
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  String _tierDisplayName(String tierId) {
+    switch (tierId) {
+      case 'unlimited':
+        return 'Neo';
+      case 'operator':
+        return 'Operator';
+      case 'architect':
+        return 'Architect';
+      default:
+        return tierId.substring(0, 1).toUpperCase() + tierId.substring(1);
+    }
+  }
+
+  String? _localizedSubtitle(BuildContext context, String tierId, String? apiSubtitle) {
+    // Extract the leading number from the API subtitle (e.g. "200 questions per month" → 200)
+    // so the UI always reflects the backend-configured cap.
+    int? _extractCount(String? s) {
+      if (s == null) return null;
+      final match = RegExp(r'(\d+)').firstMatch(s);
+      return match != null ? int.tryParse(match.group(1)!) : null;
+    }
+
+    switch (tierId) {
+      case 'unlimited':
+        final count = _extractCount(apiSubtitle) ?? 200;
+        return context.l10n.neoSubtitle(count);
+      case 'operator':
+        final count = _extractCount(apiSubtitle) ?? 500;
+        return context.l10n.operatorSubtitle(count);
+      case 'architect':
+        return context.l10n.architectSubtitle;
+      default:
+        return apiSubtitle;
+    }
+  }
+
+  /// Fallback for single-tier plan display (old monthly/yearly cards).
+  Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
+    return Column(
+      children: [
+        _buildDynamicPlanOption(
+          isSelected: selectedPlan == 'yearly',
+          planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
+          saveTag: '2 Months Free',
+          isPopular: true,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => selectedPlan = 'yearly');
+          },
+        ),
+        const SizedBox(height: 18),
+        _buildDynamicPlanOption(
+          isSelected: selectedPlan == 'monthly',
+          planData: plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => selectedPlan = 'monthly');
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTierCard({
+    required bool isSelected,
+    required String title,
+    String? eyebrow,
+    String? subtitle,
+    required String priceString,
+    required bool isActive,
+    String? endsOnDate,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.deepPurple.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isActive
+                ? Colors.green.withOpacity(0.5)
+                : isSelected
+                    ? Colors.deepPurple
+                    : Colors.white.withOpacity(0.1),
+            width: isSelected || isActive ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Selection indicator
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isActive
+                      ? Colors.green
+                      : isSelected
+                          ? Colors.deepPurple
+                          : Colors.grey.shade600,
+                  width: 2,
+                ),
+                color: isActive
+                    ? Colors.green
+                    : isSelected
+                        ? Colors.deepPurple
+                        : Colors.transparent,
+              ),
+              child: isActive || isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
+            ),
+            const SizedBox(width: 14),
+            // Plan info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (eyebrow != null && eyebrow == 'Most popular') ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            context.l10n.popular,
+                            style: const TextStyle(color: Colors.deepPurple, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                      if (isActive) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            context.l10n.currentPlan,
+                            style: const TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                      if (endsOnDate != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            context.l10n.endsOnDate(endsOnDate!),
+                            style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // Price
+            Text(
+              priceString,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

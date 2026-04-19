@@ -1715,7 +1715,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4589,10 +4594,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get alreadyBestValuePlan => 'உங்களிடம் ஏற்கனவே சிறந்த மதிப்பு திட்டம் உள்ளது. எந்த மாற்றமும் தேவையில்லை.';
 
   @override
-  String get unableToLoadPlans => 'திட்டங்களைச் சரிசெய்ய முடியவில்லை';
+  String get unableToLoadPlans => 'திட்டங்களை ஏற்ற முடியவில்லை';
 
   @override
-  String get checkConnectionTryAgain => 'உங்கள் இணைப்பைச் சரிபார்க்கவும் மற்றும் மீண்டும் முயற்சி செய்யவும்';
+  String get checkConnectionTryAgain => 'இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்';
 
   @override
   String get useFreePlan => 'இலவச திட்டத்தைப் பயன்படுத்தவும்';
@@ -8620,7 +8625,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9080,4 +9090,103 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'நீங்கள் கட்டண திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get chatTitle => 'அரட்டை';
+
+  @override
+  String get chatMessages => 'செய்திகள்';
+
+  @override
+  String get unlimitedChatThisMonth => 'இந்த மாதம் வரம்பற்ற அரட்டை செய்திகள்';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit கணக்கீடு பட்ஜெட் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return 'இந்த மாதம் $used / $limit செய்திகள் பயன்படுத்தப்பட்டன';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'அரட்டை வரம்பு எட்டியது. மேலும் செய்திகளுக்கு மேம்படுத்தவும்.';
+
+  @override
+  String get chatLimitReachedTitle => 'அரட்டை வரம்பு எட்டியது';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan திட்டத்தில் $limitDisplay இல் $used பயன்படுத்தியுள்ளீர்கள்.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count நாட்களில் மீட்டமைக்கப்படும்';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count மணி நேரத்தில் மீட்டமைக்கப்படும்';
+  }
+
+  @override
+  String get resetsSoon => 'விரைவில் மீட்டமைக்கப்படும்';
+
+  @override
+  String get upgradePlan => 'திட்டத்தை மேம்படுத்து';
+
+  @override
+  String get billingMonthly => 'மாதாந்திர';
+
+  @override
+  String get billingYearly => 'ஆண்டு';
+
+  @override
+  String get savePercent => '~17% சேமிக்கவும்';
+
+  @override
+  String get popular => 'பிரபலம்';
+
+  @override
+  String get currentPlan => 'தற்போதைய';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String get architectSubtitle => 'பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'அரட்டை: \$$used / \$$limit இந்த மாதம் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'அரட்டை: \$$used இந்த மாதம் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'அரட்டை: $used / $limit செய்திகள் இந்த மாதம்';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'அரட்டை: $used செய்திகள் இந்த மாதம்';
+  }
 }

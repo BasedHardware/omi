@@ -364,6 +364,8 @@ async def create_voice_message_stream(
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
 ):
+    enforce_chat_quota(uid)
+
     # wav
     paths = retrieve_file_paths(files, uid)
     if len(paths) == 0:

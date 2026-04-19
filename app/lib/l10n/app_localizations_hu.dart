@@ -1717,7 +1717,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ESZKÖZ',
+      one: 'ESZKÖZ',
+    );
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -9055,4 +9060,103 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Fizetős csomagod van.';
+
+  @override
+  String get chatTitle => 'Csevegés';
+
+  @override
+  String get chatMessages => 'üzenet';
+
+  @override
+  String get unlimitedChatThisMonth => 'Korlátlan csevegés ebben a hónapban';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit számítási keret felhasználva';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used / $limit üzenet felhasználva ebben a hónapban';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit felhasználva';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Csevegési korlát elérve. Frissítsen több üzenetért.';
+
+  @override
+  String get chatLimitReachedTitle => 'Csevegési korlát elérve';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Felhasznált $used / $limitDisplay a $plan csomagban.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Visszaáll $count nap múlva';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Visszaáll $count óra múlva';
+  }
+
+  @override
+  String get resetsSoon => 'Hamarosan visszaáll';
+
+  @override
+  String get upgradePlan => 'Csomag frissítése';
+
+  @override
+  String get billingMonthly => 'Havi';
+
+  @override
+  String get billingYearly => 'Éves';
+
+  @override
+  String get savePercent => '~17% megtakarítás';
+
+  @override
+  String get popular => 'Népszerű';
+
+  @override
+  String get currentPlan => 'Jelenlegi';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count kérdés havonta';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count kérdés havonta';
+  }
+
+  @override
+  String get architectSubtitle => 'Haladó AI — ezernyi chat + ügynök automatizáció';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit felhasználva ebben a hónapban';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used felhasználva ebben a hónapban';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit üzenet ebben a hónapban';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used üzenet ebben a hónapban';
+  }
 }

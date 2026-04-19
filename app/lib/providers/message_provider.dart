@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -52,6 +53,10 @@ class MessageProvider extends ChangeNotifier {
 
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
+
+  // Chat quota exceeded — set transiently when backend returns 402
+  bool _chatQuotaExceeded = false;
+  bool get isChatQuotaExceeded => _chatQuotaExceeded;
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -462,6 +467,7 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -527,6 +533,12 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          if (_tryParseQuotaError(chunk.text)) {
+            messages.removeAt(aiIndex);
+            notifyListeners();
+            setShowTypingIndicator(false);
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -541,6 +553,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
@@ -636,6 +649,15 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
+          if (_tryParseQuotaError(chunk.text)) {
+            // Remove both AI placeholder and the human message that was never stored
+            messages.removeAt(aiIndex);
+            if (aiIndex > 0) {
+              messages.removeAt(aiIndex - 1);
+            }
+            notifyListeners();
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -653,6 +675,22 @@ class MessageProvider extends ChangeNotifier {
       setShowTypingIndicator(false);
       setSendingMessage(false);
     }
+  }
+
+  bool _tryParseQuotaError(String errorText) {
+    try {
+      var json = jsonDecode(errorText);
+      if (json is! Map) return false;
+      // FastAPI wraps HTTPException detail in {"detail": {...}}
+      var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['error'] == 'quota_exceeded') {
+        detail['allowed'] = false;
+        _chatQuotaExceeded = true;
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future _sendMessageViaAgent(String text, String? appId) async {

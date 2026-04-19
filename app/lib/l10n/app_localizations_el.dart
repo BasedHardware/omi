@@ -1718,7 +1718,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ΣΥΣΚΕΥΕΣ', one: 'ΣΥΣΚΕΥΗ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ΣΥΣΚΕΥΕΣ',
+      one: 'ΣΥΣΚΕΥΗ',
+    );
     return '$count $_temp0 ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ';
   }
 
@@ -4594,7 +4599,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get alreadyBestValuePlan => 'Έχετε ήδη το πρόγραμμα με την καλύτερη αξία. Δεν χρειάζονται αλλαγές.';
 
   @override
-  String get unableToLoadPlans => 'Αδυναμία φόρτωσης προγραμμάτων';
+  String get unableToLoadPlans => 'Αδυναμία φόρτωσης πλάνων';
 
   @override
   String get checkConnectionTryAgain => 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά';
@@ -9081,4 +9086,103 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Είστε σε πληρωμένο πλάνο.';
+
+  @override
+  String get chatTitle => 'Συνομιλία';
+
+  @override
+  String get chatMessages => 'μηνύματα';
+
+  @override
+  String get unlimitedChatThisMonth => 'Απεριόριστα μηνύματα συνομιλίας αυτόν τον μήνα';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used από $limit υπολογιστικό προϋπολογισμό χρησιμοποιήθηκε';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used από $limit μηνύματα χρησιμοποιήθηκαν αυτόν τον μήνα';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit χρησιμοποιήθηκαν';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Το όριο συνομιλίας επιτεύχθηκε. Αναβαθμίστε για περισσότερα μηνύματα.';
+
+  @override
+  String get chatLimitReachedTitle => 'Το όριο συνομιλίας επιτεύχθηκε';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Έχετε χρησιμοποιήσει $used από $limitDisplay στο πλάνο $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Επαναφορά σε $count ημέρες';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Επαναφορά σε $count ώρες';
+  }
+
+  @override
+  String get resetsSoon => 'Επαναφορά σύντομα';
+
+  @override
+  String get upgradePlan => 'Αναβάθμιση πλάνου';
+
+  @override
+  String get billingMonthly => 'Μηνιαίο';
+
+  @override
+  String get billingYearly => 'Ετήσιο';
+
+  @override
+  String get savePercent => 'Εξοικονομήστε ~17%';
+
+  @override
+  String get popular => 'Δημοφιλές';
+
+  @override
+  String get currentPlan => 'Τρέχον';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count ερωτήσεις ανά μήνα';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count ερωτήσεις ανά μήνα';
+  }
+
+  @override
+  String get architectSubtitle => 'AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Συνομιλία: \$$used / \$$limit χρησιμοποιήθηκαν αυτόν τον μήνα';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Συνομιλία: \$$used χρησιμοποιήθηκαν αυτόν τον μήνα';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Συνομιλία: $used / $limit μηνύματα αυτόν τον μήνα';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Συνομιλία: $used μηνύματα αυτόν τον μήνα';
+  }
 }

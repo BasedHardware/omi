@@ -3047,5 +3047,30 @@
     "youAreOnAPaidPlan": "Fizetős csomagod van.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Csevegés",
+    "chatMessages": "üzenet",
+    "unlimitedChatThisMonth": "Korlátlan csevegés ebben a hónapban",
+    "chatUsedOfLimitCompute": "{used} / {limit} számítási keret felhasználva",
+    "chatUsedOfLimitMessages": "{used} / {limit} üzenet felhasználva ebben a hónapban",
+    "chatUsageProgress": "{used} / {limit} felhasználva",
+    "chatLimitReachedUpgrade": "Csevegési korlát elérve. Frissítsen több üzenetért.",
+    "chatLimitReachedTitle": "Csevegési korlát elérve",
+    "chatUsageDescription": "Felhasznált {used} / {limitDisplay} a {plan} csomagban.",
+    "resetsInDays": "Visszaáll {count} nap múlva",
+    "resetsInHours": "Visszaáll {count} óra múlva",
+    "resetsSoon": "Hamarosan visszaáll",
+    "upgradePlan": "Csomag frissítése",
+    "billingMonthly": "Havi",
+    "billingYearly": "Éves",
+    "savePercent": "~17% megtakarítás",
+    "popular": "Népszerű",
+    "currentPlan": "Jelenlegi",
+    "neoSubtitle": "{count} kérdés havonta",
+    "operatorSubtitle": "{count} kérdés havonta",
+    "architectSubtitle": "Haladó AI — ezernyi chat + ügynök automatizáció",
+    "chatUsageCost": "Chat: ${used} / ${limit} felhasználva ebben a hónapban",
+    "chatUsageCostNoLimit": "Chat: ${used} felhasználva ebben a hónapban",
+    "chatUsageMessages": "Chat: {used} / {limit} üzenet ebben a hónapban",
+    "chatUsageMessagesNoLimit": "Chat: {used} üzenet ebben a hónapban"
 }

@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -8733,10 +8733,10 @@ abstract class AppLocalizations {
   /// **'Cancel Subscription'**
   String get cancelSubscription;
 
-  /// Shows end date
+  /// No description provided for @endsOnDate.
   ///
   /// In en, this message translates to:
-  /// **'Ends on {date}'**
+  /// **'Ends {date}'**
   String endsOnDate(String date);
 
   /// Status label for active
@@ -16868,6 +16868,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You are on a paid plan.'**
   String get youAreOnAPaidPlan;
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'messages'**
+  String get chatMessages;
+
+  /// No description provided for @unlimitedChatThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited chat messages this month'**
+  String get unlimitedChatThisMonth;
+
+  /// No description provided for @chatUsedOfLimitCompute.
+  ///
+  /// In en, this message translates to:
+  /// **'\${used} of \${limit} compute budget used'**
+  String chatUsedOfLimitCompute(String used, String limit);
+
+  /// No description provided for @chatUsedOfLimitMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {limit} messages used this month'**
+  String chatUsedOfLimitMessages(String used, String limit);
+
+  /// No description provided for @chatUsageProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} / {limit} used'**
+  String chatUsageProgress(String used, String limit);
+
+  /// No description provided for @chatLimitReachedUpgrade.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat limit reached. Upgrade for more messages.'**
+  String get chatLimitReachedUpgrade;
+
+  /// No description provided for @chatLimitReachedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Limit Reached'**
+  String get chatLimitReachedTitle;
+
+  /// No description provided for @chatUsageDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used {used} of your {limitDisplay} on the {plan} plan.'**
+  String chatUsageDescription(String used, String limitDisplay, String plan);
+
+  /// No description provided for @resetsInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets in {count} day(s)'**
+  String resetsInDays(int count);
+
+  /// No description provided for @resetsInHours.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets in {count} hour(s)'**
+  String resetsInHours(int count);
+
+  /// No description provided for @resetsSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets soon'**
+  String get resetsSoon;
+
+  /// No description provided for @upgradePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Plan'**
+  String get upgradePlan;
+
+  /// No description provided for @billingMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get billingMonthly;
+
+  /// No description provided for @billingYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get billingYearly;
+
+  /// No description provided for @savePercent.
+  ///
+  /// In en, this message translates to:
+  /// **'Save ~17%'**
+  String get savePercent;
+
+  /// No description provided for @popular.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular'**
+  String get popular;
+
+  /// No description provided for @currentPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get currentPlan;
+
+  /// No description provided for @neoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String neoSubtitle(int count);
+
+  /// No description provided for @operatorSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String operatorSubtitle(int count);
+
+  /// No description provided for @architectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power-user AI — thousands of chats + agentic automations'**
+  String get architectSubtitle;
+
+  /// No description provided for @chatUsageCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} / \${limit} used this month'**
+  String chatUsageCost(String used, String limit);
+
+  /// No description provided for @chatUsageCostNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} used this month'**
+  String chatUsageCostNoLimit(String used);
+
+  /// No description provided for @chatUsageMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} / {limit} messages this month'**
+  String chatUsageMessages(String used, String limit);
+
+  /// No description provided for @chatUsageMessagesNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} messages this month'**
+  String chatUsageMessagesNoLimit(String used);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16880,56 +17030,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-    'ar',
-    'be',
-    'bg',
-    'bn',
-    'bs',
-    'ca',
-    'cs',
-    'da',
-    'de',
-    'el',
-    'en',
-    'es',
-    'et',
-    'fa',
-    'fi',
-    'fr',
-    'he',
-    'hi',
-    'hr',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'kn',
-    'ko',
-    'lt',
-    'lv',
-    'mk',
-    'mr',
-    'ms',
-    'nl',
-    'no',
-    'pl',
-    'pt',
-    'ro',
-    'ru',
-    'sk',
-    'sl',
-    'sr',
-    'sv',
-    'ta',
-    'te',
-    'th',
-    'tl',
-    'tr',
-    'uk',
-    'ur',
-    'vi',
-    'zh',
-  ].contains(locale.languageCode);
+        'ar',
+        'be',
+        'bg',
+        'bn',
+        'bs',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fa',
+        'fi',
+        'fr',
+        'he',
+        'hi',
+        'hr',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'kn',
+        'ko',
+        'lt',
+        'lv',
+        'mk',
+        'mr',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sl',
+        'sr',
+        'sv',
+        'ta',
+        'te',
+        'th',
+        'tl',
+        'tr',
+        'uk',
+        'ur',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -17038,10 +17188,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

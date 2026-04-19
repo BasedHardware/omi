@@ -1710,7 +1710,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ZARIADENIA',
+      one: 'ZARIADENIE',
+    );
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -4554,10 +4559,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get alreadyBestValuePlan => 'Už máte plán s najlepšou hodnotou. Nie sú potrebné žiadne zmeny.';
 
   @override
-  String get unableToLoadPlans => 'Nedá sa načítať plány';
+  String get unableToLoadPlans => 'Nepodarilo sa načítať plány';
 
   @override
-  String get checkConnectionTryAgain => 'Skontrolujte pripojenie a skúste to znova';
+  String get checkConnectionTryAgain => 'Skontrolujte pripojenie a skúste znova';
 
   @override
   String get useFreePlan => 'Použiť bezplatný plán';
@@ -9004,4 +9009,103 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Máte platený plán.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'správ';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neobmedzené chatové správy tento mesiac';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used z $limit výpočtového rozpočtu využitých';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used z $limit správ využitých tento mesiac';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit využitých';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Limit chatu dosiahnutý. Aktualizujte pre viac správ.';
+
+  @override
+  String get chatLimitReachedTitle => 'Limit chatu dosiahnutý';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Využili ste $used z $limitDisplay na pláne $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Obnoví sa o $count dní';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Obnoví sa o $count hodín';
+  }
+
+  @override
+  String get resetsSoon => 'Čoskoro sa obnoví';
+
+  @override
+  String get upgradePlan => 'Aktualizovať plán';
+
+  @override
+  String get billingMonthly => 'Mesačne';
+
+  @override
+  String get billingYearly => 'Ročne';
+
+  @override
+  String get savePercent => 'Ušetrite ~17%';
+
+  @override
+  String get popular => 'Obľúbené';
+
+  @override
+  String get currentPlan => 'Aktuálny';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count otázok mesačne';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count otázok mesačne';
+  }
+
+  @override
+  String get architectSubtitle => 'Pokročilé AI — tisíce chatov + agentná automatizácia';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit využité tento mesiac';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used využité tento mesiac';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit správ tento mesiac';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used správ tento mesiac';
+  }
 }
