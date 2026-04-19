@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Right-click the floating bar to snooze it (and notifications) for 2 hours"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.337",
+      "date": "2026-04-19",
+      "changes": [
+        "Right-click the floating bar to snooze it (and notifications) for 2 hours"
+      ]
+    },
     {
       "version": "0.11.336",
       "date": "2026-04-19",
