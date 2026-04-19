@@ -5,6 +5,8 @@ Covers issue #6837: translation cost optimization via explicit client control.
 Uses module stubbing to avoid Firestore/Redis init at import time.
 """
 
+import os
+import re
 import sys
 from unittest.mock import MagicMock
 
@@ -154,3 +156,40 @@ class TestResolveTranslationLanguage:
             user_language_preference='en',
         )
         assert result is None
+
+
+class TestTranslateParamWiring:
+    """Verify the translate param is wired through WebSocket handler signatures."""
+
+    @staticmethod
+    def _read_transcribe_source():
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
+            return f.read()
+
+    def test_listen_handler_has_translate_param(self):
+        """listen_handler must accept translate query parameter."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def listen_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find listen_handler"
+        assert 'translate' in match.group(), "listen_handler must have translate parameter"
+
+    def test_web_listen_handler_has_translate_param(self):
+        """web_listen_handler must accept translate query parameter."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def web_listen_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find web_listen_handler"
+        assert 'translate' in match.group(), "web_listen_handler must have translate parameter"
+
+    def test_stream_handler_receives_translate(self):
+        """_stream_handler must accept translate and pass it to resolve_translation_language."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def _stream_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find _stream_handler"
+        assert 'translate' in match.group(), "_stream_handler must have translate parameter"
+
+    def test_resolve_called_with_translate_param(self):
+        """resolve_translation_language must be called with translate_param=translate."""
+        source = self._read_transcribe_source()
+        assert 'resolve_translation_language(' in source, "resolve_translation_language must be called"
+        assert 'translate_param=translate' in source, "Must pass translate_param=translate"
