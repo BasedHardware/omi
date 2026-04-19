@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAuth } from '@/components/auth-provider';
@@ -28,7 +28,7 @@ const LoadingScreen = ({ message }: { message: string }) => (
 );
 
 
-export default function LoginPage() {
+function LoginPageInner() {
   const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,4 +96,15 @@ export default function LoginPage() {
 
   // Fallback shouldn't normally be reached if logic above is correct
   return <LoadingScreen message="Redirecting..." />;
-} 
+}
+
+// Next 14 requires useSearchParams() consumers to sit inside a Suspense boundary
+// during prerender. Without this the static export step bails with
+// "missing-suspense-with-csr-bailout".
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingScreen message="Loading..." />}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
