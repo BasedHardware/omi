@@ -404,7 +404,7 @@ class TestProviderClassification:
         assert 'wrapped_analysis' in _OPENROUTER_FEATURES
 
     def test_conv_features_are_openai(self):
-        for feature in ['conv_action_items', 'conv_structure', 'conv_apps']:
+        for feature in ['conv_action_items', 'conv_structure', 'conv_app_result', 'conv_app_select']:
             assert feature not in _ANTHROPIC_FEATURES
             assert feature not in _OPENROUTER_FEATURES
             assert feature not in _PERPLEXITY_FEATURES
