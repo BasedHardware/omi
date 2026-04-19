@@ -94,8 +94,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       provider.fetchChatApps();
       // Pre-connect agent WebSocket so it's ready when the user sends a message
       provider.preConnectAgent();
-      // Check chat quota
-      provider.checkChatQuota();
+      // Chat quota is checked via 402 error when sending messages
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
       // Auto-focus the text field only on initial load, not on app switches
@@ -683,13 +682,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   _sendMessageUtil(String text) async {
     var provider = context.read<MessageProvider>();
 
-    // Refresh quota and block before adding message locally to avoid phantom messages
-    await provider.checkChatQuota();
-    if (provider.isChatQuotaExceeded) {
-      _showChatQuotaPaywall(provider);
-      return;
-    }
-
     String? currentContext = _selectedContext;
     setState(() {
       _allowSpacer = true;
@@ -713,7 +705,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     await provider.sendMessageStreamToServer(text);
 
-    // Check if quota was hit during the send attempt
+    // Show paywall if backend returned 402 quota exceeded
     if (mounted && provider.isChatQuotaExceeded) {
       _showChatQuotaPaywall(provider);
     }
