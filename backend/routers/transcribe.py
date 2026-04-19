@@ -320,7 +320,6 @@ async def _stream_handler(
     # Translation language — uses extracted helper with explicit precedence
     user_language_preference = user_db.get_user_language_preference(uid) if not single_language_mode else ''
     translation_language = resolve_translation_language(
-        source=source,
         translate_param=translate,
         single_language_mode=single_language_mode,
         stt_language=stt_language,
