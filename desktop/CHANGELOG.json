@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.340",
+      "date": "2026-04-19",
+      "changes": [
+        "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription"
+      ]
+    },
     {
       "version": "0.11.339",
       "date": "2026-04-19",
