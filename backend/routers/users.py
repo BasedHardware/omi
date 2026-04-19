@@ -50,6 +50,8 @@ from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
 from models.users import (
+    ChatQuotaUnit,
+    ChatUsageQuota,
     WebhookType,
     UserSubscriptionResponse,
     SubscriptionPlan,
@@ -946,6 +948,34 @@ def get_user_subscription_endpoint(
         chat_quota_percent=chat_percent,
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
+    )
+
+
+@router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
+def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+    """Current-month chat usage for the user, plus their plan's cap.
+
+    Compatibility shim — desktop clients call this endpoint directly.
+    Data is derived from the same get_chat_quota_snapshot() helper used
+    by the subscription endpoint.
+    """
+    snapshot = get_chat_quota_snapshot(uid)
+    plan = snapshot['plan']
+    allowed = snapshot['allowed'] if CHAT_CAP_ENFORCEMENT_ENABLED else True
+    used = round(snapshot['used'], 4)
+    limit_value = snapshot['limit']
+    percent = 0.0
+    if limit_value is not None and limit_value > 0:
+        percent = min(100.0, round(100.0 * used / limit_value, 2))
+    return ChatUsageQuota(
+        plan=get_plan_display_name(plan),
+        plan_type=plan.value,
+        unit=snapshot['unit'],
+        used=used,
+        limit=limit_value,
+        reset_at=snapshot['reset_at'],
+        percent=percent,
+        allowed=allowed,
     )
 
 
