@@ -10695,5 +10695,9 @@
     "currentPlan": "Тренутни",
     "neoSubtitle": "{count} питања месечно",
     "operatorSubtitle": "{count} питања месечно",
-    "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација"
+    "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

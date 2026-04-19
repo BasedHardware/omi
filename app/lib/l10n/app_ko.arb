@@ -2972,5 +2972,9 @@
     "currentPlan": "현재",
     "neoSubtitle": "월 {count}개 질문",
     "operatorSubtitle": "월 {count}개 질문",
-    "architectSubtitle": "파워유저 AI — 수천 건의 채팅 + 에이전트 자동화"
+    "architectSubtitle": "파워유저 AI — 수천 건의 채팅 + 에이전트 자동화",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

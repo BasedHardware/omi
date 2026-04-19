@@ -1012,13 +1012,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     if (unit == 'cost_usd') {
       final limit = limits.chatCostUsdPerMonth;
       text = limit != null
-          ? 'Chat: \$${used.toStringAsFixed(2)} / \$${limit.toStringAsFixed(0)} used this month'
-          : 'Chat: \$${used.toStringAsFixed(2)} used this month';
+          ? context.l10n.chatUsageCost('\$${used.toStringAsFixed(2)}', '\$${limit.toStringAsFixed(0)}')
+          : context.l10n.chatUsageCostNoLimit('\$${used.toStringAsFixed(2)}');
     } else {
       final limit = limits.chatQuestionsPerMonth;
       text = limit != null
-          ? 'Chat: ${used.toInt()} / $limit messages this month'
-          : 'Chat: ${used.toInt()} messages this month';
+          ? context.l10n.chatUsageMessages('${used.toInt()}', '$limit')
+          : context.l10n.chatUsageMessagesNoLimit('${used.toInt()}');
     }
 
     return Padding(

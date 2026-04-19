@@ -3008,5 +3008,9 @@
     "currentPlan": "Atual",
     "neoSubtitle": "{count} perguntas por mês",
     "operatorSubtitle": "{count} perguntas por mês",
-    "architectSubtitle": "IA avançada — milhares de chats + automações de agente"
+    "architectSubtitle": "IA avançada — milhares de chats + automações de agente",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

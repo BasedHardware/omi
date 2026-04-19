@@ -2977,5 +2977,9 @@
     "currentPlan": "Hiện tại",
     "neoSubtitle": "{count} câu hỏi mỗi tháng",
     "operatorSubtitle": "{count} câu hỏi mỗi tháng",
-    "architectSubtitle": "AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân"
+    "architectSubtitle": "AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

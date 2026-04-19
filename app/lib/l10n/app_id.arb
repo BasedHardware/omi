@@ -3014,5 +3014,9 @@
     "currentPlan": "Saat ini",
     "neoSubtitle": "{count} pertanyaan per bulan",
     "operatorSubtitle": "{count} pertanyaan per bulan",
-    "architectSubtitle": "AI canggih — ribuan chat + otomatisasi agen"
+    "architectSubtitle": "AI canggih — ribuan chat + otomatisasi agen",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

@@ -2972,5 +2972,9 @@
     "currentPlan": "Τρέχον",
     "neoSubtitle": "{count} ερωτήσεις ανά μήνα",
     "operatorSubtitle": "{count} ερωτήσεις ανά μήνα",
-    "architectSubtitle": "AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί"
+    "architectSubtitle": "AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }
