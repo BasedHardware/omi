@@ -440,7 +440,8 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
-    _translationEnabled = false;  // Reset for new session
+    // Sync toggle state with server: if socket connected with translate=enabled, reflect that
+    _translationEnabled = !SharedPreferencesUtil().cachedSingleLanguageMode;
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
