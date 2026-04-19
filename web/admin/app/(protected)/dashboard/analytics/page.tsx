@@ -721,10 +721,10 @@ export default function AnalyticsPage() {
       },
       {
         id: "profit-cost-breakdown",
-        title: "Monthly infra cost by service",
+        title: "Infra cost by service — last 30 days",
         subtitle: infraCosts?.summary?.assumptions
-          ? `Apr projection split by platform share (Desktop ${Math.round((infraCosts.summary.assumptions.desktopShare ?? 0) * 100)}% · Mobile ${Math.round((infraCosts.summary.assumptions.mobileShare ?? 0) * 100)}%)`
-          : "Per-service costs from GCP bill, split by platform",
+          ? `Trailing-30-day actual spend, split by platform (Desktop ${Math.round((infraCosts.summary.assumptions.desktopShare ?? 0) * 100)}% · Mobile ${Math.round((infraCosts.summary.assumptions.mobileShare ?? 0) * 100)}%)`
+          : "Per-service actual spend from GCP bill + external LLMs, split by platform",
         icon: <DollarSign className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 6 },
         render: () => {
@@ -747,7 +747,7 @@ export default function AnalyticsPage() {
                   <tr className="border-b text-xs uppercase text-muted-foreground">
                     <th className="px-3 py-2 text-left font-medium">Service</th>
                     <th className="px-3 py-2 text-right font-medium">Gross MTD</th>
-                    <th className="px-3 py-2 text-right font-medium">Apr projection</th>
+                    <th className="px-3 py-2 text-right font-medium">Last 30 days</th>
                     <th className="px-3 py-2 text-right font-medium text-indigo-500">Desktop</th>
                     <th className="px-3 py-2 text-right font-medium text-green-500">Mobile</th>
                   </tr>
