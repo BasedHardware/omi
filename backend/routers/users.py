@@ -1012,6 +1012,20 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
     - Pro: counted in dollar spend on desktop chat
     - Resets at the start of each UTC month
     """
+    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
+    # to meter. Return unlimited so the client doesn't gate sendMessage.
+    if users_db.is_byok_active(uid):
+        return ChatUsageQuota(
+            plan='Free (BYOK)',
+            plan_type=PlanType.unlimited.value,
+            unit=ChatQuotaUnit.questions,
+            used=0.0,
+            limit=None,
+            percent=0.0,
+            allowed=True,
+            reset_at=None,
+        )
+
     subscription = get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
