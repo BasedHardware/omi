@@ -155,6 +155,24 @@ class TestGetChatQuotaSnapshot:
         snapshot = sub_mod.get_chat_quota_snapshot("uid123")
         assert snapshot['allowed'] is False
 
+    def test_architect_cost_based_above(self, monkeypatch):
+        """Architect tier with $450 used (above $400 cap) → allowed=False."""
+        sub_mod = _reload_subscription_module()
+
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.architect))
+        _db_user_usage_mod.get_monthly_chat_usage = MagicMock(
+            return_value={
+                'questions': 1000,
+                'cost_usd': 450.0,
+                'reset_at': _RESET_AT,
+            }
+        )
+
+        snapshot = sub_mod.get_chat_quota_snapshot("uid123")
+        assert snapshot['allowed'] is False
+        assert snapshot['used'] == 450.0
+        assert snapshot['limit'] == 400.0
+
     def test_basic_plan_has_limit(self, monkeypatch):
         """Basic (free) plan has 30 questions/month by default."""
         monkeypatch.setenv("FREE_CHAT_QUESTIONS_PER_MONTH", "30")
