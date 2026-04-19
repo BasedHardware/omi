@@ -642,7 +642,7 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     for call in non_gpt51_clients:
         eb = call.get("extra_body", {})
         assert "prompt_cache_retention" not in eb, f"Non-gpt-5.1 client should not have prompt_cache_retention: {call}"
-    for call in non_cache_clients:
+    for call in non_gpt51_clients:
         mkw = call.get("model_kwargs", {})
         assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
 
