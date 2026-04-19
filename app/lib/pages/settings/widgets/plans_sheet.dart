@@ -1448,19 +1448,19 @@ class _PlansSheetState extends State<PlansSheet> {
           const Icon(Icons.error_outline, color: Colors.red, size: 32),
           const SizedBox(height: 8),
           Text(
-            'Unable to load plans',
+            context.l10n.unableToLoadPlans,
             style: TextStyle(color: Colors.red.shade300, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            'Please check your connection and try again',
+            context.l10n.checkConnectionTryAgain,
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.red.shade400, fontSize: 14),
           ),
           const SizedBox(height: 12),
           TextButton(
             onPressed: _loadAvailablePlans,
-            child: const Text('Retry', style: TextStyle(color: Colors.red)),
+            child: Text(context.l10n.retry, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -1526,7 +1526,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'Monthly',
+                      context.l10n.billingMonthly,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: !isYearly ? Colors.white : Colors.grey.shade400,
@@ -1553,7 +1553,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Yearly',
+                          context.l10n.billingYearly,
                           style: TextStyle(
                             color: isYearly ? Colors.white : Colors.grey.shade400,
                             fontWeight: FontWeight.w600,
@@ -1567,9 +1567,9 @@ class _PlansSheetState extends State<PlansSheet> {
                             color: Colors.green.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text(
-                            'Save ~17%',
-                            style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
+                          child: Text(
+                            context.l10n.savePercent,
+                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
