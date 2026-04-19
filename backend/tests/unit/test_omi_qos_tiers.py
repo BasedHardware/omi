@@ -71,27 +71,31 @@ class TestModelQosProfiles:
             assert 'openai' in providers, f'{profile_name} missing OpenAI models'
             assert 'anthropic' in providers, f'{profile_name} missing Anthropic models'
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
-        # Neither profile uses OpenRouter (both optimized)
-        premium_providers = {_classify_provider(m) for m in MODEL_QOS_PROFILES['premium'].values()}
+        # Max keeps OpenRouter (production), premium has some OpenRouter too
         max_providers = {_classify_provider(m) for m in MODEL_QOS_PROFILES['max'].values()}
-        assert 'openrouter' not in premium_providers, 'premium should not use OpenRouter'
-        assert 'openrouter' not in max_providers, 'max should not use OpenRouter'
+        assert 'openrouter' in max_providers, 'max should have OpenRouter (production models)'
 
     def test_premium_profile_cost_saving(self):
-        """Premium uses geni's optimized 5-model set for cost savings."""
+        """Premium is cost-optimized: gpt-5.4-mini replaces flagship, gpt-4.1-nano replaces mini."""
         premium = MODEL_QOS_PROFILES['premium']
+        # Flagship features downgraded to gpt-5.4-mini
         assert premium['conv_structure'] == 'gpt-5.4-mini'
-        assert premium['chat_responses'] == 'gpt-5.4'
+        assert premium['chat_responses'] == 'gpt-5.4-mini'
+        assert premium['goals_advice'] == 'gpt-5.4-mini'
+        # Mini features downgraded to gpt-4.1-nano
+        assert premium['memories'] == 'gpt-4.1-nano'
+        assert premium['chat_extraction'] == 'gpt-4.1-nano'
+        assert premium['chat_graph'] == 'gpt-4.1-nano'
+        # Unchanged
         assert premium['chat_agent'] == 'claude-sonnet-4-6'
-        assert premium['learnings'] == 'gpt-5.4-mini'
-        assert premium['persona_chat'] == 'gpt-4.1-nano'
-        assert premium['persona_chat_premium'] == 'gpt-5.4-mini'
         assert premium['web_search'] == 'sonar-pro'
+        # OpenRouter persona_chat stays cheap
+        assert premium['persona_chat'] == 'google/gemini-flash-1.5-8b'
 
     def test_max_profile_quality_upgrade(self):
-        """Max profile upgrades all models to latest gen (gpt-5.4/gpt-5.4-mini)."""
+        """Max upgrades gpt-5.1/5.2 to gpt-5.4, everything else unchanged from production."""
         max_prof = MODEL_QOS_PROFILES['max']
-        # Flagship tier (gpt-5.4)
+        # Flagship upgraded to gpt-5.4 (was gpt-5.1/5.2)
         assert max_prof['chat_responses'] == 'gpt-5.4'
         assert max_prof['goals_advice'] == 'gpt-5.4'
         assert max_prof['app_generator'] == 'gpt-5.4'
@@ -100,25 +104,35 @@ class TestModelQosProfiles:
         assert max_prof['daily_summary'] == 'gpt-5.4'
         assert max_prof['persona_clone'] == 'gpt-5.4'
         assert max_prof['notifications'] == 'gpt-5.4'
-        # Mini tier (gpt-5.4-mini)
-        assert max_prof['conv_app_select'] == 'gpt-5.4-mini'
-        assert max_prof['conv_folder'] == 'gpt-5.4-mini'
-        assert max_prof['memories'] == 'gpt-5.4-mini'
-        assert max_prof['learnings'] == 'gpt-5.4-mini'
-        assert max_prof['chat_graph'] == 'gpt-5.4-mini'
-        assert max_prof['persona_chat'] == 'gpt-5.4-mini'
-        assert max_prof['persona_chat_premium'] == 'gpt-5.4-mini'
-        assert max_prof['wrapped_analysis'] == 'gpt-5.4-mini'
-        # Anthropic
+        # Unchanged from production
+        assert max_prof['conv_app_select'] == 'gpt-4.1-mini'
+        assert max_prof['memories'] == 'gpt-4.1-mini'
+        assert max_prof['learnings'] == 'o4-mini'
+        assert max_prof['chat_graph'] == 'gpt-4.1'
+        # OpenRouter unchanged
+        assert max_prof['persona_chat'] == 'google/gemini-flash-1.5-8b'
+        assert max_prof['persona_chat_premium'] == 'anthropic/claude-3.5-sonnet'
+        assert max_prof['wrapped_analysis'] == 'google/gemini-3-flash-preview'
+        # Anthropic & Perplexity unchanged
         assert max_prof['chat_agent'] == 'claude-sonnet-4-6'
-        # Perplexity
         assert max_prof['web_search'] == 'sonar-pro'
 
     def test_max_profile_model_variants(self):
-        """Max profile uses 4 distinct model IDs."""
+        """Max profile uses 9 distinct model IDs (down from 10 — consolidated 5.1+5.2 to 5.4)."""
         max_prof = MODEL_QOS_PROFILES['max']
         distinct_models = set(max_prof.values())
-        assert distinct_models == {'gpt-5.4', 'gpt-5.4-mini', 'claude-sonnet-4-6', 'sonar-pro'}
+        expected = {
+            'gpt-5.4',
+            'gpt-4.1-mini',
+            'gpt-4.1',
+            'o4-mini',
+            'claude-sonnet-4-6',
+            'google/gemini-flash-1.5-8b',
+            'anthropic/claude-3.5-sonnet',
+            'google/gemini-3-flash-preview',
+            'sonar-pro',
+        }
+        assert distinct_models == expected
 
     def test_new_features_present(self):
         """Verify newly added features exist in both profiles."""
@@ -369,8 +383,6 @@ class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
     def test_cache_key_models_contains_expected(self):
-        assert 'gpt-5.1' in _CACHE_KEY_MODELS
-        assert 'gpt-5.2' in _CACHE_KEY_MODELS
         assert 'gpt-5.4' in _CACHE_KEY_MODELS
         assert 'gpt-5.4-mini' in _CACHE_KEY_MODELS
 
@@ -396,9 +408,9 @@ class TestGetQosInfo:
         assert info['chat_agent']['provider'] == 'anthropic'
         assert info['web_search']['provider'] == 'perplexity'
         assert info['conv_action_items']['provider'] == 'openai'
-        # In max profile, persona_chat/wrapped_analysis are OpenAI (quality upgrade)
-        assert info['persona_chat']['provider'] == 'openai'
-        assert info['wrapped_analysis']['provider'] == 'openai'
+        # In max profile, persona_chat/wrapped_analysis are OpenRouter (production models)
+        assert info['persona_chat']['provider'] == 'openrouter'
+        assert info['wrapped_analysis']['provider'] == 'openrouter'
 
     def test_reflects_env_override(self, monkeypatch):
         monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'o4-mini')
@@ -444,19 +456,19 @@ class TestProviderClassification:
     def test_web_search_is_perplexity_only(self):
         assert 'web_search' in _PERPLEXITY_ONLY_FEATURES
 
-    def test_max_persona_chat_is_openai(self):
-        """In max profile, persona_chat features route to OpenAI (quality upgrade)."""
+    def test_max_persona_chat_is_openrouter(self):
+        """In max profile, persona_chat features route to OpenRouter (production models)."""
         max_prof = MODEL_QOS_PROFILES['max']
-        assert _classify_provider(max_prof['persona_chat']) == 'openai'
-        assert _classify_provider(max_prof['persona_chat_premium']) == 'openai'
-        assert _classify_provider(max_prof['wrapped_analysis']) == 'openai'
+        assert _classify_provider(max_prof['persona_chat']) == 'openrouter'
+        assert _classify_provider(max_prof['persona_chat_premium']) == 'openrouter'
+        assert _classify_provider(max_prof['wrapped_analysis']) == 'openrouter'
 
-    def test_premium_persona_chat_is_openai(self):
-        """In premium profile, persona_chat features also route to OpenAI (optimized)."""
+    def test_premium_persona_chat_mixed_providers(self):
+        """In premium, persona_chat is OpenRouter, persona_chat_premium is OpenAI."""
         premium = MODEL_QOS_PROFILES['premium']
-        assert _classify_provider(premium['persona_chat']) == 'openai'
+        assert _classify_provider(premium['persona_chat']) == 'openrouter'
         assert _classify_provider(premium['persona_chat_premium']) == 'openai'
-        assert _classify_provider(premium['wrapped_analysis']) == 'openai'
+        assert _classify_provider(premium['wrapped_analysis']) == 'openrouter'
 
     def test_conv_features_are_openai(self):
         max_prof = MODEL_QOS_PROFILES['max']
@@ -777,11 +789,11 @@ class TestOverrideWarningLog:
 class TestRuntimeProviderRouting:
     """Verify get_llm() routes to correct client factory based on resolved model."""
 
-    def test_persona_chat_max_routes_to_openai(self):
-        """In max profile, persona_chat uses gpt-5.4-mini — should route to OpenAI."""
+    def test_persona_chat_max_routes_to_openrouter(self):
+        """In max profile, persona_chat uses OpenRouter model — should route to OpenRouter."""
         llm = get_llm('persona_chat')
         base_url = getattr(llm, 'openai_api_base', None) or ''
-        assert 'openrouter' not in base_url
+        assert 'openrouter' in base_url
 
     def test_override_to_openrouter_model_routes_to_openrouter(self, monkeypatch):
         """If an override sets an OpenRouter model, get_llm should route via OpenRouter."""
@@ -790,12 +802,11 @@ class TestRuntimeProviderRouting:
         base_url = getattr(llm, 'openai_api_base', None) or ''
         assert 'openrouter' in base_url
 
-    def test_openrouter_temperature_applied_via_get_llm(self, monkeypatch):
+    def test_openrouter_temperature_applied_via_get_llm(self):
         """When get_llm routes to OpenRouter, _OPENROUTER_TEMPERATURES config is applied."""
         from utils.llm.clients import _OPENROUTER_TEMPERATURES
 
-        # Override persona_chat to an OpenRouter model so get_llm routes via OpenRouter
-        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'google/gemini-flash-1.5-8b')
+        # In max profile, persona_chat is already OpenRouter — get_llm should apply temp config
         llm = get_llm('persona_chat')
         expected_temp = _OPENROUTER_TEMPERATURES.get('persona_chat')
         assert expected_temp == 0.8, "persona_chat should have temp 0.8 in config"
