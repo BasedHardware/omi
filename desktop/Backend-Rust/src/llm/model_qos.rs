@@ -3,7 +3,7 @@
 // Central model configuration with switchable tiers, mirroring the Swift ModelQoS.
 // All LlmClient call sites should use these accessors instead of hardcoded model strings.
 //
-// Tier is read from OMI_MODEL_TIER env var at startup (default: "standard").
+// Tier is read from OMI_MODEL_TIER env var at startup (default: "premium").
 
 use std::sync::OnceLock;
 
@@ -13,16 +13,16 @@ static ACTIVE_TIER: OnceLock<ModelTier> = OnceLock::new();
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ModelTier {
     /// Cost-optimized: Flash for all Gemini workloads
-    Standard,
-    /// Quality-optimized: Pro for structured extraction, Flash for simple tasks
     Premium,
+    /// Quality-optimized: Pro for structured extraction, Flash for simple tasks
+    Max,
 }
 
 impl ModelTier {
     fn from_env() -> Self {
         match std::env::var("OMI_MODEL_TIER").as_deref() {
-            Ok("premium") => ModelTier::Premium,
-            _ => ModelTier::Standard,
+            Ok("max") => ModelTier::Max,
+            _ => ModelTier::Premium,
         }
     }
 }
@@ -41,8 +41,8 @@ pub fn gemini_default() -> &'static str {
 
 fn gemini_default_for(tier: ModelTier) -> &'static str {
     match tier {
-        ModelTier::Standard => "gemini-3-flash-preview",
         ModelTier::Premium => "gemini-3-flash-preview",
+        ModelTier::Max => "gemini-3-flash-preview",
     }
 }
 
@@ -53,8 +53,8 @@ pub fn gemini_extraction() -> &'static str {
 
 fn gemini_extraction_for(tier: ModelTier) -> &'static str {
     match tier {
-        ModelTier::Standard => "gemini-3-flash-preview",
-        ModelTier::Premium => "gemini-pro-latest",
+        ModelTier::Premium => "gemini-3-flash-preview",
+        ModelTier::Max => "gemini-pro-latest",
     }
 }
 
@@ -76,16 +76,16 @@ pub fn gemini_degrade_target() -> &'static str {
 // MARK: - Rate Limit Thresholds (tier-aware)
 
 /// Daily soft limit — at or above this, Pro requests degrade to Flash.
-/// Standard: aggressive (30) since standard already sends Flash.
-/// Premium: generous (300) to allow Pro usage.
+/// Premium: aggressive (30) since premium already sends Flash.
+/// Max: generous (300) to allow Pro usage.
 pub fn daily_soft_limit() -> u32 {
     daily_soft_limit_for(active_tier())
 }
 
 fn daily_soft_limit_for(tier: ModelTier) -> u32 {
     match tier {
-        ModelTier::Standard => 30,
-        ModelTier::Premium => 300,
+        ModelTier::Premium => 30,
+        ModelTier::Max => 300,
     }
 }
 
@@ -105,8 +105,8 @@ pub fn tier_description() -> &'static str {
 
 fn tier_description_for(tier: ModelTier) -> &'static str {
     match tier {
-        ModelTier::Standard => "Standard (cost-optimized)",
-        ModelTier::Premium => "Premium (quality-optimized)",
+        ModelTier::Premium => "Premium (cost-optimized)",
+        ModelTier::Max => "Max (quality-optimized)",
     }
 }
 
@@ -115,7 +115,7 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    /// Serialize env-var–mutating tests to avoid races under parallel execution.
+    /// Serialize env-var-mutating tests to avoid races under parallel execution.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     // --- ModelTier::from_env (serialized — shares process env) ---
@@ -124,21 +124,21 @@ mod tests {
     fn from_env_all_cases() {
         let _guard = ENV_LOCK.lock().unwrap();
 
-        // Default (unset) → Standard
+        // Default (unset) → Premium
         std::env::remove_var("OMI_MODEL_TIER");
-        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
-
-        // Explicit premium → Premium
-        std::env::set_var("OMI_MODEL_TIER", "premium");
         assert_eq!(ModelTier::from_env(), ModelTier::Premium);
 
-        // Invalid value → Standard fallback
-        std::env::set_var("OMI_MODEL_TIER", "garbage");
-        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
+        // Explicit max → Max
+        std::env::set_var("OMI_MODEL_TIER", "max");
+        assert_eq!(ModelTier::from_env(), ModelTier::Max);
 
-        // Empty string → Standard fallback
+        // Invalid value → Premium fallback
+        std::env::set_var("OMI_MODEL_TIER", "garbage");
+        assert_eq!(ModelTier::from_env(), ModelTier::Premium);
+
+        // Empty string → Premium fallback
         std::env::set_var("OMI_MODEL_TIER", "");
-        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
+        assert_eq!(ModelTier::from_env(), ModelTier::Premium);
 
         std::env::remove_var("OMI_MODEL_TIER");
     }
@@ -146,38 +146,38 @@ mod tests {
     // --- gemini_default_for (both tiers) ---
 
     #[test]
-    fn gemini_default_standard_is_flash() {
-        assert_eq!(gemini_default_for(ModelTier::Standard), "gemini-3-flash-preview");
+    fn gemini_default_premium_is_flash() {
+        assert_eq!(gemini_default_for(ModelTier::Premium), "gemini-3-flash-preview");
     }
 
     #[test]
-    fn gemini_default_premium_is_flash() {
+    fn gemini_default_max_is_flash() {
         // Default model is Flash for both tiers (cheap baseline)
-        assert_eq!(gemini_default_for(ModelTier::Premium), "gemini-3-flash-preview");
+        assert_eq!(gemini_default_for(ModelTier::Max), "gemini-3-flash-preview");
     }
 
     // --- gemini_extraction_for (the tier-dependent branch) ---
 
     #[test]
-    fn gemini_extraction_standard_is_flash() {
-        assert_eq!(gemini_extraction_for(ModelTier::Standard), "gemini-3-flash-preview");
+    fn gemini_extraction_premium_is_flash() {
+        assert_eq!(gemini_extraction_for(ModelTier::Premium), "gemini-3-flash-preview");
     }
 
     #[test]
-    fn gemini_extraction_premium_is_pro() {
-        assert_eq!(gemini_extraction_for(ModelTier::Premium), "gemini-pro-latest");
+    fn gemini_extraction_max_is_pro() {
+        assert_eq!(gemini_extraction_for(ModelTier::Max), "gemini-pro-latest");
     }
 
     // --- tier_description_for ---
 
     #[test]
-    fn tier_description_standard() {
-        assert!(tier_description_for(ModelTier::Standard).contains("Standard"));
+    fn tier_description_premium() {
+        assert!(tier_description_for(ModelTier::Premium).contains("Premium"));
     }
 
     #[test]
-    fn tier_description_premium() {
-        assert!(tier_description_for(ModelTier::Premium).contains("Premium"));
+    fn tier_description_max() {
+        assert!(tier_description_for(ModelTier::Max).contains("Max"));
     }
 
     // --- Static accessors (pinned models) ---
@@ -199,24 +199,24 @@ mod tests {
     // --- Rate limit thresholds ---
 
     #[test]
-    fn daily_soft_limit_standard_is_lower() {
-        assert_eq!(daily_soft_limit_for(ModelTier::Standard), 30);
+    fn daily_soft_limit_premium_is_lower() {
+        assert_eq!(daily_soft_limit_for(ModelTier::Premium), 30);
     }
 
     #[test]
-    fn daily_soft_limit_premium_is_higher() {
-        assert_eq!(daily_soft_limit_for(ModelTier::Premium), 300);
+    fn daily_soft_limit_max_is_higher() {
+        assert_eq!(daily_soft_limit_for(ModelTier::Max), 300);
     }
 
     #[test]
     fn daily_hard_limit_same_for_both_tiers() {
-        assert_eq!(daily_hard_limit_for(ModelTier::Standard), 1500);
         assert_eq!(daily_hard_limit_for(ModelTier::Premium), 1500);
+        assert_eq!(daily_hard_limit_for(ModelTier::Max), 1500);
     }
 
     #[test]
     fn soft_limit_always_below_hard_limit() {
-        for tier in [ModelTier::Standard, ModelTier::Premium] {
+        for tier in [ModelTier::Premium, ModelTier::Max] {
             assert!(daily_soft_limit_for(tier) < daily_hard_limit_for(tier));
         }
     }
