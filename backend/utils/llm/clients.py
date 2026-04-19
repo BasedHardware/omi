@@ -255,6 +255,19 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
 
     model = get_model(feature)
 
+    # Validate env overrides don't cross provider boundaries
+    env_key = f'MODEL_QOS_{feature.upper()}'
+    if os.environ.get(env_key, '').strip():
+        if feature in _OPENROUTER_FEATURES:
+            if '/' not in model:
+                raise ValueError(
+                    f"QoS override {env_key}={model} invalid — feature '{feature}' is OpenRouter (expected org/model)"
+                )
+        elif model.startswith('claude') or model.startswith('sonar') or '/' in model:
+            raise ValueError(
+                f"QoS override {env_key}={model} invalid — feature '{feature}' is OpenAI (expected gpt-*/o4-*/o3-*)"
+            )
+
     if feature in _OPENROUTER_FEATURES:
         temp = _OPENROUTER_TEMPERATURES.get(feature)
         return _get_or_create_openrouter_llm(model, streaming, temp)
