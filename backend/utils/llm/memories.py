@@ -10,7 +10,7 @@ from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
-from .clients import get_llm, llm_mini, llm_high
+from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ def new_learnings_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
-        chain = extract_learnings_prompt | llm_high | parser
+        chain = extract_learnings_prompt | get_llm('learnings') | parser
         response: Learnings = chain.invoke(
             {
                 'user_name': user_name,
