@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Added a Skip button to the onboarding goal step and made it resilient to transient 429 errors"
+    "Added a Skip button to the onboarding goal step and made it resilient to transient 429 errors",
+    "Added a Skip button to the onboarding exports step (Put your memories where you work)"
   ],
   "releases": [
     {
