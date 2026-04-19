@@ -16,38 +16,38 @@ final class ModelQoSTests: XCTestCase {
 
     // MARK: - Default tier
 
-    func testDefaultTierIsStandard() {
-        XCTAssertEqual(ModelQoS.activeTier, .standard)
+    func testDefaultTierIsPremium() {
+        XCTAssertEqual(ModelQoS.activeTier, .premium)
     }
 
     // MARK: - Tier persistence
 
     func testSetTierPersistsToUserDefaults() {
+        ModelQoS.activeTier = .max
+        XCTAssertEqual(UserDefaults.standard.string(forKey: tierKey), "max")
+
         ModelQoS.activeTier = .premium
         XCTAssertEqual(UserDefaults.standard.string(forKey: tierKey), "premium")
-
-        ModelQoS.activeTier = .standard
-        XCTAssertEqual(UserDefaults.standard.string(forKey: tierKey), "standard")
     }
 
-    func testInvalidUserDefaultsFallsBackToStandard() {
+    func testInvalidUserDefaultsFallsBackToPremium() {
         UserDefaults.standard.set("invalid_tier", forKey: tierKey)
-        XCTAssertEqual(ModelQoS.activeTier, .standard)
-    }
-
-    // MARK: - Claude models: standard tier
-
-    func testClaudeModelsStandardTier() {
-        ModelQoS.activeTier = .standard
-        XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
-        XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
-        XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-sonnet-4-6")
+        XCTAssertEqual(ModelQoS.activeTier, .premium)
     }
 
     // MARK: - Claude models: premium tier
 
     func testClaudeModelsPremiumTier() {
         ModelQoS.activeTier = .premium
+        XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
+        XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
+        XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-sonnet-4-6")
+    }
+
+    // MARK: - Claude models: max tier
+
+    func testClaudeModelsMaxTier() {
+        ModelQoS.activeTier = .max
         XCTAssertEqual(ModelQoS.Claude.chat, "claude-opus-4-6")
         XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
         XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-opus-4-6")
@@ -66,31 +66,31 @@ final class ModelQoSTests: XCTestCase {
 
     // MARK: - Available models reflect tier
 
-    func testAvailableModelsStandardTier() {
-        ModelQoS.activeTier = .standard
+    func testAvailableModelsPremiumTier() {
+        ModelQoS.activeTier = .premium
         let ids = ModelQoS.Claude.availableModels.map(\.id)
         XCTAssertEqual(ids, ["claude-sonnet-4-6"])
     }
 
-    func testAvailableModelsPremiumTier() {
-        ModelQoS.activeTier = .premium
+    func testAvailableModelsMaxTier() {
+        ModelQoS.activeTier = .max
         let ids = ModelQoS.Claude.availableModels.map(\.id)
         XCTAssertEqual(ids, ["claude-sonnet-4-6", "claude-opus-4-6"])
-    }
-
-    // MARK: - Gemini models: standard tier
-
-    func testGeminiModelsStandardTier() {
-        ModelQoS.activeTier = .standard
-        XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-3-flash-preview")
-        XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-3-flash-preview")
-        XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
     }
 
     // MARK: - Gemini models: premium tier
 
     func testGeminiModelsPremiumTier() {
         ModelQoS.activeTier = .premium
+        XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-3-flash-preview")
+        XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-3-flash-preview")
+        XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
+    }
+
+    // MARK: - Gemini models: max tier
+
+    func testGeminiModelsMaxTier() {
+        ModelQoS.activeTier = .max
         XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-3-flash-preview")
         XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-pro-latest")
         XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-pro-latest")
@@ -108,25 +108,25 @@ final class ModelQoSTests: XCTestCase {
     // MARK: - Tier description
 
     func testTierDescription() {
-        ModelQoS.activeTier = .standard
-        XCTAssertEqual(ModelQoS.tierDescription, "Standard (cost-optimized)")
-
         ModelQoS.activeTier = .premium
-        XCTAssertEqual(ModelQoS.tierDescription, "Premium (quality-optimized)")
+        XCTAssertEqual(ModelQoS.tierDescription, "Premium (cost-optimized)")
+
+        ModelQoS.activeTier = .max
+        XCTAssertEqual(ModelQoS.tierDescription, "Max (quality-optimized)")
     }
 
     // MARK: - Tier switch dynamically changes accessors
 
     func testTierSwitchChangesModelsAtRuntime() {
-        ModelQoS.activeTier = .standard
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
         XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
 
-        ModelQoS.activeTier = .premium
+        ModelQoS.activeTier = .max
         XCTAssertEqual(ModelQoS.Claude.chat, "claude-opus-4-6")
         XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-pro-latest")
 
-        ModelQoS.activeTier = .standard
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
         XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
     }
@@ -134,30 +134,30 @@ final class ModelQoSTests: XCTestCase {
     // MARK: - Sanitized selection (stale model regression)
 
     func testSanitizedSelectionAllowsValidModel() {
-        ModelQoS.activeTier = .standard
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-sonnet-4-6"), "claude-sonnet-4-6")
 
-        ModelQoS.activeTier = .premium
+        ModelQoS.activeTier = .max
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-opus-4-6")
     }
 
     func testSanitizedSelectionFallsBackForStaleModel() {
-        // User previously selected Opus while on premium tier
-        ModelQoS.activeTier = .premium
+        // User previously selected Opus while on max tier
+        ModelQoS.activeTier = .max
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-opus-4-6")
 
-        // Tier drops to standard — Opus is no longer available
-        ModelQoS.activeTier = .standard
+        // Tier drops to premium — Opus is no longer available
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-sonnet-4-6")
     }
 
     func testSanitizedSelectionHandlesNil() {
-        ModelQoS.activeTier = .standard
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection(nil), "claude-sonnet-4-6")
     }
 
     func testSanitizedSelectionHandlesUnknownModel() {
-        ModelQoS.activeTier = .standard
+        ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("gpt-4o"), "claude-sonnet-4-6")
     }
 }
