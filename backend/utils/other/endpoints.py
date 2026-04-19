@@ -10,6 +10,7 @@ import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database.users import record_user_platform
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,17 @@ def verify_token(token: str) -> str:
         raise
 
 
-def get_current_user_uid(authorization: str = Header(None)):
-    """FastAPI dependency for HTTP endpoints with Authorization header."""
+def get_current_user_uid(
+    authorization: str = Header(None),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+):
+    """FastAPI dependency for HTTP endpoints with Authorization header.
+
+    Side-effect: records the signup/last-active platform for the user via
+    `record_user_platform`, which is throttled via Redis to one Firestore
+    write per (uid, platform) every 10 minutes. Failures here never fail the
+    request — it's telemetry, not auth.
+    """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -57,10 +67,17 @@ def get_current_user_uid(authorization: str = Header(None)):
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    try:
+        record_user_platform(uid, x_app_platform)
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    return uid
 
 
 def _verify_ws_auth(authorization: str) -> str:
