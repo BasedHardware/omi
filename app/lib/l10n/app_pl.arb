@@ -2949,5 +2949,42 @@
     "appleHealthFeatureSecureTitle": "Bezpieczna synchronizacja",
     "appleHealthFeatureSecureDesc": "Twoje dane z Apple Health prywatnie synchronizują się z kontem Omi.",
     "appleHealthDeniedTitle": "Odmowa dostępu do Apple Health",
-    "appleHealthDeniedBody": "Omi nie ma uprawnień do odczytu Twoich danych z Apple Health. Włącz to w Ustawienia iOS → Prywatność i bezpieczeństwo → Health → Omi."
+    "appleHealthDeniedBody": "Omi nie ma uprawnień do odczytu Twoich danych z Apple Health. Włącz to w Ustawienia iOS → Prywatność i bezpieczeństwo → Health → Omi.",
+    "deleteFlowReasonTitle": "Dlaczego odchodzisz?",
+    "deleteFlowReasonSubtitle": "Twoja opinia pomaga nam ulepszać Omi dla wszystkich.",
+    "deleteReasonPrivacy": "Obawy dotyczące prywatności",
+    "deleteReasonNotUsing": "Nie używam wystarczająco często",
+    "deleteReasonMissingFeatures": "Brakuje potrzebnych funkcji",
+    "deleteReasonTechnicalIssues": "Zbyt wiele problemów technicznych",
+    "deleteReasonFoundAlternative": "Korzystam z czegoś innego",
+    "deleteReasonTakingBreak": "Po prostu robię sobie przerwę",
+    "deleteReasonOther": "Inne",
+    "deleteFlowFeedbackTitle": "Powiedz nam więcej",
+    "deleteFlowFeedbackSubtitle": "Co sprawiłoby, że Omi działałoby dla Ciebie?",
+    "deleteFlowFeedbackHint": "Opcjonalnie — Twoje przemyślenia pomagają nam tworzyć lepszy produkt.",
+    "deleteFlowConfirmTitle": "To jest nieodwracalne",
+    "deleteFlowConfirmSubtitle": "Po usunięciu konta nie można go odzyskać.",
+    "deleteConsequenceSubscription": "Aktywna subskrypcja zostanie anulowana.",
+    "deleteConsequenceNoRecovery": "Twojego konta nie można przywrócić — nawet przez wsparcie.",
+    "deleteTypeToConfirm": "Wpisz DELETE, aby potwierdzić",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Usuń konto na zawsze",
+    "keepMyAccount": "Zachowaj moje konto",
+    "deleteAccountFailed": "Nie udało się usunąć Twojego konta. Spróbuj ponownie.",
+    "planUpdate": "Aktualizacja planu",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Twój plan Unlimited jest wycofywany. Przejdź na plan Operator — te same świetne funkcje za $49/mies. Twój obecny plan będzie nadal działać w międzyczasie.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Ulepsz swój plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Masz płatny plan.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -1,6 +1,7 @@
-import threading
 import uuid
 from datetime import datetime, timezone, timedelta
+
+from utils.executors import critical_executor
 from enum import Enum
 from typing import List, Optional
 
@@ -13,7 +14,6 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
-import database.folders as folders_db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.memories import MemoryCategory, Memory, MemoryDB
@@ -24,10 +24,9 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from models.geolocation import Geolocation
-from models.conversation import Conversation as ConversationModel
+from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
-    get_uid_from_dev_api_key,
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
@@ -212,7 +211,7 @@ def create_memory(
 
     # Update personas asynchronously if visibility is public
     if memory.visibility == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
     return MemoryResponse(
         id=memory_db.id,
@@ -289,7 +288,7 @@ def create_memories_batch(
 
     # Update personas if any memory is public
     if has_public:
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [
@@ -732,52 +731,6 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
 
 
-def _add_speaker_names_to_segments(uid, conversations: list):
-    """Add speaker_name to transcript segments based on person_id mappings."""
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
-
-    all_person_ids = set()
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('person_id'):
-                all_person_ids.add(seg['person_id'])
-
-    people_map = {}
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-        people_map = {p['id']: p['name'] for p in people_data}
-
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('is_user'):
-                seg['speaker_name'] = user_name
-            elif seg.get('person_id') and seg['person_id'] in people_map:
-                seg['speaker_name'] = people_map[seg['person_id']]
-            else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
-
-
-def _add_folder_names_to_conversations(uid, conversations: list):
-    """Add folder_name to conversations based on folder_id mappings."""
-    folder_ids = set()
-    for conv in conversations:
-        if conv.get('folder_id'):
-            folder_ids.add(conv['folder_id'])
-
-    if not folder_ids:
-        for conv in conversations:
-            conv['folder_name'] = None
-        return
-
-    all_folders = folders_db.get_folders(uid)
-    folder_map = {f['id']: f['name'] for f in all_folders}
-
-    for conv in conversations:
-        folder_id = conv.get('folder_id')
-        conv['folder_name'] = folder_map.get(folder_id) if folder_id else None
-
-
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
@@ -817,9 +770,9 @@ def get_conversations(
         for conv in unlocked_conversations:
             conv.pop('transcript_segments', None)
     else:
-        _add_speaker_names_to_segments(uid, unlocked_conversations)
+        populate_speaker_names(uid, unlocked_conversations)
 
-    _add_folder_names_to_conversations(uid, unlocked_conversations)
+    populate_folder_names(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -926,9 +879,9 @@ def get_conversation_endpoint(
     if not include_transcript:
         conversation.pop('transcript_segments', None)
     else:
-        _add_speaker_names_to_segments(uid, [conversation])
+        populate_speaker_names(uid, [conversation])
 
-    _add_folder_names_to_conversations(uid, [conversation])
+    populate_folder_names(uid, [conversation])
 
     return conversation
 
@@ -1122,7 +1075,7 @@ def update_conversation_endpoint(
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:
-        _add_folder_names_to_conversations(uid, [conversation])
+        populate_folder_names(uid, [conversation])
     return conversation
 
 

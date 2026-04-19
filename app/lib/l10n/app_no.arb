@@ -2914,5 +2914,42 @@
     "appleHealthFeatureSecureTitle": "Sikker synkronisering",
     "appleHealthFeatureSecureDesc": "Apple Health-dataene dine synkroniseres privat til Omi-kontoen din.",
     "appleHealthDeniedTitle": "Apple Health-tilgang avvist",
-    "appleHealthDeniedBody": "Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi."
+    "appleHealthDeniedBody": "Omi har ikke tillatelse til å lese Apple Health-dataene dine. Slå det på i iOS-innstillinger → Personvern og sikkerhet → Helse → Omi.",
+    "deleteFlowReasonTitle": "Hvorfor forlater du oss?",
+    "deleteFlowReasonSubtitle": "Tilbakemeldingen din hjelper oss å gjøre Omi bedre for alle.",
+    "deleteReasonPrivacy": "Personvernhensyn",
+    "deleteReasonNotUsing": "Bruker den ikke nok",
+    "deleteReasonMissingFeatures": "Mangler funksjoner jeg trenger",
+    "deleteReasonTechnicalIssues": "For mange tekniske problemer",
+    "deleteReasonFoundAlternative": "Bruker noe annet",
+    "deleteReasonTakingBreak": "Tar bare en pause",
+    "deleteReasonOther": "Annet",
+    "deleteFlowFeedbackTitle": "Fortell oss mer",
+    "deleteFlowFeedbackSubtitle": "Hva ville fått Omi til å fungere for deg?",
+    "deleteFlowFeedbackHint": "Valgfritt — tankene dine hjelper oss å bygge et bedre produkt.",
+    "deleteFlowConfirmTitle": "Dette er permanent",
+    "deleteFlowConfirmSubtitle": "Når du sletter kontoen din, kan den ikke gjenopprettes.",
+    "deleteConsequenceSubscription": "Aktive abonnementer vil bli kansellert.",
+    "deleteConsequenceNoRecovery": "Kontoen din kan ikke gjenopprettes — ikke engang av kundestøtte.",
+    "deleteTypeToConfirm": "Skriv DELETE for å bekrefte",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Slett kontoen permanent",
+    "keepMyAccount": "Behold kontoen min",
+    "deleteAccountFailed": "Kunne ikke slette kontoen din. Prøv igjen.",
+    "planUpdate": "Planoppdatering",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ditt Unlimited-abonnement avvikles. Bytt til Operator-abonnementet — samme flotte funksjoner til $49/md. Ditt nåværende abonnement vil fortsette å fungere i mellomtiden.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Oppgrader planen din",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Du er på en betalt plan.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

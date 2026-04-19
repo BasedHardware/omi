@@ -1707,12 +1707,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8565,12 +8560,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8947,4 +8937,80 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi مجوز خواندن داده‌های Apple Health شما را ندارد. آن را در تنظیمات iOS ← حریم خصوصی و امنیت ← Health ← Omi فعال کنید.';
+
+  @override
+  String get deleteFlowReasonTitle => 'چرا می‌روید؟';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'بازخورد شما به ما کمک می‌کند Omi را برای همه بهتر کنیم.';
+
+  @override
+  String get deleteReasonPrivacy => 'نگرانی‌های حریم خصوصی';
+
+  @override
+  String get deleteReasonNotUsing => 'به اندازه کافی استفاده نمی‌کنم';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ویژگی‌هایی که نیاز دارم وجود ندارد';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'مشکلات فنی زیاد';
+
+  @override
+  String get deleteReasonFoundAlternative => 'از چیز دیگری استفاده می‌کنم';
+
+  @override
+  String get deleteReasonTakingBreak => 'فقط کمی استراحت می‌کنم';
+
+  @override
+  String get deleteReasonOther => 'دیگر';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'بیشتر بگویید';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'چه چیزی باعث می‌شد Omi برای شما مفید باشد؟';
+
+  @override
+  String get deleteFlowFeedbackHint => 'اختیاری — نظرات شما به ما کمک می‌کند محصول بهتری بسازیم.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'این عمل برگشت‌ناپذیر است';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'پس از حذف حساب، راهی برای بازیابی آن وجود ندارد.';
+
+  @override
+  String get deleteConsequenceSubscription => 'هرگونه اشتراک فعال لغو خواهد شد.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'حساب شما قابل بازیابی نیست — حتی توسط پشتیبانی.';
+
+  @override
+  String get deleteTypeToConfirm => 'برای تأیید، DELETE را تایپ کنید';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'حذف دائمی حساب';
+
+  @override
+  String get keepMyAccount => 'حفظ حساب من';
+
+  @override
+  String get deleteAccountFailed => 'حذف حساب شما ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get planUpdate => 'به‌روزرسانی طرح';
+
+  @override
+  String get planDeprecationMessage =>
+      'طرح Unlimited شما در حال بازنشسته شدن است. به طرح Operator تغییر دهید — همان ویژگی‌های عالی با \$49/ماه. طرح فعلی شما در این مدت به کار خود ادامه خواهد داد.';
+
+  @override
+  String get upgradeYourPlan => 'طرح خود را ارتقا دهید';
+
+  @override
+  String get youAreOnAPaidPlan => 'شما در یک طرح پولی هستید.';
 }

@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "సురక్షిత సమకాలీకరణ",
     "appleHealthFeatureSecureDesc": "మీ Apple Health డేటా ప్రైవేట్‌గా మీ Omi ఖాతాకు సమకాలీకరించబడుతుంది.",
     "appleHealthDeniedTitle": "Apple Health యాక్సెస్ తిరస్కరించబడింది",
-    "appleHealthDeniedBody": "Omi కి మీ Apple Health డేటాను చదవడానికి అనుమతి లేదు. iOS సెట్టింగ్‌లు → గోప్యత & భద్రత → Health → Omi లో దీన్ని ప్రారంభించండి."
+    "appleHealthDeniedBody": "Omi కి మీ Apple Health డేటాను చదవడానికి అనుమతి లేదు. iOS సెట్టింగ్‌లు → గోప్యత & భద్రత → Health → Omi లో దీన్ని ప్రారంభించండి.",
+    "deleteFlowReasonTitle": "మీరు ఎందుకు వెళ్తున్నారు?",
+    "deleteFlowReasonSubtitle": "మీ అభిప్రాయం అందరికీ Omi-ని మెరుగుపరచడంలో మాకు సహాయపడుతుంది.",
+    "deleteReasonPrivacy": "గోప్యత ఆందోళనలు",
+    "deleteReasonNotUsing": "తగినంతగా ఉపయోగించడం లేదు",
+    "deleteReasonMissingFeatures": "నాకు కావలసిన ఫీచర్లు లేవు",
+    "deleteReasonTechnicalIssues": "చాలా సాంకేతిక సమస్యలు",
+    "deleteReasonFoundAlternative": "మరొకటి ఉపయోగిస్తున్నాను",
+    "deleteReasonTakingBreak": "కేవలం విరామం తీసుకుంటున్నాను",
+    "deleteReasonOther": "ఇతరత్రా",
+    "deleteFlowFeedbackTitle": "మరింత చెప్పండి",
+    "deleteFlowFeedbackSubtitle": "Omi మీకు ఎలా పని చేసేది?",
+    "deleteFlowFeedbackHint": "ఐచ్ఛికం — మీ ఆలోచనలు మెరుగైన ఉత్పత్తిని తయారు చేయడంలో మాకు సహాయపడతాయి.",
+    "deleteFlowConfirmTitle": "ఇది శాశ్వతం",
+    "deleteFlowConfirmSubtitle": "మీరు ఖాతాను తొలగించిన తర్వాత, దాన్ని పునరుద్ధరించే మార్గం లేదు.",
+    "deleteConsequenceSubscription": "ఏదైనా క్రియాశీల సబ్‌స్క్రిప్షన్ రద్దు చేయబడుతుంది.",
+    "deleteConsequenceNoRecovery": "మీ ఖాతాను పునరుద్ధరించలేరు — సపోర్ట్ కూడా చేయలేదు.",
+    "deleteTypeToConfirm": "నిర్ధారించడానికి DELETE టైప్ చేయండి",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "ఖాతాను శాశ్వతంగా తొలగించండి",
+    "keepMyAccount": "నా ఖాతాను ఉంచండి",
+    "deleteAccountFailed": "మీ ఖాతాను తొలగించలేకపోయాము. దయచేసి మళ్ళీ ప్రయత్నించండి.",
+    "planUpdate": "ప్లాన్ అప్‌డేట్",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "మీ Unlimited ప్లాన్ ఆపివేయబడుతోంది. Operator ప్లాన్‌కి మారండి — అదే అద్భుతమైన ఫీచర్లు $49/నెలకు. మీ ప్రస్తుత ప్లాన్ ఈలోగా పని చేస్తూనే ఉంటుంది.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "మీ ప్లాన్‌ను అప్‌గ్రేడ్ చేయండి",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "మీరు చెల్లింపు ప్లాన్‌లో ఉన్నారు.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

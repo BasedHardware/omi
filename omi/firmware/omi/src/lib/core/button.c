@@ -13,13 +13,12 @@
 #include <zephyr/sys/poweroff.h>
 
 #include "haptic.h"
+#include "imu.h"
 #include "led.h"
 #include "mic.h"
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
-
-#include "imu.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -323,7 +322,7 @@ int button_init()
     // Regist callback
     ret = button_regist_callback();
     if (ret < 0) {
-        LOG_ERR("Failed to regist buttons callback (%d)", ret);
+        LOG_ERR("Failed to register buttons callback (%d)", ret);
         return ret;
     }
 
@@ -420,7 +419,6 @@ void turnoff_all()
         return;
     }
 
-    
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
     lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);

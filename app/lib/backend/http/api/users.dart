@@ -89,12 +89,13 @@ Future webhooksStatus() async {
   return null;
 }
 
-Future<bool> deleteAccount() async {
+Future<bool> deleteAccount({String? reason, String? reasonDetails}) async {
+  final hasFeedback = (reason != null && reason.isNotEmpty) || (reasonDetails != null && reasonDetails.isNotEmpty);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/delete-account',
-    headers: {},
+    headers: hasFeedback ? {'Content-Type': 'application/json'} : {},
     method: 'DELETE',
-    body: '',
+    body: hasFeedback ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
   );
   if (response == null) return false;
   Logger.debug('deleteAccount response: ${response.body}');
@@ -186,21 +187,6 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<Person?> getSinglePerson(String personId, {bool includeSpeechSamples = false}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people/$personId?include_speech_samples=$includeSpeechSamples',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  Logger.debug('getSinglePerson response: ${response.body}');
-  if (response.statusCode == 200) {
-    return Person.fromJson(jsonDecode(response.body));
-  }
-  return null;
-}
-
 Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
@@ -256,22 +242,6 @@ Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
   if (response == null) return false;
   Logger.debug('deletePersonSpeechSample response: ${response.body}');
   return response.statusCode == 200;
-}
-
-Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/joan/$conversationId/followup-question',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return '';
-  Logger.debug('getFollowUpQuestion response: ${response.body}');
-  if (response.statusCode == 200) {
-    var jsonResponse = jsonDecode(response.body);
-    return jsonResponse['result'] as String? ?? '';
-  }
-  return '';
 }
 
 /*Analytics*/
@@ -546,16 +516,6 @@ Future<DailySummary?> getDailySummary(String summaryId) async {
     Logger.debug('Error parsing daily summary: $e');
     return null;
   }
-}
-
-Future<bool> deleteDailySummary(String summaryId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-  return response?.statusCode == 200;
 }
 
 /// Generate a daily summary for a specific date (or today if not specified)

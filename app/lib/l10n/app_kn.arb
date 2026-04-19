@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "ಸುರಕ್ಷಿತ ಸಿಂಕ್",
     "appleHealthFeatureSecureDesc": "ನಿಮ್ಮ Apple Health ಡೇಟಾ ಖಾಸಗಿಯಾಗಿ ನಿಮ್ಮ Omi ಖಾತೆಗೆ ಸಿಂಕ್ ಆಗುತ್ತದೆ.",
     "appleHealthDeniedTitle": "Apple Health ಪ್ರವೇಶ ನಿರಾಕರಿಸಲಾಗಿದೆ",
-    "appleHealthDeniedBody": "Omi ಗೆ ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು ಓದುವ ಅನುಮತಿ ಇಲ್ಲ. iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳು → ಗೌಪ್ಯತೆ ಮತ್ತು ಭದ್ರತೆ → Health → Omi ನಲ್ಲಿ ಇದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ."
+    "appleHealthDeniedBody": "Omi ಗೆ ನಿಮ್ಮ Apple Health ಡೇಟಾವನ್ನು ಓದುವ ಅನುಮತಿ ಇಲ್ಲ. iOS ಸೆಟ್ಟಿಂಗ್‌ಗಳು → ಗೌಪ್ಯತೆ ಮತ್ತು ಭದ್ರತೆ → Health → Omi ನಲ್ಲಿ ಇದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ.",
+    "deleteFlowReasonTitle": "ನೀವೇಕೆ ಹೋಗುತ್ತಿದ್ದೀರಿ?",
+    "deleteFlowReasonSubtitle": "ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ಎಲ್ಲರಿಗೂ Omi ಅನ್ನು ಸುಧಾರಿಸಲು ನಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತದೆ.",
+    "deleteReasonPrivacy": "ಗೌಪ್ಯತೆ ಕಾಳಜಿಗಳು",
+    "deleteReasonNotUsing": "ಸಾಕಷ್ಟು ಬಳಸುತ್ತಿಲ್ಲ",
+    "deleteReasonMissingFeatures": "ನನಗೆ ಬೇಕಾದ ವೈಶಿಷ್ಟ್ಯಗಳಿಲ್ಲ",
+    "deleteReasonTechnicalIssues": "ಅನೇಕ ತಾಂತ್ರಿಕ ಸಮಸ್ಯೆಗಳು",
+    "deleteReasonFoundAlternative": "ಬೇರೆ ಯಾವುದನ್ನೋ ಬಳಸುತ್ತಿದ್ದೇನೆ",
+    "deleteReasonTakingBreak": "ಕೇವಲ ವಿರಾಮ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದ್ದೇನೆ",
+    "deleteReasonOther": "ಇತರೆ",
+    "deleteFlowFeedbackTitle": "ಹೆಚ್ಚು ಹೇಳಿ",
+    "deleteFlowFeedbackSubtitle": "Omi ನಿಮಗೆ ಹೇಗೆ ಉಪಯುಕ್ತವಾಗುತ್ತಿತ್ತು?",
+    "deleteFlowFeedbackHint": "ಐಚ್ಛಿಕ — ನಿಮ್ಮ ಆಲೋಚನೆಗಳು ಉತ್ತಮ ಉತ್ಪನ್ನವನ್ನು ನಿರ್ಮಿಸಲು ನಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತವೆ.",
+    "deleteFlowConfirmTitle": "ಇದು ಶಾಶ್ವತ",
+    "deleteFlowConfirmSubtitle": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಿದ ನಂತರ, ಅದನ್ನು ಮರುಪಡೆಯಲು ಯಾವುದೇ ಮಾರ್ಗವಿಲ್ಲ.",
+    "deleteConsequenceSubscription": "ಯಾವುದೇ ಸಕ್ರಿಯ ಚಂದಾದಾರಿಕೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುತ್ತದೆ.",
+    "deleteConsequenceNoRecovery": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ — ಬೆಂಬಲದಿಂದಲೂ ಸಾಧ್ಯವಿಲ್ಲ.",
+    "deleteTypeToConfirm": "ದೃಢೀಕರಿಸಲು DELETE ಟೈಪ್ ಮಾಡಿ",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "ಖಾತೆಯನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಿ",
+    "keepMyAccount": "ನನ್ನ ಖಾತೆಯನ್ನು ಇರಿಸಿ",
+    "deleteAccountFailed": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "planUpdate": "ಯೋಜನೆ ನವೀಕರಣ",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ. Operator ಯೋಜನೆಗೆ ಬದಲಾಯಿಸಿ — ಅದೇ ಅದ್ಭುತ ವೈಶಿಷ್ಟ್ಯಗಳು $49/ತಿಂಗಳಿಗೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆ ಈ ಮಧ್ಯೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "ನೀವು ಪಾವತಿಸಿದ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

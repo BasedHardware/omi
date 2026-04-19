@@ -1716,12 +1716,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -8999,4 +8994,80 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi no té permís per llegir les teves dades d\'Apple Health. Activa-ho a Configuració d\'iOS → Privadesa i seguretat → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Per què te\'n vas?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'El teu feedback ens ajuda a millorar Omi per a tothom.';
+
+  @override
+  String get deleteReasonPrivacy => 'Preocupacions de privadesa';
+
+  @override
+  String get deleteReasonNotUsing => 'No l\'utilitzo prou';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Falten funcions que necessito';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Massa problemes tècnics';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Utilitzo una altra cosa';
+
+  @override
+  String get deleteReasonTakingBreak => 'Només em prenc un descans';
+
+  @override
+  String get deleteReasonOther => 'Altres';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Explica\'ns més';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Què hauria fet que Omi funcionés per a tu?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opcional — les teves idees ens ajuden a crear un producte millor.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Això és permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Un cop eliminis el teu compte, no es podrà recuperar.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Qualsevol subscripció activa es cancel·larà.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'El teu compte no es pot restaurar — ni tan sols pel suport.';
+
+  @override
+  String get deleteTypeToConfirm => 'Escriu DELETE per confirmar';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Eliminar compte permanentment';
+
+  @override
+  String get keepMyAccount => 'Mantenir el meu compte';
+
+  @override
+  String get deleteAccountFailed => 'No s\'ha pogut eliminar el teu compte. Torna-ho a provar.';
+
+  @override
+  String get planUpdate => 'Actualització del pla';
+
+  @override
+  String get planDeprecationMessage =>
+      'El vostre pla Unlimited s\'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a \$49/mes. El vostre pla actual continuarà funcionant mentrestant.';
+
+  @override
+  String get upgradeYourPlan => 'Actualitza el teu pla';
+
+  @override
+  String get youAreOnAPaidPlan => 'Estàs en un pla de pagament.';
 }

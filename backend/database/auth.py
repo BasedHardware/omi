@@ -1,7 +1,7 @@
 from firebase_admin import auth
 
 from database._client import db
-from database.redis_db import cache_user_name, get_cached_user_name
+from database.redis_db import cache_user_name
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,8 +41,6 @@ def _get_firestore_user_name(uid: str):
 
 
 def get_user_name(uid: str, use_default: bool = True):
-    # if cached_name := get_cached_user_name(uid):
-    #     return cached_name
     default_name = 'The User' if use_default else None
     user = get_user_from_uid(uid)
     if not user:

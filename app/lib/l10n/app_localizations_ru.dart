@@ -8974,4 +8974,80 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'У Omi нет разрешения на чтение данных Apple Health. Включите его в Настройках iOS → Конфиденциальность и безопасность → Здоровье → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Почему вы уходите?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Ваш отзыв помогает нам делать Omi лучше для всех.';
+
+  @override
+  String get deleteReasonPrivacy => 'Вопросы конфиденциальности';
+
+  @override
+  String get deleteReasonNotUsing => 'Использую недостаточно часто';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Не хватает нужных функций';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Слишком много технических проблем';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Использую другое';
+
+  @override
+  String get deleteReasonTakingBreak => 'Просто делаю перерыв';
+
+  @override
+  String get deleteReasonOther => 'Другое';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Расскажите подробнее';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Что бы заставило Omi работать для вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Необязательно — ваши мысли помогают нам создавать лучший продукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Это необратимо';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'После удаления аккаунта восстановить его невозможно.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Активная подписка будет отменена.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ваш аккаунт нельзя восстановить — даже через поддержку.';
+
+  @override
+  String get deleteTypeToConfirm => 'Введите DELETE для подтверждения';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Удалить аккаунт навсегда';
+
+  @override
+  String get keepMyAccount => 'Оставить аккаунт';
+
+  @override
+  String get deleteAccountFailed => 'Не удалось удалить аккаунт. Попробуйте ещё раз.';
+
+  @override
+  String get planUpdate => 'Обновление плана';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ваш план Unlimited прекращается. Перейдите на план Operator — те же отличные функции за \$49/мес. Ваш текущий план продолжит работать тем временем.';
+
+  @override
+  String get upgradeYourPlan => 'Улучшите свой план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вы на платном плане.';
 }

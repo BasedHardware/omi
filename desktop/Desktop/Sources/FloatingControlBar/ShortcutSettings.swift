@@ -394,6 +394,48 @@ class ShortcutSettings: ObservableObject {
         return "Maximum"
     }
 
+    /// A selectable ElevenLabs voice for floating-bar replies.
+    struct VoiceOption: Identifiable, Equatable {
+        enum Gender: String {
+            case female
+            case male
+        }
+
+        let id: String
+        let name: String
+        let gender: Gender
+        let description: String
+    }
+
+    /// Curated ElevenLabs voices available from the voice picker.
+    static let availableVoices: [VoiceOption] = [
+        VoiceOption(id: "BAMYoBHLZM7lJgJAmFz0", name: "Sloane", gender: .female, description: "Warm, confident"),
+        VoiceOption(id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", gender: .female, description: "Smooth, sultry"),
+        VoiceOption(id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", gender: .female, description: "Calm, breathy"),
+        VoiceOption(id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", gender: .female, description: "Soft, mature"),
+        VoiceOption(id: "piTKgcLEGmPE4e6mEKli", name: "Nicole", gender: .female, description: "Whispery, intimate"),
+        VoiceOption(id: "pNInz6obpgDQGcFmaJgB", name: "Adam", gender: .male, description: "Deep American"),
+        VoiceOption(id: "ErXwobaYiN019PkySvjV", name: "Antoni", gender: .male, description: "Warm, friendly"),
+        VoiceOption(id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", gender: .male, description: "Young, deep"),
+        VoiceOption(id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum", gender: .male, description: "Intense, gravelly"),
+        VoiceOption(id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: .male, description: "Authoritative British"),
+    ]
+
+    static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"
+
+    static func voiceOption(for id: String) -> VoiceOption {
+        availableVoices.first(where: { $0.id == id }) ?? availableVoices[0]
+    }
+
+    /// Selected ElevenLabs voice ID for floating-bar TTS replies.
+    @Published var selectedVoiceID: String {
+        didSet {
+            guard selectedVoiceID != oldValue else { return }
+            UserDefaults.standard.set(selectedVoiceID, forKey: "shortcut_selectedVoiceID")
+            FloatingBarVoicePlaybackService.shared.playVoiceSample(voiceID: selectedVoiceID)
+        }
+    }
+
     var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
         floatingBarVoiceAnswersEnabled || floatingBarTypedQuestionVoiceAnswersEnabled
     }
@@ -441,6 +483,11 @@ class ShortcutSettings: ObservableObject {
         self.floatingBarTypedQuestionVoiceAnswersEnabled =
             UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
         self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4
+        let storedVoiceID = UserDefaults.standard.string(forKey: "shortcut_selectedVoiceID") ?? Self.defaultVoiceID
+        let validVoiceID = Self.availableVoices.contains(where: { $0.id == storedVoiceID })
+            ? storedVoiceID
+            : Self.defaultVoiceID
+        self.selectedVoiceID = validVoiceID
     }
 
     private func persistShortcut(_ shortcut: KeyboardShortcut, forKey key: String) {

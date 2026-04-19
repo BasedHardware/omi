@@ -10,6 +10,7 @@ v1 remains completely unchanged.
 
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -64,8 +65,8 @@ class TestSyncV2Structure:
         assert "'job_id'" in func_body, "v2 response must include job_id"
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
-    def test_v2_starts_daemon_thread(self):
-        """v2 must start a daemon background thread."""
+    def test_v2_submits_to_critical_executor(self):
+        """v2 must submit background work to the shared critical_executor."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -73,8 +74,17 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'daemon=True' in func_body, "Background thread must be daemon"
-        assert 'bg_thread.start()' in func_body, "Background thread must be started"
+        assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
+        assert '_process_segments_background' in func_body, "v2 must submit the background worker function"
+        # The coordinator dispatch must use run_in_executor with None (default executor),
+        # not critical_executor, to avoid deadlock when the coordinator itself submits to
+        # critical_executor internally.
+        # Accept both inline and multi-line forms: run_in_executor(None, and run_in_executor(\n..None,
+        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
+        assert none_executor_pattern.search(func_body), (
+            "v2 coordinator dispatch must use run_in_executor(None, ...) — "
+            "passing critical_executor would nest executors and cause deadlock"
+        )
 
     def test_v2_has_fair_use_gates(self):
         """v2 must check fair-use and DG budget (same gates as v1)."""
@@ -123,10 +133,10 @@ class TestSyncV2Structure:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
 
-        # record_dg_usage_ms must come after chunk_threads_bg
+        # record_dg_usage_ms must come after critical_executor.submit / future.result processing
         dg_pos = func_body.index('record_dg_usage_ms')
-        thread_pos = func_body.index('chunk_threads_bg(threads)')
-        assert dg_pos > thread_pos, "DG usage must be recorded AFTER segment processing"
+        processing_pos = func_body.index('future.result()')
+        assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
 
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
@@ -145,8 +155,8 @@ class TestSyncV2Structure:
 
         assert '404' in func_body, "GET must return 404 for missing job"
 
-    def test_v2_fetches_prefs_and_cache_before_bg_thread(self):
-        """v2 must fetch transcription_prefs and build person_embeddings_cache before spawning bg thread."""
+    def test_v2_fetches_prefs_and_cache_before_executor_submit(self):
+        """v2 must fetch transcription_prefs and build person_embeddings_cache before submitting to executor."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -157,12 +167,12 @@ class TestSyncV2Structure:
         assert 'get_user_transcription_preferences' in func_body, "v2 must fetch transcription preferences"
         assert 'build_person_embeddings_cache' in func_body, "v2 must build person embeddings cache"
 
-        # Both must appear before bg_thread.start()
+        # Both must appear before the background worker dispatch
         prefs_pos = func_body.index('get_user_transcription_preferences')
         cache_pos = func_body.index('build_person_embeddings_cache')
-        thread_start_pos = func_body.index('bg_thread.start()')
-        assert prefs_pos < thread_start_pos, "Prefs must be fetched before bg thread starts"
-        assert cache_pos < thread_start_pos, "Cache must be built before bg thread starts"
+        submit_pos = func_body.index('_process_segments_background')
+        assert prefs_pos < submit_pos, "Prefs must be fetched before background worker dispatch"
+        assert cache_pos < submit_pos, "Cache must be built before background worker dispatch"
 
     def test_v2_bg_worker_accepts_prefs_and_cache_params(self):
         """_process_segments_background must accept transcription_prefs and person_embeddings_cache."""
@@ -175,8 +185,8 @@ class TestSyncV2Structure:
         assert 'transcription_prefs' in func_sig, "bg worker must accept transcription_prefs param"
         assert 'person_embeddings_cache' in func_sig, "bg worker must accept person_embeddings_cache param"
 
-    def test_v2_passes_prefs_and_cache_to_bg_thread(self):
-        """v2 must pass transcription_prefs and person_embeddings_cache in bg thread args."""
+    def test_v2_passes_prefs_and_cache_to_executor_submit(self):
+        """v2 must pass transcription_prefs and person_embeddings_cache in executor submit args."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -184,13 +194,14 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        # Find the Thread constructor args
-        thread_start = func_body.index('threading.Thread')
-        thread_end = func_body.index('bg_thread.start()')
-        thread_block = func_body[thread_start:thread_end]
+        # Find the background worker dispatch block
+        submit_start = func_body.index('_process_segments_background')
+        # Find the closing — look for the return statement after it
+        submit_end = func_body.index('return JSONResponse', submit_start)
+        submit_block = func_body[submit_start:submit_end]
 
-        assert 'transcription_prefs' in thread_block, "v2 must pass transcription_prefs to bg thread"
-        assert 'person_embeddings_cache' in thread_block, "v2 must pass person_embeddings_cache to bg thread"
+        assert 'transcription_prefs' in submit_block, "v2 must pass transcription_prefs to background worker"
+        assert 'person_embeddings_cache' in submit_block, "v2 must pass person_embeddings_cache to background worker"
 
 
 # ---------------------------------------------------------------------------
@@ -407,10 +418,10 @@ class TestProcessSegmentsBackground:
         """Worker must heartbeat (update_sync_job) during processing to prevent stale detection."""
         body = self._get_bg_func_body()
         assert 'update_sync_job(' in body, "Worker must call update_sync_job for heartbeat"
-        # Heartbeat must be inside the chunk loop, after join
+        # Heartbeat must be inside the chunk loop, after futures are resolved
         heartbeat_pos = body.index('update_sync_job(')
-        join_pos = body.index('.join()')
-        assert heartbeat_pos > join_pos, "Heartbeat must come after thread join"
+        result_pos = body.index('future.result()')
+        assert heartbeat_pos > result_pos, "Heartbeat must come after future.result()"
 
 
 # ---------------------------------------------------------------------------
@@ -449,10 +460,12 @@ class TestV1Unchanged:
         body = self._get_v1_body()
         assert 'status_code=500' in body, "v1 must raise 500 for total failure"
 
-    def test_v1_uses_synchronous_chunk_threads(self):
-        """v1 must still join threads synchronously (no background)."""
+    def test_v1_uses_synchronous_gather(self):
+        """v1 must process segments synchronously with asyncio.gather (no background)."""
         body = self._get_v1_body()
-        assert 'chunk_threads(threads)' in body, "v1 must still use synchronous chunk_threads"
+        assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
+        assert 'run_in_executor' in body, "v1 must use run_in_executor for blocking segment work"
+        assert 'critical_executor' in body, "v1 must use critical_executor (Lane 2 architecture)"
 
     def test_v1_cleanup_in_finally(self):
         """v1 must still clean up files in finally block."""
@@ -761,12 +774,20 @@ class TestBackgroundWorkerBehavioral:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'utils.executors',
         ]
         heavy_deps.extend(utils_subs)
 
         for mod in heavy_deps:
             saved_modules[mod] = sys.modules.get(mod)
             sys.modules[mod] = MagicMock()
+
+        # Provide a working critical_executor stub (submit runs the function synchronously)
+        from concurrent.futures import ThreadPoolExecutor
+
+        _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='test')
+        sys.modules['utils.executors'].critical_executor = _test_executor
+        sys.modules['utils.executors'].storage_executor = _test_executor
 
         # Set up specific mocks
         sys.modules['database.redis_db'] = MagicMock(r=mock_redis)
@@ -1215,6 +1236,13 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        # Stub utils.executors with a real-ish critical_executor mock
+        mock_executors = MagicMock()
+        mock_executors.critical_executor = MagicMock()
+        mock_executors.storage_executor = MagicMock()
+        saved_modules['utils.executors'] = sys.modules.get('utils.executors')
+        sys.modules['utils.executors'] = mock_executors
+
         sys.modules['database.redis_db'] = MagicMock(r=MagicMock())
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
         sys.modules['database.sync_jobs'] = mock_sync_jobs
@@ -1448,3 +1476,62 @@ class TestV2EndpointExecution:
             assert body['processed_segments'] == 2
         finally:
             self._cleanup_modules(saved)
+
+
+# ---------------------------------------------------------------------------
+# Pusher coordinator executor pattern
+# ---------------------------------------------------------------------------
+
+
+class TestPusherCoordinatorExecutor:
+    """Pusher _process_conversation_task must use run_in_executor(None, ...) not critical_executor.
+
+    process_conversation is a coordinator that internally submits to critical_executor.
+    Passing critical_executor to run_in_executor would nest executors and cause deadlock.
+    """
+
+    @staticmethod
+    def _read_pusher_source():
+        pusher_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'pusher.py')
+        with open(pusher_path) as f:
+            return f.read()
+
+    def test_process_conversation_uses_run_in_executor(self):
+        """pusher._process_conversation_task must use run_in_executor for process_conversation."""
+        source = self._read_pusher_source()
+        assert 'run_in_executor' in source, "pusher.py must use run_in_executor for process_conversation"
+
+    def test_process_conversation_uses_none_executor(self):
+        """pusher._process_conversation_task must pass None as executor to avoid deadlock.
+
+        process_conversation is a coordinator that submits child tasks to critical_executor.
+        Using run_in_executor(None, ...) uses the default executor, preventing nested pool deadlock.
+        """
+        source = self._read_pusher_source()
+        assert '_process_conversation_task' in source, "pusher.py must define _process_conversation_task"
+        start = source.index('async def _process_conversation_task')
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
+        assert none_executor_pattern.search(func_body), (
+            "pusher._process_conversation_task must use run_in_executor(None, process_conversation, ...) "
+            "— not critical_executor — because process_conversation is a coordinator that submits "
+            "child tasks to critical_executor; nesting would cause deadlock under load"
+        )
+
+    def test_process_conversation_not_using_critical_executor_directly(self):
+        """process_conversation call in pusher must NOT use critical_executor as the executor arg."""
+        source = self._read_pusher_source()
+        start = source.index('async def _process_conversation_task')
+        next_def = source.find('\nasync def ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert 'run_in_executor(critical_executor, process_conversation' not in func_body, (
+            "pusher._process_conversation_task must NOT pass critical_executor for process_conversation — "
+            "use None (default executor) to prevent deadlock"
+        )

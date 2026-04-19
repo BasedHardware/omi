@@ -1711,12 +1711,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8609,12 +8604,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8994,4 +8984,80 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi нема дозвола да ги чита вашите Apple Health податоци. Овозможете го во iOS Поставки → Приватност и безбедност → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Зошто си одите?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Вашите повратни информации ни помагаат да го подобриме Omi за сите.';
+
+  @override
+  String get deleteReasonPrivacy => 'Грижи за приватноста';
+
+  @override
+  String get deleteReasonNotUsing => 'Не го користам доволно често';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Недостасуваат функции што ми се потребни';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Премногу технички проблеми';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Користам нешто друго';
+
+  @override
+  String get deleteReasonTakingBreak => 'Само правам пауза';
+
+  @override
+  String get deleteReasonOther => 'Друго';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Кажете ни повеќе';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Што би направило Omi да работи за вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Опционално — вашите мисли ни помагаат да изградиме подобар производ.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ова е трајно';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Откако ќе ја избришете сметката, не може да се врати.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Секоја активна претплата ќе биде откажана.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Вашата сметка не може да се обнови — ниту од поддршката.';
+
+  @override
+  String get deleteTypeToConfirm => 'Внесете DELETE за потврда';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Трајно избриши ја сметката';
+
+  @override
+  String get keepMyAccount => 'Задржи ја мојата сметка';
+
+  @override
+  String get deleteAccountFailed => 'Не успеавме да ја избришеме вашата сметка. Обидете се повторно.';
+
+  @override
+  String get planUpdate => 'Ажурирање на планот';
+
+  @override
+  String get planDeprecationMessage =>
+      'Вашиот Unlimited план се укинува. Преминете на Operator план — истите одлични функции за \$49/мес. Вашиот тековен план ќе продолжи да работи во меѓувреме.';
+
+  @override
+  String get upgradeYourPlan => 'Надградете го вашиот план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Вие сте на платен план.';
 }

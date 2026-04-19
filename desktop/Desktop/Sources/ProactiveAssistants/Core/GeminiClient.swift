@@ -338,7 +338,7 @@ actor GeminiClient {
             contents: [
               GeminiRequest.Content(parts: [
                 GeminiRequest.Part(text: prompt),
-                GeminiRequest.Part(mimeType: "image/jpeg", data: base64Data),
+                GeminiRequest.Part(mimeType: "image/webp", data: base64Data),
               ])
             ],
             systemInstruction: GeminiRequest.SystemInstruction(

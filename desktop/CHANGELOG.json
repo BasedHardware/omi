@@ -2,6 +2,105 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.334",
+      "date": "2026-04-18",
+      "changes": [
+        "Pause Rewind screen capture while screenshot apps (CleanShot, Shottr, macOS screenshot, Loom, OBS, etc.) are frontmost so their capture no longer stalls on WindowServer contention"
+      ]
+    },
+    {
+      "version": "0.11.332",
+      "date": "2026-04-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.330",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.329",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.328",
+      "date": "2026-04-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.326",
+      "date": "2026-04-17",
+      "changes": [
+        "Chat limits now use server-side quota instead of local counter",
+        "Added deprecation notice for Unlimited plan subscribers with Operator upgrade option"
+      ]
+    },
+    {
+      "version": "0.11.324",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.323",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.322",
+      "date": "2026-04-16",
+      "changes": [
+        "Fixed Rewind screen capture contending with other screenshot apps (e.g. CleanShot) and causing brief UI stalls"
+      ]
+    },
+    {
+      "version": "0.11.321",
+      "date": "2026-04-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.320",
+      "date": "2026-04-16",
+      "changes": [
+        "Floating bar voice picker now plays a short sample when you switch voices"
+      ]
+    },
+    {
+      "version": "0.11.319",
+      "date": "2026-04-16",
+      "changes": [
+        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+      ]
+    },
+    {
+      "version": "0.11.318",
+      "date": "2026-04-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.316",
+      "date": "2026-04-15",
+      "changes": [
+        "Restored crash reporting and error telemetry (Sentry DSN was pointing at an inaccessible org since 2026-03-22, silently dropping every event)"
+      ]
+    },
+    {
       "version": "0.11.314",
       "date": "2026-04-15",
       "changes": [

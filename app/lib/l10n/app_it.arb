@@ -2914,5 +2914,42 @@
     "appleHealthFeatureSecureTitle": "Sincronizzazione sicura",
     "appleHealthFeatureSecureDesc": "I tuoi dati Apple Health si sincronizzano privatamente con il tuo account Omi.",
     "appleHealthDeniedTitle": "Accesso ad Apple Health negato",
-    "appleHealthDeniedBody": "Omi non ha il permesso di leggere i tuoi dati di Apple Health. Attivalo in Impostazioni iOS → Privacy e sicurezza → Salute → Omi."
+    "appleHealthDeniedBody": "Omi non ha il permesso di leggere i tuoi dati di Apple Health. Attivalo in Impostazioni iOS → Privacy e sicurezza → Salute → Omi.",
+    "deleteFlowReasonTitle": "Perché te ne stai andando?",
+    "deleteFlowReasonSubtitle": "Il tuo feedback ci aiuta a migliorare Omi per tutti.",
+    "deleteReasonPrivacy": "Problemi di privacy",
+    "deleteReasonNotUsing": "Non lo uso abbastanza",
+    "deleteReasonMissingFeatures": "Mancano funzionalità di cui ho bisogno",
+    "deleteReasonTechnicalIssues": "Troppi problemi tecnici",
+    "deleteReasonFoundAlternative": "Sto usando qualcos'altro",
+    "deleteReasonTakingBreak": "Mi sto solo prendendo una pausa",
+    "deleteReasonOther": "Altro",
+    "deleteFlowFeedbackTitle": "Raccontaci di più",
+    "deleteFlowFeedbackSubtitle": "Cosa avrebbe reso Omi adatto a te?",
+    "deleteFlowFeedbackHint": "Facoltativo — le tue idee ci aiutano a costruire un prodotto migliore.",
+    "deleteFlowConfirmTitle": "È definitivo",
+    "deleteFlowConfirmSubtitle": "Una volta eliminato il tuo account, non c'è modo di recuperarlo.",
+    "deleteConsequenceSubscription": "Eventuali abbonamenti attivi verranno annullati.",
+    "deleteConsequenceNoRecovery": "Il tuo account non può essere ripristinato — nemmeno dall'assistenza.",
+    "deleteTypeToConfirm": "Digita DELETE per confermare",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Elimina account definitivamente",
+    "keepMyAccount": "Mantieni il mio account",
+    "deleteAccountFailed": "Impossibile eliminare il tuo account. Riprova.",
+    "planUpdate": "Aggiornamento del piano",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Il tuo piano Unlimited viene ritirato. Passa al piano Operator — le stesse fantastiche funzionalità a $49/mese. Il tuo piano attuale continuerà a funzionare nel frattempo.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Aggiorna il tuo piano",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Sei su un piano a pagamento.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

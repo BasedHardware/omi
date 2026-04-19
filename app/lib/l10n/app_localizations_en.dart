@@ -1703,12 +1703,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8559,12 +8554,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -8941,4 +8931,80 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Why are you leaving?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Your feedback helps us improve Omi for everyone.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privacy concerns';
+
+  @override
+  String get deleteReasonNotUsing => 'Not using it enough';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Missing features I need';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Too many technical issues';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Using something else';
+
+  @override
+  String get deleteReasonTakingBreak => 'Just taking a break';
+
+  @override
+  String get deleteReasonOther => 'Other';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Tell us more';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'What would have made Omi work for you?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Optional — your thoughts help us build a better product.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'This is permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Once you delete your account, there is no way to recover it.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Any active subscription will be cancelled.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+
+  @override
+  String get deleteTypeToConfirm => 'Type DELETE to confirm';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Delete account permanently';
+
+  @override
+  String get keepMyAccount => 'Keep my account';
+
+  @override
+  String get deleteAccountFailed => 'Could not delete your account. Please try again.';
+
+  @override
+  String get planUpdate => 'Plan Update';
+
+  @override
+  String get planDeprecationMessage =>
+      'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.';
+
+  @override
+  String get upgradeYourPlan => 'Upgrade Your Plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'You are on a paid plan.';
 }

@@ -71,7 +71,7 @@ class _AuthComponentState extends State<AuthComponent> {
                     const SizedBox(height: 32),
 
                     // Sign in buttons
-                    if (Platform.isIOS) ...[
+                    if (Platform.isIOS || Platform.isAndroid) ...[
                       SizedBox(
                         width: double.infinity,
                         height: 56,

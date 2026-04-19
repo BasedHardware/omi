@@ -1,18 +1,19 @@
 from datetime import datetime
-import threading
 from typing import List, Optional
+
+from utils.executors import critical_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 import database.memories as memories_db
 import database.conversations as conversations_db
-import database.users as users_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
+from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -52,7 +53,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
-    threading.Thread(target=update_personas_async, args=(uid,)).start()
+    critical_executor.submit(update_personas_async, uid)
     return memory_db
 
 
@@ -121,32 +122,6 @@ class SimpleTranscriptSegment(BaseModel):
     end: float
 
 
-def _add_speaker_names_to_segments(uid, conversations: list):
-    """Add speaker_name to transcript segments based on person_id mappings."""
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
-
-    all_person_ids = set()
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('person_id'):
-                all_person_ids.add(seg['person_id'])
-
-    people_map = {}
-    if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-        people_map = {p['id']: p['name'] for p in people_data}
-
-    for conv in conversations:
-        for seg in conv.get('transcript_segments', []):
-            if seg.get('is_user'):
-                seg['speaker_name'] = user_name
-            elif seg.get('person_id') and seg['person_id'] in people_map:
-                seg['speaker_name'] = people_map[seg['person_id']]
-            else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
-
-
 class SimpleConversation(BaseModel):
     id: str
     started_at: Optional[datetime]
@@ -195,13 +170,7 @@ def get_conversations(
         categories=[c.value for c in category_list],
     )
 
-    # Redact locked conversation content in list view
-    for conv in conversations:
-        if conv.get('is_locked', False):
-            if 'structured' in conv:
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-            conv['transcript_segments'] = []
+    redact_conversations_for_list(conversations)
     return conversations
 
 
@@ -219,6 +188,6 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    _add_speaker_names_to_segments(uid, [conversation])
+    populate_speaker_names(uid, [conversation])
 
     return conversation

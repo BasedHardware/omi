@@ -34,18 +34,19 @@ from models.conversation import (
     ExternalIntegrationCreateConversation,
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
+from utils.conversations.factory import deserialize_conversation
 from models.other import Person
 from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
+from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
+from utils.executors import critical_executor
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
     should_discard_conversation,
-    select_best_app_for_conversation,
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
     assign_conversation_to_folder,
@@ -364,11 +365,12 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    for app in filtered_apps:
-        threads.append(threading.Thread(target=execute_app, args=(app,)))
-
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    futures = [critical_executor.submit(execute_app, app) for app in filtered_apps]
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            logger.error(f"Error executing app: {e}")
 
 
 def _update_goal_progress(uid: str, conversation: Conversation):
@@ -571,7 +573,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        threading.Thread(target=_run_auto_sync, daemon=True).start()
+        critical_executor.submit(_run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -613,12 +615,16 @@ def _update_personas_async(uid: str):
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
 
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_batch())
+        finally:
+            loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
@@ -714,21 +720,12 @@ def process_conversation(
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
-        (
-            threading.Thread(
-                target=save_structured_vector,
-                args=(
-                    uid,
-                    conversation,
-                ),
-            ).start()
-            if not is_reprocess
-            else None
-        )
-        threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
-        threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
-        threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
-        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
+        if not is_reprocess:
+            critical_executor.submit(save_structured_vector, uid, conversation)
+        critical_executor.submit(_extract_memories, uid, conversation)
+        critical_executor.submit(_extract_trends, uid, conversation)
+        critical_executor.submit(_save_action_items, uid, conversation)
+        critical_executor.submit(_update_goal_progress, uid, conversation)
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -752,15 +749,13 @@ def process_conversation(
         folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
-        threading.Thread(
-            target=conversation_created_webhook,
-            args=(
-                uid,
-                conversation,
-            ),
-        ).start()
+
+        def _run_webhook():
+            asyncio.run(conversation_created_webhook(uid, conversation))
+
+        critical_executor.submit(_run_webhook)
         # Update persona prompts with new conversation
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        critical_executor.submit(update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
@@ -906,7 +901,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
         logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
         return
 
-    conversation = Conversation(**conversation_data)
+    conversation = deserialize_conversation(conversation_data)
 
     # Get prediction
     predictions = callback.predictions

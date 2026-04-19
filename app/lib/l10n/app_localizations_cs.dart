@@ -1707,12 +1707,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZAŘÍZENÍ',
-      one: 'ZAŘÍZENÍ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -8941,4 +8936,80 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi nemá oprávnění číst vaše data z Apple Health. Povolte ho v Nastavení iOS → Soukromí a zabezpečení → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Proč odcházíte?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Vaše zpětná vazba nám pomáhá zlepšovat Omi pro všechny.';
+
+  @override
+  String get deleteReasonPrivacy => 'Obavy o soukromí';
+
+  @override
+  String get deleteReasonNotUsing => 'Nepoužívám to dost často';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Chybí funkce, které potřebuji';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Příliš mnoho technických problémů';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Používám něco jiného';
+
+  @override
+  String get deleteReasonTakingBreak => 'Jen si dávám pauzu';
+
+  @override
+  String get deleteReasonOther => 'Jiné';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Řekněte nám více';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Co by udělalo Omi pro vás použitelným?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Nepovinné — vaše myšlenky nám pomáhají vytvořit lepší produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Toto je trvalé';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Po smazání účtu jej nelze obnovit.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Jakékoli aktivní předplatné bude zrušeno.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Váš účet nelze obnovit — ani podporou.';
+
+  @override
+  String get deleteTypeToConfirm => 'Pro potvrzení napište DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Trvale smazat účet';
+
+  @override
+  String get keepMyAccount => 'Ponechat můj účet';
+
+  @override
+  String get deleteAccountFailed => 'Váš účet se nepodařilo smazat. Zkuste to znovu.';
+
+  @override
+  String get planUpdate => 'Aktualizace plánu';
+
+  @override
+  String get planDeprecationMessage =>
+      'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
+
+  @override
+  String get upgradeYourPlan => 'Upgradujte svůj plán';
+
+  @override
+  String get youAreOnAPaidPlan => 'Máte placený plán.';
 }

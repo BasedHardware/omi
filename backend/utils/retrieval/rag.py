@@ -1,4 +1,3 @@
-import threading
 from collections import Counter, defaultdict
 from typing import List, Tuple
 
@@ -8,9 +7,12 @@ from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.other import Person
+from utils.conversations.factory import deserialize_conversations
+from utils.conversations.render import conversations_to_string
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
+from utils.executors import critical_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,24 +31,21 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     end_timestamp = dates_range[1].timestamp() if len(dates_range) == 2 else None
 
     memories_id = defaultdict(list)
-    threads = []
     top_k = 10 if len(topics) == 1 else 5
-    for topic in topics:
-        t = threading.Thread(
-            target=retrieve_for_topic, args=(uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
-        )
-        threads.append(t)
-    [t.start() for t in threads]
-    [t.join() for t in threads]
+    futures = [
+        critical_executor.submit(retrieve_for_topic, uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
+        for topic in topics
+    ]
+    for f in futures:
+        f.result()
 
     # FIXME, fix the source of the issue, not this patch
     if not memories_id and len(dates_range) == 2:
-        threads = []
-        for topic in topics:
-            t = threading.Thread(target=retrieve_for_topic, args=(uid, topic, None, None, top_k, memories_id))
-            threads.append(t)
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        futures = [
+            critical_executor.submit(retrieve_for_topic, uid, topic, None, None, top_k, memories_id) for topic in topics
+        ]
+        for f in futures:
+            f.result()
 
     return memories_id, get_conversations_by_id(uid, memories_id.keys())
 
@@ -59,7 +58,7 @@ def get_better_conversation_chunk(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
     if num_tokens_from_string(conversation) < 250:
-        return Conversation.conversations_to_string([memory], people=people, user_name=user_name)
+        return conversations_to_string([memory], people=people, user_name=user_name)
     chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
         return
@@ -81,7 +80,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         id_counter = Counter(memory['id'] for memory in memories)
         memories = sorted(memories, key=lambda x: id_counter[x['id']], reverse=True)
 
-    memories = [Conversation(**memory) for memory in memories]
+    memories = deserialize_conversations(memories)
     if len(memories) > 10:
         memories = memories[:10]
 
@@ -97,19 +96,18 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
     user_name = get_user_name(uid, use_default=False)
 
     if memories_id_to_topics:
-        # TODO: restore sorthing here
+        # TODO: restore sorting here
         context_data = {}
-        threads = []
-        for memory in memories:
-            topics = memories_id_to_topics.get(memory.id, [])
-            t = threading.Thread(
-                target=get_better_conversation_chunk, args=(memory, topics, context_data, people, user_name)
+        futures = [
+            critical_executor.submit(
+                get_better_conversation_chunk, m, memories_id_to_topics.get(m.id, []), context_data, people, user_name
             )
-            threads.append(t)
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+            for m in memories
+        ]
+        for f in futures:
+            f.result()
         context_str = '\n'.join(context_data.values()).strip()
     else:
-        context_str = Conversation.conversations_to_string(memories, people=people, user_name=user_name)
+        context_str = conversations_to_string(memories, people=people, user_name=user_name)
 
     return context_str, (memories if context_str else [])

@@ -8407,12 +8407,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -8782,4 +8777,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appleHealthDeniedBody => 'Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。';
+
+  @override
+  String get deleteFlowReasonTitle => '您为何离开?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '您的反馈有助于我们为所有人改进 Omi。';
+
+  @override
+  String get deleteReasonPrivacy => '隐私方面的顾虑';
+
+  @override
+  String get deleteReasonNotUsing => '使用得不够多';
+
+  @override
+  String get deleteReasonMissingFeatures => '缺少我需要的功能';
+
+  @override
+  String get deleteReasonTechnicalIssues => '技术问题太多';
+
+  @override
+  String get deleteReasonFoundAlternative => '在使用其他产品';
+
+  @override
+  String get deleteReasonTakingBreak => '只是休息一下';
+
+  @override
+  String get deleteReasonOther => '其他';
+
+  @override
+  String get deleteFlowFeedbackTitle => '告诉我们更多';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '怎样才能让 Omi 对您有用?';
+
+  @override
+  String get deleteFlowFeedbackHint => '可选 — 您的想法有助于我们打造更好的产品。';
+
+  @override
+  String get deleteFlowConfirmTitle => '此操作不可撤销';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '一旦删除账户,将无法恢复。';
+
+  @override
+  String get deleteConsequenceSubscription => '任何有效的订阅都将被取消。';
+
+  @override
+  String get deleteConsequenceNoRecovery => '您的账户无法恢复 — 即使是客服也无法处理。';
+
+  @override
+  String get deleteTypeToConfirm => '输入 DELETE 以确认';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '永久删除账户';
+
+  @override
+  String get keepMyAccount => '保留我的账户';
+
+  @override
+  String get deleteAccountFailed => '无法删除您的账户。请重试。';
+
+  @override
+  String get planUpdate => '套餐更新';
+
+  @override
+  String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
+
+  @override
+  String get upgradeYourPlan => '升级你的计划';
+
+  @override
+  String get youAreOnAPaidPlan => '你正在使用付费计划。';
 }

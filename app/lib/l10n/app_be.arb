@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "Бяспечная сінхранізацыя",
     "appleHealthFeatureSecureDesc": "Даныя Apple Health прыватна сінхранізуюцца з акаўнтам Omi.",
     "appleHealthDeniedTitle": "Доступ да Apple Health адхілены",
-    "appleHealthDeniedBody": "У Omi няма дазволу на чытанне даных Apple Health. Уключыце яго ў Налады iOS → Прыватнасць і бяспека → Health → Omi."
+    "appleHealthDeniedBody": "У Omi няма дазволу на чытанне даных Apple Health. Уключыце яго ў Налады iOS → Прыватнасць і бяспека → Health → Omi.",
+    "deleteFlowReasonTitle": "Чаму вы сыходзіце?",
+    "deleteFlowReasonSubtitle": "Ваш водгук дапамагае нам зрабіць Omi лепшым для ўсіх.",
+    "deleteReasonPrivacy": "Праблемы з прыватнасцю",
+    "deleteReasonNotUsing": "Карыстаюся недастаткова часта",
+    "deleteReasonMissingFeatures": "Не хапае патрэбных функцый",
+    "deleteReasonTechnicalIssues": "Зашмат тэхнічных праблем",
+    "deleteReasonFoundAlternative": "Карыстаюся нечым іншым",
+    "deleteReasonTakingBreak": "Проста раблю перапынак",
+    "deleteReasonOther": "Іншае",
+    "deleteFlowFeedbackTitle": "Раскажыце падрабязней",
+    "deleteFlowFeedbackSubtitle": "Што прымусіла б Omi працаваць для вас?",
+    "deleteFlowFeedbackHint": "Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.",
+    "deleteFlowConfirmTitle": "Гэта назаўсёды",
+    "deleteFlowConfirmSubtitle": "Пасля выдалення ўліковага запісу аднавіць яго немагчыма.",
+    "deleteConsequenceSubscription": "Любая актыўная падпіска будзе скасавана.",
+    "deleteConsequenceNoRecovery": "Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.",
+    "deleteTypeToConfirm": "Увядзіце DELETE для пацвярджэння",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Выдаліць уліковы запіс назаўсёды",
+    "keepMyAccount": "Захаваць мой уліковы запіс",
+    "deleteAccountFailed": "Не атрымалася выдаліць ваш уліковы запіс. Паспрабуйце яшчэ раз.",
+    "planUpdate": "Абнаўленне плана",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ваш план Unlimited спыняецца. Пераключыцеся на план Operator — тыя ж выдатныя магчымасці за $49/мес. Ваш бягучы план будзе працягваць працаваць тым часам.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Палепшыце свой план",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Вы на платным плане.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

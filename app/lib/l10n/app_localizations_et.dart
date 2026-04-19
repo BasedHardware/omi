@@ -1705,12 +1705,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -8942,4 +8937,80 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omil pole luba teie Apple Health\'i andmete lugemiseks. Lubage see: iOS Seaded → Privaatsus ja turvalisus → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Miks sa lahkud?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Sinu tagasiside aitab meil Omi kõigi jaoks paremaks muuta.';
+
+  @override
+  String get deleteReasonPrivacy => 'Privaatsusprobleemid';
+
+  @override
+  String get deleteReasonNotUsing => 'Ei kasuta seda piisavalt';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Puuduvad funktsioonid, mida vajan';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Liiga palju tehnilisi probleeme';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Kasutan midagi muud';
+
+  @override
+  String get deleteReasonTakingBreak => 'Teen lihtsalt pausi';
+
+  @override
+  String get deleteReasonOther => 'Muu';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Räägi rohkem';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Mis oleks pannud Omi sinu jaoks toimima?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valikuline — sinu mõtted aitavad meil paremat toodet ehitada.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'See on jäädav';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Kui kustutad oma konto, ei saa seda enam taastada.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Kõik aktiivsed tellimused tühistatakse.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Sinu kontot ei saa taastada — isegi mitte tugi.';
+
+  @override
+  String get deleteTypeToConfirm => 'Kinnitamiseks tipi DELETE';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Kustuta konto jäädavalt';
+
+  @override
+  String get keepMyAccount => 'Säilita minu konto';
+
+  @override
+  String get deleteAccountFailed => 'Sinu kontot ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get planUpdate => 'Plaani uuendus';
+
+  @override
+  String get planDeprecationMessage =>
+      'Teie Unlimited plaan lõpetatakse. Lülitage Operator plaanile — samad suurepärased funktsioonid hinnaga \$49/kuus. Teie praegune plaan jätkab vahepeal tööd.';
+
+  @override
+  String get upgradeYourPlan => 'Uuenda oma plaani';
+
+  @override
+  String get youAreOnAPaidPlan => 'Oled tasulisel plaanil.';
 }

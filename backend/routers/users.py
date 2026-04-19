@@ -6,7 +6,7 @@ import hashlib
 import os
 
 import pytz
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.app_review_config import should_hide_subscription_ui
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -42,20 +43,35 @@ from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation
+from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
-from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
+from models.users import (
+    WebhookType,
+    UserSubscriptionResponse,
+    SubscriptionPlan,
+    PlanType,
+    PricingOption,
+    ChatUsageQuota,
+    ChatQuotaUnit,
+)
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
     get_paid_plan_definitions,
+    get_plan_display_name,
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
     reconcile_basic_plan_with_stripe,
+    filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
+    legacy_plan_features,
 )
+from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -71,7 +87,6 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from database.action_items import get_action_items as get_standalone_action_items
-from google.cloud import firestore as cloud_firestore
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,16 +117,51 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     return profile
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
-def delete_account(uid: str = Depends(auth.get_current_user_uid)):
+class DeleteAccountRequest(BaseModel):
+    reason: Optional[str] = None
+    reason_details: Optional[str] = None
+
+
+def _background_wipe_user_data(uid: str):
     try:
         delete_user_data(uid)
-        # delete user from firebase auth
-        auth.delete_account(uid)
-        return {'status': 'ok', 'message': 'Account deleted successfully'}
+        logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
-        logger.info(f'delete_account {str(e)}')
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
+
+
+@router.delete('/v1/users/delete-account', tags=['v1'])
+def delete_account(
+    request: DeleteAccountRequest = DeleteAccountRequest(),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    try:
+        # 1. Persist deletion feedback first (top-level collection survives wipe).
+        if request.reason or request.reason_details:
+            try:
+                users_db.set_user_deletion_feedback(uid, request.reason, request.reason_details)
+            except Exception as e:
+                logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
+
+        # 2. Revoke Firebase auth immediately so tokens are useless and the
+        #    account cannot be logged back into while the data wipe runs.
+        try:
+            auth.delete_account(uid)
+        except Exception as e:
+            err = str(e).upper()
+            if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
+                logger.info(f'delete_account firebase user already gone for {uid}')
+            else:
+                raise
+
+        # 3. Wipe Firestore subcollections in the background — can take minutes
+        #    for heavy users and would otherwise time out at the load balancer.
+        threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
+
+        return {'status': 'ok', 'message': 'Account deletion started'}
+    except Exception as e:
+        logger.info(f'delete_account {sanitize(str(e))}')
+        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'])
@@ -381,7 +431,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
-    memory = Conversation(**memory)
+    memory = deserialize_conversation(memory)
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
 
@@ -709,7 +759,11 @@ def get_user_usage_stats_endpoint(
 
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
-def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_subscription_endpoint(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Gets the user's subscription plan and usage."""
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
     if uid in marketplace_reviewers:
@@ -760,6 +814,22 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)
 
+    new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+
+    # Mark deprecated plans
+    if subscription.plan == PlanType.unlimited:
+        subscription.deprecated = True
+        subscription.deprecation_message = (
+            "Your Unlimited plan is being retired. Switch to the Operator plan "
+            "— same great features at $49/mo. Your current plan will continue "
+            "to work in the meantime."
+        )
+
+    # Backward-compat: old clients without the `operator` enum value would crash
+    # on deserialization. Only send the real plan type to clients that understand it.
+    if not new_plans_enabled and subscription.plan == PlanType.operator:
+        subscription.plan = PlanType.unlimited
+
     # Get current usage
     usage = get_monthly_usage_for_subscription(uid)
 
@@ -775,9 +845,14 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
     insights_gained_limit = subscription.limits.insights_gained or 0
     memories_created_limit = subscription.limits.memories_created or 0
 
-    # Build available plans for upgrading
+    # Build available plans. Version-gated: new clients see Operator + Architect,
+    # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
+    all_definitions = get_paid_plan_definitions()
+    if not new_plans_enabled:
+        all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    for definition in get_paid_plan_definitions():
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan)
+    for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
         annual_price_id = definition["annual_price_id"]
@@ -827,14 +902,25 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
 
         if plan_prices:
+            features = (
+                get_plan_features(definition["plan_type"])
+                if new_plans_enabled
+                else legacy_plan_features(definition["plan_type"])
+            )
             available_plans.append(
                 SubscriptionPlan(
                     id=definition["plan_id"],
                     title=definition["title"],
-                    features=get_plan_features(definition["plan_type"]),
+                    subtitle=definition.get("subtitle"),
+                    description=definition.get("description"),
+                    eyebrow=definition.get("eyebrow"),
+                    features=features,
                     prices=plan_prices,
+                    legacy=bool(definition.get("legacy")),
                 )
             )
+
+    show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
 
     return UserSubscriptionResponse(
         subscription=subscription,
@@ -847,12 +933,53 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_used=memories_created_used,
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
+        show_subscription_ui=show_subscription_ui,
     )
 
 
 # **************************************
 # ****** Daily Summary Settings ********
 # **************************************
+
+
+@router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
+def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+    """Current-month chat usage for the user, plus their plan's cap.
+
+    - Free / Plus: counted in questions (user-initiated chat turns)
+    - Pro: counted in dollar spend on desktop chat
+    - Resets at the start of each UTC month
+    """
+    subscription = get_user_valid_subscription(uid)
+    plan = subscription.plan if subscription else PlanType.basic
+    limits = get_plan_limits(plan)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
+
+    if limits.chat_cost_usd_per_month is not None:
+        unit = ChatQuotaUnit.cost_usd
+        used = float(usage['cost_usd'])
+        limit_value = float(limits.chat_cost_usd_per_month)
+    else:
+        unit = ChatQuotaUnit.questions
+        used = float(usage['questions'])
+        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+
+    percent = 0.0
+    allowed = True
+    if limit_value is not None and limit_value > 0:
+        percent = min(100.0, round(100.0 * used / limit_value, 2))
+        allowed = used < limit_value
+
+    return ChatUsageQuota(
+        plan=get_plan_display_name(plan),
+        plan_type=plan.value,
+        unit=unit,
+        used=round(used, 4),
+        limit=limit_value,
+        percent=percent,
+        allowed=allowed,
+        reset_at=usage['reset_at'],
+    )
 
 
 class DailySummarySettingsResponse(BaseModel):
@@ -987,7 +1114,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
     if not conversations_data or len(conversations_data) == 0:
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    conversations = deserialize_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)

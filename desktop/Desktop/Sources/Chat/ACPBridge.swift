@@ -353,6 +353,19 @@ actor ACPBridge {
       throw BridgeError.notRunning
     }
 
+    // Hard cap: check monthly chat quota before spending any Anthropic tokens.
+    // Free / Operator / Unlimited cap by question count; Architect (pro) caps by
+    // cost_usd. Raises BridgeError.quotaExceeded if over — caller shows upgrade UI.
+    if let quota = await APIClient.shared.fetchChatUsageQuota(), !quota.allowed {
+      throw BridgeError.quotaExceeded(
+        plan: quota.plan,
+        unit: quota.unit,
+        used: quota.used,
+        limit: quota.limit,
+        resetAtUnix: quota.resetAt
+      )
+    }
+
     var queryDict: [String: Any] = [
       "type": "query",
       "id": UUID().uuidString,
@@ -875,6 +888,11 @@ enum BridgeError: LocalizedError {
   case outOfMemory
   case stopped
   case agentError(String)
+  /// User is past their monthly chat cap; the client should render an
+  /// upgrade modal instead of a generic error. `plan` is the user-facing
+  /// plan label (e.g. "Free" / "Operator" / "Architect") and `resetAtUnix`
+  /// is the Unix-seconds timestamp of the cap reset (start of next UTC month).
+  case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
 
   var errorDescription: String? {
     switch self {
@@ -917,6 +935,19 @@ enum BridgeError: LocalizedError {
         return "AI service is temporarily unavailable. Please try again later."
       }
       return "Something went wrong. Please try again."
+    case .quotaExceeded(let plan, let unit, let used, let limit, _):
+      let limitStr: String = {
+        guard let limit = limit else { return "your monthly limit" }
+        return unit == "cost_usd"
+          ? String(format: "$%.0f of monthly chat usage", limit)
+          : "\(Int(limit)) chat questions per month"
+      }()
+      let usedStr: String = {
+        unit == "cost_usd"
+          ? String(format: "$%.2f used", used)
+          : "\(Int(used)) used"
+      }()
+      return "You've hit your \(plan) plan limit (\(limitStr); \(usedStr)). Upgrade in Settings → Plan and Usage, or wait until the next reset."
     }
   }
 }

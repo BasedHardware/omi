@@ -564,6 +564,20 @@ class MixpanelManager {
 
   void deleteAccountCancelled() => track('Delete Account Cancelled');
 
+  void deleteAccountFlowStarted() => track('Delete Account Flow Started');
+
+  void deleteAccountReasonSelected({required String reason}) =>
+      track('Delete Account Reason Selected', properties: {'reason': reason});
+
+  void deleteAccountFeedbackSubmitted({required String reason, String? details}) =>
+      track('Delete Account Feedback Submitted', properties: {'reason': reason, 'reason_details': details});
+
+  void deleteAccountAbandoned({required int step, String? reason}) =>
+      track('Delete Account Abandoned', properties: {'step': step, 'reason': reason});
+
+  void deleteAccountKeptAccount({required int step, String? reason}) =>
+      track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
+
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
     if (PlatformService.isMixpanelNativelySupported) {
       _mixpanel?.getPeople().deleteUser();

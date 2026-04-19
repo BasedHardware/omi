@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -16718,6 +16718,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.'**
   String get appleHealthDeniedBody;
+
+  /// Title on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Why are you leaving?'**
+  String get deleteFlowReasonTitle;
+
+  /// Subtitle on delete-account flow reason step
+  ///
+  /// In en, this message translates to:
+  /// **'Your feedback helps us improve Omi for everyone.'**
+  String get deleteFlowReasonSubtitle;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy concerns'**
+  String get deleteReasonPrivacy;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Not using it enough'**
+  String get deleteReasonNotUsing;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Missing features I need'**
+  String get deleteReasonMissingFeatures;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Too many technical issues'**
+  String get deleteReasonTechnicalIssues;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Using something else'**
+  String get deleteReasonFoundAlternative;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Just taking a break'**
+  String get deleteReasonTakingBreak;
+
+  /// Delete reason option
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get deleteReasonOther;
+
+  /// Title on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more'**
+  String get deleteFlowFeedbackTitle;
+
+  /// Subtitle on delete-account flow feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'What would have made Omi work for you?'**
+  String get deleteFlowFeedbackSubtitle;
+
+  /// TextField hint on delete feedback step
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — your thoughts help us build a better product.'**
+  String get deleteFlowFeedbackHint;
+
+  /// Title on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'This is permanent'**
+  String get deleteFlowConfirmTitle;
+
+  /// Subtitle on final delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'Once you delete your account, there is no way to recover it.'**
+  String get deleteFlowConfirmSubtitle;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Any active subscription will be cancelled.'**
+  String get deleteConsequenceSubscription;
+
+  /// Delete consequence bullet
+  ///
+  /// In en, this message translates to:
+  /// **'Your account cannot be restored — not even by support.'**
+  String get deleteConsequenceNoRecovery;
+
+  /// Instruction to type DELETE to confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Type DELETE to confirm'**
+  String get deleteTypeToConfirm;
+
+  /// The literal word users type to confirm deletion. Keep uppercase.
+  ///
+  /// In en, this message translates to:
+  /// **'DELETE'**
+  String get deleteConfirmationWord;
+
+  /// Primary destructive action label
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account permanently'**
+  String get deleteAccountPermanently;
+
+  /// Secondary action to back out of deletion
+  ///
+  /// In en, this message translates to:
+  /// **'Keep my account'**
+  String get keepMyAccount;
+
+  /// Error shown when deletion API fails
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete your account. Please try again.'**
+  String get deleteAccountFailed;
+
+  /// Header for plan deprecation notice
+  ///
+  /// In en, this message translates to:
+  /// **'Plan Update'**
+  String get planUpdate;
+
+  /// Deprecation notice for legacy Unlimited subscribers
+  ///
+  /// In en, this message translates to:
+  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
+  String get planDeprecationMessage;
+
+  /// Header for plan upgrade screen for non-paid users
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Your Plan'**
+  String get upgradeYourPlan;
+
+  /// Subtitle for paid plan users on plans sheet
+  ///
+  /// In en, this message translates to:
+  /// **'You are on a paid plan.'**
+  String get youAreOnAPaidPlan;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -16730,56 +16880,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -16888,8 +17038,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

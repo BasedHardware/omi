@@ -2956,5 +2956,42 @@
     "appleHealthFeatureSecureTitle": "Sinkronisasi aman",
     "appleHealthFeatureSecureDesc": "Data Apple Health Anda disinkronkan secara pribadi ke akun Omi.",
     "appleHealthDeniedTitle": "Akses Apple Health ditolak",
-    "appleHealthDeniedBody": "Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi."
+    "appleHealthDeniedBody": "Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.",
+    "deleteFlowReasonTitle": "Mengapa Anda pergi?",
+    "deleteFlowReasonSubtitle": "Masukan Anda membantu kami meningkatkan Omi untuk semua orang.",
+    "deleteReasonPrivacy": "Kekhawatiran privasi",
+    "deleteReasonNotUsing": "Tidak cukup sering menggunakannya",
+    "deleteReasonMissingFeatures": "Fitur yang saya butuhkan tidak ada",
+    "deleteReasonTechnicalIssues": "Terlalu banyak masalah teknis",
+    "deleteReasonFoundAlternative": "Menggunakan sesuatu yang lain",
+    "deleteReasonTakingBreak": "Hanya sedang istirahat",
+    "deleteReasonOther": "Lainnya",
+    "deleteFlowFeedbackTitle": "Beri tahu kami lebih banyak",
+    "deleteFlowFeedbackSubtitle": "Apa yang akan membuat Omi cocok untuk Anda?",
+    "deleteFlowFeedbackHint": "Opsional — pendapat Anda membantu kami membuat produk yang lebih baik.",
+    "deleteFlowConfirmTitle": "Ini bersifat permanen",
+    "deleteFlowConfirmSubtitle": "Setelah Anda menghapus akun, tidak ada cara untuk memulihkannya.",
+    "deleteConsequenceSubscription": "Langganan aktif apa pun akan dibatalkan.",
+    "deleteConsequenceNoRecovery": "Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.",
+    "deleteTypeToConfirm": "Ketik DELETE untuk konfirmasi",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Hapus akun secara permanen",
+    "keepMyAccount": "Pertahankan akun saya",
+    "deleteAccountFailed": "Tidak dapat menghapus akun Anda. Silakan coba lagi.",
+    "planUpdate": "Pembaruan Paket",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga $49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Tingkatkan Paket Anda",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Anda menggunakan paket berbayar.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

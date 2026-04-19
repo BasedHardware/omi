@@ -1712,12 +1712,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIVI',
-      one: 'DISPOSITIVO',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -9000,4 +8995,80 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi non ha il permesso di leggere i tuoi dati di Apple Health. Attivalo in Impostazioni iOS → Privacy e sicurezza → Salute → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Perché te ne stai andando?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Il tuo feedback ci aiuta a migliorare Omi per tutti.';
+
+  @override
+  String get deleteReasonPrivacy => 'Problemi di privacy';
+
+  @override
+  String get deleteReasonNotUsing => 'Non lo uso abbastanza';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Mancano funzionalità di cui ho bisogno';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Troppi problemi tecnici';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Sto usando qualcos\'altro';
+
+  @override
+  String get deleteReasonTakingBreak => 'Mi sto solo prendendo una pausa';
+
+  @override
+  String get deleteReasonOther => 'Altro';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Raccontaci di più';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Cosa avrebbe reso Omi adatto a te?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Facoltativo — le tue idee ci aiutano a costruire un prodotto migliore.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'È definitivo';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Una volta eliminato il tuo account, non c\'è modo di recuperarlo.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Eventuali abbonamenti attivi verranno annullati.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Il tuo account non può essere ripristinato — nemmeno dall\'assistenza.';
+
+  @override
+  String get deleteTypeToConfirm => 'Digita DELETE per confermare';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Elimina account definitivamente';
+
+  @override
+  String get keepMyAccount => 'Mantieni il mio account';
+
+  @override
+  String get deleteAccountFailed => 'Impossibile eliminare il tuo account. Riprova.';
+
+  @override
+  String get planUpdate => 'Aggiornamento del piano';
+
+  @override
+  String get planDeprecationMessage =>
+      'Il tuo piano Unlimited viene ritirato. Passa al piano Operator — le stesse fantastiche funzionalità a \$49/mese. Il tuo piano attuale continuerà a funzionare nel frattempo.';
+
+  @override
+  String get upgradeYourPlan => 'Aggiorna il tuo piano';
+
+  @override
+  String get youAreOnAPaidPlan => 'Sei su un piano a pagamento.';
 }

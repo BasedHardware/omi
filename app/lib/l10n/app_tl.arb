@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "Ligtas na sync",
     "appleHealthFeatureSecureDesc": "Ang iyong datos sa Apple Health ay pribadong sinisync sa iyong Omi account.",
     "appleHealthDeniedTitle": "Tinanggihan ang access sa Apple Health",
-    "appleHealthDeniedBody": "Walang pahintulot ang Omi na basahin ang iyong Apple Health data. I-enable ito sa iOS Settings → Privacy & Security → Health → Omi."
+    "appleHealthDeniedBody": "Walang pahintulot ang Omi na basahin ang iyong Apple Health data. I-enable ito sa iOS Settings → Privacy & Security → Health → Omi.",
+    "deleteFlowReasonTitle": "Bakit ka aalis?",
+    "deleteFlowReasonSubtitle": "Ang iyong feedback ay tumutulong sa amin na pagbutihin ang Omi para sa lahat.",
+    "deleteReasonPrivacy": "Mga alalahanin sa privacy",
+    "deleteReasonNotUsing": "Hindi sapat ang paggamit",
+    "deleteReasonMissingFeatures": "Kulang sa mga feature na kailangan ko",
+    "deleteReasonTechnicalIssues": "Masyadong maraming teknikal na problema",
+    "deleteReasonFoundAlternative": "Gumagamit ng iba",
+    "deleteReasonTakingBreak": "Nagpapahinga lang",
+    "deleteReasonOther": "Iba pa",
+    "deleteFlowFeedbackTitle": "Sabihin mo sa amin ang higit pa",
+    "deleteFlowFeedbackSubtitle": "Ano ang magiging dahilan para gumana ang Omi para sa iyo?",
+    "deleteFlowFeedbackHint": "Opsyonal — ang mga isip mo ay tumutulong sa amin na makabuo ng mas mahusay na produkto.",
+    "deleteFlowConfirmTitle": "Ito ay permanente",
+    "deleteFlowConfirmSubtitle": "Kapag na-delete mo na ang account mo, wala nang paraan para mabawi ito.",
+    "deleteConsequenceSubscription": "Ang anumang aktibong subscription ay ikakansela.",
+    "deleteConsequenceNoRecovery": "Hindi maibabalik ang iyong account — kahit ng support team.",
+    "deleteTypeToConfirm": "I-type ang DELETE para kumpirmahin",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Tanggalin nang permanente ang account",
+    "keepMyAccount": "Panatilihin ang aking account",
+    "deleteAccountFailed": "Hindi ma-delete ang iyong account. Pakisubukan muli.",
+    "planUpdate": "Update ng Plano",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa $49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "I-upgrade ang Iyong Plano",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Ikaw ay nasa bayad na plano.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

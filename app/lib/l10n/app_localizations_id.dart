@@ -1711,12 +1711,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANGKAT',
-      one: 'PERANGKAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -8955,4 +8950,80 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi tidak memiliki izin untuk membaca data Apple Health Anda. Aktifkan di Pengaturan iOS → Privasi & Keamanan → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Mengapa Anda pergi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Masukan Anda membantu kami meningkatkan Omi untuk semua orang.';
+
+  @override
+  String get deleteReasonPrivacy => 'Kekhawatiran privasi';
+
+  @override
+  String get deleteReasonNotUsing => 'Tidak cukup sering menggunakannya';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Fitur yang saya butuhkan tidak ada';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Terlalu banyak masalah teknis';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Menggunakan sesuatu yang lain';
+
+  @override
+  String get deleteReasonTakingBreak => 'Hanya sedang istirahat';
+
+  @override
+  String get deleteReasonOther => 'Lainnya';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Beri tahu kami lebih banyak';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Apa yang akan membuat Omi cocok untuk Anda?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Opsional — pendapat Anda membantu kami membuat produk yang lebih baik.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Ini bersifat permanen';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Setelah Anda menghapus akun, tidak ada cara untuk memulihkannya.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Langganan aktif apa pun akan dibatalkan.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.';
+
+  @override
+  String get deleteTypeToConfirm => 'Ketik DELETE untuk konfirmasi';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Hapus akun secara permanen';
+
+  @override
+  String get keepMyAccount => 'Pertahankan akun saya';
+
+  @override
+  String get deleteAccountFailed => 'Tidak dapat menghapus akun Anda. Silakan coba lagi.';
+
+  @override
+  String get planUpdate => 'Pembaruan Paket';
+
+  @override
+  String get planDeprecationMessage =>
+      'Paket Unlimited Anda akan dihentikan. Beralih ke paket Operator — fitur hebat yang sama seharga \$49/bulan. Paket Anda saat ini akan terus berfungsi untuk sementara.';
+
+  @override
+  String get upgradeYourPlan => 'Tingkatkan Paket Anda';
+
+  @override
+  String get youAreOnAPaidPlan => 'Anda menggunakan paket berbayar.';
 }

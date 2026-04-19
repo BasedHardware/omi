@@ -8925,4 +8925,80 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi के पास आपका Apple Health डेटा पढ़ने की अनुमति नहीं है। iOS सेटिंग्स → गोपनीयता और सुरक्षा → Health → Omi में इसे सक्षम करें।';
+
+  @override
+  String get deleteFlowReasonTitle => 'आप क्यों जा रहे हैं?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'आपकी प्रतिक्रिया हमें सभी के लिए Omi को बेहतर बनाने में मदद करती है।';
+
+  @override
+  String get deleteReasonPrivacy => 'गोपनीयता संबंधी चिंताएँ';
+
+  @override
+  String get deleteReasonNotUsing => 'पर्याप्त उपयोग नहीं कर रहा';
+
+  @override
+  String get deleteReasonMissingFeatures => 'ज़रूरी फ़ीचर उपलब्ध नहीं हैं';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'बहुत ज़्यादा तकनीकी समस्याएँ';
+
+  @override
+  String get deleteReasonFoundAlternative => 'कुछ और इस्तेमाल कर रहा हूँ';
+
+  @override
+  String get deleteReasonTakingBreak => 'बस थोड़ा ब्रेक ले रहा हूँ';
+
+  @override
+  String get deleteReasonOther => 'अन्य';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'हमें और बताएँ';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'क्या बात Omi को आपके लिए उपयोगी बनाती?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'वैकल्पिक — आपके विचार हमें बेहतर उत्पाद बनाने में मदद करते हैं।';
+
+  @override
+  String get deleteFlowConfirmTitle => 'यह स्थायी है';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'खाता हटाने के बाद, उसे पुनर्प्राप्त करने का कोई तरीका नहीं है।';
+
+  @override
+  String get deleteConsequenceSubscription => 'कोई भी सक्रिय सदस्यता रद्द कर दी जाएगी।';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'आपका खाता पुनर्स्थापित नहीं किया जा सकता — सहायता टीम भी नहीं कर सकती।';
+
+  @override
+  String get deleteTypeToConfirm => 'पुष्टि के लिए DELETE लिखें';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'खाता स्थायी रूप से हटाएँ';
+
+  @override
+  String get keepMyAccount => 'मेरा खाता रखें';
+
+  @override
+  String get deleteAccountFailed => 'आपका खाता हटाया नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get planUpdate => 'प्लान अपडेट';
+
+  @override
+  String get planDeprecationMessage =>
+      'आपका Unlimited प्लान बंद किया जा रहा है। Operator प्लान पर स्विच करें — वही बेहतरीन सुविधाएँ \$49/माह पर। आपका वर्तमान प्लान तब तक काम करता रहेगा।';
+
+  @override
+  String get upgradeYourPlan => 'अपना प्लान अपग्रेड करें';
+
+  @override
+  String get youAreOnAPaidPlan => 'आप एक सशुल्क प्लान पर हैं।';
 }

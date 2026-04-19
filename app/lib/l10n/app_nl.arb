@@ -2914,5 +2914,42 @@
     "appleHealthFeatureSecureTitle": "Veilige synchronisatie",
     "appleHealthFeatureSecureDesc": "Je Apple Health-gegevens synchroniseren privé naar je Omi-account.",
     "appleHealthDeniedTitle": "Apple Health-toegang geweigerd",
-    "appleHealthDeniedBody": "Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi."
+    "appleHealthDeniedBody": "Omi heeft geen toestemming om je Apple Health-gegevens te lezen. Schakel het in via iOS-instellingen → Privacy en beveiliging → Gezondheid → Omi.",
+    "deleteFlowReasonTitle": "Waarom vertrek je?",
+    "deleteFlowReasonSubtitle": "Jouw feedback helpt ons Omi voor iedereen te verbeteren.",
+    "deleteReasonPrivacy": "Privacyzorgen",
+    "deleteReasonNotUsing": "Ik gebruik het niet genoeg",
+    "deleteReasonMissingFeatures": "Functies die ik nodig heb ontbreken",
+    "deleteReasonTechnicalIssues": "Te veel technische problemen",
+    "deleteReasonFoundAlternative": "Ik gebruik iets anders",
+    "deleteReasonTakingBreak": "Ik neem gewoon een pauze",
+    "deleteReasonOther": "Anders",
+    "deleteFlowFeedbackTitle": "Vertel ons meer",
+    "deleteFlowFeedbackSubtitle": "Wat zou Omi voor jou hebben laten werken?",
+    "deleteFlowFeedbackHint": "Optioneel — jouw inzichten helpen ons een beter product te bouwen.",
+    "deleteFlowConfirmTitle": "Dit is definitief",
+    "deleteFlowConfirmSubtitle": "Zodra je je account verwijdert, is herstel niet meer mogelijk.",
+    "deleteConsequenceSubscription": "Een actief abonnement wordt geannuleerd.",
+    "deleteConsequenceNoRecovery": "Je account kan niet worden hersteld — zelfs niet door support.",
+    "deleteTypeToConfirm": "Typ DELETE om te bevestigen",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Account definitief verwijderen",
+    "keepMyAccount": "Mijn account behouden",
+    "deleteAccountFailed": "Je account kon niet worden verwijderd. Probeer het opnieuw.",
+    "planUpdate": "Abonnement bijwerken",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Uw Unlimited-abonnement wordt stopgezet. Schakel over naar het Operator-abonnement — dezelfde geweldige functies voor $49/maand. Uw huidige abonnement blijft in de tussentijd werken.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Upgrade je abonnement",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Je hebt een betaald abonnement.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

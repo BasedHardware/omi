@@ -2914,5 +2914,42 @@
     "appleHealthFeatureSecureTitle": "Penyegerakan selamat",
     "appleHealthFeatureSecureDesc": "Data Apple Health anda disegerakkan secara peribadi ke akaun Omi.",
     "appleHealthDeniedTitle": "Akses Apple Health ditolak",
-    "appleHealthDeniedBody": "Omi tidak mempunyai kebenaran membaca data Apple Health anda. Dayakan di Tetapan iOS → Privasi & Keselamatan → Health → Omi."
+    "appleHealthDeniedBody": "Omi tidak mempunyai kebenaran membaca data Apple Health anda. Dayakan di Tetapan iOS → Privasi & Keselamatan → Health → Omi.",
+    "deleteFlowReasonTitle": "Mengapa anda pergi?",
+    "deleteFlowReasonSubtitle": "Maklum balas anda membantu kami menambah baik Omi untuk semua orang.",
+    "deleteReasonPrivacy": "Kebimbangan privasi",
+    "deleteReasonNotUsing": "Tidak cukup kerap menggunakannya",
+    "deleteReasonMissingFeatures": "Ciri yang saya perlukan tiada",
+    "deleteReasonTechnicalIssues": "Terlalu banyak masalah teknikal",
+    "deleteReasonFoundAlternative": "Menggunakan sesuatu yang lain",
+    "deleteReasonTakingBreak": "Hanya berehat sebentar",
+    "deleteReasonOther": "Lain-lain",
+    "deleteFlowFeedbackTitle": "Beritahu kami lebih lanjut",
+    "deleteFlowFeedbackSubtitle": "Apakah yang akan menjadikan Omi sesuai untuk anda?",
+    "deleteFlowFeedbackHint": "Pilihan — pandangan anda membantu kami membina produk yang lebih baik.",
+    "deleteFlowConfirmTitle": "Ini adalah kekal",
+    "deleteFlowConfirmSubtitle": "Setelah anda memadam akaun, tiada cara untuk memulihkannya.",
+    "deleteConsequenceSubscription": "Sebarang langganan aktif akan dibatalkan.",
+    "deleteConsequenceNoRecovery": "Akaun anda tidak boleh dipulihkan — walaupun oleh sokongan.",
+    "deleteTypeToConfirm": "Taip DELETE untuk sahkan",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Padam akaun secara kekal",
+    "keepMyAccount": "Kekalkan akaun saya",
+    "deleteAccountFailed": "Tidak dapat memadam akaun anda. Sila cuba lagi.",
+    "planUpdate": "Kemas Kini Pelan",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Pelan Unlimited anda sedang ditamatkan. Tukar ke pelan Operator — ciri-ciri hebat yang sama pada $49/bulan. Pelan semasa anda akan terus berfungsi buat sementara waktu.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Naik Taraf Pelan Anda",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Anda menggunakan pelan berbayar.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

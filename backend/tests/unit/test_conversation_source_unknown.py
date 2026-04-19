@@ -38,11 +38,11 @@ class TestConversationSourceMissing:
         assert ConversationSource('workflow') == ConversationSource.workflow
         assert ConversationSource('external_integration') == ConversationSource.external_integration
 
-    def test_phone_call_resolves_to_unknown(self):
-        """The specific value that caused issue #5409."""
+    def test_phone_call_is_known_member(self):
+        """phone_call was added as a real enum member after issue #5409."""
         result = ConversationSource('phone_call')
-        assert result == ConversationSource.unknown
-        assert result.value == 'unknown'
+        assert result == ConversationSource.phone_call
+        assert result.value == 'phone_call'
 
     def test_arbitrary_unknown_resolves(self):
         """Any unrecognized string resolves to unknown."""
@@ -102,7 +102,7 @@ class TestConversationModelWithUnknownSource:
             source='phone_call',
             structured=Structured(title='Test', overview='Test overview', emoji='🎤'),
         )
-        assert conv.source == ConversationSource.unknown
+        assert conv.source == ConversationSource.phone_call
 
     def test_conversation_with_known_source(self):
         """Known source values still work in the model."""
@@ -133,4 +133,4 @@ class TestConversationModelWithUnknownSource:
             structured=Structured(title='Test', overview='Test overview', emoji='🎤'),
         )
         d = conv.dict()
-        assert d['source'] == ConversationSource.unknown
+        assert d['source'] == ConversationSource.phone_call

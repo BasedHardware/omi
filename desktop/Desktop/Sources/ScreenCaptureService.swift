@@ -36,6 +36,43 @@ final class ScreenCaptureService: Sendable {
   nonisolated(unsafe) private static var lastActiveWindowSnapshot: ActiveWindowSnapshot?
   nonisolated(unsafe) private static var isActiveWindowResolutionInFlight = false
 
+  /// Cache for SCShareableContent to avoid hammering the WindowServer every capture tick.
+  /// SCShareableContent.excludingDesktopWindows enumerates every on-screen window through
+  /// the WindowServer; calling it every 3 seconds contends with other screen-capture apps
+  /// (CleanShot, Zoom share, Loom, etc.) and causes UI stalls. Re-use a recent snapshot
+  /// for up to `sharedContentTTL` seconds; refresh on demand when a target window isn't
+  /// present in the cache.
+  private static let sharedContentLock = NSLock()
+  nonisolated(unsafe) private static var cachedSharedContent: Any?  // SCShareableContent, typed Any so this decl predates macOS 14 gate
+  nonisolated(unsafe) private static var sharedContentCachedAt: Date?
+  private static let sharedContentTTL: TimeInterval = 5.0
+
+  @available(macOS 14.0, *)
+  private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
+    if !forceRefresh,
+      !UserDefaults.standard.bool(forKey: "rewindDisableContentCache")
+    {
+      let cached: SCShareableContent? = sharedContentLock.withLock {
+        guard let ts = sharedContentCachedAt,
+          Date().timeIntervalSince(ts) < sharedContentTTL,
+          let content = cachedSharedContent as? SCShareableContent
+        else { return nil }
+        return content
+      }
+      if let cached { return cached }
+    }
+
+    let content = try await SCShareableContent.excludingDesktopWindows(
+      false,
+      onScreenWindowsOnly: true
+    )
+    sharedContentLock.withLock {
+      cachedSharedContent = content
+      sharedContentCachedAt = Date()
+    }
+    return content
+  }
+
   init() {}
 
   /// Check if we have screen recording permission by actually testing capture
@@ -700,12 +737,13 @@ final class ScreenCaptureService: Sendable {
   @available(macOS 14.0, *)
   private func captureWithScreenCaptureKit(windowID: CGWindowID) async -> Data? {
     do {
-      let content = try await SCShareableContent.excludingDesktopWindows(
-        false,
-        onScreenWindowsOnly: true
-      )
-
-      guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+      var content = try await Self.sharedContent()
+      var window = content.windows.first(where: { $0.windowID == windowID })
+      if window == nil {
+        content = try await Self.sharedContent(forceRefresh: true)
+        window = content.windows.first(where: { $0.windowID == windowID })
+      }
+      guard let window else {
         log("Window not found in SCShareableContent")
         return nil
       }
@@ -768,10 +806,10 @@ final class ScreenCaptureService: Sendable {
   /// disappearance from real capture failures.
   func captureWindowCGImage(windowID: CGWindowID) async -> WindowCaptureResult {
     do {
-      let content = try await SCShareableContent.excludingDesktopWindows(
-        false,
-        onScreenWindowsOnly: true
-      )
+      var content = try await Self.sharedContent()
+      if !content.windows.contains(where: { $0.windowID == windowID }) {
+        content = try await Self.sharedContent(forceRefresh: true)
+      }
 
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
         guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
@@ -823,10 +861,10 @@ final class ScreenCaptureService: Sendable {
     }
 
     do {
-      let content = try await SCShareableContent.excludingDesktopWindows(
-        false,
-        onScreenWindowsOnly: true
-      )
+      var content = try await Self.sharedContent()
+      if !content.windows.contains(where: { $0.windowID == windowID }) {
+        content = try await Self.sharedContent(forceRefresh: true)
+      }
 
       // Wrap synchronous ScreenCaptureKit object processing in autoreleasepool.
       // SCShareableContent enumerates all windows, creating Obj-C objects that

@@ -34,7 +34,6 @@ import type {
   GenerateDescriptionResponse,
   NotificationScope,
   PaymentPlan,
-  AppApiKey,
 } from "@/types/apps";
 
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
@@ -644,6 +643,7 @@ export async function sendMessageStream(
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "X-App-Platform": "web",
     },
     body: JSON.stringify({
       text,
@@ -710,15 +710,6 @@ export async function clearMessages(appId?: string): Promise<void> {
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
   await fetchWithAuth(endpoint, {
     method: "DELETE",
-  });
-}
-
-/**
- * Get initial greeting message from an app
- */
-export async function getInitialMessage(appId: string): Promise<ServerMessage> {
-  return fetchWithAuth<ServerMessage>(`/v2/initial-message?app_id=${appId}`, {
-    method: "POST",
   });
 }
 
@@ -1042,21 +1033,6 @@ export async function deleteApp(appId: string): Promise<void> {
 }
 
 /**
- * Change app visibility (public/private)
- */
-export async function changeAppVisibility(
-  appId: string,
-  isPrivate: boolean,
-): Promise<void> {
-  await fetchWithAuth(
-    `/v1/apps/${appId}/change-visibility?private=${isPrivate}`,
-    {
-      method: "PATCH",
-    },
-  );
-}
-
-/**
  * Upload app thumbnail
  */
 export async function uploadAppThumbnail(
@@ -1156,6 +1132,7 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          "X-App-Platform": "web",
         },
       },
     );
@@ -1180,6 +1157,7 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "X-App-Platform": "web",
       },
     });
 
@@ -1188,34 +1166,6 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
   } catch {
     return [];
   }
-}
-
-/**
- * Get API keys for an app
- */
-export async function getAppApiKeys(appId: string): Promise<AppApiKey[]> {
-  return fetchWithAuth<AppApiKey[]>(`/v1/apps/${appId}/api-keys`);
-}
-
-/**
- * Create new API key for an app
- */
-export async function createAppApiKey(appId: string): Promise<AppApiKey> {
-  return fetchWithAuth<AppApiKey>(`/v1/apps/${appId}/api-keys`, {
-    method: "POST",
-  });
-}
-
-/**
- * Delete API key for an app
- */
-export async function deleteAppApiKey(
-  appId: string,
-  keyId: string,
-): Promise<void> {
-  await fetchWithAuth(`/v1/apps/${appId}/api-keys/${keyId}`, {
-    method: "DELETE",
-  });
 }
 
 // ============================================================================
@@ -1228,7 +1178,6 @@ import type {
   DeveloperWebhooks,
   WebhookSettings,
   RecordingPermission,
-  PrivateCloudSync,
   UserUsage,
   UserUsageResponse,
   UsageStats,
@@ -1343,18 +1292,6 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
   );
 }
 
-/**
- * Update transcription preferences
- */
-export async function updateTranscriptionPreferences(
-  preferences: Partial<TranscriptionPreferences>,
-): Promise<void> {
-  await fetchWithAuth("/v1/users/transcription-preferences", {
-    method: "PATCH",
-    body: JSON.stringify(preferences),
-  });
-}
-
 // Webhook type enum matching backend API
 type WebhookType =
   | "memory_created"
@@ -1427,31 +1364,6 @@ export async function getRecordingPermission(): Promise<RecordingPermission> {
  */
 export async function setRecordingPermission(enabled: boolean): Promise<void> {
   await fetchWithAuth(`/v1/users/store-recording-permission?value=${enabled}`, {
-    method: "POST",
-  });
-}
-
-/**
- * Delete recording permission and all stored recordings
- */
-export async function deleteRecordingPermission(): Promise<void> {
-  await fetchWithAuth("/v1/users/store-recording-permission", {
-    method: "DELETE",
-  });
-}
-
-/**
- * Get private cloud sync status
- */
-export async function getPrivateCloudSync(): Promise<PrivateCloudSync> {
-  return fetchWithAuth<PrivateCloudSync>("/v1/users/private-cloud-sync");
-}
-
-/**
- * Set private cloud sync
- */
-export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
-  await fetchWithAuth(`/v1/users/private-cloud-sync?value=${enabled}`, {
     method: "POST",
   });
 }
@@ -1998,20 +1910,6 @@ export async function getIntegrationOAuthUrl(
 }
 
 /**
- * Connect an integration (alternative method)
- */
-export async function connectIntegration(
-  integrationId: string,
-): Promise<{ redirect_url: string }> {
-  return fetchWithAuth<{ redirect_url: string }>(
-    `/v1/integrations/${integrationId}/connect`,
-    {
-      method: "POST",
-    },
-  );
-}
-
-/**
  * Disconnect an integration
  */
 export async function disconnectIntegration(
@@ -2196,7 +2094,6 @@ import type {
   CreateFolderRequest,
   UpdateFolderRequest,
   BulkMoveConversationsRequest,
-  ReorderFoldersRequest,
 } from "@/types/folder";
 
 /**
@@ -2261,22 +2158,6 @@ export async function deleteFolder(folderId: string): Promise<void> {
 }
 
 /**
- * Move a single conversation to a folder
- * @param conversationId - The conversation to move
- * @param folderId - The target folder ID, or null to remove from folder
- */
-export async function moveConversationToFolder(
-  conversationId: string,
-  folderId: string | null,
-): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${conversationId}/folder`, {
-    method: "PATCH",
-    body: JSON.stringify({ folder_id: folderId }),
-  });
-  invalidateCache(invalidationPatterns.conversations);
-}
-
-/**
  * Bulk move multiple conversations to a folder
  * @param folderId - The target folder ID
  * @param conversationIds - Array of conversation IDs to move
@@ -2288,17 +2169,6 @@ export async function bulkMoveConversationsToFolder(
   await fetchWithAuth(`/v1/folders/${folderId}/conversations/bulk-move`, {
     method: "POST",
     body: JSON.stringify({ conversation_ids: conversationIds }),
-  });
-}
-
-/**
- * Reorder folders
- * @param folderIds - Array of folder IDs in the desired order
- */
-export async function reorderFolders(folderIds: string[]): Promise<void> {
-  await fetchWithAuth("/v1/folders/reorder", {
-    method: "POST",
-    body: JSON.stringify({ folder_ids: folderIds }),
   });
 }
 

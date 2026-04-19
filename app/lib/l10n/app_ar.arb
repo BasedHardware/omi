@@ -2881,5 +2881,42 @@
     "appleHealthFeatureSecureTitle": "مزامنة آمنة",
     "appleHealthFeatureSecureDesc": "تتم مزامنة بيانات Apple Health بخصوصية مع حسابك في Omi.",
     "appleHealthDeniedTitle": "تم رفض الوصول إلى Apple Health",
-    "appleHealthDeniedBody": "ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi."
+    "appleHealthDeniedBody": "ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi.",
+    "deleteFlowReasonTitle": "لماذا ترحل؟",
+    "deleteFlowReasonSubtitle": "ملاحظاتك تساعدنا على تحسين Omi للجميع.",
+    "deleteReasonPrivacy": "مخاوف تتعلق بالخصوصية",
+    "deleteReasonNotUsing": "لا أستخدمه بما يكفي",
+    "deleteReasonMissingFeatures": "تنقصه ميزات أحتاجها",
+    "deleteReasonTechnicalIssues": "مشاكل تقنية كثيرة",
+    "deleteReasonFoundAlternative": "أستخدم شيئاً آخر",
+    "deleteReasonTakingBreak": "أأخذ استراحة فقط",
+    "deleteReasonOther": "غير ذلك",
+    "deleteFlowFeedbackTitle": "أخبرنا المزيد",
+    "deleteFlowFeedbackSubtitle": "ما الذي كان سيجعل Omi يناسبك؟",
+    "deleteFlowFeedbackHint": "اختياري — أفكارك تساعدنا على بناء منتج أفضل.",
+    "deleteFlowConfirmTitle": "هذا إجراء نهائي",
+    "deleteFlowConfirmSubtitle": "بمجرد حذف حسابك، لا يمكن استعادته.",
+    "deleteConsequenceSubscription": "سيتم إلغاء أي اشتراك نشط.",
+    "deleteConsequenceNoRecovery": "لا يمكن استعادة حسابك — ولا حتى من قبل الدعم.",
+    "deleteTypeToConfirm": "اكتب DELETE للتأكيد",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "حذف الحساب نهائياً",
+    "keepMyAccount": "الاحتفاظ بحسابي",
+    "deleteAccountFailed": "تعذر حذف حسابك. يرجى المحاولة مرة أخرى.",
+    "planUpdate": "تحديث الخطة",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر $49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "قم بترقية خطتك",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "أنت على خطة مدفوعة.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

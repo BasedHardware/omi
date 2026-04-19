@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "सुरक्षित सिंक",
     "appleHealthFeatureSecureDesc": "आपला Apple Health डेटा खासगीरित्या आपल्या Omi खात्याशी सिंक होतो.",
     "appleHealthDeniedTitle": "Apple Health प्रवेश नाकारला",
-    "appleHealthDeniedBody": "Omi कडे आपला Apple Health डेटा वाचण्याची परवानगी नाही. iOS सेटिंग्ज → गोपनीयता आणि सुरक्षा → Health → Omi मध्ये ते सक्षम करा."
+    "appleHealthDeniedBody": "Omi कडे आपला Apple Health डेटा वाचण्याची परवानगी नाही. iOS सेटिंग्ज → गोपनीयता आणि सुरक्षा → Health → Omi मध्ये ते सक्षम करा.",
+    "deleteFlowReasonTitle": "तुम्ही का सोडत आहात?",
+    "deleteFlowReasonSubtitle": "तुमचा अभिप्राय आम्हाला सर्वांसाठी Omi सुधारण्यात मदत करतो.",
+    "deleteReasonPrivacy": "गोपनीयतेच्या चिंता",
+    "deleteReasonNotUsing": "पुरेसा वापर करत नाही",
+    "deleteReasonMissingFeatures": "मला आवश्यक असलेली वैशिष्ट्ये नाहीत",
+    "deleteReasonTechnicalIssues": "खूप तांत्रिक समस्या",
+    "deleteReasonFoundAlternative": "दुसरे काहीतरी वापरत आहे",
+    "deleteReasonTakingBreak": "फक्त विश्रांती घेत आहे",
+    "deleteReasonOther": "इतर",
+    "deleteFlowFeedbackTitle": "आम्हाला अधिक सांगा",
+    "deleteFlowFeedbackSubtitle": "Omi तुमच्यासाठी कसे उपयुक्त ठरले असते?",
+    "deleteFlowFeedbackHint": "ऐच्छिक — तुमचे विचार आम्हाला एक चांगले उत्पादन बनवण्यात मदत करतात.",
+    "deleteFlowConfirmTitle": "हे कायमचे आहे",
+    "deleteFlowConfirmSubtitle": "एकदा खाते हटवले की ते पुनर्प्राप्त करण्याचा कोणताही मार्ग नाही.",
+    "deleteConsequenceSubscription": "कोणतीही सक्रिय सदस्यता रद्द केली जाईल.",
+    "deleteConsequenceNoRecovery": "तुमचे खाते पुनर्संचयित केले जाऊ शकत नाही — सपोर्टद्वारेही नाही.",
+    "deleteTypeToConfirm": "पुष्टी करण्यासाठी DELETE टाइप करा",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "खाते कायमचे हटवा",
+    "keepMyAccount": "माझे खाते ठेवा",
+    "deleteAccountFailed": "तुमचे खाते हटवता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+    "planUpdate": "प्लॅन अपडेट",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "तुमचा Unlimited प्लॅन बंद केला जात आहे. Operator प्लॅनवर स्विच करा — तेच उत्कृष्ट वैशिष्ट्ये $49/महिना. तुमचा सध्याचा प्लॅन तोपर्यंत काम करत राहील.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "तुमचा प्लॅन अपग्रेड करा",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "तुम्ही सशुल्क प्लॅनवर आहात.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -2936,5 +2936,42 @@
     "appleHealthFeatureSecureTitle": "安全同步",
     "appleHealthFeatureSecureDesc": "您的 Apple Health 数据私密同步到您的 Omi 账户。",
     "appleHealthDeniedTitle": "Apple Health 访问被拒绝",
-    "appleHealthDeniedBody": "Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。"
+    "appleHealthDeniedBody": "Omi 没有读取您的 Apple Health 数据的权限。请在 iOS 设置 → 隐私与安全性 → 健康 → Omi 中启用。",
+    "deleteFlowReasonTitle": "您为何离开?",
+    "deleteFlowReasonSubtitle": "您的反馈有助于我们为所有人改进 Omi。",
+    "deleteReasonPrivacy": "隐私方面的顾虑",
+    "deleteReasonNotUsing": "使用得不够多",
+    "deleteReasonMissingFeatures": "缺少我需要的功能",
+    "deleteReasonTechnicalIssues": "技术问题太多",
+    "deleteReasonFoundAlternative": "在使用其他产品",
+    "deleteReasonTakingBreak": "只是休息一下",
+    "deleteReasonOther": "其他",
+    "deleteFlowFeedbackTitle": "告诉我们更多",
+    "deleteFlowFeedbackSubtitle": "怎样才能让 Omi 对您有用?",
+    "deleteFlowFeedbackHint": "可选 — 您的想法有助于我们打造更好的产品。",
+    "deleteFlowConfirmTitle": "此操作不可撤销",
+    "deleteFlowConfirmSubtitle": "一旦删除账户,将无法恢复。",
+    "deleteConsequenceSubscription": "任何有效的订阅都将被取消。",
+    "deleteConsequenceNoRecovery": "您的账户无法恢复 — 即使是客服也无法处理。",
+    "deleteTypeToConfirm": "输入 DELETE 以确认",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "永久删除账户",
+    "keepMyAccount": "保留我的账户",
+    "deleteAccountFailed": "无法删除您的账户。请重试。",
+    "planUpdate": "套餐更新",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 $49。您当前的套餐在此期间将继续可用。",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "升级你的计划",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "你正在使用付费计划。",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

@@ -3010,5 +3010,42 @@
     "appleHealthFeatureSecureTitle": "Biztonságos szinkronizálás",
     "appleHealthFeatureSecureDesc": "Apple Health-adataid bizalmasan szinkronizálódnak az Omi-fiókoddal.",
     "appleHealthDeniedTitle": "Apple Health-hozzáférés megtagadva",
-    "appleHealthDeniedBody": "Az Ominak nincs engedélye az Apple Health-adataid olvasására. Engedélyezd: iOS Beállítások → Adatvédelem és biztonság → Health → Omi."
+    "appleHealthDeniedBody": "Az Ominak nincs engedélye az Apple Health-adataid olvasására. Engedélyezd: iOS Beállítások → Adatvédelem és biztonság → Health → Omi.",
+    "deleteFlowReasonTitle": "Miért távozol?",
+    "deleteFlowReasonSubtitle": "A visszajelzésed segít nekünk, hogy az Omi mindenki számára jobb legyen.",
+    "deleteReasonPrivacy": "Adatvédelmi aggályok",
+    "deleteReasonNotUsing": "Nem használom elég gyakran",
+    "deleteReasonMissingFeatures": "Hiányoznak a funkciók, amikre szükségem van",
+    "deleteReasonTechnicalIssues": "Túl sok műszaki probléma",
+    "deleteReasonFoundAlternative": "Mást használok",
+    "deleteReasonTakingBreak": "Csak szünetet tartok",
+    "deleteReasonOther": "Egyéb",
+    "deleteFlowFeedbackTitle": "Mesélj többet",
+    "deleteFlowFeedbackSubtitle": "Mi tette volna használhatóvá az Omit számodra?",
+    "deleteFlowFeedbackHint": "Nem kötelező — a gondolataid segítenek nekünk jobb terméket építeni.",
+    "deleteFlowConfirmTitle": "Ez végleges",
+    "deleteFlowConfirmSubtitle": "Miután törölted a fiókodat, nincs mód a visszaállítására.",
+    "deleteConsequenceSubscription": "Minden aktív előfizetés megszűnik.",
+    "deleteConsequenceNoRecovery": "A fiókod nem állítható vissza — még az ügyfélszolgálat által sem.",
+    "deleteTypeToConfirm": "Írd be a DELETE szót a megerősítéshez",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Fiók végleges törlése",
+    "keepMyAccount": "Fiókom megtartása",
+    "deleteAccountFailed": "Nem sikerült törölni a fiókodat. Próbáld újra.",
+    "planUpdate": "Csomag frissítés",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Az Unlimited csomagja megszűnik. Váltson az Operator csomagra — ugyanazok a kiváló funkciók $49/hó áron. A jelenlegi csomagja addig is tovább működik.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Frissítsd a csomagodat",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Fizetős csomagod van.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

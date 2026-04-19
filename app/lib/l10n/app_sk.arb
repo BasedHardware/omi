@@ -2919,5 +2919,42 @@
     "appleHealthFeatureSecureTitle": "Bezpečná synchronizácia",
     "appleHealthFeatureSecureDesc": "Vaše údaje z Apple Health sa súkromne synchronizujú s účtom Omi.",
     "appleHealthDeniedTitle": "Prístup k Apple Health zamietnutý",
-    "appleHealthDeniedBody": "Omi nemá povolenie na čítanie vašich údajov Apple Health. Povoľte ho v Nastaveniach iOS → Súkromie a bezpečnosť → Health → Omi."
+    "appleHealthDeniedBody": "Omi nemá povolenie na čítanie vašich údajov Apple Health. Povoľte ho v Nastaveniach iOS → Súkromie a bezpečnosť → Health → Omi.",
+    "deleteFlowReasonTitle": "Prečo odchádzate?",
+    "deleteFlowReasonSubtitle": "Vaša spätná väzba nám pomáha zlepšovať Omi pre všetkých.",
+    "deleteReasonPrivacy": "Obavy o súkromie",
+    "deleteReasonNotUsing": "Nepoužívam to dostatočne často",
+    "deleteReasonMissingFeatures": "Chýbajú funkcie, ktoré potrebujem",
+    "deleteReasonTechnicalIssues": "Príliš veľa technických problémov",
+    "deleteReasonFoundAlternative": "Používam niečo iné",
+    "deleteReasonTakingBreak": "Len si dávam pauzu",
+    "deleteReasonOther": "Iné",
+    "deleteFlowFeedbackTitle": "Povedzte nám viac",
+    "deleteFlowFeedbackSubtitle": "Čo by spôsobilo, že by Omi pre vás fungovalo?",
+    "deleteFlowFeedbackHint": "Nepovinné — vaše myšlienky nám pomáhajú vytvoriť lepší produkt.",
+    "deleteFlowConfirmTitle": "Toto je trvalé",
+    "deleteFlowConfirmSubtitle": "Po odstránení účtu sa nedá obnoviť.",
+    "deleteConsequenceSubscription": "Akékoľvek aktívne predplatné bude zrušené.",
+    "deleteConsequenceNoRecovery": "Váš účet nie je možné obnoviť — ani podporou.",
+    "deleteTypeToConfirm": "Pre potvrdenie napíšte DELETE",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Trvalo odstrániť účet",
+    "keepMyAccount": "Ponechať môj účet",
+    "deleteAccountFailed": "Váš účet sa nepodarilo odstrániť. Skúste to znova.",
+    "planUpdate": "Aktualizácia plánu",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Váš plán Unlimited sa ruší. Prejdite na plán Operator — rovnaké skvelé funkcie za $49/mes. Váš súčasný plán bude zatiaľ naďalej fungovať.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Vylepšite svoj plán",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Máte platený plán.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

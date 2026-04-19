@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -228,24 +226,6 @@ Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
   return null;
 }
 
-/// Get goal progress history
-Future<List<GoalHistoryEntry>> getGoalHistory(String goalId, {int days = 30}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/$goalId/history?days=$days',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return [];
-  if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded is List) {
-      return decoded.map((e) => GoalHistoryEntry.fromJson(e)).toList();
-    }
-  }
-  return [];
-}
-
 /// Delete a goal
 Future<bool> deleteGoal(String goalId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/$goalId', headers: {}, method: 'DELETE', body: '');
@@ -270,23 +250,6 @@ Future<String?> getGoalAdvice() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/goals/advice', headers: {}, method: 'GET', body: '');
   if (response == null) return null;
   Logger.debug('getGoalAdvice response: ${response.body}');
-  if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    return decoded['advice'];
-  }
-  return null;
-}
-
-/// Get AI-generated advice for a specific goal
-Future<String?> getGoalAdviceById(String goalId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/goals/$goalId/advice',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return null;
-  Logger.debug('getGoalAdviceById response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return decoded['advice'];

@@ -17,6 +17,8 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
               .toList() ??
           [],
       cancelAtPeriodEnd: json['cancel_at_period_end'] as bool? ?? false,
+      deprecated: json['deprecated'] as bool? ?? false,
+      deprecationMessage: json['deprecation_message'] as String?,
     );
 
 Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
@@ -28,12 +30,15 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
       'current_price_id': instance.currentPriceId,
       'features': instance.features,
       'cancel_at_period_end': instance.cancelAtPeriodEnd,
+      'deprecated': instance.deprecated,
+      'deprecation_message': instance.deprecationMessage,
     };
 
 const _$PlanTypeEnumMap = {
   PlanType.basic: 'basic',
   PlanType.unlimited: 'unlimited',
-  PlanType.pro: 'pro',
+  PlanType.architect: 'architect',
+  PlanType.operator: 'operator',
 };
 
 const _$SubscriptionStatusEnumMap = {
@@ -98,7 +103,7 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               ?.map((e) => SubscriptionPlan.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      showSubscriptionUi: json['show_subscription_ui'] as bool? ?? false,
+      showSubscriptionUi: json['show_subscription_ui'] as bool? ?? true,
     );
 
 Map<String, dynamic> _$UserSubscriptionResponseToJson(

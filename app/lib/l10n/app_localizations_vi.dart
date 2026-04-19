@@ -1711,12 +1711,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'THIẾT BỊ',
-      one: 'THIẾT BỊ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -8945,4 +8940,80 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi không có quyền đọc dữ liệu Apple Health của bạn. Bật tính năng này trong Cài đặt iOS → Quyền riêng tư & Bảo mật → Sức khỏe → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Vì sao bạn rời đi?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Phản hồi của bạn giúp chúng tôi cải thiện Omi cho mọi người.';
+
+  @override
+  String get deleteReasonPrivacy => 'Lo ngại về quyền riêng tư';
+
+  @override
+  String get deleteReasonNotUsing => 'Không sử dụng đủ nhiều';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Thiếu các tính năng tôi cần';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Quá nhiều vấn đề kỹ thuật';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Đang dùng thứ khác';
+
+  @override
+  String get deleteReasonTakingBreak => 'Chỉ nghỉ một thời gian';
+
+  @override
+  String get deleteReasonOther => 'Khác';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Điều gì sẽ khiến Omi phù hợp với bạn?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Đây là vĩnh viễn';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Khi bạn xóa tài khoản, không có cách nào để khôi phục.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Mọi gói đăng ký đang hoạt động sẽ bị hủy.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.';
+
+  @override
+  String get deleteTypeToConfirm => 'Nhập DELETE để xác nhận';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Xóa tài khoản vĩnh viễn';
+
+  @override
+  String get keepMyAccount => 'Giữ tài khoản của tôi';
+
+  @override
+  String get deleteAccountFailed => 'Không thể xóa tài khoản của bạn. Vui lòng thử lại.';
+
+  @override
+  String get planUpdate => 'Cập nhật gói';
+
+  @override
+  String get planDeprecationMessage =>
+      'Gói Unlimited của bạn đang được ngừng cung cấp. Chuyển sang gói Operator — cùng các tính năng tuyệt vời với giá \$49/tháng. Gói hiện tại của bạn sẽ tiếp tục hoạt động trong thời gian chờ đợi.';
+
+  @override
+  String get upgradeYourPlan => 'Nâng cấp gói của bạn';
+
+  @override
+  String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
 }

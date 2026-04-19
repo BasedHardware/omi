@@ -2949,5 +2949,42 @@
     "appleHealthFeatureSecureTitle": "Synchronisation sécurisée",
     "appleHealthFeatureSecureDesc": "Vos données Apple Health se synchronisent en privé avec votre compte Omi.",
     "appleHealthDeniedTitle": "Accès à Apple Health refusé",
-    "appleHealthDeniedBody": "Omi n'a pas l'autorisation de lire vos données Apple Health. Activez-la dans Réglages iOS → Confidentialité et sécurité → Santé → Omi."
+    "appleHealthDeniedBody": "Omi n'a pas l'autorisation de lire vos données Apple Health. Activez-la dans Réglages iOS → Confidentialité et sécurité → Santé → Omi.",
+    "deleteFlowReasonTitle": "Pourquoi partez-vous ?",
+    "deleteFlowReasonSubtitle": "Vos commentaires nous aident à améliorer Omi pour tous.",
+    "deleteReasonPrivacy": "Préoccupations liées à la confidentialité",
+    "deleteReasonNotUsing": "Je ne l'utilise pas assez",
+    "deleteReasonMissingFeatures": "Il manque des fonctionnalités dont j'ai besoin",
+    "deleteReasonTechnicalIssues": "Trop de problèmes techniques",
+    "deleteReasonFoundAlternative": "J'utilise autre chose",
+    "deleteReasonTakingBreak": "Je fais juste une pause",
+    "deleteReasonOther": "Autre",
+    "deleteFlowFeedbackTitle": "Dites-nous-en plus",
+    "deleteFlowFeedbackSubtitle": "Qu'est-ce qui aurait fait fonctionner Omi pour vous ?",
+    "deleteFlowFeedbackHint": "Facultatif — vos idées nous aident à créer un meilleur produit.",
+    "deleteFlowConfirmTitle": "C'est définitif",
+    "deleteFlowConfirmSubtitle": "Une fois votre compte supprimé, il est impossible de le récupérer.",
+    "deleteConsequenceSubscription": "Tout abonnement actif sera annulé.",
+    "deleteConsequenceNoRecovery": "Votre compte ne peut pas être restauré — même pas par le support.",
+    "deleteTypeToConfirm": "Tapez DELETE pour confirmer",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Supprimer le compte définitivement",
+    "keepMyAccount": "Conserver mon compte",
+    "deleteAccountFailed": "Impossible de supprimer votre compte. Veuillez réessayer.",
+    "planUpdate": "Mise à jour du plan",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Votre plan Unlimited est en cours de retrait. Passez au plan Operator — les mêmes fonctionnalités à $49/mois. Votre plan actuel continuera de fonctionner en attendant.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Améliorez votre forfait",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Vous êtes sur un forfait payant.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

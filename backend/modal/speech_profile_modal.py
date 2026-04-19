@@ -3,10 +3,8 @@ import os
 from collections import defaultdict
 from typing import List, Optional
 
-import modal.gpu
 import torch
 from fastapi import File, UploadFile, Form
-from modal import App, web_endpoint, Secret, Image
 from pydantic import BaseModel
 from pydub import AudioSegment
 from speechbrain.inference.speaker import SpeakerRecognition
@@ -85,33 +83,9 @@ def classify_segments(audio_file_path: str, profile_path: str, people: List[dict
     return matches
 
 
-app = App(name='speech_profile')
-image = (
-    Image.debian_slim()
-    .apt_install('ffmpeg')
-    .pip_install("torch")
-    .pip_install("torchaudio")
-    .pip_install("torchvision")
-    .pip_install("speechbrain")
-    .pip_install("pydub")
-    .pip_install("requests")
-    .pip_install("google-cloud-storage")
-    .pip_install("redis")
-)
-
 os.makedirs('_temp', exist_ok=True)
 
 
-@app.function(
-    image=image,
-    keep_warm=1,
-    memory=(1024, 2048),
-    allow_concurrent_inputs=2,
-    cpu=4,
-    gpu=modal.gpu.T4(count=1),
-    secrets=[Secret.from_name('huggingface-token'), Secret.from_name('envs'), Secret.from_name("gcp-credentials")],
-)
-@web_endpoint(method='POST')
 def endpoint(uid: str, audio_file: UploadFile = File(...), segments: str = Form(...)) -> List[ResponseItem]:
     """
     This endpoint obtains the user (speech profile + samples) + all user people speech samples

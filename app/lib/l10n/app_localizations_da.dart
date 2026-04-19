@@ -8931,4 +8931,80 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi har ikke tilladelse til at læse dine Apple Health-data. Aktivér det i iOS-indstillinger → Anonymitet og sikkerhed → Health → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Hvorfor forlader du os?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Din feedback hjælper os med at gøre Omi bedre for alle.';
+
+  @override
+  String get deleteReasonPrivacy => 'Bekymringer om privatliv';
+
+  @override
+  String get deleteReasonNotUsing => 'Bruger den ikke nok';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Mangler funktioner, jeg har brug for';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'For mange tekniske problemer';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Bruger noget andet';
+
+  @override
+  String get deleteReasonTakingBreak => 'Tager bare en pause';
+
+  @override
+  String get deleteReasonOther => 'Andet';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Fortæl os mere';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Hvad ville have fået Omi til at fungere for dig?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Valgfrit — dine tanker hjælper os med at bygge et bedre produkt.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Dette er permanent';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Når du sletter din konto, kan den ikke gendannes.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Eventuelle aktive abonnementer annulleres.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Din konto kan ikke gendannes — ikke engang af supporten.';
+
+  @override
+  String get deleteTypeToConfirm => 'Skriv DELETE for at bekræfte';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Slet konto permanent';
+
+  @override
+  String get keepMyAccount => 'Behold min konto';
+
+  @override
+  String get deleteAccountFailed => 'Kunne ikke slette din konto. Prøv igen.';
+
+  @override
+  String get planUpdate => 'Planopdatering';
+
+  @override
+  String get planDeprecationMessage =>
+      'Dit Unlimited-abonnement bliver udfaset. Skift til Operator-abonnementet — samme fantastiske funktioner til \$49/md. Dit nuværende abonnement vil fortsætte med at fungere i mellemtiden.';
+
+  @override
+  String get upgradeYourPlan => 'Opgrader din plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Du er på en betalt plan.';
 }

@@ -5,13 +5,13 @@ import os
 import struct
 import wave
 from typing import List
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+from concurrent.futures import as_completed
+
+from utils.executors import storage_executor
 
 import opuslib
 from google.cloud import storage
 from google.oauth2 import service_account
-from google.cloud.storage import transfer_manager
 from google.cloud.exceptions import NotFound as BlobNotFound
 from google.cloud.exceptions import NotFound
 
@@ -91,13 +91,6 @@ def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
     return None
 
 
-def upload_additional_profile_audio(file_path: str, uid: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/additional_profile_recordings/{file_path.split("/")[-1]}'
-    blob = bucket.blob(path)
-    blob.upload_from_filename(file_path)
-
-
 def delete_additional_profile_audio(uid: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
@@ -125,27 +118,11 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
 # ********************************************
 
 
-def upload_user_person_speech_sample(file_path: str, uid: str, person_id: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    path = f'{uid}/people_profiles/{person_id}/{file_path.split("/")[-1]}'
-    blob = bucket.blob(path)
-    blob.upload_from_filename(file_path)
-
-
 def delete_user_person_speech_sample(uid: str, person_id: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/people_profiles/{person_id}/{file_name}')
     if blob.exists():
         blob.delete()
-
-
-def delete_speech_sample_for_people(uid: str, file_name: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
-    for blob in blobs:
-        if file_name in blob.name:
-            logger.info(f'delete_speech_sample_for_people deleting {blob.name}')
-            blob.delete()
 
 
 def delete_user_person_speech_samples(uid: str, person_id: str) -> None:
@@ -783,30 +760,25 @@ def download_audio_chunks_and_merge(
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
     unique_batch_paths = set(ts_to_batch_path.values())
 
-    max_workers = min(10, len(individual_timestamps) + len(unique_batch_paths))
-    if max_workers == 0:
-        max_workers = 1
+    # Submit individual chunk downloads via shared storage executor
+    individual_futures = {storage_executor.submit(download_single_chunk, ts): ts for ts in individual_timestamps}
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit individual chunk downloads
-        individual_futures = {executor.submit(download_single_chunk, ts): ts for ts in individual_timestamps}
+    # Submit batch blob downloads (once per unique path)
+    batch_futures = {storage_executor.submit(_download_and_decode_blob, path): path for path in unique_batch_paths}
 
-        # Submit batch blob downloads (once per unique path)
-        batch_futures = {executor.submit(_download_and_decode_blob, path): path for path in unique_batch_paths}
+    # Collect individual results
+    for future in as_completed(individual_futures):
+        timestamp, pcm_data = future.result()
+        if pcm_data is not None:
+            chunk_results[timestamp] = pcm_data
 
-        # Collect individual results
-        for future in as_completed(individual_futures):
-            timestamp, pcm_data = future.result()
-            if pcm_data is not None:
-                chunk_results[timestamp] = pcm_data
-
-        # Collect batch results — assign full batch data at the batch's start timestamp
-        for future in as_completed(batch_futures):
-            path = batch_futures[future]
-            pcm_data = future.result()
-            if pcm_data is not None:
-                batch_info = batch_paths[path]
-                chunk_results[batch_info['timestamp']] = pcm_data
+    # Collect batch results — assign full batch data at the batch's start timestamp
+    for future in as_completed(batch_futures):
+        path = batch_futures[future]
+        pcm_data = future.result()
+        if pcm_data is not None:
+            batch_info = batch_paths[path]
+            chunk_results[batch_info['timestamp']] = pcm_data
 
     # Merge chunks
     merged_data = bytearray()
@@ -931,8 +903,7 @@ def get_or_create_merged_audio(
         except Exception as e:
             logger.error(f"Error uploading audio cache: {e}")
 
-    cache_thread = threading.Thread(target=_upload_to_cache, daemon=True)
-    cache_thread.start()
+    storage_executor.submit(_upload_to_cache)
 
     return wav_data, False
 
@@ -1023,11 +994,14 @@ def precache_conversation_audio(
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            list(executor.map(_cache_single, audio_files))
+        futures = [storage_executor.submit(_cache_single, af) for af in audio_files]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception:
+                pass
 
-    thread = threading.Thread(target=_precache_all, daemon=True)
-    thread.start()
+    storage_executor.submit(_precache_all)
 
 
 # **********************************

@@ -9,12 +9,13 @@ import threading
 import time
 import uuid as _uuid
 import wave
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import requests
+import httpx
+
+from utils.executors import critical_executor, storage_executor
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -34,6 +35,7 @@ from database.sync_jobs import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
@@ -186,21 +188,18 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
-    # Start background parallel pre-caching for all audio files
+    # Start background parallel pre-caching for all audio files using storage_executor
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
-            # Wait for all to complete
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    logger.error(f"Error in parallel precache: {e}")
+        futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    thread = threading.Thread(target=_precache_all_parallel, daemon=True)
-    thread.start()
+    critical_executor.submit(_precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -289,16 +288,14 @@ def get_audio_signed_urls_endpoint(
     if uncached_files:
 
         def _cache_uncached_parallel():
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
-                for future in futures:
-                    try:
-                        future.result()
-                    except Exception as e:
-                        logger.error(f"Error in parallel cache: {e}")
+            futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Error in parallel cache: {e}")
 
-        thread = threading.Thread(target=_cache_uncached_parallel, daemon=True)
-        thread.start()
+        critical_executor.submit(_cache_uncached_parallel)
 
     return {"audio_files": result}
 
@@ -695,7 +692,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return
 
     # Convert to Conversation object
-    conversation = Conversation(**conversation_data)
+    conversation = deserialize_conversation(conversation_data)
 
     process_conversation(
         uid=uid,
@@ -744,7 +741,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
 def _download_audio_bytes(url: str) -> Optional[bytes]:
     """Download audio from a signed URL. Returns WAV bytes or None on failure."""
     try:
-        resp = requests.get(url, timeout=60)
+        resp = httpx.get(url, timeout=60.0)
         resp.raise_for_status()
         return resp.content
     except Exception as e:
@@ -930,7 +927,7 @@ def process_segment(
             time.sleep(480)
             delete_syncing_temporal_file(path)
 
-        threading.Thread(target=delete_file).start()
+        storage_executor.submit(delete_file)
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
@@ -1117,18 +1114,13 @@ async def sync_local_files(
         paths = retrieve_file_paths(files, uid)
         wav_paths = decode_files_to_wav(paths)
 
-        def chunk_threads(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-
         vad_errors = []
-        threads = [
-            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
-            for path in wav_paths
-        ]
-        chunk_threads(threads)
+
+        def _run_vad(path):
+            retrieve_vad_segments(path, segmented_paths, vad_errors)
+
+        loop = asyncio.get_running_loop()
+        await asyncio.gather(*[loop.run_in_executor(critical_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1203,10 +1195,11 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
+        await asyncio.gather(
+            *[
+                loop.run_in_executor(
+                    critical_executor,
+                    process_segment,
                     path,
                     uid,
                     response,
@@ -1217,11 +1210,10 @@ async def sync_local_files(
                     transcription_prefs,
                     person_embeddings_cache,
                     conversation_id,
-                ),
-            )
-            for path in segmented_paths
-        ]
-        chunk_threads(threads)
+                )
+                for path in segmented_paths
+            ]
+        )
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1333,36 +1325,36 @@ def _process_segments_background(
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        def chunk_threads_bg(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-                # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
-                try:
-                    update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(threads))})
-                except Exception:
-                    pass  # Non-fatal: stale detection is a safety net, not a hard gate
-
-        threads = [
-            threading.Thread(
-                target=process_segment,
-                args=(
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    target_conversation_id,
-                ),
+        def _process_one_segment(path):
+            process_segment(
+                path,
+                uid,
+                response,
+                segment_lock,
+                segment_errors,
+                source,
+                is_locked,
+                transcription_prefs,
+                person_embeddings_cache,
+                target_conversation_id,
             )
-            for path in segmented_paths
-        ]
-        chunk_threads_bg(threads)
+
+        # Process in chunks of 5, with heartbeat after each chunk
+        chunk_size = 5
+        segment_list = list(segmented_paths)
+        for i in range(0, len(segment_list), chunk_size):
+            chunk = segment_list[i : i + chunk_size]
+            futures = [critical_executor.submit(_process_one_segment, path) for path in chunk]
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Error processing segment: {e}")
+            # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
+            try:
+                update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(segment_list))})
+            except Exception:
+                pass  # Non-fatal: stale detection is a safety net, not a hard gate
 
         # Record DG usage after processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1454,18 +1446,13 @@ async def sync_local_files_v2(
         paths = _retrieve_file_paths_v2(files, uid, job_id)
         wav_paths = decode_files_to_wav(paths)
 
-        def chunk_threads_local(threads):
-            chunk_size = 5
-            for i in range(0, len(threads), chunk_size):
-                [t.start() for t in threads[i : i + chunk_size]]
-                [t.join() for t in threads[i : i + chunk_size]]
-
         vad_errors = []
-        threads = [
-            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
-            for path in wav_paths
-        ]
-        chunk_threads_local(threads)
+
+        def _run_vad_v2(path):
+            retrieve_vad_segments(path, segmented_paths, vad_errors)
+
+        loop_v2 = asyncio.get_running_loop()
+        await asyncio.gather(*[loop_v2.run_in_executor(critical_executor, _run_vad_v2, path) for path in wav_paths])
 
         _cleanup_files(wav_paths)
         wav_paths = []
@@ -1540,24 +1527,24 @@ async def sync_local_files_v2(
         owned_paths = list(segmented_paths)
         segmented_paths = set()  # Prevent finally cleanup of files now owned by bg thread
 
-        bg_thread = threading.Thread(
-            target=_process_segments_background,
-            args=(
-                job_id,
-                uid,
-                owned_paths,
-                source,
-                should_lock,
-                fair_use_restrict_dg,
-                total_speech_seconds,
-                job_dir,
-                transcription_prefs,
-                person_embeddings_cache,
-                conversation_id,
-            ),
-            daemon=True,
+        # Run in default executor (not critical_executor) because _process_segments_background
+        # is a coordinator that submits child tasks to critical_executor — nesting both
+        # in the same pool causes deadlock under concurrent load.
+        loop_v2.run_in_executor(
+            None,
+            _process_segments_background,
+            job_id,
+            uid,
+            owned_paths,
+            source,
+            should_lock,
+            fair_use_restrict_dg,
+            total_speech_seconds,
+            job_dir,
+            transcription_prefs,
+            person_embeddings_cache,
+            conversation_id,
         )
-        bg_thread.start()
 
         return JSONResponse(
             status_code=202,

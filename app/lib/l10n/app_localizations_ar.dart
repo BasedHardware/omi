@@ -1693,12 +1693,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'أجهزة',
-      one: 'جهاز',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8884,4 +8879,80 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'ليس لدى Omi إذن لقراءة بيانات Apple Health الخاصة بك. فعّل ذلك من إعدادات iOS ← الخصوصية والأمان ← Health ← Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'لماذا ترحل؟';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'ملاحظاتك تساعدنا على تحسين Omi للجميع.';
+
+  @override
+  String get deleteReasonPrivacy => 'مخاوف تتعلق بالخصوصية';
+
+  @override
+  String get deleteReasonNotUsing => 'لا أستخدمه بما يكفي';
+
+  @override
+  String get deleteReasonMissingFeatures => 'تنقصه ميزات أحتاجها';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'مشاكل تقنية كثيرة';
+
+  @override
+  String get deleteReasonFoundAlternative => 'أستخدم شيئاً آخر';
+
+  @override
+  String get deleteReasonTakingBreak => 'أأخذ استراحة فقط';
+
+  @override
+  String get deleteReasonOther => 'غير ذلك';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'أخبرنا المزيد';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'ما الذي كان سيجعل Omi يناسبك؟';
+
+  @override
+  String get deleteFlowFeedbackHint => 'اختياري — أفكارك تساعدنا على بناء منتج أفضل.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'هذا إجراء نهائي';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'بمجرد حذف حسابك، لا يمكن استعادته.';
+
+  @override
+  String get deleteConsequenceSubscription => 'سيتم إلغاء أي اشتراك نشط.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'لا يمكن استعادة حسابك — ولا حتى من قبل الدعم.';
+
+  @override
+  String get deleteTypeToConfirm => 'اكتب DELETE للتأكيد';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'حذف الحساب نهائياً';
+
+  @override
+  String get keepMyAccount => 'الاحتفاظ بحسابي';
+
+  @override
+  String get deleteAccountFailed => 'تعذر حذف حسابك. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get planUpdate => 'تحديث الخطة';
+
+  @override
+  String get planDeprecationMessage =>
+      'يتم إيقاف خطة Unlimited الخاصة بك. انتقل إلى خطة Operator — نفس الميزات الرائعة بسعر \$49/شهريًا. ستستمر خطتك الحالية في العمل في هذه الأثناء.';
+
+  @override
+  String get upgradeYourPlan => 'قم بترقية خطتك';
+
+  @override
+  String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
 }

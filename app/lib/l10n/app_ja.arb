@@ -2915,5 +2915,42 @@
     "appleHealthFeatureSecureTitle": "安全な同期",
     "appleHealthFeatureSecureDesc": "Apple Health のデータは Omi アカウントに安全に同期されます。",
     "appleHealthDeniedTitle": "Apple Health へのアクセスが拒否されました",
-    "appleHealthDeniedBody": "Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。"
+    "appleHealthDeniedBody": "Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。",
+    "deleteFlowReasonTitle": "どうして離れるのですか?",
+    "deleteFlowReasonSubtitle": "あなたのフィードバックは、みんなのためにOmiを改善するのに役立ちます。",
+    "deleteReasonPrivacy": "プライバシーへの懸念",
+    "deleteReasonNotUsing": "あまり使っていない",
+    "deleteReasonMissingFeatures": "必要な機能が足りない",
+    "deleteReasonTechnicalIssues": "技術的な問題が多すぎる",
+    "deleteReasonFoundAlternative": "他のものを使っている",
+    "deleteReasonTakingBreak": "少し休みたいだけ",
+    "deleteReasonOther": "その他",
+    "deleteFlowFeedbackTitle": "もう少し聞かせてください",
+    "deleteFlowFeedbackSubtitle": "何があればOmiはあなたに合っていましたか?",
+    "deleteFlowFeedbackHint": "任意 — あなたの声がより良い製品づくりに役立ちます。",
+    "deleteFlowConfirmTitle": "この操作は取り消せません",
+    "deleteFlowConfirmSubtitle": "アカウントを削除すると、復元することはできません。",
+    "deleteConsequenceSubscription": "有効なサブスクリプションはキャンセルされます。",
+    "deleteConsequenceNoRecovery": "アカウントは復元できません — サポートでも対応できません。",
+    "deleteTypeToConfirm": "確認のためにDELETEと入力してください",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "アカウントを完全に削除",
+    "keepMyAccount": "アカウントを残す",
+    "deleteAccountFailed": "アカウントを削除できませんでした。もう一度お試しください。",
+    "planUpdate": "プラン更新",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "プランをアップグレード",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "有料プランをご利用中です。",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }

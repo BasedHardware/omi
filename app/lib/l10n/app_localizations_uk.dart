@@ -1708,12 +1708,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ПРИСТРОЇВ',
-      one: 'ПРИСТРІЙ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ПРИСТРОЇВ', one: 'ПРИСТРІЙ');
     return '$count $_temp0 ЗНАЙДЕНО ПОБЛИЗУ';
   }
 
@@ -8958,4 +8953,80 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get appleHealthDeniedBody =>
       'Omi не має дозволу на читання даних Apple Health. Увімкніть це в Налаштування iOS → Конфіденційність і безпека → Здоров\'я → Omi.';
+
+  @override
+  String get deleteFlowReasonTitle => 'Чому ви йдете?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'Ваш відгук допомагає нам покращити Omi для всіх.';
+
+  @override
+  String get deleteReasonPrivacy => 'Питання конфіденційності';
+
+  @override
+  String get deleteReasonNotUsing => 'Користуюся недостатньо часто';
+
+  @override
+  String get deleteReasonMissingFeatures => 'Бракує потрібних функцій';
+
+  @override
+  String get deleteReasonTechnicalIssues => 'Забагато технічних проблем';
+
+  @override
+  String get deleteReasonFoundAlternative => 'Використовую щось інше';
+
+  @override
+  String get deleteReasonTakingBreak => 'Просто роблю перерву';
+
+  @override
+  String get deleteReasonOther => 'Інше';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'Розкажіть більше';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => 'Що змусило б Omi працювати для вас?';
+
+  @override
+  String get deleteFlowFeedbackHint => 'Необов\'язково — ваші думки допомагають нам створювати кращий продукт.';
+
+  @override
+  String get deleteFlowConfirmTitle => 'Це назавжди';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'Після видалення акаунту відновити його неможливо.';
+
+  @override
+  String get deleteConsequenceSubscription => 'Активну підписку буде скасовано.';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'Ваш акаунт неможливо відновити — навіть службою підтримки.';
+
+  @override
+  String get deleteTypeToConfirm => 'Введіть DELETE для підтвердження';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'Видалити акаунт назавжди';
+
+  @override
+  String get keepMyAccount => 'Зберегти мій акаунт';
+
+  @override
+  String get deleteAccountFailed => 'Не вдалося видалити ваш акаунт. Спробуйте ще раз.';
+
+  @override
+  String get planUpdate => 'Оновлення плану';
+
+  @override
+  String get planDeprecationMessage =>
+      'Ваш план Unlimited припиняється. Перейдіть на план Operator — ті самі чудові функції за \$49/міс. Ваш поточний план продовжить працювати тим часом.';
+
+  @override
+  String get upgradeYourPlan => 'Покращіть свій план';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ви на платному плані.';
 }

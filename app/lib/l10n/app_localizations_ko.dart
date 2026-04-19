@@ -8421,12 +8421,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개 생성됨',
-      one: '대화 1개 생성됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
     return '$_temp0';
   }
 
@@ -8797,4 +8792,80 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appleHealthDeniedBody => 'Omi에 Apple Health 데이터를 읽을 권한이 없습니다. iOS 설정 → 개인정보 보호 및 보안 → 건강 → Omi에서 활성화하세요.';
+
+  @override
+  String get deleteFlowReasonTitle => '왜 떠나시나요?';
+
+  @override
+  String get deleteFlowReasonSubtitle => '여러분의 의견은 모두를 위한 Omi를 개선하는 데 도움이 됩니다.';
+
+  @override
+  String get deleteReasonPrivacy => '개인정보 보호에 대한 우려';
+
+  @override
+  String get deleteReasonNotUsing => '충분히 사용하지 않음';
+
+  @override
+  String get deleteReasonMissingFeatures => '필요한 기능이 없음';
+
+  @override
+  String get deleteReasonTechnicalIssues => '기술적인 문제가 너무 많음';
+
+  @override
+  String get deleteReasonFoundAlternative => '다른 것을 사용 중';
+
+  @override
+  String get deleteReasonTakingBreak => '잠시 쉬고 싶을 뿐';
+
+  @override
+  String get deleteReasonOther => '기타';
+
+  @override
+  String get deleteFlowFeedbackTitle => '더 자세히 알려주세요';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '무엇이 있었다면 Omi가 여러분께 도움이 되었을까요?';
+
+  @override
+  String get deleteFlowFeedbackHint => '선택 사항 — 여러분의 의견은 더 나은 제품을 만드는 데 도움이 됩니다.';
+
+  @override
+  String get deleteFlowConfirmTitle => '이 작업은 영구적입니다';
+
+  @override
+  String get deleteFlowConfirmSubtitle => '계정을 삭제하면 복구할 방법이 없습니다.';
+
+  @override
+  String get deleteConsequenceSubscription => '활성 구독은 모두 취소됩니다.';
+
+  @override
+  String get deleteConsequenceNoRecovery => '계정은 복구할 수 없습니다 — 고객 지원으로도 불가능합니다.';
+
+  @override
+  String get deleteTypeToConfirm => '확인하려면 DELETE를 입력하세요';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => '계정 영구 삭제';
+
+  @override
+  String get keepMyAccount => '내 계정 유지';
+
+  @override
+  String get deleteAccountFailed => '계정을 삭제할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get planUpdate => '플랜 업데이트';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
+
+  @override
+  String get upgradeYourPlan => '플랜 업그레이드';
+
+  @override
+  String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
 }

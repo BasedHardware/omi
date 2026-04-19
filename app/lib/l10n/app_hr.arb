@@ -10637,5 +10637,42 @@
     "appleHealthFeatureSecureTitle": "Sigurna sinkronizacija",
     "appleHealthFeatureSecureDesc": "Vaši Apple Health podaci sinkroniziraju se privatno s Omi računom.",
     "appleHealthDeniedTitle": "Pristup Apple Health-u odbijen",
-    "appleHealthDeniedBody": "Omi nema dozvolu za čitanje vaših Apple Health podataka. Omogućite ga u iOS Postavke → Privatnost i sigurnost → Health → Omi."
+    "appleHealthDeniedBody": "Omi nema dozvolu za čitanje vaših Apple Health podataka. Omogućite ga u iOS Postavke → Privatnost i sigurnost → Health → Omi.",
+    "deleteFlowReasonTitle": "Zašto odlazite?",
+    "deleteFlowReasonSubtitle": "Vaše povratne informacije pomažu nam poboljšati Omi za sve.",
+    "deleteReasonPrivacy": "Brige o privatnosti",
+    "deleteReasonNotUsing": "Ne koristim dovoljno često",
+    "deleteReasonMissingFeatures": "Nedostaju značajke koje trebam",
+    "deleteReasonTechnicalIssues": "Previše tehničkih problema",
+    "deleteReasonFoundAlternative": "Koristim nešto drugo",
+    "deleteReasonTakingBreak": "Samo uzimam pauzu",
+    "deleteReasonOther": "Ostalo",
+    "deleteFlowFeedbackTitle": "Recite nam više",
+    "deleteFlowFeedbackSubtitle": "Što bi Omi učinilo prikladnim za vas?",
+    "deleteFlowFeedbackHint": "Neobavezno — vaše misli pomažu nam izgraditi bolji proizvod.",
+    "deleteFlowConfirmTitle": "Ovo je trajno",
+    "deleteFlowConfirmSubtitle": "Nakon brisanja računa nije ga moguće vratiti.",
+    "deleteConsequenceSubscription": "Bilo koja aktivna pretplata bit će otkazana.",
+    "deleteConsequenceNoRecovery": "Vaš račun nije moguće vratiti — čak ni preko podrške.",
+    "deleteTypeToConfirm": "Upišite DELETE za potvrdu",
+    "deleteConfirmationWord": "DELETE",
+    "deleteAccountPermanently": "Trajno izbriši račun",
+    "keepMyAccount": "Zadrži moj račun",
+    "deleteAccountFailed": "Brisanje vašeg računa nije uspjelo. Pokušajte ponovno.",
+    "planUpdate": "Ažuriranje plana",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Vaš Unlimited plan se ukida. Prijeđite na Operator plan — iste izvrsne značajke za $49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Nadogradite svoj plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "Na plaćenom ste planu.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    }
 }
