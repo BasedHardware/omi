@@ -87,6 +87,8 @@ mock_llm = MagicMock()
 mock_llm.invoke = MagicMock(return_value=MagicMock(content="test"))
 
 clients_mod = _stub_module("utils.llm.clients")
+clients_mod.get_llm = MagicMock(return_value=mock_llm)
+clients_mod.get_model = MagicMock(return_value="gpt-4.1-mini")
 clients_mod.llm_mini = mock_llm
 clients_mod.llm_mini_stream = mock_llm
 clients_mod.llm_medium = mock_llm
@@ -100,6 +102,7 @@ clients_mod.ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-opus-4-6-20250414"
 clients_mod.embeddings = MagicMock()
 clients_mod.encoding = MagicMock()
 clients_mod.num_tokens_from_string = MagicMock(return_value=100)
+clients_mod.parser = MagicMock()
 
 llm_mod = _stub_module("utils.llm")
 if not hasattr(llm_mod, "__path__"):
