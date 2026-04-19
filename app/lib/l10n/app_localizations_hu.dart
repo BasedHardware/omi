@@ -9120,4 +9120,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get savePercent => '~17% megtakarítás';
+
+  @override
+  String get popular => 'Népszerű';
+
+  @override
+  String get currentPlan => 'Jelenlegi';
 }

@@ -9164,4 +9164,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get savePercent => 'Économisez ~17%';
+
+  @override
+  String get popular => 'Populaire';
+
+  @override
+  String get currentPlan => 'Actuel';
 }

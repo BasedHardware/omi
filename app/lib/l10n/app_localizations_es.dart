@@ -9102,4 +9102,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get savePercent => 'Ahorra ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Actual';
 }

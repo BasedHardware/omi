@@ -8933,4 +8933,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get savePercent => '~17% 절약';
+
+  @override
+  String get popular => '인기';
+
+  @override
+  String get currentPlan => '현재';
 }

@@ -9150,4 +9150,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get savePercent => '~17% சேமிக்கவும்';
+
+  @override
+  String get popular => 'பிரபலம்';
+
+  @override
+  String get currentPlan => 'தற்போதைய';
 }

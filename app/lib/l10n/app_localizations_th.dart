@@ -9035,4 +9035,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get savePercent => 'ประหยัด ~17%';
+
+  @override
+  String get popular => 'ยอดนิยม';
+
+  @override
+  String get currentPlan => 'ปัจจุบัน';
 }

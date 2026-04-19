@@ -8932,4 +8932,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get savePercent => '約17%お得';
+
+  @override
+  String get popular => '人気';
+
+  @override
+  String get currentPlan => '現在';
 }

@@ -9109,4 +9109,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get savePercent => 'Bespaar ~17%';
+
+  @override
+  String get popular => 'Populair';
+
+  @override
+  String get currentPlan => 'Huidig';
 }

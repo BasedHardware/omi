@@ -9098,4 +9098,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get savePercent => '~17% بچائیں';
+
+  @override
+  String get popular => 'مقبول';
+
+  @override
+  String get currentPlan => 'موجودہ';
 }

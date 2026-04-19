@@ -9083,4 +9083,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get savePercent => '~17% صرفه‌جویی';
+
+  @override
+  String get popular => 'محبوب';
+
+  @override
+  String get currentPlan => 'فعلی';
 }

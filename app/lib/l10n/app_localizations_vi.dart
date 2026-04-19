@@ -9081,4 +9081,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get savePercent => 'Tiết kiệm ~17%';
+
+  @override
+  String get popular => 'Phổ biến';
+
+  @override
+  String get currentPlan => 'Hiện tại';
 }

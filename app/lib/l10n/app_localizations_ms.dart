@@ -9105,4 +9105,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get savePercent => 'Jimat ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Semasa';
 }

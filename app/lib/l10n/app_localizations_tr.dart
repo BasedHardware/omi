@@ -9094,4 +9094,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get savePercent => '~%17 tasarruf';
+
+  @override
+  String get popular => 'Popüler';
+
+  @override
+  String get currentPlan => 'Mevcut';
 }

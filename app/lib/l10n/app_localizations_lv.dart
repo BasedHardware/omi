@@ -9099,4 +9099,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get savePercent => 'Ietaupiet ~17%';
+
+  @override
+  String get popular => 'Populārs';
+
+  @override
+  String get currentPlan => 'Pašreizējais';
 }

@@ -9092,4 +9092,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get savePercent => '~17% बचत करा';
+
+  @override
+  String get popular => 'लोकप्रिय';
+
+  @override
+  String get currentPlan => 'सध्याचा';
 }

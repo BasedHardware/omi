@@ -9130,4 +9130,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get savePercent => 'Заштедете ~17%';
+
+  @override
+  String get popular => 'Популарно';
+
+  @override
+  String get currentPlan => 'Тековен';
 }

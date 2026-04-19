@@ -9116,4 +9116,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get savePercent => 'Спестете ~17%';
+
+  @override
+  String get popular => 'Популярен';
+
+  @override
+  String get currentPlan => 'Текущ';
 }

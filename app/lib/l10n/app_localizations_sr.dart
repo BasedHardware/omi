@@ -9094,4 +9094,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get savePercent => 'Уштедите ~17%';
+
+  @override
+  String get popular => 'Популарно';
+
+  @override
+  String get currentPlan => 'Тренутни';
 }

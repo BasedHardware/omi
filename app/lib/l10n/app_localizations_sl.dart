@@ -9105,4 +9105,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get savePercent => 'Prihranite ~17%';
+
+  @override
+  String get popular => 'Priljubljeno';
+
+  @override
+  String get currentPlan => 'Trenutni';
 }

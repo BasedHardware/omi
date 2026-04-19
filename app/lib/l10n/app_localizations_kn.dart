@@ -9113,4 +9113,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get savePercent => '~17% ಉಳಿಸಿ';
+
+  @override
+  String get popular => 'ಜನಪ್ರಿಯ';
+
+  @override
+  String get currentPlan => 'ಪ್ರಸ್ತುತ';
 }

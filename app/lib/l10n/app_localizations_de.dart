@@ -9158,4 +9158,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get savePercent => '~17% sparen';
+
+  @override
+  String get popular => 'Beliebt';
+
+  @override
+  String get currentPlan => 'Aktuell';
 }

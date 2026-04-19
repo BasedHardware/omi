@@ -9090,4 +9090,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get savePercent => '~17% সাশ্রয়';
+
+  @override
+  String get popular => 'জনপ্রিয়';
+
+  @override
+  String get currentPlan => 'বর্তমান';
 }
