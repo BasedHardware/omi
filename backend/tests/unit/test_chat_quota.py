@@ -283,17 +283,8 @@ class TestGetChatQuotaSnapshot:
 class TestEnforceChatQuota:
     """Tests for enforce_chat_quota()."""
 
-    def test_enforcement_disabled_no_raise(self, monkeypatch):
-        """When CHAT_CAP_ENFORCEMENT_ENABLED=false, never raises."""
-        monkeypatch.setenv("CHAT_CAP_ENFORCEMENT_ENABLED", "false")
-        sub_mod = _reload_subscription_module()
-
-        with patch.object(sub_mod, "get_chat_quota_snapshot", return_value={'allowed': False}):
-            sub_mod.enforce_chat_quota("uid123")  # no exception
-
-    def test_enforcement_enabled_allowed(self, monkeypatch):
-        """When enabled and user is within quota, no exception."""
-        monkeypatch.setenv("CHAT_CAP_ENFORCEMENT_ENABLED", "true")
+    def test_enforcement_allowed(self, monkeypatch):
+        """When user is within quota, no exception."""
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -310,11 +301,10 @@ class TestEnforceChatQuota:
         ):
             sub_mod.enforce_chat_quota("uid123")  # no exception
 
-    def test_enforcement_enabled_exceeded_raises_402(self, monkeypatch):
-        """When enabled and user exceeds quota, raises HTTPException 402."""
+    def test_enforcement_exceeded_raises_402(self, monkeypatch):
+        """When user exceeds quota, raises HTTPException 402."""
         from fastapi import HTTPException
 
-        monkeypatch.setenv("CHAT_CAP_ENFORCEMENT_ENABLED", "true")
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -345,7 +335,6 @@ class TestEnforceChatQuota:
         """Operator plan shows correct display name in 402 detail."""
         from fastapi import HTTPException
 
-        monkeypatch.setenv("CHAT_CAP_ENFORCEMENT_ENABLED", "true")
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -370,7 +359,6 @@ class TestEnforceChatQuota:
         """Architect plan shows cost_usd unit in 402 detail."""
         from fastapi import HTTPException
 
-        monkeypatch.setenv("CHAT_CAP_ENFORCEMENT_ENABLED", "true")
         sub_mod = _reload_subscription_module()
 
         with patch.object(
