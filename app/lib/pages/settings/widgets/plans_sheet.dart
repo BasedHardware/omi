@@ -1597,7 +1597,7 @@ class _PlansSheetState extends State<PlansSheet> {
           final isSelected = selectedTierId == tierId;
           final title = _tierDisplayName(tierId);
           final eyebrow = planForPeriod['eyebrow'] as String?;
-          final subtitle = planForPeriod['subtitle'] as String?;
+          final subtitle = _localizedSubtitle(context, tierId, planForPeriod['subtitle'] as String?);
           final priceString = planForPeriod['price_string'] as String? ?? '';
           final isActive = planForPeriod['is_active'] as bool? ?? false;
 
@@ -1645,6 +1645,19 @@ class _PlansSheetState extends State<PlansSheet> {
         return 'Architect';
       default:
         return tierId.substring(0, 1).toUpperCase() + tierId.substring(1);
+    }
+  }
+
+  String? _localizedSubtitle(BuildContext context, String tierId, String? apiSubtitle) {
+    switch (tierId) {
+      case 'unlimited':
+        return context.l10n.neoSubtitle(2000);
+      case 'operator':
+        return context.l10n.operatorSubtitle(500);
+      case 'architect':
+        return context.l10n.architectSubtitle;
+      default:
+        return apiSubtitle;
     }
   }
 
