@@ -426,44 +426,47 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
-def test_models_unchanged_for_llm_calls():
-    """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
-    # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py
+def test_llm_calls_use_qos_tier_system():
+    """Verify all LLM functions use get_llm() with correct feature keys and prompt_cache_key."""
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text()
 
-    # get_transcript_structure should use llm_medium_experiment (may have .bind() for cache key)
+    # get_transcript_structure should use get_llm('conv_structure') with cache key
     struct_match = re.search(
-        r'def get_transcript_structure.*?chain = prompt \| (\w+)[\.\|]',
+        r'def get_transcript_structure.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\)',
         conv_proc_source,
         re.DOTALL,
     )
     assert struct_match is not None
     assert (
-        struct_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for structure, got {struct_match.group(1)}"
+        struct_match.group(1) == "conv_structure"
+    ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use llm_medium_experiment (may have extra kwargs in invoke)
+    # get_app_result should use get_llm('conv_apps')
     app_match = re.search(
-        r'def get_app_result.*?response = (\w+)\.invoke\(prompt',
+        r'def get_app_result.*?response = get_llm\([\'"](\w+)[\'"]\)',
         conv_proc_source,
         re.DOTALL,
     )
     assert app_match is not None
-    assert (
-        app_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
+    assert app_match.group(1) == "conv_apps", f"Expected get_llm('conv_apps') for app result, got {app_match.group(1)}"
 
-    # extract_action_items should use llm_medium_experiment (may have .bind() for cache key)
+    # extract_action_items should use get_llm('conv_action_items') with cache key
     action_match = re.search(
-        r'def extract_action_items.*?chain = prompt \| (\w+)[\.\|]',
+        r'def extract_action_items.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\)',
         conv_proc_source,
         re.DOTALL,
     )
     assert action_match is not None
     assert (
-        action_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
+        action_match.group(1) == "conv_action_items"
+    ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
+
+    # Verify prompt_cache_key is preserved on medium-tier callsites
+    assert 'prompt_cache_key="omi-extract-actions"' in conv_proc_source, "Missing prompt_cache_key for action items"
+    assert 'prompt_cache_key="omi-transcript-structure"' in conv_proc_source, "Missing prompt_cache_key for structure"
+    assert 'prompt_cache_key="omi-app-result"' in conv_proc_source, "Missing prompt_cache_key for app result"
+    assert 'prompt_cache_key="omi-daily-summary"' in conv_proc_source, "Missing prompt_cache_key for daily summary"
 
 
 def test_threaded_tracking_context_isolation():
