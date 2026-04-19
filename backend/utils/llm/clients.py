@@ -32,88 +32,88 @@ _usage_callback = get_usage_callback()
 
 MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
     'premium': {
-        # OpenAI — conversation processing
-        'conv_action_items': 'gpt-4.1-nano',
-        'conv_structure': 'gpt-4.1-mini',
-        'conv_app_result': 'gpt-4.1-nano',
-        'conv_app_select': 'gpt-4.1-nano',
-        'conv_folder': 'gpt-4.1-nano',
-        'conv_discard': 'gpt-4.1-nano',
-        'daily_summary': 'gpt-4.1-mini',
-        'daily_summary_simple': 'gpt-4.1-nano',
-        'external_structure': 'gpt-4.1-nano',
+        # OpenAI — conversation processing (matches current production max)
+        'conv_action_items': 'gpt-5.1',
+        'conv_structure': 'gpt-5.1',
+        'conv_app_result': 'gpt-5.1',
+        'conv_app_select': 'gpt-4.1-mini',
+        'conv_folder': 'gpt-4.1-mini',
+        'conv_discard': 'gpt-4.1-mini',
+        'daily_summary': 'gpt-5.1',
+        'daily_summary_simple': 'gpt-4.1-mini',
+        'external_structure': 'gpt-4.1-mini',
         # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-nano',
-        'learnings': 'gpt-4.1-mini',
-        'memory_conflict': 'gpt-4.1-nano',
-        'memory_category': 'gpt-4.1-nano',
-        'knowledge_graph': 'gpt-4.1-nano',
+        'memories': 'gpt-4.1-mini',
+        'learnings': 'o4-mini',
+        'memory_conflict': 'gpt-4.1-mini',
+        'memory_category': 'gpt-4.1-mini',
+        'knowledge_graph': 'gpt-4.1-mini',
         # OpenAI — chat
-        'chat_responses': 'gpt-4.1-mini',
-        'chat_extraction': 'gpt-4.1-nano',
-        'chat_graph': 'gpt-4.1-mini',
-        'session_titles': 'gpt-4.1-nano',
+        'chat_responses': 'gpt-5.2',
+        'chat_extraction': 'gpt-4.1-mini',
+        'chat_graph': 'gpt-4.1',
+        'session_titles': 'gpt-4.1-mini',
         # OpenAI — features
-        'goals': 'gpt-4.1-nano',
-        'goals_advice': 'gpt-4.1-mini',
-        'notifications': 'gpt-4.1-mini',
-        'proactive_notification': 'gpt-4.1-nano',
-        'followup': 'gpt-4.1-nano',
-        'smart_glasses': 'gpt-4.1-nano',
-        'onboarding': 'gpt-4.1-nano',
-        'app_generator': 'gpt-4.1-mini',
-        'app_integration': 'gpt-4.1-nano',
-        'persona_clone': 'gpt-4.1-mini',
-        'trends': 'gpt-4.1-nano',
+        'goals': 'gpt-4.1-mini',
+        'goals_advice': 'gpt-5.2',
+        'notifications': 'gpt-5.2',
+        'proactive_notification': 'gpt-4.1-mini',
+        'followup': 'gpt-4.1-mini',
+        'smart_glasses': 'gpt-4.1-mini',
+        'onboarding': 'gpt-4.1-mini',
+        'app_generator': 'gpt-5.2',
+        'app_integration': 'gpt-4.1-mini',
+        'persona_clone': 'gpt-5.1',
+        'trends': 'gpt-4.1-mini',
         # Anthropic
-        'chat_agent': 'claude-haiku-3.5',
+        'chat_agent': 'claude-sonnet-4-6',
         # OpenRouter
         'persona_chat': 'google/gemini-flash-1.5-8b',
-        'persona_chat_premium': 'google/gemini-flash-1.5-8b',
-        'wrapped_analysis': 'google/gemini-flash-1.5-8b',
+        'persona_chat_premium': 'anthropic/claude-3.5-sonnet',
+        'wrapped_analysis': 'google/gemini-3-flash-preview',
         # Perplexity
-        'web_search': 'sonar',
+        'web_search': 'sonar-pro',
     },
     'max': {
-        # OpenAI — conversation processing (gpt-5.4-mini for quality, gpt-4.1-nano for simple)
-        'conv_action_items': 'gpt-5.4-mini',
-        'conv_structure': 'gpt-5.4-mini',
-        'conv_app_result': 'gpt-5.4-mini',
-        'conv_app_select': 'gpt-4.1-nano',
-        'conv_folder': 'gpt-4.1-nano',
-        'conv_discard': 'gpt-4.1-nano',
-        'daily_summary': 'gpt-5.4-mini',
-        'daily_summary_simple': 'gpt-4.1-nano',
-        'external_structure': 'gpt-4.1-nano',
+        # OpenAI — conversation processing (current production, pending geni re-tune)
+        'conv_action_items': 'gpt-5.1',
+        'conv_structure': 'gpt-5.1',
+        'conv_app_result': 'gpt-5.1',
+        'conv_app_select': 'gpt-4.1-mini',
+        'conv_folder': 'gpt-4.1-mini',
+        'conv_discard': 'gpt-4.1-mini',
+        'daily_summary': 'gpt-5.1',
+        'daily_summary_simple': 'gpt-4.1-mini',
+        'external_structure': 'gpt-4.1-mini',
         # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-nano',
-        'learnings': 'gpt-5.4-mini',
-        'memory_conflict': 'gpt-4.1-nano',
-        'memory_category': 'gpt-4.1-nano',
-        'knowledge_graph': 'gpt-4.1-nano',
-        # OpenAI — chat (gpt-5.4 for user-facing, gpt-4.1-nano for extraction)
-        'chat_responses': 'gpt-5.4',
-        'chat_extraction': 'gpt-4.1-nano',
-        'chat_graph': 'gpt-5.4-mini',
-        'session_titles': 'gpt-4.1-nano',
+        'memories': 'gpt-4.1-mini',
+        'learnings': 'o4-mini',
+        'memory_conflict': 'gpt-4.1-mini',
+        'memory_category': 'gpt-4.1-mini',
+        'knowledge_graph': 'gpt-4.1-mini',
+        # OpenAI — chat
+        'chat_responses': 'gpt-5.2',
+        'chat_extraction': 'gpt-4.1-mini',
+        'chat_graph': 'gpt-4.1',
+        'session_titles': 'gpt-4.1-mini',
         # OpenAI — features
-        'goals': 'gpt-4.1-nano',
-        'goals_advice': 'gpt-5.4',
-        'notifications': 'gpt-5.4-mini',
-        'proactive_notification': 'gpt-4.1-nano',
-        'followup': 'gpt-4.1-nano',
-        'smart_glasses': 'gpt-4.1-nano',
-        'onboarding': 'gpt-4.1-nano',
-        'app_generator': 'gpt-5.4',
-        'app_integration': 'gpt-4.1-nano',
-        'persona_clone': 'gpt-5.4-mini',
-        'trends': 'gpt-4.1-nano',
-        # Anthropic (chat_agent only — used via get_model() + anthropic_client)
+        'goals': 'gpt-4.1-mini',
+        'goals_advice': 'gpt-5.2',
+        'notifications': 'gpt-5.2',
+        'proactive_notification': 'gpt-4.1-mini',
+        'followup': 'gpt-4.1-mini',
+        'smart_glasses': 'gpt-4.1-mini',
+        'onboarding': 'gpt-4.1-mini',
+        'app_generator': 'gpt-5.2',
+        'app_integration': 'gpt-4.1-mini',
+        'persona_clone': 'gpt-5.1',
+        'trends': 'gpt-4.1-mini',
+        # Anthropic
         'chat_agent': 'claude-sonnet-4-6',
-        # OpenAI — persona & analysis (moved from OpenRouter to direct OpenAI)
-        'persona_chat': 'gpt-4.1-nano',
-        'persona_chat_premium': 'gpt-5.4-mini',
-        'wrapped_analysis': 'gpt-5.4-mini',
+        # OpenRouter
+        'persona_chat': 'google/gemini-flash-1.5-8b',
+        'persona_chat_premium': 'anthropic/claude-3.5-sonnet',
+        'wrapped_analysis': 'google/gemini-3-flash-preview',
         # Perplexity
         'web_search': 'sonar-pro',
     },
@@ -157,7 +157,7 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 }
 
 # Models that support OpenAI prompt caching (prompt_cache_key routing).
-_CACHE_KEY_MODELS = {'gpt-5.1', 'gpt-5.4', 'gpt-5.4-mini'}
+_CACHE_KEY_MODELS = {'gpt-5.1', 'gpt-5.2'}
 
 
 def get_model(feature: str) -> str:
