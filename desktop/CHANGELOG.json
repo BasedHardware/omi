@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a Skip button to the onboarding goal step and made it resilient to transient 429 errors"
+  ],
   "releases": [
     {
       "version": "0.11.336",
