@@ -1,10 +1,11 @@
 import struct
 import asyncio
+import contextvars
 import json
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -24,6 +25,7 @@ from utils.app_integrations import (
     trigger_external_integrations,
 )
 from utils.conversations.location import async_get_google_maps_location
+from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import storage_executor
 from utils.webhooks import (
@@ -62,8 +64,21 @@ TRANSCRIPT_QUEUE_WARN_SIZE = 50
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
 
 
-async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
-    """Process a conversation and send result back to _listen via websocket."""
+async def _process_conversation_task(
+    uid: str,
+    conversation_id: str,
+    language: str,
+    websocket: WebSocket,
+    byok_keys: Optional[Dict[str, str]] = None,
+):
+    """Process a conversation and send result back to _listen via websocket.
+
+    `byok_keys` is forwarded from the listen service. When present, LLM and
+    STT calls made inside process_conversation route through the user's own
+    provider keys instead of Omi's env keys.
+    """
+    if byok_keys:
+        set_byok_keys(byok_keys)
     try:
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if not conversation_data:
@@ -93,8 +108,13 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             # Run in default executor (not critical_executor) because process_conversation
             # is a coordinator that submits child tasks to critical_executor — nesting both
             # in the same pool causes deadlock under concurrent load.
+            # Copy the current context (which holds BYOK keys) into the worker thread so
+            # LLM client proxies see the right key when resolving per-request.
             loop = asyncio.get_running_loop()
-            conversation = await loop.run_in_executor(None, process_conversation, uid, language, conversation)
+            ctx = contextvars.copy_context()
+            conversation = await loop.run_in_executor(
+                None, lambda: ctx.run(process_conversation, uid, language, conversation)
+            )
             messages = await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
@@ -442,9 +462,10 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
+                    byok_keys = res.get('byok_keys') or None
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        spawn(_process_conversation_task(uid, conversation_id, language, websocket))
+                        spawn(_process_conversation_task(uid, conversation_id, language, websocket, byok_keys))
                     continue
 
                 # Speaker sample extraction request - queue for background processing
