@@ -477,6 +477,17 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
+    // Check chat quota before sending voice message
+    try {
+      _chatQuota = await getUserChatQuota();
+      if (_chatQuota != null && !_chatQuota!.allowed) {
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      Logger.debug('Chat quota check failed, allowing voice send: $e');
+    }
+
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
