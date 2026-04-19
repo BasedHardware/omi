@@ -94,7 +94,8 @@ async fn rebuild_knowledge_graph(
     tracing::info!("Processing {} memories for knowledge graph", memories.len());
 
     // Create LLM client
-    let llm = LlmClient::new(api_key);
+    let llm = LlmClient::new(api_key)
+        .with_model(crate::llm::model_qos::gemini_extraction());
 
     // Track nodes by lowercase label for deduplication
     let mut node_map: HashMap<String, KnowledgeGraphNode> = HashMap::new();
