@@ -9152,21 +9152,21 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Разговор: \$$used / \$$limit искористено овој месец';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Разговор: \$$used искористено овој месец';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Разговор: $used / $limit пораки овој месец';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Разговор: $used пораки овој месец';
   }
 }

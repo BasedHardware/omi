@@ -9089,21 +9089,21 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat: \$$used / \$$limit brugt denne måned';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat: \$$used brugt denne måned';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chat: $used / $limit beskeder denne måned';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chat: $used beskeder denne måned';
   }
 }

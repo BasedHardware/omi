@@ -9107,21 +9107,21 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chatt: \$$used / \$$limit använt denna månad';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chatt: \$$used använt denna månad';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chatt: $used / $limit meddelanden denna månad';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chatt: $used meddelanden denna månad';
   }
 }

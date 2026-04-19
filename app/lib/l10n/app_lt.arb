@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} klausimų per mėnesį",
     "operatorSubtitle": "{count} klausimų per mėnesį",
     "architectSubtitle": "Pažangus AI — tūkstančiai pokalbių + agentinė automatizacija",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Pokalbis: ${used} / ${limit} panaudota šį mėnesį",
+    "chatUsageCostNoLimit": "Pokalbis: ${used} panaudota šį mėnesį",
+    "chatUsageMessages": "Pokalbis: {used} / {limit} žinučių šį mėnesį",
+    "chatUsageMessagesNoLimit": "Pokalbis: {used} žinučių šį mėnesį"
 }

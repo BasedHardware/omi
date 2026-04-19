@@ -9172,21 +9172,21 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'அரட்டை: \$$used / \$$limit இந்த மாதம் பயன்படுத்தப்பட்டது';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'அரட்டை: \$$used இந்த மாதம் பயன்படுத்தப்பட்டது';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'அரட்டை: $used / $limit செய்திகள் இந்த மாதம்';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'அரட்டை: $used செய்திகள் இந்த மாதம்';
   }
 }

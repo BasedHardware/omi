@@ -9057,21 +9057,21 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'แชท: \$$used / \$$limit ที่ใช้ในเดือนนี้';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'แชท: \$$used ที่ใช้ในเดือนนี้';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'แชท: $used / $limit ข้อความในเดือนนี้';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'แชท: $used ข้อความในเดือนนี้';
   }
 }

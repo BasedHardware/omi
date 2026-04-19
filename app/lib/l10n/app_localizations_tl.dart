@@ -9188,21 +9188,21 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat: \$$used / \$$limit nagamit ngayong buwan';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat: \$$used nagamit ngayong buwan';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chat: $used / $limit mensahe ngayong buwan';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chat: $used mensahe ngayong buwan';
   }
 }

@@ -10696,8 +10696,8 @@
     "neoSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
     "operatorSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
     "architectSubtitle": "பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "அரட்டை: ${used} / ${limit} இந்த மாதம் பயன்படுத்தப்பட்டது",
+    "chatUsageCostNoLimit": "அரட்டை: ${used} இந்த மாதம் பயன்படுத்தப்பட்டது",
+    "chatUsageMessages": "அரட்டை: {used} / {limit} செய்திகள் இந்த மாதம்",
+    "chatUsageMessagesNoLimit": "அரட்டை: {used} செய்திகள் இந்த மாதம்"
 }

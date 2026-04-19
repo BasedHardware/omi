@@ -9099,21 +9099,21 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat: \$$used / \$$limit brukt denne måneden';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat: \$$used brukt denne måneden';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chat: $used / $limit meldinger denne måneden';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chat: $used meldinger denne måneden';
   }
 }

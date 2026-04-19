@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} kysymystä kuukaudessa",
     "operatorSubtitle": "{count} kysymystä kuukaudessa",
     "architectSubtitle": "Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Chat: ${used} / ${limit} käytetty tässä kuussa",
+    "chatUsageCostNoLimit": "Chat: ${used} käytetty tässä kuussa",
+    "chatUsageMessages": "Chat: {used} / {limit} viestiä tässä kuussa",
+    "chatUsageMessagesNoLimit": "Chat: {used} viestiä tässä kuussa"
 }

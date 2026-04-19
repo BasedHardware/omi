@@ -10696,8 +10696,8 @@
     "neoSubtitle": "{count} tanong bawat buwan",
     "operatorSubtitle": "{count} tanong bawat buwan",
     "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Chat: ${used} / ${limit} nagamit ngayong buwan",
+    "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
+    "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
+    "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan"
 }

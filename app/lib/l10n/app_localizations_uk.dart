@@ -9116,21 +9116,21 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Чат: \$$used / \$$limit використано цього місяця';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Чат: \$$used використано цього місяця';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Чат: $used / $limit повідомлень цього місяця';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Чат: $used повідомлень цього місяця';
   }
 }

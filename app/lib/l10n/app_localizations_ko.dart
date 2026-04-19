@@ -8955,21 +8955,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return '채팅: \$$used / \$$limit 이번 달 사용량';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return '채팅: \$$used 이번 달 사용량';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return '채팅: $used / $limit 이번 달 메시지';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return '채팅: $used 이번 달 메시지';
   }
 }

@@ -10696,8 +10696,8 @@
     "neoSubtitle": "ماہانہ {count} سوالات",
     "operatorSubtitle": "ماہانہ {count} سوالات",
     "architectSubtitle": "پاور یوزر AI — ہزاروں چیٹس + ایجنٹک آٹومیشن",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "چیٹ: ${used} / ${limit} اس مہینے استعمال ہوا",
+    "chatUsageCostNoLimit": "چیٹ: ${used} اس مہینے استعمال ہوا",
+    "chatUsageMessages": "چیٹ: {used} / {limit} پیغامات اس مہینے",
+    "chatUsageMessagesNoLimit": "چیٹ: {used} پیغامات اس مہینے"
 }

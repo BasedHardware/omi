@@ -10696,8 +10696,8 @@
     "neoSubtitle": "{count} שאלות בחודש",
     "operatorSubtitle": "{count} שאלות בחודש",
     "architectSubtitle": "AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "צ'אט: ${used} / ${limit} נוצל החודש",
+    "chatUsageCostNoLimit": "צ'אט: ${used} נוצל החודש",
+    "chatUsageMessages": "צ'אט: {used} / {limit} הודעות החודש",
+    "chatUsageMessagesNoLimit": "צ'אט: {used} הודעות החודש"
 }

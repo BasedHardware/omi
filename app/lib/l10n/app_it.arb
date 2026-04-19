@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} domande al mese",
     "operatorSubtitle": "{count} domande al mese",
     "architectSubtitle": "AI avanzata — migliaia di chat + automazioni agentic",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Chat: ${used} / ${limit} utilizzato questo mese",
+    "chatUsageCostNoLimit": "Chat: ${used} utilizzato questo mese",
+    "chatUsageMessages": "Chat: {used} / {limit} messaggi questo mese",
+    "chatUsageMessagesNoLimit": "Chat: {used} messaggi questo mese"
 }

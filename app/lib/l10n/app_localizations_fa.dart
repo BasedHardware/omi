@@ -9105,21 +9105,21 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'چت: \$$used / \$$limit مصرف‌شده این ماه';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'چت: \$$used مصرف‌شده این ماه';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'چت: $used / $limit پیام این ماه';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'چت: $used پیام این ماه';
   }
 }

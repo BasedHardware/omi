@@ -2941,8 +2941,8 @@
     "neoSubtitle": "{count} Fragen pro Monat",
     "operatorSubtitle": "{count} Fragen pro Monat",
     "architectSubtitle": "Power-User KI — tausende Chats + agentische Automatisierung",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Chat: ${used} / ${limit} diesen Monat verbraucht",
+    "chatUsageCostNoLimit": "Chat: ${used} diesen Monat verbraucht",
+    "chatUsageMessages": "Chat: {used} / {limit} Nachrichten diesen Monat",
+    "chatUsageMessagesNoLimit": "Chat: {used} Nachrichten diesen Monat"
 }

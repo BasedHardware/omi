@@ -3008,8 +3008,8 @@
     "neoSubtitle": "{count} pytań miesięcznie",
     "operatorSubtitle": "{count} pytań miesięcznie",
     "architectSubtitle": "Zaawansowane AI — tysiące czatów + automatyzacja agentowa",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Czat: ${used} / ${limit} wykorzystane w tym miesiącu",
+    "chatUsageCostNoLimit": "Czat: ${used} wykorzystane w tym miesiącu",
+    "chatUsageMessages": "Czat: {used} / {limit} wiadomości w tym miesiącu",
+    "chatUsageMessagesNoLimit": "Czat: {used} wiadomości w tym miesiącu"
 }

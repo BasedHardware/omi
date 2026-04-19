@@ -10696,8 +10696,8 @@
     "neoSubtitle": "মাসে {count}টি প্রশ্ন",
     "operatorSubtitle": "মাসে {count}টি প্রশ্ন",
     "architectSubtitle": "পাওয়ার-ইউজার AI — হাজার হাজার চ্যাট + এজেন্টিক অটোমেশন",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "চ্যাট: ${used} / ${limit} এই মাসে ব্যবহৃত",
+    "chatUsageCostNoLimit": "চ্যাট: ${used} এই মাসে ব্যবহৃত",
+    "chatUsageMessages": "চ্যাট: {used} / {limit} বার্তা এই মাসে",
+    "chatUsageMessagesNoLimit": "চ্যাট: {used} বার্তা এই মাসে"
 }

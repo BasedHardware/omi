@@ -10696,8 +10696,8 @@
     "neoSubtitle": "{count} питања месечно",
     "operatorSubtitle": "{count} питања месечно",
     "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Ћаскање: ${used} / ${limit} искоришћено овог месеца",
+    "chatUsageCostNoLimit": "Ћаскање: ${used} искоришћено овог месеца",
+    "chatUsageMessages": "Ћаскање: {used} / {limit} порука овог месеца",
+    "chatUsageMessagesNoLimit": "Ћаскање: {used} порука овог месеца"
 }

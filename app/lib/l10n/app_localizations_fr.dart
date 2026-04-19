@@ -9186,21 +9186,21 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat : \$$used / \$$limit utilisé ce mois-ci';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat : \$$used utilisé ce mois-ci';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chat : $used / $limit messages ce mois-ci';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chat : $used messages ce mois-ci';
   }
 }

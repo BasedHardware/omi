@@ -10696,8 +10696,8 @@
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
     "operatorSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
     "architectSubtitle": "ಪವರ್-ಯೂಸರ್ AI — ಸಾವಿರಾರು ಚಾಟ್‌ಗಳು + ಏಜೆಂಟಿಕ್ ಆಟೋಮೇಶನ್",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "ಚಾಟ್: ${used} / ${limit} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageCostNoLimit": "ಚಾಟ್: ${used} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageMessages": "ಚಾಟ್: {used} / {limit} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು",
+    "chatUsageMessagesNoLimit": "ಚಾಟ್: {used} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು"
 }

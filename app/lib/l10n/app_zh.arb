@@ -2995,8 +2995,8 @@
     "neoSubtitle": "每月 {count} 个问题",
     "operatorSubtitle": "每月 {count} 个问题",
     "architectSubtitle": "高级用户 AI — 数千次对话 + 代理自动化",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "聊天：${used} / ${limit} 本月已使用",
+    "chatUsageCostNoLimit": "聊天：${used} 本月已使用",
+    "chatUsageMessages": "聊天：{used} / {limit} 条消息本月",
+    "chatUsageMessagesNoLimit": "聊天：{used} 条消息本月"
 }
