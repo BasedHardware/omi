@@ -69,6 +69,12 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
 
     now = datetime.now(timezone.utc)
     memory_id = str(uuid.uuid4())
+
+    # scoring mirrors MemoryDB.calculate_score:
+    # "{manually_added_boost:02d}_{cat_boost:02d}_{timestamp:010d}"
+    # category='system' → boost=0, manually_added=False → boost=0
+    scoring = "00_{:02d}_{:010d}".format(0, int(now.timestamp()))
+
     memory_data = {
         'id': memory_id,
         'content': preference,
@@ -79,12 +85,24 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         'reviewed': False,
         'visibility': 'private',
         'tags': ['agent-learned'],
+        'scoring': scoring,            # Bug 2 fix: was missing
     }
 
     try:
         memory_db.create_memory(uid, memory_data)
-        logger.info(f"Saved user preference: {preference[:80]}")
-        return f"Preference saved: {preference}"
+        logger.info(f"Saved user preference to Firestore: {preference[:80]}")
     except Exception as e:
-        logger.error(f"Failed to save preference: {e}")
+        logger.error(f"Failed to save preference to Firestore: {e}")
         return f"Error saving preference: {str(e)}"
+
+    # Bug 1 fix: this call was completely missing before
+    # Without it the memory exists in Firestore but is invisible to
+    # search_memories_tool (vector search) and hidden in get_memories listings.
+    try:
+        vector_db.upsert_memory_vector(uid, memory_id, preference, 'system')
+        logger.info(f"Upserted memory vector for: {preference[:80]}")
+    except Exception as e:
+        # Non-fatal: memory is persisted; search won't find it until re-embedding
+        logger.error(f"Failed to upsert memory vector (memory saved, search delayed): {e}")
+
+    return f"Preference saved: {preference}"
