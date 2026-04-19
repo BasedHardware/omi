@@ -745,3 +745,55 @@ class TestExpandedCallsiteCoverage:
             assert 'llm_mini.invoke' not in source, f"{path} still uses llm_mini.invoke"
             assert 'llm_medium_experiment.invoke' not in source, f"{path} still uses llm_medium_experiment.invoke"
             assert 'llm_high.invoke' not in source, f"{path} still uses llm_high.invoke"
+
+
+class TestOverrideWarningLog:
+    """Verify override warnings fire when provider doesn't match."""
+
+    def test_warns_on_cross_provider_override(self, monkeypatch, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger='utils.llm.clients'):
+            monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'google/gemini-flash-1.5-8b')
+            result = get_model('conv_action_items')
+            assert result == 'google/gemini-flash-1.5-8b'
+        assert any('may be invalid' in r.message for r in caplog.records), "Expected cross-provider override warning"
+
+    def test_no_warning_on_same_provider_override(self, monkeypatch, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger='utils.llm.clients'):
+            monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'gpt-4.1-mini')
+            result = get_model('conv_action_items')
+            assert result == 'gpt-4.1-mini'
+        assert not any(
+            'may be invalid' in r.message for r in caplog.records
+        ), "No warning expected for same-provider override"
+
+
+class TestRuntimeProviderRouting:
+    """Verify get_llm() routes to correct client factory based on resolved model."""
+
+    def test_persona_chat_max_routes_to_openai(self):
+        """In max profile, persona_chat uses gpt-4.1-nano — should route to OpenAI."""
+        llm = get_llm('persona_chat')
+        # OpenAI clients don't have openai_api_base set to openrouter
+        base_url = getattr(llm, 'openai_api_base', None) or ''
+        assert 'openrouter' not in base_url
+
+    def test_override_to_openrouter_model_routes_to_openrouter(self, monkeypatch):
+        """If an override sets an OpenRouter model, get_llm should route via OpenRouter."""
+        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'google/gemini-flash-1.5-8b')
+        llm = get_llm('persona_chat')
+        base_url = getattr(llm, 'openai_api_base', None) or ''
+        assert 'openrouter' in base_url
+
+    def test_openrouter_temperature_applied(self):
+        """OpenRouter features should get their configured temperature."""
+        from utils.llm.clients import _OPENROUTER_TEMPERATURES
+
+        # In premium profile, persona_chat is OpenRouter with temp 0.8
+        # In max profile, persona_chat is OpenAI — temperature config only applies to OpenRouter
+        # Test via direct factory
+        llm = _get_or_create_openrouter_llm('google/gemini-flash-1.5-8b', temperature=0.8)
+        assert llm.temperature == 0.8
