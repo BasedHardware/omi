@@ -996,7 +996,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         prompt: prompt,
         systemPrompt:
           "You are a structured onboarding research assistant. Output only valid JSON.",
-        model: ModelQoS.Claude.synthesis,
+        model: ModelQoS.Claude.chat,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }
