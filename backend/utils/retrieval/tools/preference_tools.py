@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 import logging
+from models.memories import MemoryDB, MemoryCategory
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +71,19 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     now = datetime.now(timezone.utc)
     memory_id = str(uuid.uuid4())
 
-    # scoring mirrors MemoryDB.calculate_score:
-    # "{manually_added_boost:02d}_{cat_boost:02d}_{timestamp:010d}"
-    # category='system' → boost=0, manually_added=False → boost=0
-    scoring = "00_{:02d}_{:010d}".format(0, int(now.timestamp()))
+    # Use MemoryDB.calculate_score so scoring always matches Firestore-created memories
+    # system category → cat_boost = 999 - CATEGORY_BOOSTS['system'] = 999 - 0 = 999
+    scoring = MemoryDB.calculate_score(
+        MemoryDB(
+            id=memory_id,
+            uid=uid,
+            content=preference,
+            category=MemoryCategory.system,
+            created_at=now,
+            updated_at=now,
+            manually_added=False,
+        )
+    )
 
     memory_data = {
         'id': memory_id,
