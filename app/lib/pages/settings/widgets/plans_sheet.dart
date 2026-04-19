@@ -1649,11 +1649,21 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   String? _localizedSubtitle(BuildContext context, String tierId, String? apiSubtitle) {
+    // Extract the leading number from the API subtitle (e.g. "200 questions per month" → 200)
+    // so the UI always reflects the backend-configured cap.
+    int? _extractCount(String? s) {
+      if (s == null) return null;
+      final match = RegExp(r'(\d+)').firstMatch(s);
+      return match != null ? int.tryParse(match.group(1)!) : null;
+    }
+
     switch (tierId) {
       case 'unlimited':
-        return context.l10n.neoSubtitle(200);
+        final count = _extractCount(apiSubtitle) ?? 200;
+        return context.l10n.neoSubtitle(count);
       case 'operator':
-        return context.l10n.operatorSubtitle(500);
+        final count = _extractCount(apiSubtitle) ?? 500;
+        return context.l10n.operatorSubtitle(count);
       case 'architect':
         return context.l10n.architectSubtitle;
       default:
