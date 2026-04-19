@@ -782,7 +782,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = get_llm('conv_apps', cache_key='omi-app-result').invoke(prompt)
+    response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -866,7 +866,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
     """
 
     try:
-        with_parser = get_llm('conv_apps').with_structured_output(SuggestedAppsSelection)
+        with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
         response: SuggestedAppsSelection = with_parser.invoke(prompt)
 
         # Validate that suggested app IDs exist in the available apps
@@ -937,7 +937,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     """
 
     try:
-        with_parser = get_llm('conv_apps').with_structured_output(BestAppSelection)
+        with_parser = get_llm('conv_app_select').with_structured_output(BestAppSelection)
         response: BestAppSelection = with_parser.invoke(prompt)
         selected_app_id = response.app_id
 
