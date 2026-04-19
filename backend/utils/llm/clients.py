@@ -35,7 +35,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         # OpenAI — conversation processing
         'conv_action_items': 'gpt-4.1-nano',
         'conv_structure': 'gpt-4.1-mini',
-        'conv_apps': 'gpt-4.1-nano',
+        'conv_app_result': 'gpt-4.1-nano',
+        'conv_app_select': 'gpt-4.1-nano',
         'conv_folder': 'gpt-4.1-nano',
         'conv_discard': 'gpt-4.1-nano',
         'daily_summary': 'gpt-4.1-mini',
@@ -77,7 +78,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         # OpenAI — conversation processing
         'conv_action_items': 'gpt-5.1',
         'conv_structure': 'gpt-5.1',
-        'conv_apps': 'gpt-5.1',
+        'conv_app_result': 'gpt-5.1',
+        'conv_app_select': 'gpt-4.1-mini',
         'conv_folder': 'gpt-4.1-mini',
         'conv_discard': 'gpt-4.1-mini',
         'daily_summary': 'gpt-5.1',
@@ -165,6 +167,18 @@ def get_model(feature: str) -> str:
     env_key = f'MODEL_QOS_{feature.upper()}'
     override = os.environ.get(env_key, '').strip()
     if override:
+        # Warn if override model doesn't match the feature's provider expectations
+        if feature in _ANTHROPIC_FEATURES and not override.startswith('claude'):
+            logger.warning('QoS override %s=%s may be invalid — feature %s is Anthropic', env_key, override, feature)
+        elif feature in _PERPLEXITY_FEATURES and not override.startswith('sonar'):
+            logger.warning('QoS override %s=%s may be invalid — feature %s is Perplexity', env_key, override, feature)
+        elif feature in _OPENROUTER_FEATURES and '/' not in override:
+            logger.warning(
+                'QoS override %s=%s may be invalid — feature %s is OpenRouter (expected org/model)',
+                env_key,
+                override,
+                feature,
+            )
         return override
     return _active_profile.get(feature, 'gpt-4.1-mini')
 
