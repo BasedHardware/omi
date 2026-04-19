@@ -36,7 +36,7 @@ class UserProvider with ChangeNotifier {
   Geolocation? _lastKnownLocation;
 
   // Transcription preferences
-  bool _singleLanguageMode = false;
+  bool _singleLanguageMode = true;
   List<String> _transcriptionVocabulary = [];
 
   // Loading states for transcription settings
@@ -161,7 +161,7 @@ class UserProvider with ChangeNotifier {
     try {
       final prefs = await getTranscriptionPreferences();
       if (prefs != null) {
-        _singleLanguageMode = prefs['single_language_mode'] ?? false;
+        _singleLanguageMode = prefs['single_language_mode'] ?? true;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
         _syncToCache();
         notifyListeners();
