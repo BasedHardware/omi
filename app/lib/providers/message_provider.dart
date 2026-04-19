@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -54,7 +55,7 @@ class MessageProvider extends ChangeNotifier {
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
 
-  // Chat quota state
+  // Chat quota state — set when backend returns 402 (quota exceeded)
   ChatUsageQuota? _chatQuota;
   ChatUsageQuota? get chatQuota => _chatQuota;
   bool get isChatQuotaExceeded => _chatQuota != null && !_chatQuota!.allowed;
@@ -64,15 +65,6 @@ class MessageProvider extends ChangeNotifier {
   List<MessageFile> uploadedFiles = [];
   bool isUploadingFiles = false;
   Map<String, bool> uploadingFiles = {};
-
-  Future<void> checkChatQuota() async {
-    try {
-      _chatQuota = await getUserChatQuota();
-      notifyListeners();
-    } catch (e) {
-      Logger.debug('Failed to check chat quota: $e');
-    }
-  }
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
@@ -477,17 +469,6 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
-    // Check chat quota before sending voice message
-    try {
-      _chatQuota = await getUserChatQuota();
-      if (_chatQuota != null && !_chatQuota!.allowed) {
-        notifyListeners();
-        return;
-      }
-    } catch (e) {
-      Logger.debug('Chat quota check failed, allowing voice send: $e');
-    }
-
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -553,6 +534,12 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          if (_tryParseQuotaError(chunk.text)) {
+            messages.removeAt(aiIndex);
+            notifyListeners();
+            setShowTypingIndicator(false);
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -572,19 +559,6 @@ class MessageProvider extends ChangeNotifier {
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
       currentAppId = null;
-    }
-
-    // Check chat quota before sending
-    try {
-      _chatQuota = await getUserChatQuota();
-      if (_chatQuota != null && !_chatQuota!.allowed) {
-        setShowTypingIndicator(false);
-        setSendingMessage(false);
-        notifyListeners();
-        return;
-      }
-    } catch (e) {
-      Logger.debug('Chat quota check failed, allowing send: $e');
     }
 
     String chatTargetId = currentAppId ?? 'omi';
@@ -675,6 +649,11 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
+          if (_tryParseQuotaError(chunk.text)) {
+            messages.removeAt(aiIndex);
+            notifyListeners();
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -692,6 +671,22 @@ class MessageProvider extends ChangeNotifier {
       setShowTypingIndicator(false);
       setSendingMessage(false);
     }
+  }
+
+  bool _tryParseQuotaError(String errorText) {
+    try {
+      var json = jsonDecode(errorText);
+      if (json is! Map) return false;
+      // FastAPI wraps HTTPException detail in {"detail": {...}}
+      var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['error'] == 'quota_exceeded') {
+        detail['allowed'] = false;
+        _chatQuota = ChatUsageQuota.fromJson(Map<String, dynamic>.from(detail));
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future _sendMessageViaAgent(String text, String? appId) async {
