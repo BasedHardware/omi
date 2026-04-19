@@ -2972,5 +2972,9 @@
     "currentPlan": "ปัจจุบัน",
     "neoSubtitle": "{count} คำถามต่อเดือน",
     "operatorSubtitle": "{count} คำถามต่อเดือน",
-    "architectSubtitle": "AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ"
+    "architectSubtitle": "AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

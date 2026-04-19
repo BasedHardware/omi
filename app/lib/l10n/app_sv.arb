@@ -2972,5 +2972,9 @@
     "currentPlan": "Nuvarande",
     "neoSubtitle": "{count} frågor per månad",
     "operatorSubtitle": "{count} frågor per månad",
-    "architectSubtitle": "Avancerad AI — tusentals chattar + agentautomatisering"
+    "architectSubtitle": "Avancerad AI — tusentals chattar + agentautomatisering",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

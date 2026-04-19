@@ -10695,5 +10695,9 @@
     "currentPlan": "فعلی",
     "neoSubtitle": "{count} پرسش در ماه",
     "operatorSubtitle": "{count} پرسش در ماه",
-    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی"
+    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

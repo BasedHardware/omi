@@ -2973,5 +2973,9 @@
     "currentPlan": "現在",
     "neoSubtitle": "月{count}件の質問",
     "operatorSubtitle": "月{count}件の質問",
-    "architectSubtitle": "パワーユーザーAI — 数千のチャット + エージェント自動化"
+    "architectSubtitle": "パワーユーザーAI — 数千のチャット + エージェント自動化",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

@@ -10695,5 +10695,9 @@
     "currentPlan": "தற்போதைய",
     "neoSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
     "operatorSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
-    "architectSubtitle": "பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்"
+    "architectSubtitle": "பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

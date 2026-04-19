@@ -2981,5 +2981,9 @@
     "currentPlan": "Nuværende",
     "neoSubtitle": "{count} spørgsmål om måneden",
     "operatorSubtitle": "{count} spørgsmål om måneden",
-    "architectSubtitle": "Avanceret AI — tusindvis af chats + agentautomatisering"
+    "architectSubtitle": "Avanceret AI — tusindvis af chats + agentautomatisering",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

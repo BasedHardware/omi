@@ -2972,5 +2972,9 @@
     "currentPlan": "Nykyinen",
     "neoSubtitle": "{count} kysymystä kuukaudessa",
     "operatorSubtitle": "{count} kysymystä kuukaudessa",
-    "architectSubtitle": "Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi"
+    "architectSubtitle": "Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

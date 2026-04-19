@@ -16994,6 +16994,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Power-user AI — thousands of chats + agentic automations'**
   String get architectSubtitle;
+
+  /// No description provided for @chatUsageCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} / \${limit} used this month'**
+  String chatUsageCost(String used, String limit);
+
+  /// No description provided for @chatUsageCostNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} used this month'**
+  String chatUsageCostNoLimit(String used);
+
+  /// No description provided for @chatUsageMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} / {limit} messages this month'**
+  String chatUsageMessages(String used, String limit);
+
+  /// No description provided for @chatUsageMessagesNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} messages this month'**
+  String chatUsageMessagesNoLimit(String used);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

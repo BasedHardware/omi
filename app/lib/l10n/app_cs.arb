@@ -2941,5 +2941,9 @@
     "currentPlan": "Aktuální",
     "neoSubtitle": "{count} dotazů měsíčně",
     "operatorSubtitle": "{count} dotazů měsíčně",
-    "architectSubtitle": "AI pro pokročilé — tisíce chatů + agentní automatizace"
+    "architectSubtitle": "AI pro pokročilé — tisíce chatů + agentní automatizace",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }

@@ -2972,5 +2972,9 @@
     "currentPlan": "Поточний",
     "neoSubtitle": "{count} запитань на місяць",
     "operatorSubtitle": "{count} запитань на місяць",
-    "architectSubtitle": "AI для просунутих — тисячі чатів + агентна автоматизація"
+    "architectSubtitle": "AI для просунутих — тисячі чатів + агентна автоматизація",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
 }
