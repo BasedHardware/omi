@@ -1,7 +1,11 @@
+import json
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
+import database.action_items as action_items_db
 import database.users as users_db
 from models.conversation import Conversation
 from models.structured import Structured
@@ -137,10 +141,6 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
-    import json
-    import uuid
-    import database.action_items as action_items_db
-
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -195,11 +195,12 @@ def generate_comprehensive_daily_summary(
                 }
             )
 
-    # Fetch actual action items from the database for this date range
+    # Fetch action items for the specific conversations being summarised.
+    # Querying by conversation_id (not date range) prevents pulling in items whose
+    # async processing happened to land on the same UTC day as an unrelated conversation.
     actual_action_items = []
-    if start_date_utc and end_date_utc:
-        db_action_items = action_items_db.get_action_items(uid, start_date=start_date_utc, end_date=end_date_utc)
-        for item in db_action_items:
+    for c in non_discarded:
+        for item in action_items_db.get_action_items(uid, conversation_id=c.id):
             actual_action_items.append(
                 {
                     "description": item.get("description", ""),
@@ -281,8 +282,6 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         response = response.strip()
 
         # Try to repair common JSON issues from LLM
-        import re
-
         response = re.sub(r':\s*\\"([^"]*)\\"', r': "\1"', response)
         response = response.replace('\\"', '"')
 
