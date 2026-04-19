@@ -197,7 +197,7 @@ pub fn maybe_rewrite_model_path(path: &str, decision: &RateDecision, action: &st
         return path.to_string();
     }
     if let Some(rest) = path.strip_prefix("models/gemini-pro-latest:") {
-        return format!("models/gemini-3-flash-preview:{}", rest);
+        return format!("models/{}:{}", crate::llm::model_qos::gemini_degrade_target(), rest);
     }
     path.to_string()
 }
