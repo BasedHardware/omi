@@ -90,7 +90,11 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     // Log active QoS tier
-    tracing::info!("Model QoS tier: {}", llm::model_qos::tier_description());
+    tracing::info!("Model QoS tier: {} | rate limits: soft={}, hard={}",
+        llm::model_qos::tier_description(),
+        llm::model_qos::daily_soft_limit(),
+        llm::model_qos::daily_hard_limit(),
+    );
 
     // Load and validate config
     let config = Config::from_env();
