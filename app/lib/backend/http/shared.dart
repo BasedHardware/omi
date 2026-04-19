@@ -390,6 +390,14 @@ Stream<String> makeStreamingApiCall({
 
     if (streamedResponse.statusCode != 200) {
       Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
+      if (streamedResponse.statusCode == 402) {
+        try {
+          var body = await streamedResponse.stream.bytesToString();
+          yield 'error:402:$body';
+        } catch (_) {
+          yield 'error:402:{}';
+        }
+      }
       return;
     }
 
@@ -480,6 +488,14 @@ Stream<String> makeMultipartStreamingApiCall({
 
     if (response.statusCode != 200) {
       Logger.error('Multipart streaming request failed: ${response.statusCode}');
+      if (response.statusCode == 402) {
+        try {
+          var body = await response.stream.bytesToString();
+          yield 'error:402:$body';
+        } catch (_) {
+          yield 'error:402:{}';
+        }
+      }
       return;
     }
 
