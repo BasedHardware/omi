@@ -90,8 +90,7 @@ const CACHE_PREFIX = "admin:stats:profitability:v6";
 const CACHE_TTL_SECONDS = 30 * 60;
 
 // Fallback per-user infra cost when real billing data can't be pulled from
-// the infra-costs endpoint. Calibrated against the team's Apr projection
-// ($57K/mo ÷ 30 days ÷ ~10K DAU) so numbers are realistic even before the
+// the infra-costs endpoint. Used as a rough estimate before the
 // collection-group scan finishes.
 const DEFAULT_DESKTOP_COST = 0.2;
 const DEFAULT_MOBILE_COST = 0.2;
