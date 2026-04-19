@@ -5150,6 +5150,7 @@ struct SettingsContentView: View {
             acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
           }
           try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+          await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
             byokKeyStatuses = results
             byokActivationError = nil
@@ -5161,6 +5162,7 @@ struct SettingsContentView: View {
           }
           let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
           try? await APIClient.shared.deactivateBYOK()
+          await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
             byokKeyStatuses = results
             byokActivationError =
@@ -5169,6 +5171,7 @@ struct SettingsContentView: View {
         }
       } else {
         try? await APIClient.shared.deactivateBYOK()
+        await FloatingBarUsageLimiter.shared.fetchPlan()
         await MainActor.run {
           byokKeyStatuses = [:]
           byokActivationError = nil
@@ -5901,6 +5904,12 @@ struct SettingsContentView: View {
   private var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
       return isLoadingSubscription ? "Loading plan..." : "Free"
+    }
+    // BYOK users: the backend returns plan=unlimited to turn off metering
+    // but that's an implementation detail — to the user, they're on the
+    // free plan because they pay the providers directly, not Omi.
+    if subscription.features.contains("byok") {
+      return "Free (BYOK)"
     }
     switch subscription.plan {
     case .basic:
