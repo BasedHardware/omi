@@ -1492,8 +1492,13 @@ class _PlansSheetState extends State<PlansSheet> {
         return (ai == -1 ? 999 : ai).compareTo(bi == -1 ? 999 : bi);
       });
 
-    // Auto-select first tier if none selected
-    selectedTierId ??= sortedTierIds.first;
+    // Auto-select current plan's tier, or first tier if none selected
+    if (selectedTierId == null) {
+      final activeTier = sortedTierIds.firstWhereOrNull(
+        (tid) => grouped[tid]!.any((p) => p['is_active'] == true),
+      );
+      selectedTierId = activeTier ?? sortedTierIds.first;
+    }
 
     final isYearly = selectedPlan == 'yearly';
 
