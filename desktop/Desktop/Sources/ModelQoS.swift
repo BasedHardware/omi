@@ -7,8 +7,8 @@ import Foundation
 // Individual workloads can also override their tier.
 
 enum ModelTier: String, CaseIterable {
-    case standard   // Cost-optimized: Sonnet for Claude, Flash for Gemini
-    case premium    // Quality-optimized: Opus for Claude, Pro for Gemini
+    case premium    // Cost-optimized: Sonnet for Claude, Flash for Gemini
+    case max        // Quality-optimized: Opus for Claude, Pro for Gemini
 }
 
 struct ModelQoS {
@@ -20,7 +20,7 @@ struct ModelQoS {
         get {
             guard let raw = UserDefaults.standard.string(forKey: tierKey),
                   let tier = ModelTier(rawValue: raw) else {
-                return .standard
+                return .premium
             }
             return tier
         }
@@ -33,13 +33,13 @@ struct ModelQoS {
 
     struct Claude {
         /// Main chat session model
-        static var chat: String { model(standard: "claude-sonnet-4-6", premium: "claude-opus-4-6") }
+        static var chat: String { model(premium: "claude-sonnet-4-6", max: "claude-opus-4-6") }
 
         /// Floating bar responses
-        static var floatingBar: String { model(standard: "claude-sonnet-4-6", premium: "claude-sonnet-4-6") }
+        static var floatingBar: String { model(premium: "claude-sonnet-4-6", max: "claude-sonnet-4-6") }
 
         /// Synthesis tasks (calendar, gmail, notes, onboarding)
-        static var synthesis: String { model(standard: "claude-sonnet-4-6", premium: "claude-opus-4-6") }
+        static var synthesis: String { model(premium: "claude-sonnet-4-6", max: "claude-opus-4-6") }
 
         /// ChatLab test queries
         static var chatLabQuery: String { "claude-sonnet-4-20250514" }
@@ -50,9 +50,9 @@ struct ModelQoS {
         /// Available models shown in the UI picker
         static var availableModels: [(id: String, label: String)] {
             switch activeTier {
-            case .standard:
-                return [("claude-sonnet-4-6", "Sonnet")]
             case .premium:
+                return [("claude-sonnet-4-6", "Sonnet")]
+            case .max:
                 return [
                     ("claude-sonnet-4-6", "Sonnet"),
                     ("claude-opus-4-6", "Opus"),
@@ -71,8 +71,8 @@ struct ModelQoS {
             return allowedIDs.contains(model) ? model : defaultSelection
         }
 
-        private static func model(standard: String, premium: String) -> String {
-            activeTier == .standard ? standard : premium
+        private static func model(premium: String, max: String) -> String {
+            activeTier == .premium ? premium : max
         }
     }
 
@@ -80,19 +80,19 @@ struct ModelQoS {
 
     struct Gemini {
         /// Proactive assistants (screenshot analysis, context detection)
-        static var proactive: String { model(standard: "gemini-3-flash-preview", premium: "gemini-3-flash-preview") }
+        static var proactive: String { model(premium: "gemini-3-flash-preview", max: "gemini-3-flash-preview") }
 
         /// Task extraction
-        static var taskExtraction: String { model(standard: "gemini-3-flash-preview", premium: "gemini-pro-latest") }
+        static var taskExtraction: String { model(premium: "gemini-3-flash-preview", max: "gemini-pro-latest") }
 
         /// Insight generation
-        static var insight: String { model(standard: "gemini-3-flash-preview", premium: "gemini-pro-latest") }
+        static var insight: String { model(premium: "gemini-3-flash-preview", max: "gemini-pro-latest") }
 
         /// Embeddings (not tier-dependent, kept separate)
         static var embedding: String { "gemini-embedding-001" }
 
-        private static func model(standard: String, premium: String) -> String {
-            activeTier == .standard ? standard : premium
+        private static func model(premium: String, max: String) -> String {
+            activeTier == .premium ? premium : max
         }
     }
 
@@ -100,8 +100,8 @@ struct ModelQoS {
 
     static var tierDescription: String {
         switch activeTier {
-        case .standard: return "Standard (cost-optimized)"
-        case .premium: return "Premium (quality-optimized)"
+        case .premium: return "Premium (cost-optimized)"
+        case .max: return "Max (quality-optimized)"
         }
     }
 }
