@@ -21,6 +21,21 @@ APP_REDUCE_EXCLUDE_FIELDS = {
     'usage_count',
 }
 
+SENSITIVE_EXTERNAL_INTEGRATION_FIELDS = {
+    'mcp_oauth_tokens',
+}
+
+
+def redact_external_integration_secrets(external_integration: Optional[dict]) -> Optional[dict]:
+    """Remove secret-bearing integration fields from user-facing responses."""
+    if not external_integration or not isinstance(external_integration, dict):
+        return external_integration
+
+    redacted = dict(external_integration)
+    for field in SENSITIVE_EXTERNAL_INTEGRATION_FIELDS:
+        redacted.pop(field, None)
+    return redacted
+
 
 class AppReview(BaseModel):
     uid: str
@@ -218,7 +233,15 @@ class App(AppBaseModel):
         Excludes large/redundant fields that are not needed in app list displays.
         Uses APP_REDUCE_EXCLUDE_FIELDS constant for consistency with cache reduction.
         """
-        return self.model_dump(mode='json', exclude=APP_REDUCE_EXCLUDE_FIELDS)
+        data = self.model_dump(mode='json', exclude=APP_REDUCE_EXCLUDE_FIELDS)
+        data['external_integration'] = redact_external_integration_secrets(data.get('external_integration'))
+        return data
+
+    def to_safe_response_dict(self) -> dict:
+        """Serialize for user-facing detail responses with sensitive fields redacted."""
+        data = self.model_dump(mode='json')
+        data['external_integration'] = redact_external_integration_secrets(data.get('external_integration'))
+        return data
 
     @staticmethod
     def reduce_dict(app_dict: dict) -> dict:
@@ -226,7 +249,9 @@ class App(AppBaseModel):
 
         Use this for reducing dicts before caching. For App instances, use to_reduced_dict().
         """
-        return {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
+        reduced = {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
+        reduced['external_integration'] = redact_external_integration_secrets(reduced.get('external_integration'))
+        return reduced
 
 
 class AppCreate(BaseModel):
