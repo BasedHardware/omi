@@ -778,6 +778,17 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const message = event.message as PiAssistantMessage | undefined;
 
+    // When pi-mono stops to execute a tool (stopReason === "tool_use"),
+    // this is an intermediate turn — the model will continue after the
+    // tool executes. Keep the prompt state alive so subsequent text_delta
+    // events and the final turn_end are properly handled.
+    if (message?.stopReason === "tool_use") {
+      process.stderr.write(
+        "[pi-mono] intermediate turn_end (tool_use) — keeping prompt alive\n"
+      );
+      return;
+    }
+
     // Extract text from content blocks
     let text = "";
     if (message?.content) {
@@ -786,7 +797,6 @@ export class PiMonoAdapter implements HarnessAdapter {
         .map((b) => b.text || "")
         .join("");
     }
-    // (diagnostic logging removed)
 
     // Extract usage
     const usage = message?.usage;
