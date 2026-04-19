@@ -215,7 +215,7 @@ pub fn rate_limit_error_json(message: &str) -> String {
 mod tests {
     use super::*;
 
-    // --- Decision from snapshot (uses QoS tier — Standard in test env: soft=30, hard=500) ---
+    // --- Decision from snapshot (uses QoS tier — Premium in test env: soft=30, hard=1500) ---
 
     #[test]
     fn snapshot_allow() {
