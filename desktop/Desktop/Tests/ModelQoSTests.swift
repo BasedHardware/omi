@@ -160,4 +160,12 @@ final class ModelQoSTests: XCTestCase {
         ModelQoS.activeTier = .premium
         XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("gpt-4o"), "claude-sonnet-4-6")
     }
+
+    // MARK: - Tier change notification
+
+    func testTierChangePostsNotification() {
+        let expectation = expectation(forNotification: .modelTierDidChange, object: nil)
+        ModelQoS.activeTier = .max
+        wait(for: [expectation], timeout: 1.0)
+    }
 }
