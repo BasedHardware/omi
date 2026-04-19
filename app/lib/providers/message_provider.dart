@@ -469,6 +469,7 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
+    _chatQuota = null; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -554,6 +555,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    _chatQuota = null; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
