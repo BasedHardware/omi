@@ -14,7 +14,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/models/chat_quota.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
@@ -260,7 +259,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
-      context.read<UsageProvider>().fetchChatQuota();
       _loadAvailablePlans();
       _loadFairUseStatus();
       if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
@@ -674,9 +672,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 color: Colors.purple.shade300,
                 subscription: provider.subscription,
               ),
-              if (provider.chatQuota != null && period == 'monthly') ...[
-                const SizedBox(height: 16),
-                _buildChatQuotaCard(context, provider.chatQuota!, numberFormatter),
+              if (provider.chatQuotaUnit != null && period == 'monthly') ...[
+                const SizedBox(height: 12),
+                _buildChatQuotaLine(context, provider),
               ],
             ],
           ),
@@ -1002,108 +1000,30 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChatQuotaCard(BuildContext context, ChatUsageQuota quota, NumberFormat numberFormatter) {
-    final color = Colors.teal.shade300;
-    final used = quota.used.toInt();
-    final limit = quota.limit?.toInt();
-    final percentage = (limit != null && limit > 0) ? (quota.used / limit).clamp(0.0, 1.0) : 0.0;
+  Widget _buildChatQuotaLine(BuildContext context, UsageProvider provider) {
+    final sub = provider.subscription;
+    if (sub == null) return const SizedBox.shrink();
 
-    String valueText;
-    if (quota.unit == ChatQuotaUnit.costUsd) {
-      valueText = '\$${quota.used.toStringAsFixed(2)}';
+    final used = sub.chatQuotaUsed;
+    final unit = sub.chatQuotaUnit;
+    final limits = sub.subscription.limits;
+
+    String text;
+    if (unit == 'cost_usd') {
+      final limit = limits.chatCostUsdPerMonth;
+      text = limit != null
+          ? 'Chat: \$${used.toStringAsFixed(2)} / \$${limit.toStringAsFixed(0)} used this month'
+          : 'Chat: \$${used.toStringAsFixed(2)} used this month';
     } else {
-      valueText = '${numberFormatter.format(used)} ${context.l10n.chatMessages}';
+      final limit = limits.chatQuestionsPerMonth;
+      text = limit != null
+          ? 'Chat: ${used.toInt()} / $limit messages this month'
+          : 'Chat: ${used.toInt()} messages this month';
     }
 
-    String subtitleText;
-    if (limit == null || limit == 0) {
-      subtitleText = context.l10n.unlimitedChatThisMonth;
-    } else if (quota.unit == ChatQuotaUnit.costUsd) {
-      subtitleText = context.l10n.chatUsedOfLimitCompute(
-        '\$${quota.used.toStringAsFixed(2)}',
-        '\$${limit.toStringAsFixed(0)}',
-      );
-    } else {
-      subtitleText = context.l10n.chatUsedOfLimitMessages(
-        numberFormatter.format(used),
-        numberFormatter.format(limit),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              valueText,
-              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FaIcon(FontAwesomeIcons.comments, color: color, size: 16),
-                const SizedBox(width: 8),
-                Text(context.l10n.chatTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(subtitleText, style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4)),
-            if (limit != null && limit > 0) ...[
-              const SizedBox(height: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (quota.unit == ChatQuotaUnit.costUsd)
-                    Text(
-                      context.l10n.chatUsageProgress(
-                        '\$${quota.used.toStringAsFixed(2)}',
-                        '\$${limit.toStringAsFixed(0)}',
-                      ),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    )
-                  else
-                    Text(
-                      context.l10n.chatUsageProgress(
-                        numberFormatter.format(used),
-                        numberFormatter.format(limit),
-                      ),
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: percentage,
-                    backgroundColor: Colors.grey.shade700,
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                    minHeight: 4,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  if (percentage >= 1.0) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.chatLimitReachedUpgrade,
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
     );
   }
 
