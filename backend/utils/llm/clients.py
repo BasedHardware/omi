@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Optional
 
 import anthropic
 import httpx
@@ -8,10 +8,33 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured import Structured
+from utils.byok import get_byok_key
 from utils.llm.usage_tracker import get_usage_callback
 
 # Anthropic client for chat agent
 anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+
+
+def get_anthropic_client() -> anthropic.AsyncAnthropic:
+    """Return an Anthropic client keyed to the current request's BYOK key, if present.
+
+    Falls back to the process-wide client (which uses ANTHROPIC_API_KEY env var).
+    Callers on hot paths should switch to this helper so BYOK users pay their
+    own Anthropic bill.
+    """
+    key = get_byok_key('anthropic')
+    if key:
+        return anthropic.AsyncAnthropic(api_key=key)
+    return anthropic_client
+
+
+def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
+    """Return a ChatOpenAI instance keyed to the current request's BYOK key, if present."""
+    byok = get_byok_key('openai')
+    if byok:
+        return ChatOpenAI(model=model, api_key=byok, **kwargs)
+    return ChatOpenAI(model=model, **kwargs)
+
 
 ANTHROPIC_AGENT_MODEL = "claude-sonnet-4-6"
 ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
