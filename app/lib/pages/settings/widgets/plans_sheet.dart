@@ -389,7 +389,12 @@ class _PlansSheetState extends State<PlansSheet> {
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
-    final isUpgradingFromMonthlyToAnnual = (currentSub?.plan == PlanType.unlimited ||
+    // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
+    // Cross-tier changes are immediate+prorated on the backend, not deferred.
+    final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
+    final isSameTier = currentTierName == tierId;
+    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+        (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
         currentSub?.status == SubscriptionStatus.active &&
@@ -1358,9 +1363,9 @@ class _PlansSheetState extends State<PlansSheet> {
                                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                       ),
                                     ] else ...[
-                                      const Text(
-                                        'Resubscribe',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                                      Text(
+                                        context.l10n.resubscribe,
+                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                                       ),
                                       const SizedBox(width: 8),
                                       AnimatedBuilder(
@@ -1745,9 +1750,9 @@ class _PlansSheetState extends State<PlansSheet> {
                             color: Colors.deepPurple.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            'Popular',
-                            style: TextStyle(color: Colors.deepPurple, fontSize: 11, fontWeight: FontWeight.w600),
+                          child: Text(
+                            context.l10n.popular,
+                            style: const TextStyle(color: Colors.deepPurple, fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
@@ -1759,9 +1764,9 @@ class _PlansSheetState extends State<PlansSheet> {
                             color: Colors.green.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            'Current',
-                            style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
+                          child: Text(
+                            context.l10n.currentPlan,
+                            style: const TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],
