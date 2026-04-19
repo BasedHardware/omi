@@ -21,7 +21,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/models/chat_quota.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
@@ -55,10 +54,9 @@ class MessageProvider extends ChangeNotifier {
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
 
-  // Chat quota state — set when backend returns 402 (quota exceeded)
-  ChatUsageQuota? _chatQuota;
-  ChatUsageQuota? get chatQuota => _chatQuota;
-  bool get isChatQuotaExceeded => _chatQuota != null && !_chatQuota!.allowed;
+  // Chat quota exceeded — set transiently when backend returns 402
+  bool _chatQuotaExceeded = false;
+  bool get isChatQuotaExceeded => _chatQuotaExceeded;
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -469,7 +467,7 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
-    _chatQuota = null; // Clear stale quota state from previous sends
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -555,7 +553,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
-    _chatQuota = null; // Clear stale quota state from previous sends
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
@@ -687,7 +685,7 @@ class MessageProvider extends ChangeNotifier {
       var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
       if (detail['error'] == 'quota_exceeded') {
         detail['allowed'] = false;
-        _chatQuota = ChatUsageQuota.fromJson(Map<String, dynamic>.from(detail));
+        _chatQuotaExceeded = true;
         notifyListeners();
         return true;
       }
