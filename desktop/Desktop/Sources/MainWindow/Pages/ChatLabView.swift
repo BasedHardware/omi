@@ -436,7 +436,7 @@ class ChatLabViewModel: ObservableObject {
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
             let body: [String: Any] = [
-                "model": "claude-sonnet-4-20250514",
+                "model": ModelQoS.Claude.chatLabQuery,
                 "max_tokens": 1024,
                 "system": systemPrompt.prefix(50000),
                 "messages": [["role": "user", "content": userMessage]],
@@ -481,7 +481,7 @@ class ChatLabViewModel: ObservableObject {
             """
 
             let body: [String: Any] = [
-                "model": "claude-haiku-4-5-20251001",
+                "model": ModelQoS.Claude.chatLabGrade,
                 "max_tokens": 200,
                 "messages": [["role": "user", "content": gradePrompt]],
             ]
