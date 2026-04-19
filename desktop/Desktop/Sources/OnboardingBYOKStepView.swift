@@ -162,6 +162,9 @@ struct OnboardingBYOKStepView: View {
           acc[provider.rawValue] = APIKeyService.byokFingerprint(key)
         }
       })
+      // Refresh the in-memory quota snapshot — otherwise the client keeps
+      // blocking chat against the stale basic-tier 30-message cap.
+      await FloatingBarUsageLimiter.shared.fetchPlan()
       AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Activated")
       onContinue()
     } catch {
