@@ -16,6 +16,14 @@ class ChatQuotaPaywall extends StatelessWidget {
     required this.usageProvider,
   });
 
+  String _getLimitDisplay(BuildContext context) {
+    if (quota.limit == null) return context.l10n.unlimitedChatThisMonth;
+    if (quota.unit == ChatQuotaUnit.costUsd) {
+      return '\$${quota.limit!.toStringAsFixed(0)}';
+    }
+    return '${quota.limit!.toInt()} ${context.l10n.chatMessages}';
+  }
+
   String _getResetTimeDisplay(BuildContext context) {
     if (quota.resetAt == null) return '';
     final resetDate = DateTime.fromMillisecondsSinceEpoch(quota.resetAt! * 1000);
@@ -74,7 +82,7 @@ class ChatQuotaPaywall extends StatelessWidget {
               Text(
                 context.l10n.chatUsageDescription(
                   quota.unit == ChatQuotaUnit.costUsd ? '\$${quota.used.toStringAsFixed(2)}' : '${quota.used.toInt()}',
-                  quota.limitDisplay,
+                  _getLimitDisplay(context),
                   quota.plan,
                 ),
                 textAlign: TextAlign.center,
