@@ -10,7 +10,7 @@ from utils.executors import critical_executor, storage_executor
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from .clients import get_llm, llm_mini
+from .clients import get_llm
 from .usage_tracker import track_usage, Features
 from database import knowledge_graph as kg_db
 
