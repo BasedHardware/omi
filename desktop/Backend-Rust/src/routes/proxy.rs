@@ -28,8 +28,8 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
 ];
 
 // Allowed Gemini models — driven by model_qos (issue #6834).
-// Desktop app uses: gemini-3-flash-preview (default), gemini-pro-latest (tasks/insights),
-// gemini-embedding-001 (embeddings). Rate limiting may rewrite pro → flash.
+// Desktop app uses: gemini-3-flash-preview (all features), gemini-embedding-001 (embeddings).
+// Rate limiting may degrade requests above soft limit.
 
 /// Maximum request body size for Gemini proxy routes (5 MB).
 /// Normal app payloads are 300-600 KB (base64 JPEG + prompt); 5 MB gives ~8x headroom.
@@ -717,12 +717,12 @@ mod tests {
     #[test]
     fn model_allowlist_permits_valid_models() {
         assert!(is_gemini_model_allowed("gemini-3-flash-preview"));
-        assert!(is_gemini_model_allowed("gemini-pro-latest"));
         assert!(is_gemini_model_allowed("gemini-embedding-001"));
     }
 
     #[test]
     fn model_allowlist_blocks_unknown() {
+        assert!(!is_gemini_model_allowed("gemini-pro-latest"), "pro removed from allowlist");
         assert!(!is_gemini_model_allowed("gemini-2.5-pro"));
         assert!(!is_gemini_model_allowed("gemini-1.5-pro"));
         assert!(!is_gemini_model_allowed("gemini-ultra"));
