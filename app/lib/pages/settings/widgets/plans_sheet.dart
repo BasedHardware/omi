@@ -1651,7 +1651,7 @@ class _PlansSheetState extends State<PlansSheet> {
   String? _localizedSubtitle(BuildContext context, String tierId, String? apiSubtitle) {
     switch (tierId) {
       case 'unlimited':
-        return context.l10n.neoSubtitle(2000);
+        return context.l10n.neoSubtitle(200);
       case 'operator':
         return context.l10n.operatorSubtitle(500);
       case 'architect':
