@@ -10,7 +10,7 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
-from .clients import get_llm, llm_mini, parser, llm_high, llm_medium_experiment
+from .clients import get_llm, parser
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ Provide:
 
     folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | folder_parser
+    chain = prompt | get_llm('conv_folder') | folder_parser
 
     try:
         response: FolderAssignment = chain.invoke(
@@ -231,7 +231,7 @@ Content:
             ).strip()
         ]
     )
-    chain = prompt | llm_mini | custom_parser
+    chain = prompt | get_llm('conv_discard') | custom_parser
     try:
         response: DiscardConversation = chain.invoke(
             {
@@ -866,7 +866,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
     """
 
     try:
-        with_parser = llm_mini.with_structured_output(SuggestedAppsSelection)
+        with_parser = get_llm('conv_apps').with_structured_output(SuggestedAppsSelection)
         response: SuggestedAppsSelection = with_parser.invoke(prompt)
 
         # Validate that suggested app IDs exist in the available apps
@@ -937,7 +937,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     """
 
     try:
-        with_parser = llm_mini.with_structured_output(BestAppSelection)
+        with_parser = get_llm('conv_apps').with_structured_output(BestAppSelection)
         response: BestAppSelection = with_parser.invoke(prompt)
         selected_app_id = response.app_id
 
