@@ -758,6 +758,51 @@ def get_user_usage_stats_endpoint(
     return stats
 
 
+class BYOKActivateRequest(BaseModel):
+    fingerprints: Dict[str, str]
+
+
+@router.post('/v1/users/me/byok-active', tags=['v1'])
+def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Flip the user onto the BYOK free plan.
+
+    The client sends SHA-256 fingerprints of the 4 provider keys so we can
+    detect rotation without ever seeing the keys. The live keys themselves
+    travel on every request as headers; they are never persisted.
+    """
+    required = {'openai', 'anthropic', 'gemini', 'deepgram'}
+    missing = required - set(data.fingerprints.keys())
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing fingerprints for providers: {sorted(missing)}",
+        )
+    users_db.set_byok_active(uid, data.fingerprints)
+    return {"active": True}
+
+
+@router.delete('/v1/users/me/byok-active', tags=['v1'])
+def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Drop the user off the BYOK free plan (keys were cleared client-side)."""
+    users_db.clear_byok_active(uid)
+    return {"active": False}
+
+
+def _byok_unlimited_subscription() -> Subscription:
+    """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
+    return Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        features=["byok"],
+        limits=PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+        ),
+    )
+
+
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
@@ -765,6 +810,23 @@ def get_user_subscription_endpoint(
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
+    # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
+    # Skip Stripe entirely and return an unlimited plan tagged with the `byok` feature.
+    if users_db.is_byok_active(uid):
+        return UserSubscriptionResponse(
+            subscription=_byok_unlimited_subscription(),
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            memories_created_used=0,
+            memories_created_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+        )
+
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
     if uid in marketplace_reviewers:
         unlimited_sub = Subscription(
