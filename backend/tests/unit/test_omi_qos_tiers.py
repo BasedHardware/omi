@@ -92,7 +92,7 @@ class TestModelQosProfiles:
     def test_medium_profile_matches_current_behavior(self):
         """Medium profile should match current production model assignments."""
         medium = MODEL_QOS_PROFILES['medium']
-        assert medium['conv_action_items'] == 'gpt-4.1-mini'
+        assert medium['conv_action_items'] == 'gpt-5.1'
         assert medium['conv_structure'] == 'gpt-5.1'
         assert medium['chat_responses'] == 'gpt-5.2'
         assert medium['chat_agent'] == 'claude-sonnet-4-6'
@@ -156,13 +156,13 @@ class TestGetLlm:
 
     def test_different_features_same_model_share_instance(self):
         # Both default to gpt-4.1-mini in medium profile
-        llm1 = get_llm('conv_action_items')
-        llm2 = get_llm('memories')
+        llm1 = get_llm('memories')
+        llm2 = get_llm('goals')
         assert llm1 is llm2
 
     def test_different_models_return_different_instances(self):
-        # conv_action_items=gpt-4.1-mini, conv_structure=gpt-5.1 in medium
-        llm1 = get_llm('conv_action_items')
+        # memories=gpt-4.1-mini, conv_structure=gpt-5.1 in medium
+        llm1 = get_llm('memories')
         llm2 = get_llm('conv_structure')
         assert llm1 is not llm2
 
@@ -182,8 +182,8 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_gpt51(self):
-        llm_with_key = get_llm('conv_action_items', cache_key='omi-test-key')
-        llm_without_key = get_llm('conv_action_items')
+        llm_with_key = get_llm('memories', cache_key='omi-test-key')
+        llm_without_key = get_llm('memories')
         assert llm_with_key is llm_without_key
 
     def test_cache_key_ignored_after_override_to_non_cacheable(self, monkeypatch):
@@ -380,6 +380,18 @@ class TestProviderClassification:
             assert feature not in _ANTHROPIC_FEATURES
             assert feature not in _OPENROUTER_FEATURES
             assert feature not in _PERPLEXITY_FEATURES
+
+
+class TestProviderSafetyGuard:
+    """Verify get_llm() rejects Anthropic/Perplexity features."""
+
+    def test_get_llm_rejects_anthropic_feature(self):
+        with pytest.raises(ValueError, match='Anthropic'):
+            get_llm('chat_agent')
+
+    def test_get_llm_rejects_perplexity_feature(self):
+        with pytest.raises(ValueError, match='Perplexity'):
+            get_llm('web_search')
 
 
 class TestAnthropicModelExports:
