@@ -215,11 +215,6 @@ NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '20
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
-# Hard kill-switch for the cap. Default OFF so we can deploy the backend to
-# prod without immediately blocking any existing over-cap user. Flip to "true"
-# via Cloud Run env var once beta has validated the UX.
-CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false').lower() in ('true', '1', 'yes', 'on')
-
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
@@ -272,15 +267,8 @@ def get_chat_quota_snapshot(uid: str) -> dict:
 
 
 def enforce_chat_quota(uid: str) -> None:
-    """Raise HTTPException(402) if the user is past their monthly chat cap.
-
-    Guarded by CHAT_CAP_ENFORCEMENT_ENABLED so we can deploy the code first,
-    ship the UI to beta, validate, then flip the kill-switch from ops.
-    """
+    """Raise HTTPException(402) if the user is past their monthly chat cap."""
     from fastapi import HTTPException
-
-    if not CHAT_CAP_ENFORCEMENT_ENABLED:
-        return
 
     snapshot = get_chat_quota_snapshot(uid)
     if snapshot['allowed']:
