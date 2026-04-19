@@ -1706,7 +1706,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8571,7 +8576,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9024,4 +9034,55 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'На плаћеном сте плану.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'messages';
+
+  @override
+  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '\$$used of \$$limit compute budget used';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used of $limit messages used this month';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit used';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+
+  @override
+  String get chatLimitReachedTitle => 'Chat Limit Reached';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Resets in $count day(s)';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Resets in $count hour(s)';
+  }
+
+  @override
+  String get resetsSoon => 'Resets soon';
+
+  @override
+  String get upgradePlan => 'Upgrade Plan';
 }

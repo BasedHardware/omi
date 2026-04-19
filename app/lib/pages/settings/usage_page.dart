@@ -1012,16 +1012,22 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     if (quota.unit == ChatQuotaUnit.costUsd) {
       valueText = '\$${quota.used.toStringAsFixed(2)}';
     } else {
-      valueText = '${numberFormatter.format(used)} messages';
+      valueText = '${numberFormatter.format(used)} ${context.l10n.chatMessages}';
     }
 
     String subtitleText;
     if (limit == null || limit == 0) {
-      subtitleText = 'Unlimited chat messages this month';
+      subtitleText = context.l10n.unlimitedChatThisMonth;
     } else if (quota.unit == ChatQuotaUnit.costUsd) {
-      subtitleText = '\$${quota.used.toStringAsFixed(2)} of \$${limit.toStringAsFixed(0)} compute budget used';
+      subtitleText = context.l10n.chatUsedOfLimitCompute(
+        '\$${quota.used.toStringAsFixed(2)}',
+        '\$${limit.toStringAsFixed(0)}',
+      );
     } else {
-      subtitleText = '${numberFormatter.format(used)} of ${numberFormatter.format(limit)} messages used this month';
+      subtitleText = context.l10n.chatUsedOfLimitMessages(
+        numberFormatter.format(used),
+        numberFormatter.format(limit),
+      );
     }
 
     return Container(
@@ -1051,7 +1057,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               children: [
                 FaIcon(FontAwesomeIcons.comments, color: color, size: 16),
                 const SizedBox(width: 8),
-                const Text('Chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                Text(context.l10n.chatTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
               ],
             ),
             const SizedBox(height: 8),
@@ -1063,12 +1069,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 children: [
                   if (quota.unit == ChatQuotaUnit.costUsd)
                     Text(
-                      '\$${quota.used.toStringAsFixed(2)} / \$${limit.toStringAsFixed(0)} used',
+                      context.l10n.chatUsageProgress(
+                        '\$${quota.used.toStringAsFixed(2)}',
+                        '\$${limit.toStringAsFixed(0)}',
+                      ),
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                     )
                   else
                     Text(
-                      '${numberFormatter.format(used)} / ${numberFormatter.format(limit)} used',
+                      context.l10n.chatUsageProgress(
+                        numberFormatter.format(used),
+                        numberFormatter.format(limit),
+                      ),
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                     ),
                   const SizedBox(height: 8),
@@ -1082,7 +1094,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                   if (percentage >= 1.0) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Chat limit reached. Upgrade for more messages.',
+                      context.l10n.chatLimitReachedUpgrade,
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                     ),
                   ],

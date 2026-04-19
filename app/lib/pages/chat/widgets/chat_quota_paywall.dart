@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/models/chat_quota.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ChatQuotaPaywall extends StatelessWidget {
   final ChatUsageQuota quota;
@@ -15,17 +16,17 @@ class ChatQuotaPaywall extends StatelessWidget {
     required this.usageProvider,
   });
 
-  String _getResetTimeDisplay() {
+  String _getResetTimeDisplay(BuildContext context) {
     if (quota.resetAt == null) return '';
     final resetDate = DateTime.fromMillisecondsSinceEpoch(quota.resetAt! * 1000);
     final now = DateTime.now();
     final diff = resetDate.difference(now);
     if (diff.inDays > 0) {
-      return 'Resets in ${diff.inDays} day${diff.inDays == 1 ? '' : 's'}';
+      return context.l10n.resetsInDays(diff.inDays);
     } else if (diff.inHours > 0) {
-      return 'Resets in ${diff.inHours} hour${diff.inHours == 1 ? '' : 's'}';
+      return context.l10n.resetsInHours(diff.inHours);
     }
-    return 'Resets soon';
+    return context.l10n.resetsSoon;
   }
 
   @override
@@ -60,8 +61,8 @@ class ChatQuotaPaywall extends StatelessWidget {
               const SizedBox(height: 24),
               const Icon(Icons.chat_bubble_outline, color: Colors.deepPurple, size: 48),
               const SizedBox(height: 16),
-              const Text(
-                'Chat Limit Reached',
+              Text(
+                context.l10n.chatLimitReachedTitle,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -71,7 +72,11 @@ class ChatQuotaPaywall extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                "You've used ${quota.unit == ChatQuotaUnit.costUsd ? '\$${quota.used.toStringAsFixed(2)}' : '${quota.used.toInt()}'} of your ${quota.limitDisplay} on the ${quota.plan} plan.",
+                context.l10n.chatUsageDescription(
+                  quota.unit == ChatQuotaUnit.costUsd ? '\$${quota.used.toStringAsFixed(2)}' : '${quota.used.toInt()}',
+                  quota.limitDisplay,
+                  quota.plan,
+                ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey.shade400,
@@ -80,7 +85,7 @@ class ChatQuotaPaywall extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                _getResetTimeDisplay(),
+                _getResetTimeDisplay(context),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey.shade500,
@@ -108,12 +113,12 @@ class ChatQuotaPaywall extends StatelessWidget {
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.rocket_launch, size: 20),
-                      SizedBox(width: 8),
-                      Text('Upgrade Plan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                      const Icon(Icons.rocket_launch, size: 20),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.upgradePlan, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -125,7 +130,7 @@ class ChatQuotaPaywall extends StatelessWidget {
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text(
-                    'Maybe Later',
+                    context.l10n.maybeLater,
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
                   ),
                 ),

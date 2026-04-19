@@ -8419,7 +8419,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -8867,4 +8872,55 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'messages';
+
+  @override
+  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '\$$used of \$$limit compute budget used';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used of $limit messages used this month';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit used';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+
+  @override
+  String get chatLimitReachedTitle => 'Chat Limit Reached';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Resets in $count day(s)';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Resets in $count hour(s)';
+  }
+
+  @override
+  String get resetsSoon => 'Resets soon';
+
+  @override
+  String get upgradePlan => 'Upgrade Plan';
 }
