@@ -60,6 +60,7 @@ from models.users import (
 )
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    CHAT_CAP_ENFORCEMENT_ENABLED,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -968,7 +969,8 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
     allowed = True
     if limit_value is not None and limit_value > 0:
         percent = min(100.0, round(100.0 * used / limit_value, 2))
-        allowed = used < limit_value
+        # Only block when enforcement is enabled; otherwise always allow
+        allowed = used < limit_value if CHAT_CAP_ENFORCEMENT_ENABLED else True
 
     return ChatUsageQuota(
         plan=get_plan_display_name(plan),
