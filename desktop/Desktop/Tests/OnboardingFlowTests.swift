@@ -3,16 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesNineteenSteps() {
+  func testMergedFlowUsesEighteenSteps() {
     XCTAssertEqual(
       OnboardingFlow.steps,
       [
         "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
-        "FullDiskAccess", "FileScan", "Microphone", "Notifications", "Accessibility",
-        "Automation", "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo",
-        "DataSources", "Exports", "Goal", "Tasks",
+        "FullDiskAccess", "FileScan", "Microphone", "Accessibility", "Automation",
+        "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "DataSources",
+        "Exports", "Goal", "Tasks",
       ])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 18)
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -121,7 +121,7 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(migratedResearch, 15)
     XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
     XCTAssertEqual(migratedGoal, 17)
-    XCTAssertEqual(migratedTasks, 18)
+    XCTAssertEqual(migratedTasks, 17)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {

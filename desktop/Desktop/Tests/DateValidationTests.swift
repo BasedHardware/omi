@@ -1,6 +1,7 @@
 import XCTest
 @testable import Omi_Computer
 
+@MainActor
 final class DateValidationTests: XCTestCase {
 
     // MARK: - Valid dates (should be accepted)
