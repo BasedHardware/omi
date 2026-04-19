@@ -62,13 +62,19 @@ struct SubscriptionPlanCatalogMerger {
     primary: [SubscriptionPlanOption],
     fallback: [SubscriptionPlanOption]
   ) -> [SubscriptionPlanOption] {
-    var mergedById: [String: SubscriptionPlanOption] = [:]
+    // Filter out plans with empty IDs — malformed API responses can cause
+    // dictionary assertion failures in Swift's optimized merge path (#6506).
+    let safePrimary = primary.filter { !$0.id.isEmpty }
+    let safeFallback = fallback.filter { !$0.id.isEmpty }
 
-    for plan in fallback {
+    var mergedById: [String: SubscriptionPlanOption] = [:]
+    mergedById.reserveCapacity(max(safePrimary.count, safeFallback.count))
+
+    for plan in safeFallback {
       mergedById[plan.id] = plan
     }
 
-    for plan in primary {
+    for plan in safePrimary {
       if let existing = mergedById[plan.id] {
         mergedById[plan.id] = SubscriptionPlanOption(
           id: plan.id,
@@ -91,13 +97,18 @@ struct SubscriptionPlanCatalogMerger {
     primary: [SubscriptionPriceOption],
     fallback: [SubscriptionPriceOption]
   ) -> [SubscriptionPriceOption] {
-    var mergedById: [String: SubscriptionPriceOption] = [:]
+    // Filter out prices with empty IDs to avoid dictionary assertion crashes.
+    let safePrimary = primary.filter { !$0.id.isEmpty }
+    let safeFallback = fallback.filter { !$0.id.isEmpty }
 
-    for price in fallback {
+    var mergedById: [String: SubscriptionPriceOption] = [:]
+    mergedById.reserveCapacity(max(safePrimary.count, safeFallback.count))
+
+    for price in safeFallback {
       mergedById[price.id] = price
     }
 
-    for price in primary {
+    for price in safePrimary {
       mergedById[price.id] = price
     }
 
