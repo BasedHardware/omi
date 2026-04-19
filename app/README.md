@@ -56,4 +56,29 @@ Once installed, the app will run on your iPhone independently from your developm
 
 ## Need Help?
 
+# AGENTS.md — Additions Required by Issue #4905
+#
+# Add the following section to the existing app/AGENTS.md file.
+# Insert it BEFORE the final section or at the top-level after the existing agent rules.
+# ──────────────────────────────────────────────────────────────────────────────
+
+## Flow Doc Governance (Mandatory)
+
+> **Any PR with significant app changes MUST update the corresponding flow doc.**
+
+The three canonical flow docs live in `app/docs/flows/`:
+
+| Doc | File | Update when... |
+|---|---|---|
+| UI Flow | `docs/flows/ui-flow.md` | Navigation, screens, or routing changes in `lib/pages/**` or `lib/core/app_shell.dart` |
+| Data Flow | `docs/flows/data-flow.md` | API modules, schema, WebSocket events, or deep-link handlers change |
+| State Management | `docs/flows/state-management.md` | Provider registrations, ProxyProvider chains, or `lib/providers/**` change |
+
+Generated YAML machine-diffable artifacts live in `docs/flows/generated/` — regenerate after
+any relevant change using the scripts in `scripts/agent/`.
+
+For full operational guidance (build bootstrap, codegen rules, native bridge, permissions,
+test strategy, l10n, security), see `app/CLAUDE.md`.
+
+
 - 💬 Join our [Discord Community](http://discord.omi.me)
