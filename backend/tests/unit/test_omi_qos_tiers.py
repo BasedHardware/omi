@@ -53,17 +53,16 @@ from utils.llm.clients import (
 class TestModelQosProfiles:
     """Verify profile structure and completeness."""
 
-    def test_three_profiles_exist(self):
-        assert set(MODEL_QOS_PROFILES.keys()) == {'mini', 'medium', 'high'}
+    def test_two_profiles_exist(self):
+        assert set(MODEL_QOS_PROFILES.keys()) == {'premium', 'max'}
 
     def test_all_profiles_have_same_features(self):
-        mini_features = set(MODEL_QOS_PROFILES['mini'].keys())
-        medium_features = set(MODEL_QOS_PROFILES['medium'].keys())
-        high_features = set(MODEL_QOS_PROFILES['high'].keys())
-        assert mini_features == medium_features == high_features
+        premium_features = set(MODEL_QOS_PROFILES['premium'].keys())
+        max_features = set(MODEL_QOS_PROFILES['max'].keys())
+        assert premium_features == max_features
 
-    def test_medium_profile_is_default(self):
-        assert _active_profile_name == 'medium'
+    def test_max_profile_is_default(self):
+        assert _active_profile_name == 'max'
 
     def test_profiles_cover_all_providers(self):
         """Each profile should have features across all 4 providers."""
@@ -78,27 +77,42 @@ class TestModelQosProfiles:
             assert has_openrouter, f'{profile_name} missing OpenRouter features'
             assert has_perplexity, f'{profile_name} missing Perplexity features'
 
-    def test_mini_profile_uses_cheaper_models(self):
-        """Mini profile should use cheaper models than medium for most features."""
-        mini = MODEL_QOS_PROFILES['mini']
-        medium = MODEL_QOS_PROFILES['medium']
-        # conv_structure: mini uses gpt-4.1-mini, medium uses gpt-5.1
-        assert mini['conv_structure'] == 'gpt-4.1-mini'
-        assert medium['conv_structure'] == 'gpt-5.1'
-        # chat_agent: mini uses haiku, medium uses sonnet
-        assert 'haiku' in mini['chat_agent']
-        assert 'sonnet' in medium['chat_agent']
+    def test_premium_profile_uses_cheaper_models(self):
+        """Premium profile should use cheaper models than max for most features."""
+        premium = MODEL_QOS_PROFILES['premium']
+        max_prof = MODEL_QOS_PROFILES['max']
+        # conv_structure: premium uses gpt-4.1-mini, max uses gpt-5.1
+        assert premium['conv_structure'] == 'gpt-4.1-mini'
+        assert max_prof['conv_structure'] == 'gpt-5.1'
+        # chat_agent: premium uses haiku, max uses sonnet
+        assert 'haiku' in premium['chat_agent']
+        assert 'sonnet' in max_prof['chat_agent']
 
-    def test_medium_profile_matches_current_behavior(self):
-        """Medium profile should match current production model assignments."""
-        medium = MODEL_QOS_PROFILES['medium']
-        assert medium['conv_action_items'] == 'gpt-5.1'
-        assert medium['conv_structure'] == 'gpt-5.1'
-        assert medium['chat_responses'] == 'gpt-5.2'
-        assert medium['chat_agent'] == 'claude-sonnet-4-6'
-        assert medium['persona_chat'] == 'google/gemini-flash-1.5-8b'
-        assert medium['wrapped_analysis'] == 'google/gemini-3-flash-preview'
-        assert medium['web_search'] == 'sonar-pro'
+    def test_max_profile_matches_current_behavior(self):
+        """Max profile should match current production model assignments."""
+        max_prof = MODEL_QOS_PROFILES['max']
+        assert max_prof['conv_action_items'] == 'gpt-5.1'
+        assert max_prof['conv_structure'] == 'gpt-5.1'
+        assert max_prof['chat_responses'] == 'gpt-5.2'
+        assert max_prof['chat_agent'] == 'claude-sonnet-4-6'
+        assert max_prof['persona_chat'] == 'google/gemini-flash-1.5-8b'
+        assert max_prof['wrapped_analysis'] == 'google/gemini-3-flash-preview'
+        assert max_prof['web_search'] == 'sonar-pro'
+
+    def test_new_features_present(self):
+        """Verify newly added features exist in both profiles."""
+        new_features = [
+            'conv_folder',
+            'conv_discard',
+            'daily_summary_simple',
+            'external_structure',
+            'learnings',
+            'chat_graph',
+            'proactive_notification',
+        ]
+        for feature in new_features:
+            for profile_name, profile in MODEL_QOS_PROFILES.items():
+                assert feature in profile, f'{feature} missing from {profile_name}'
 
 
 class TestGetModel:
@@ -155,13 +169,13 @@ class TestGetLlm:
         assert llm1 is llm2
 
     def test_different_features_same_model_share_instance(self):
-        # Both default to gpt-4.1-mini in medium profile
+        # Both default to gpt-4.1-mini in max profile
         llm1 = get_llm('memories')
         llm2 = get_llm('goals')
         assert llm1 is llm2
 
     def test_different_models_return_different_instances(self):
-        # memories=gpt-4.1-mini, conv_structure=gpt-5.1 in medium
+        # memories=gpt-4.1-mini, conv_structure=gpt-5.1 in max
         llm1 = get_llm('memories')
         llm2 = get_llm('conv_structure')
         assert llm1 is not llm2
@@ -191,6 +205,20 @@ class TestGetLlm:
         llm_with_key = get_llm('conv_structure', cache_key='omi-test-key')
         llm_without_key = get_llm('conv_structure')
         assert llm_with_key is llm_without_key
+
+    def test_new_features_return_clients(self):
+        """New features should return valid LLM clients."""
+        for feature in [
+            'conv_folder',
+            'conv_discard',
+            'daily_summary_simple',
+            'external_structure',
+            'learnings',
+            'chat_graph',
+            'proactive_notification',
+        ]:
+            llm = get_llm(feature)
+            assert hasattr(llm, 'invoke'), f'{feature} did not return a valid client'
 
 
 class TestGetOrCreateLlmBehavioral:
