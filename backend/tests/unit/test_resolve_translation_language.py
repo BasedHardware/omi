@@ -1,0 +1,273 @@
+"""Tests for resolve_translation_language() — the translation opt-in/out gate.
+
+Covers issue #6837: translation cost optimization via explicit client control.
+
+Uses module stubbing to avoid Firestore/Redis init at import time.
+"""
+
+import os
+import re
+import sys
+from unittest.mock import MagicMock
+
+# --- Module-level mocks for heavy dependencies (must happen before any project imports) ---
+_mock_redis = MagicMock()
+_mock_redis.get.return_value = None
+_mock_redis.set.return_value = True
+_mock_redis.exists.return_value = 0
+
+if 'database' not in sys.modules:
+    sys.modules['database'] = MagicMock()
+if 'database.redis_db' not in sys.modules:
+    sys.modules['database.redis_db'] = MagicMock(r=_mock_redis)
+else:
+    sys.modules['database.redis_db'].r = _mock_redis
+
+if 'google' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+if 'google.cloud' not in sys.modules:
+    sys.modules['google.cloud'] = MagicMock()
+if 'google.cloud.translate_v3' not in sys.modules:
+    sys.modules['google.cloud.translate_v3'] = MagicMock()
+
+from utils.translation import resolve_translation_language
+
+
+class TestResolveTranslationLanguage:
+    """Test the translation language resolution with explicit precedence rules."""
+
+    def test_translate_disabled_overrides_settings(self):
+        """Client sending translate=disabled disables translation even when settings would enable it."""
+        result = resolve_translation_language(
+            translate_param='disabled',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result is None
+
+    def test_auto_translate_disabled_prevents_translation(self):
+        """auto_translate_enabled=False disables translation."""
+        result = resolve_translation_language(
+            translate_param='enabled',
+            auto_translate_enabled=False,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result is None
+
+    def test_empty_translate_param_with_auto_enabled(self):
+        """Empty translate param (legacy clients) with auto_translate_enabled falls through."""
+        result = resolve_translation_language(
+            translate_param='',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result == 'en'
+
+    def test_translate_enabled_with_multi_language_and_preference(self):
+        """translate=enabled with language=multi uses user_language_preference as target."""
+        result = resolve_translation_language(
+            translate_param='enabled',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='vi',
+        )
+        assert result == 'vi'
+
+    def test_translate_enabled_with_specific_language(self):
+        """translate=enabled with a specific language (not multi) uses that language as target."""
+        result = resolve_translation_language(
+            translate_param='enabled',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='es',
+            user_language_preference='en',
+        )
+        assert result == 'es'
+
+    def test_no_user_language_preference_disables_translation(self):
+        """No user language preference means no target language — translation disabled."""
+        result = resolve_translation_language(
+            translate_param='enabled',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='',
+        )
+        assert result is None
+
+    def test_non_multi_stt_language_disables_translation(self):
+        """Single-language STT (stt_language != 'multi') doesn't need translation."""
+        result = resolve_translation_language(
+            translate_param='enabled',
+            auto_translate_enabled=True,
+            stt_language='en',
+            language='en',
+            user_language_preference='en',
+        )
+        assert result is None
+
+    def test_precedence_translate_disabled_over_auto_translate(self):
+        """translate=disabled is checked before auto_translate_enabled (both disable, but order matters for logging)."""
+        result = resolve_translation_language(
+            translate_param='disabled',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result is None
+
+    def test_unknown_translate_value_treated_as_legacy(self):
+        """Unknown translate param values (not 'enabled' or 'disabled') fall through like empty."""
+        result = resolve_translation_language(
+            translate_param='foobar',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='ja',
+        )
+        assert result == 'ja'
+
+    def test_backward_compat_legacy_client_multi_language(self):
+        """Legacy clients (no translate param) with auto_translate_enabled still get translation."""
+        result = resolve_translation_language(
+            translate_param='',
+            auto_translate_enabled=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='fr',
+        )
+        assert result == 'fr'
+
+    def test_auto_translate_off_disables_for_legacy_clients(self):
+        """Legacy clients with auto_translate_enabled=False get translation disabled."""
+        result = resolve_translation_language(
+            translate_param='',
+            auto_translate_enabled=False,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result is None
+
+
+class TestTranslateParamWiring:
+    """Verify the translate param is wired through WebSocket handler signatures."""
+
+    @staticmethod
+    def _read_transcribe_source():
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
+            return f.read()
+
+    def test_listen_handler_has_translate_param(self):
+        """listen_handler must accept translate query parameter."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def listen_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find listen_handler"
+        assert 'translate' in match.group(), "listen_handler must have translate parameter"
+
+    def test_web_listen_handler_has_translate_param(self):
+        """web_listen_handler must accept translate query parameter."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def web_listen_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find web_listen_handler"
+        assert 'translate' in match.group(), "web_listen_handler must have translate parameter"
+
+    def test_stream_handler_receives_translate(self):
+        """_stream_handler must accept translate and pass it to resolve_translation_language."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def _stream_handler\(.*?\):\s*\n', source, re.DOTALL)
+        assert match is not None, "Could not find _stream_handler"
+        assert 'translate' in match.group(), "_stream_handler must have translate parameter"
+
+    def test_resolve_called_with_translate_param(self):
+        """resolve_translation_language must be called with translate_param and auto_translate_enabled."""
+        source = self._read_transcribe_source()
+        assert 'resolve_translation_language(' in source, "resolve_translation_language must be called"
+        assert 'translate_param=translate' in source, "Must pass translate_param=translate"
+        assert 'auto_translate_enabled=auto_translate_enabled' in source, "Must pass auto_translate_enabled"
+
+    def test_listen_handler_forwards_translate_to_listen(self):
+        """listen_handler must pass translate=translate to _listen."""
+        source = self._read_transcribe_source()
+        # Find the listen_handler body (between its def and the next @router or async def at module level)
+        match = re.search(
+            r'async def listen_handler\(.*?\):\s*\n(.*?)(?=\n@router|\nasync def [a-z])', source, re.DOTALL
+        )
+        assert match is not None, "Could not find listen_handler body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "listen_handler must forward translate=translate to _listen"
+
+    def test_listen_forwards_translate_to_stream_handler(self):
+        """_listen must pass translate=translate to _stream_handler."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def _listen\(.*?\):\s*\n(.*?)(?=\nasync def [a-z])', source, re.DOTALL)
+        assert match is not None, "Could not find _listen body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "_listen must forward translate=translate to _stream_handler"
+
+    def test_web_listen_forwards_translate_to_stream_handler(self):
+        """web_listen_handler must pass translate=translate to _stream_handler."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def web_listen_handler\(.*?\):\s*\n(.*?)$', source, re.DOTALL)
+        assert match is not None, "Could not find web_listen_handler body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "web_listen_handler must forward translate=translate to _stream_handler"
+
+    def test_translate_toggle_handler_exists(self):
+        """WebSocket text message handler must dispatch translate_toggle messages."""
+        source = self._read_transcribe_source()
+        assert (
+            "json_data.get('type') == 'translate_toggle'" in source
+        ), "translate_toggle message type must be handled in WebSocket text message handler"
+
+    def test_screen_state_handler_exists(self):
+        """WebSocket text message handler must dispatch screen_state messages."""
+        source = self._read_transcribe_source()
+        assert (
+            "json_data.get('type') == 'screen_state'" in source
+        ), "screen_state message type must be handled in WebSocket text message handler"
+
+    def test_deferred_segments_initialized(self):
+        """_stream_handler must initialize deferred_segments for screen-aware deferral."""
+        source = self._read_transcribe_source()
+        assert 'deferred_segments' in source, "deferred_segments must be initialized in _stream_handler"
+
+    def test_flush_deferred_translations_defined(self):
+        """_flush_deferred_translations must be defined for screen-aware deferral flush."""
+        source = self._read_transcribe_source()
+        assert 'async def _flush_deferred_translations' in source, "_flush_deferred_translations must be defined"
+
+    def test_toggle_handler_updates_translation_enabled(self):
+        """translate_toggle handler must update translation_enabled flag for stream_transcript_process gate."""
+        source = self._read_transcribe_source()
+        # Find the translate_toggle handler block
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        assert toggle_start != -1, "translate_toggle handler not found"
+        # Find the next message type handler to bound the search
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert 'translation_enabled = True' in toggle_block, "toggle-on must set translation_enabled = True"
+        assert 'translation_enabled = False' in toggle_block, "toggle-off must set translation_enabled = False"
+
+    def test_deferred_flush_routes_through_coordinator(self):
+        """_flush_deferred_translations must route through coordinator.observe() not direct API."""
+        source = self._read_transcribe_source()
+        # Find the function body
+        start = source.find('async def _flush_deferred_translations')
+        assert start != -1
+        # Find the next function definition
+        end = source.find('\n    async def ', start + 1)
+        body = source[start:end]
+        assert 'coordinator.observe(' in body, "_flush_deferred_translations must use coordinator.observe()"
+        assert (
+            'translate_units_batch' not in body
+        ), "_flush_deferred_translations must NOT call translate_units_batch directly"

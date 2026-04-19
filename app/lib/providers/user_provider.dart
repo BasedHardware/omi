@@ -37,16 +37,20 @@ class UserProvider with ChangeNotifier {
 
   // Transcription preferences
   bool _singleLanguageMode = false;
+  bool _autoTranslateEnabled = false;
   List<String> _transcriptionVocabulary = [];
 
   // Loading states for transcription settings
   bool _isUpdatingSingleLanguageMode = false;
+  bool _isUpdatingAutoTranslate = false;
   bool _isUpdatingVocabulary = false;
 
   // Transcription preferences getters
   bool get singleLanguageMode => _singleLanguageMode;
+  bool get autoTranslateEnabled => _autoTranslateEnabled;
   List<String> get transcriptionVocabulary => _transcriptionVocabulary;
   bool get isUpdatingSingleLanguageMode => _isUpdatingSingleLanguageMode;
+  bool get isUpdatingAutoTranslate => _isUpdatingAutoTranslate;
   bool get isUpdatingVocabulary => _isUpdatingVocabulary;
 
   String get dataProtectionLevel => _dataProtectionLevel;
@@ -139,12 +143,14 @@ class UserProvider with ChangeNotifier {
   void _preloadFromCache() {
     final prefs = SharedPreferencesUtil();
     _singleLanguageMode = prefs.cachedSingleLanguageMode;
+    _autoTranslateEnabled = prefs.cachedAutoTranslateEnabled;
     _transcriptionVocabulary = prefs.cachedTranscriptionVocabulary;
   }
 
   void _syncToCache() {
     final prefs = SharedPreferencesUtil();
     prefs.cachedSingleLanguageMode = _singleLanguageMode;
+    prefs.cachedAutoTranslateEnabled = _autoTranslateEnabled;
     prefs.cachedTranscriptionVocabulary = _transcriptionVocabulary;
   }
 
@@ -162,6 +168,7 @@ class UserProvider with ChangeNotifier {
       final prefs = await getTranscriptionPreferences();
       if (prefs != null) {
         _singleLanguageMode = prefs['single_language_mode'] ?? false;
+        _autoTranslateEnabled = prefs['auto_translate_enabled'] ?? false;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
         _syncToCache();
         notifyListeners();
@@ -224,6 +231,28 @@ class UserProvider with ChangeNotifier {
       return false;
     } finally {
       _isUpdatingSingleLanguageMode = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> setAutoTranslateEnabled(bool value) async {
+    if (_isUpdatingAutoTranslate) return false;
+
+    _isUpdatingAutoTranslate = true;
+    notifyListeners();
+
+    try {
+      final success = await setTranscriptionPreferences(autoTranslateEnabled: value);
+      if (success) {
+        _autoTranslateEnabled = value;
+        _syncToCache();
+      }
+      return success;
+    } catch (e, stackTrace) {
+      Logger.error('Failed to set auto translate enabled: $e\n$stackTrace');
+      return false;
+    } finally {
+      _isUpdatingAutoTranslate = false;
       notifyListeners();
     }
   }

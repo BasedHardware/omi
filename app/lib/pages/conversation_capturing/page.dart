@@ -350,6 +350,28 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         ),
                       ),
                       const SizedBox(width: 12),
+                      // Translate toggle button
+                      GestureDetector(
+                        onTap: () => provider.toggleTranslation(),
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: provider.translationEnabled ? const Color(0xFF4A90D9) : const Color(0xFF35343B),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.translate, color: Colors.white, size: 24),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       // Mute button
                       GestureDetector(
                         onTap: () => _toggleMute(provider),

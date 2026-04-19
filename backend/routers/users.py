@@ -555,12 +555,14 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 
 class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
+    auto_translate_enabled: bool = False
     vocabulary: List[str] = []
     language: str = ''
 
 
 class TranscriptionPreferencesUpdate(BaseModel):
     single_language_mode: Optional[bool] = None
+    auto_translate_enabled: Optional[bool] = None
     vocabulary: Optional[List[str]] = None
 
 
@@ -581,7 +583,12 @@ def update_transcription_preferences_endpoint(
     - single_language_mode: If True, uses exact language for higher accuracy but disables translation
     - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
     """
-    set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
+    set_user_transcription_preferences(
+        uid,
+        single_language_mode=data.single_language_mode,
+        auto_translate_enabled=data.auto_translate_enabled,
+        vocabulary=data.vocabulary,
+    )
     return {'status': 'ok'}
 
 
