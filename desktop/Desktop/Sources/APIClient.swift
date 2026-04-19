@@ -105,6 +105,12 @@ actor APIClient {
       }
     }
 
+    // BYOK: attach user-provided keys so the backend uses them for LLM/STT
+    // calls this request triggers. Sent per-request; never stored server-side.
+    for (provider, entry) in APIKeyService.byokSnapshot {
+      headers[provider.headerName] = entry.key
+    }
+
     return headers
   }
 
@@ -4408,6 +4414,24 @@ extension APIClient {
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
     return try await post("v1/payments/customer-portal")
+  }
+
+  /// Activate the Bring-Your-Own-Keys free plan on the backend.
+  /// Sends SHA-256 fingerprints (never the keys themselves) so the backend
+  /// can tell when the user rotates keys and re-validate.
+  func activateBYOK(fingerprints: [String: String]) async throws {
+    struct Request: Encodable {
+      let fingerprints: [String: String]
+    }
+    struct Empty: Decodable {}
+    let _: Empty = try await post(
+      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints)
+    )
+  }
+
+  /// Deactivate BYOK (user cleared keys) so they return to the paid plan gate.
+  func deactivateBYOK() async throws {
+    try await delete("v1/users/me/byok-active")
   }
 
   /// Fetches all people for the current user

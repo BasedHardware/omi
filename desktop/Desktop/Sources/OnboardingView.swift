@@ -27,6 +27,7 @@ struct OnboardingView: View {
   @AppStorage("onboardingResearchStepRemoved") private var hasRemovedResearchStep = false
   @AppStorage("onboardingNotificationPermissionStepRemoved") private
     var hasRemovedNotificationPermissionStep = false
+  @AppStorage("onboardingBYOKStepInserted") private var hasInsertedBYOKStep = false
   @StateObject private var introCoordinator = OnboardingPagedIntroCoordinator()
   @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -77,7 +78,8 @@ struct OnboardingView: View {
           hasInsertedDataSourcesStep: hasInsertedDataSourcesStep,
           hasInsertedExportsStep: hasInsertedExportsStep,
           hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
-          hasRemovedResearchStep: hasRemovedResearchStep
+          hasRemovedResearchStep: hasRemovedResearchStep,
+          hasInsertedBYOKStep: hasInsertedBYOKStep
         )
         if !hasRemovedNotificationPermissionStep, currentStep >= 8 {
           currentStep -= 1
@@ -96,6 +98,7 @@ struct OnboardingView: View {
       hasInsertedSecondBrainStep = false
       hasRemovedResearchStep = true
       hasRemovedNotificationPermissionStep = true
+      hasInsertedBYOKStep = true
       introCoordinator.prepare(appState: appState)
     }
     .task {
@@ -433,14 +436,27 @@ struct OnboardingView: View {
           },
           onForceComplete: handleOnboardingComplete
         )
+      } else if currentStep == 17 {
+        OnboardingBYOKStepView(
+          graphViewModel: graphViewModel,
+          stepIndex: 17,
+          totalSteps: OnboardingFlow.introStepCount,
+          onContinue: {
+            currentStep = 18
+          },
+          onSkip: {
+            currentStep = 18
+          },
+          onForceComplete: handleOnboardingComplete
+        )
       } else {
         OnboardingTasksStepView(
           onComplete: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
             handleOnboardingComplete()
           },
           onSkip: {
-            AnalyticsManager.shared.onboardingStepCompleted(step: 17, stepName: "Tasks_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks_Skipped")
             handleOnboardingComplete()
           },
           onForceComplete: handleOnboardingComplete

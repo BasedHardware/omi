@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription"
+  ],
   "releases": [
     {
       "version": "0.11.339",

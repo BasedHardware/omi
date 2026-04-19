@@ -496,6 +496,10 @@ def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
     """
+    # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
+    if users_db.is_byok_active(uid):
+        return True
+
     subscription = users_db.get_user_valid_subscription(uid)
     if not subscription:
         return False
@@ -517,6 +521,10 @@ def get_remaining_transcription_seconds(uid: str) -> int | None:
     Returns None if unlimited, otherwise the remaining seconds (>= 0).
     Used for freemium auto-switch to on-device transcription.
     """
+    # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
+    if users_db.is_byok_active(uid):
+        return None
+
     subscription = users_db.get_user_valid_subscription(uid)
     if not subscription:
         # No subscription = use basic limits

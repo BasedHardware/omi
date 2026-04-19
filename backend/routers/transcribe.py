@@ -36,6 +36,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
+from utils.byok import get_byok_keys
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
@@ -1073,7 +1074,15 @@ async def _stream_handler(
                 pending_request_event.set()  # Signal the receiver
                 data = bytearray()
                 data.extend(struct.pack("I", 104))
-                data.extend(bytes(json.dumps({"conversation_id": conversation_id, "language": language}), "utf-8"))
+                # Forward BYOK keys to pusher so process_conversation routes LLM
+                # calls through the user's keys. Empty dict when user isn't BYOK
+                # — pusher then uses its env keys (unchanged behavior).
+                payload = {
+                    "conversation_id": conversation_id,
+                    "language": language,
+                    "byok_keys": get_byok_keys(),
+                }
+                data.extend(bytes(json.dumps(payload), "utf-8"))
                 await pusher_ws.send(data)
                 logger.info(f"Sent process_conversation request to pusher: {conversation_id} {uid} {session_id}")
                 return True
