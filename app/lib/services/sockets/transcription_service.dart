@@ -122,7 +122,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     }
 
     // Send translation preference — enabled when user has auto-translation on
-    if (!SharedPreferencesUtil().cachedSingleLanguageMode) {
+    if (SharedPreferencesUtil().cachedAutoTranslateEnabled) {
       params += '&translate=enabled';
     }
 

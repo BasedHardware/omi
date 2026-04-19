@@ -42,6 +42,7 @@ class UserProvider with ChangeNotifier {
 
   // Loading states for transcription settings
   bool _isUpdatingSingleLanguageMode = false;
+  bool _isUpdatingAutoTranslate = false;
   bool _isUpdatingVocabulary = false;
 
   // Transcription preferences getters
@@ -49,6 +50,7 @@ class UserProvider with ChangeNotifier {
   bool get autoTranslateEnabled => _autoTranslateEnabled;
   List<String> get transcriptionVocabulary => _transcriptionVocabulary;
   bool get isUpdatingSingleLanguageMode => _isUpdatingSingleLanguageMode;
+  bool get isUpdatingAutoTranslate => _isUpdatingAutoTranslate;
   bool get isUpdatingVocabulary => _isUpdatingVocabulary;
 
   String get dataProtectionLevel => _dataProtectionLevel;
@@ -229,6 +231,28 @@ class UserProvider with ChangeNotifier {
       return false;
     } finally {
       _isUpdatingSingleLanguageMode = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> setAutoTranslateEnabled(bool value) async {
+    if (_isUpdatingAutoTranslate) return false;
+
+    _isUpdatingAutoTranslate = true;
+    notifyListeners();
+
+    try {
+      final success = await setTranscriptionPreferences(autoTranslateEnabled: value);
+      if (success) {
+        _autoTranslateEnabled = value;
+        _syncToCache();
+      }
+      return success;
+    } catch (e, stackTrace) {
+      Logger.error('Failed to set auto translate enabled: $e\n$stackTrace');
+      return false;
+    } finally {
+      _isUpdatingAutoTranslate = false;
       notifyListeners();
     }
   }

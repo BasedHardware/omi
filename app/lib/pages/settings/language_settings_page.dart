@@ -85,8 +85,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               .key
         : context.l10n.notSet;
 
-    final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
-    final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
+    final isUpdatingTranslation = userProvider.isUpdatingAutoTranslate;
+    final isAutoTranslationEnabled = userProvider.autoTranslateEnabled;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -176,7 +176,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 Switch(
                   value: isAutoTranslationEnabled,
                   onChanged: (value) async {
-                    final success = await userProvider.setSingleLanguageMode(!value);
+                    final success = await userProvider.setAutoTranslateEnabled(value);
                     if (success && context.mounted) {
                       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
                     }
