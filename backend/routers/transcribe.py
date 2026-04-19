@@ -1663,30 +1663,32 @@ async def _stream_handler(
         await translation_coordinator.observe(segments, removed_ids or [], conversation_id)
 
     async def _flush_deferred_translations():
-        """Batch-translate all segments deferred while screen was off."""
+        """Flush segments deferred while screen was off through the coordinator."""
         nonlocal translation_coordinator
         if not deferred_segments or not translation_coordinator:
+            deferred_segments.clear()
+            deferred_removed_ids.clear()
             return
 
-        # Group deferred segments by conversation_id
+        # Route through coordinator to respect monolingual gate and stability checks
         by_conv: Dict[str, list] = {}
         for seg_id, info in deferred_segments.items():
             conv_id = info['conversation_id']
             if conv_id not in by_conv:
                 by_conv[conv_id] = []
-            by_conv[conv_id].append((seg_id, info['text']))
+            by_conv[conv_id].append(
+                TranscriptSegment(id=seg_id, text=info['text'], speaker='SPEAKER_00', start=0, end=0)
+            )
 
-        for conv_id, units in by_conv.items():
-            try:
-                results = translation_service.translate_units_batch(translation_coordinator.target_language, units)
-                for seg_id, translated_text, detected_lang in results:
-                    if translated_text and detected_lang:
-                        await _on_translation_ready(seg_id, translated_text, detected_lang, conv_id)
-            except Exception as e:
-                logger.error(f"Deferred translation batch error: {e} {uid} {session_id}")
-
+        removed = list(deferred_removed_ids)
         deferred_segments.clear()
         deferred_removed_ids.clear()
+
+        for conv_id, segments in by_conv.items():
+            try:
+                await translation_coordinator.observe(segments, removed, conv_id)
+            except Exception as e:
+                logger.error(f"Deferred translation flush error: {e} {uid} {session_id}")
 
     async def flush_pending_translations():
         """Flush all pending translations before cleanup."""
@@ -2353,7 +2355,7 @@ async def _stream_handler(
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal audio_ring_buffer, dg_usage_ms_pending
         nonlocal translation_coordinator, translation_language, translation_language_base, translation_enabled_mid_session
-        nonlocal conversation_language_state, screen_active
+        nonlocal translation_enabled, conversation_language_state, screen_active
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -2550,6 +2552,7 @@ async def _stream_handler(
                                 if lang_pref:
                                     translation_language = lang_pref
                                     translation_language_base = lang_pref.split('-')[0]
+                                    translation_enabled = True
                                     translation_enabled_mid_session = True
                                     conversation_language_state = ConversationLanguageState(lang_pref)
                                     translation_coordinator = TranslationCoordinator(
@@ -2563,11 +2566,20 @@ async def _stream_handler(
                                         conv = _get_cached_conversation()
                                         if conv:
                                             existing = conv.get('transcript_segments', [])
-                                            units = [
-                                                (s['id'], s['text'])
-                                                for s in existing
-                                                if s.get('text') and not s.get('translations')
-                                            ]
+                                            # Filter to recent segments (24h window)
+                                            conv_started = conv.get('started_at')
+                                            now = datetime.now(timezone.utc)
+                                            cutoff_secs = 24 * 3600
+                                            units = []
+                                            for s in existing:
+                                                if not s.get('text') or s.get('translations'):
+                                                    continue
+                                                # Check 24h window using conversation start + segment end
+                                                if conv_started and s.get('end'):
+                                                    seg_time = conv_started + timedelta(seconds=s['end'])
+                                                    if (now - seg_time).total_seconds() > cutoff_secs:
+                                                        continue
+                                                units.append((s['id'], s['text']))
                                             if units:
                                                 try:
                                                     results = translation_service.translate_units_batch(
@@ -2591,6 +2603,7 @@ async def _stream_handler(
                                 # Disable translation — flush pending then stop
                                 await flush_pending_translations()
                                 translation_coordinator = None
+                                translation_enabled = False
                                 translation_enabled_mid_session = False
                         elif json_data.get('type') == 'screen_state':
                             # Screen on/off tracking for translation cost deferral (issue #6837)
