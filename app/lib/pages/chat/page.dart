@@ -63,6 +63,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   // Track which app is pending deletion confirmation
   String? _pendingDeleteAppId;
   String? _selectedContext;
+  bool _quotaSheetShown = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -87,6 +88,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      // Listen for quota exceeded from any send path (text or voice)
+      provider.addListener(_onMessageProviderChanged);
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
@@ -142,8 +145,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.initState();
   }
 
+  void _onMessageProviderChanged() {
+    final provider = context.read<MessageProvider>();
+    if (mounted && provider.isChatQuotaExceeded && !_quotaSheetShown) {
+      _quotaSheetShown = true;
+      _showPlansSheetOnQuotaExceeded();
+    } else if (!provider.isChatQuotaExceeded) {
+      _quotaSheetShown = false;
+    }
+  }
+
   @override
   void dispose() {
+    context.read<MessageProvider>().removeListener(_onMessageProviderChanged);
     textController.dispose();
     scrollController.dispose();
     textFieldFocusNode.dispose();
@@ -705,10 +719,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     await provider.sendMessageStreamToServer(text);
 
-    // Show plans sheet if backend returned 402 quota exceeded
-    if (mounted && provider.isChatQuotaExceeded) {
-      _showPlansSheetOnQuotaExceeded();
-    }
+    // Plans sheet is shown reactively via _onMessageProviderChanged listener
 
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
@@ -1399,8 +1410,8 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
     _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
     _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation = Tween<double>(begin: 0, end: 10)
-        .animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+    _arrowAnimation =
+        Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
   }
 
   @override
