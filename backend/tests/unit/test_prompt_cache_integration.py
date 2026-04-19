@@ -629,24 +629,19 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     }
     exec(source, ns)
 
-    # Find clients that have prompt cache kwargs (should be exactly the 2 agent clients)
-    cache_clients = [c for c in captured_calls if "prompt_cache_key" in c.get("model_kwargs", {})]
-    assert len(cache_clients) == 2, f"Expected exactly 2 clients with prompt_cache_key, found {len(cache_clients)}"
+    # Verify gpt-5.1 clients get prompt_cache_retention via extra_body
+    gpt51_clients = [c for c in captured_calls if c.get("model") == "gpt-5.1"]
+    for call in gpt51_clients:
+        eb = call.get("extra_body", {})
+        assert (
+            eb.get("prompt_cache_retention") == "24h"
+        ), f"gpt-5.1 client missing prompt_cache_retention in extra_body: {call}"
 
-    for call in cache_clients:
-        mkw = call["model_kwargs"]
-        assert mkw["prompt_cache_key"] == "omi-agent-v1", f"Wrong prompt_cache_key: {mkw}"
-        assert call["model"] == "gpt-5.1", f"Cache kwargs should only be on gpt-5.1, got {call['model']}"
-
-    # Verify one is streaming, one is not
-    streaming_cache = [c for c in cache_clients if c.get("streaming")]
-    non_streaming_cache = [c for c in cache_clients if not c.get("streaming")]
-    assert len(streaming_cache) == 1, "Should have exactly 1 streaming agent with cache"
-    assert len(non_streaming_cache) == 1, "Should have exactly 1 non-streaming agent with cache"
-
-    # Verify non-cache clients do NOT have prompt_cache_key
-    non_cache_clients = [c for c in captured_calls if "prompt_cache_key" not in c.get("model_kwargs", {})]
-    assert len(non_cache_clients) > 0, "Should have some clients without cache kwargs"
+    # Verify non-gpt-5.1 clients do NOT have prompt_cache_retention
+    non_gpt51_clients = [c for c in captured_calls if c.get("model") != "gpt-5.1"]
+    for call in non_gpt51_clients:
+        eb = call.get("extra_body", {})
+        assert "prompt_cache_retention" not in eb, f"Non-gpt-5.1 client should not have prompt_cache_retention: {call}"
     for call in non_cache_clients:
         mkw = call.get("model_kwargs", {})
         assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
