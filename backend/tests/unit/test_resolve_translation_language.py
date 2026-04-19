@@ -193,3 +193,30 @@ class TestTranslateParamWiring:
         source = self._read_transcribe_source()
         assert 'resolve_translation_language(' in source, "resolve_translation_language must be called"
         assert 'translate_param=translate' in source, "Must pass translate_param=translate"
+
+    def test_listen_handler_forwards_translate_to_listen(self):
+        """listen_handler must pass translate=translate to _listen."""
+        source = self._read_transcribe_source()
+        # Find the listen_handler body (between its def and the next @router or async def at module level)
+        match = re.search(
+            r'async def listen_handler\(.*?\):\s*\n(.*?)(?=\n@router|\nasync def [a-z])', source, re.DOTALL
+        )
+        assert match is not None, "Could not find listen_handler body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "listen_handler must forward translate=translate to _listen"
+
+    def test_listen_forwards_translate_to_stream_handler(self):
+        """_listen must pass translate=translate to _stream_handler."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def _listen\(.*?\):\s*\n(.*?)(?=\nasync def [a-z])', source, re.DOTALL)
+        assert match is not None, "Could not find _listen body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "_listen must forward translate=translate to _stream_handler"
+
+    def test_web_listen_forwards_translate_to_stream_handler(self):
+        """web_listen_handler must pass translate=translate to _stream_handler."""
+        source = self._read_transcribe_source()
+        match = re.search(r'async def web_listen_handler\(.*?\):\s*\n(.*?)$', source, re.DOTALL)
+        assert match is not None, "Could not find web_listen_handler body"
+        body = match.group(1)
+        assert 'translate=translate' in body, "web_listen_handler must forward translate=translate to _stream_handler"
