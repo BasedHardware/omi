@@ -418,6 +418,14 @@ struct OnboardingView: View {
             }
             currentStep = 17
           },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 16, stepName: "Goal_Skipped")
+            if !ProactiveAssistantsPlugin.shared.isMonitoring {
+              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+            }
+            currentStep = 17
+          },
           onForceComplete: handleOnboardingComplete
         )
       } else {
