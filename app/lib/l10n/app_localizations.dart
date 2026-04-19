@@ -8733,10 +8733,10 @@ abstract class AppLocalizations {
   /// **'Cancel Subscription'**
   String get cancelSubscription;
 
-  /// Shows end date
+  /// No description provided for @endsOnDate.
   ///
   /// In en, this message translates to:
-  /// **'Ends on {date}'**
+  /// **'Ends {date}'**
   String endsOnDate(String date);
 
   /// Status label for active
