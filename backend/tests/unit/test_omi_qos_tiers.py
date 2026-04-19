@@ -421,6 +421,22 @@ class TestProviderSafetyGuard:
         with pytest.raises(ValueError, match='Perplexity'):
             get_llm('web_search')
 
+    def test_get_llm_rejects_cross_provider_env_override(self, monkeypatch):
+        """Env override must not silently route an OpenAI feature to a Claude model."""
+        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'claude-haiku-3.5')
+        with pytest.raises(ValueError, match='invalid.*OpenAI'):
+            get_llm('conv_action_items')
+
+    def test_get_llm_rejects_openrouter_model_for_openai_feature(self, monkeypatch):
+        monkeypatch.setenv('MODEL_QOS_CONV_STRUCTURE', 'google/gemini-flash-1.5-8b')
+        with pytest.raises(ValueError, match='invalid.*OpenAI'):
+            get_llm('conv_structure')
+
+    def test_get_llm_rejects_flat_model_for_openrouter_feature(self, monkeypatch):
+        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'gpt-5.1')
+        with pytest.raises(ValueError, match='invalid.*OpenRouter'):
+            get_llm('persona_chat')
+
 
 class TestAnthropicModelExports:
     """Verify ANTHROPIC_AGENT_MODEL is backed by profile."""
