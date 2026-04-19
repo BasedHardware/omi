@@ -101,3 +101,9 @@ class UserSubscriptionResponse(BaseModel):
     memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # Chat quota usage — derived from llm_usage collection
+    chat_quota_used: float = 0.0
+    chat_quota_unit: Optional[ChatQuotaUnit] = None
+    chat_quota_percent: float = 0.0
+    chat_quota_allowed: bool = True
+    chat_quota_reset_at: Optional[int] = None
