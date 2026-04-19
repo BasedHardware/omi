@@ -1795,7 +1795,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get rateOnGooglePlay => 'Ocenite v Google Play';
 
   @override
-  String get maybeLater => 'Morda kasneje';
+  String get maybeLater => 'Morda pozneje';
 
   @override
   String get speechProfileIntro => 'Omi mora spoznati vaše cilje in vaš glas. Pozneje ga boste lahko spremenili.';
@@ -4570,10 +4570,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get alreadyBestValuePlan => 'Že imate najboljši načrt z največjo vrednostjo. Nobenih sprememb ni potrebnih.';
 
   @override
-  String get unableToLoadPlans => 'Ni mogoče naložiti načrtov';
+  String get unableToLoadPlans => 'Načrtov ni mogoče naložiti';
 
   @override
-  String get checkConnectionTryAgain => 'Prosimo, preverite svojo povezavo in poskusite ponovno';
+  String get checkConnectionTryAgain => 'Preverite povezavo in poskusite znova';
 
   @override
   String get useFreePlan => 'Uporabite brezplačni načrt';
@@ -9047,53 +9047,62 @@ class AppLocalizationsSl extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Imate plačljiv načrt.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Klepet';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'sporočil';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Neomejeno število sporočil ta mesec';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used od $limit proračuna porabljeno';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used od $limit sporočil porabljenih ta mesec';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit porabljeno';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Dosežena omejitev klepeta. Nadgradite za več sporočil.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Dosežena omejitev klepeta';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Porabili ste $used od $limitDisplay na načrtu $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Ponastavitev čez $count dni';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Ponastavitev čez $count ur';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Kmalu se ponastavi';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Nadgradi načrt';
+
+  @override
+  String get billingMonthly => 'Mesečno';
+
+  @override
+  String get billingYearly => 'Letno';
+
+  @override
+  String get savePercent => 'Prihranite ~17%';
 }

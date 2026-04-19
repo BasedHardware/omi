@@ -4483,7 +4483,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToLoadPlans => 'プランを読み込めません';
 
   @override
-  String get checkConnectionTryAgain => '接続を確認してもう一度お試しください';
+  String get checkConnectionTryAgain => '接続を確認して再試行してください';
 
   @override
   String get useFreePlan => '無料プランを使用';
@@ -8874,53 +8874,62 @@ class AppLocalizationsJa extends AppLocalizations {
   String get youAreOnAPaidPlan => '有料プランをご利用中です。';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'チャット';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'メッセージ';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => '今月のチャットメッセージは無制限です';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit のコンピュート予算を使用';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '今月 $used / $limit メッセージ使用済み';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit 使用済み';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'チャット上限に達しました。アップグレードしてください。';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'チャット上限に達しました';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return '$planプランで$limitDisplayのうち$usedを使用しました。';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return '$count日後にリセット';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return '$count時間後にリセット';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'まもなくリセット';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'プランをアップグレード';
+
+  @override
+  String get billingMonthly => '月額';
+
+  @override
+  String get billingYearly => '年額';
+
+  @override
+  String get savePercent => '約17%お得';
 }

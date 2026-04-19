@@ -4610,7 +4610,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get unableToLoadPlans => 'Impossible de charger les forfaits';
 
   @override
-  String get checkConnectionTryAgain => 'Veuillez vérifier votre connexion et réessayer';
+  String get checkConnectionTryAgain => 'Vérifiez votre connexion et réessayez';
 
   @override
   String get useFreePlan => 'Utiliser le forfait gratuit';
@@ -9112,47 +9112,56 @@ class AppLocalizationsFr extends AppLocalizations {
   String get chatMessages => 'messages';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Messages de chat illimités ce mois-ci';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used sur $limit de budget de calcul utilisé';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used sur $limit messages utilisés ce mois-ci';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit utilisés';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Limite de chat atteinte. Passez à un forfait supérieur pour plus de messages.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Limite de chat atteinte';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Vous avez utilisé $used de vos $limitDisplay sur le forfait $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Réinitialisation dans $count jours';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Réinitialisation dans $count heures';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Réinitialisation bientôt';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Améliorer le forfait';
+
+  @override
+  String get billingMonthly => 'Mensuel';
+
+  @override
+  String get billingYearly => 'Annuel';
+
+  @override
+  String get savePercent => 'Économisez ~17%';
 }

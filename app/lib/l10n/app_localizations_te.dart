@@ -1800,7 +1800,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get rateOnGooglePlay => 'Google Play లో రేట్ చేయండి';
 
   @override
-  String get maybeLater => 'బహుశా తరువాత';
+  String get maybeLater => 'బహుశా తర్వాత';
 
   @override
   String get speechProfileIntro => 'Omi మీ లక్ష్యాలు మరియు మీ గతిని నేర్చుకోవాలి. మీరు దీన్ని తరువాత సవరించగలరు.';
@@ -4589,10 +4589,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get alreadyBestValuePlan => 'మీరు ఇప్పటికే ఉత్తమ విలువ ప్లాన్‌ను కలిగి ఉన్నారు. ఎటువంటి మార్పులు అవసరం లేవు.';
 
   @override
-  String get unableToLoadPlans => 'ప్లాన్‌లను లోడ్ చేయలేకపోయాను';
+  String get unableToLoadPlans => 'ప్లాన్‌లు లోడ్ చేయలేకపోయాము';
 
   @override
-  String get checkConnectionTryAgain => 'దయచేసి మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి';
+  String get checkConnectionTryAgain => 'కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి';
 
   @override
   String get useFreePlan => 'ఉచిత ప్లాన్‌ను ఉపయోగించండి';
@@ -9074,53 +9074,62 @@ class AppLocalizationsTe extends AppLocalizations {
   String get youAreOnAPaidPlan => 'మీరు చెల్లింపు ప్లాన్‌లో ఉన్నారు.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'చాట్';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'సందేశాలు';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'ఈ నెల అపరిమిత చాట్ సందేశాలు';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit కంప్యూట్ బడ్జెట్ వాడారు';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return 'ఈ నెల $used / $limit సందేశాలు వాడారు';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit వాడారు';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'చాట్ పరిమితి చేరుకుంది. మరిన్ని సందేశాల కోసం అప్‌గ్రేడ్ చేయండి.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'చాట్ పరిమితి చేరుకుంది';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return '$plan ప్లాన్‌లో $limitDisplay నుండి $used వాడారు.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return '$count రోజుల్లో రీసెట్ అవుతుంది';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return '$count గంటల్లో రీసెట్ అవుతుంది';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'త్వరలో రీసెట్ అవుతుంది';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'ప్లాన్ అప్‌గ్రేడ్';
+
+  @override
+  String get billingMonthly => 'నెలవారీ';
+
+  @override
+  String get billingYearly => 'సంవత్సరానికి';
+
+  @override
+  String get savePercent => '~17% ఆదా చేయండి';
 }

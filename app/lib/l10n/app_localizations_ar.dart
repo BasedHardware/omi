@@ -1781,7 +1781,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get rateOnGooglePlay => 'التقييم على Google Play';
 
   @override
-  String get maybeLater => 'ربما لاحقًا';
+  String get maybeLater => 'ربما لاحقاً';
 
   @override
   String get speechProfileIntro => 'يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقًا.';
@@ -8962,53 +8962,62 @@ class AppLocalizationsAr extends AppLocalizations {
   String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'الدردشة';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'رسائل';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'رسائل دردشة غير محدودة هذا الشهر';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used من $limit ميزانية الحوسبة مستخدمة';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used من $limit رسالة مستخدمة هذا الشهر';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit مستخدم';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'تم الوصول لحد الدردشة. قم بالترقية لمزيد من الرسائل.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'تم الوصول لحد الدردشة';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'لقد استخدمت $used من $limitDisplay في خطة $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'يُعاد التعيين خلال $count يوم';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'يُعاد التعيين خلال $count ساعة';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'يُعاد التعيين قريباً';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'ترقية الخطة';
+
+  @override
+  String get billingMonthly => 'شهري';
+
+  @override
+  String get billingYearly => 'سنوي';
+
+  @override
+  String get savePercent => 'وفّر ~17%';
 }

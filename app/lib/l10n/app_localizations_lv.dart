@@ -4570,10 +4570,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get alreadyBestValuePlan => 'Jums jau ir vislabākās vērtības plāns. Nav nepieciešamas izmaiņas.';
 
   @override
-  String get unableToLoadPlans => 'Nevar ielādēt plānus';
+  String get unableToLoadPlans => 'Neizdevās ielādēt plānus';
 
   @override
-  String get checkConnectionTryAgain => 'Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz';
+  String get checkConnectionTryAgain => 'Pārbaudiet savienojumu un mēģiniet vēlreiz';
 
   @override
   String get useFreePlan => 'Izmantot bezmaksas plānu';
@@ -9041,53 +9041,62 @@ class AppLocalizationsLv extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Jums ir maksas plāns.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Tērzēšana';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'ziņas';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Neierobežotas tērzēšanas ziņas šomēnes';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used no $limit skaitļošanas budžeta izmantots';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used no $limit ziņām izmantots šomēnes';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit izmantots';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Tērzēšanas limits sasniegts. Jauniniet vairāk ziņām.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Tērzēšanas limits sasniegts';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Esat izmantojis $used no $limitDisplay plānā $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Atiestatīsies pēc $count dienām';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Atiestatīsies pēc $count stundām';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Drīz atiestatīsies';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Jaunināt plānu';
+
+  @override
+  String get billingMonthly => 'Mēnesī';
+
+  @override
+  String get billingYearly => 'Gadā';
+
+  @override
+  String get savePercent => 'Ietaupiet ~17%';
 }

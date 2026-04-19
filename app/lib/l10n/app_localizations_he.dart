@@ -4529,7 +4529,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unableToLoadPlans => 'לא ניתן לטעון תוכניות';
 
   @override
-  String get checkConnectionTryAgain => 'אנא בדוק את החיבור שלך ונסה שוב';
+  String get checkConnectionTryAgain => 'בדוק את החיבור ונסה שוב';
 
   @override
   String get useFreePlan => 'השתמש בתוכנית חינם';
@@ -8951,53 +8951,62 @@ class AppLocalizationsHe extends AppLocalizations {
   String get youAreOnAPaidPlan => 'אתה על תוכנית בתשלום.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'צ׳אט';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'הודעות';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'הודעות צ׳אט ללא הגבלה החודש';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used מתוך $limit תקציב מחשוב נוצל';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used מתוך $limit הודעות נוצלו החודש';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit נוצל';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'הגעת למגבלת הצ׳אט. שדרג לעוד הודעות.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'הגעת למגבלת הצ׳אט';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'השתמשת ב-$used מתוך $limitDisplay בתוכנית $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'מתאפס בעוד $count ימים';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'מתאפס בעוד $count שעות';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'מתאפס בקרוב';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'שדרג תוכנית';
+
+  @override
+  String get billingMonthly => 'חודשי';
+
+  @override
+  String get billingYearly => 'שנתי';
+
+  @override
+  String get savePercent => 'חסוך ~17%';
 }

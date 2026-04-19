@@ -4561,10 +4561,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get alreadyBestValuePlan => 'Teil on juba parima väärtusega plaan. Muudatusi pole vaja.';
 
   @override
-  String get unableToLoadPlans => 'Plaane ei saa laadida';
+  String get unableToLoadPlans => 'Plaanide laadimine ebaõnnestus';
 
   @override
-  String get checkConnectionTryAgain => 'Palun kontrollige ühendust ja proovige uuesti';
+  String get checkConnectionTryAgain => 'Kontrolli ühendust ja proovi uuesti';
 
   @override
   String get useFreePlan => 'Kasuta tasuta plaani';
@@ -9020,53 +9020,62 @@ class AppLocalizationsEt extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Oled tasulisel plaanil.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Vestlus';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'sõnumit';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Piiramatu arv vestlussõnumeid sel kuul';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit arvutuseelarvet kasutatud';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used / $limit sõnumit kasutatud sel kuul';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit kasutatud';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Vestluse limiit täis. Uuenda rohkemate sõnumite jaoks.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Vestluse limiit täis';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Oled kasutanud $used oma $limitDisplay plaanist $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Lähtestub $count päeva pärast';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Lähtestub $count tunni pärast';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Lähtestub peagi';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Uuenda plaani';
+
+  @override
+  String get billingMonthly => 'Kuine';
+
+  @override
+  String get billingYearly => 'Aastane';
+
+  @override
+  String get savePercent => 'Säästa ~17%';
 }

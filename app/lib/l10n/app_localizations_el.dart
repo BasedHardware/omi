@@ -4599,7 +4599,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get alreadyBestValuePlan => 'Έχετε ήδη το πρόγραμμα με την καλύτερη αξία. Δεν χρειάζονται αλλαγές.';
 
   @override
-  String get unableToLoadPlans => 'Αδυναμία φόρτωσης προγραμμάτων';
+  String get unableToLoadPlans => 'Αδυναμία φόρτωσης πλάνων';
 
   @override
   String get checkConnectionTryAgain => 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά';
@@ -9088,53 +9088,62 @@ class AppLocalizationsEl extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Είστε σε πληρωμένο πλάνο.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Συνομιλία';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'μηνύματα';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Απεριόριστα μηνύματα συνομιλίας αυτόν τον μήνα';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used από $limit υπολογιστικό προϋπολογισμό χρησιμοποιήθηκε';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used από $limit μηνύματα χρησιμοποιήθηκαν αυτόν τον μήνα';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit χρησιμοποιήθηκαν';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Το όριο συνομιλίας επιτεύχθηκε. Αναβαθμίστε για περισσότερα μηνύματα.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Το όριο συνομιλίας επιτεύχθηκε';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Έχετε χρησιμοποιήσει $used από $limitDisplay στο πλάνο $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Επαναφορά σε $count ημέρες';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Επαναφορά σε $count ώρες';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Επαναφορά σύντομα';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Αναβάθμιση πλάνου';
+
+  @override
+  String get billingMonthly => 'Μηνιαίο';
+
+  @override
+  String get billingYearly => 'Ετήσιο';
+
+  @override
+  String get savePercent => 'Εξοικονομήστε ~17%';
 }

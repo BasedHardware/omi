@@ -4556,7 +4556,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get alreadyBestValuePlan => 'Již máte plán s nejlepší hodnotou. Nejsou potřeba žádné změny.';
 
   @override
-  String get unableToLoadPlans => 'Nelze načíst plány';
+  String get unableToLoadPlans => 'Nepodařilo se načíst plány';
 
   @override
   String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
@@ -9022,50 +9022,59 @@ class AppLocalizationsCs extends AppLocalizations {
   String get chatTitle => 'Chat';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'zpráv';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Neomezené chatové zprávy tento měsíc';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used z $limit výpočetního rozpočtu využito';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used z $limit zpráv využito tento měsíc';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit využito';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Dosažen limit chatu. Upgradujte pro více zpráv.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Dosažen limit chatu';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Využili jste $used z $limitDisplay na plánu $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Obnoví se za $count dní';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Obnoví se za $count hodin';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Brzy se obnoví';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Upgradovat plán';
+
+  @override
+  String get billingMonthly => 'Měsíční';
+
+  @override
+  String get billingYearly => 'Roční';
+
+  @override
+  String get savePercent => 'Ušetřete ~17%';
 }
