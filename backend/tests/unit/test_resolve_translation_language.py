@@ -220,3 +220,27 @@ class TestTranslateParamWiring:
         assert match is not None, "Could not find web_listen_handler body"
         body = match.group(1)
         assert 'translate=translate' in body, "web_listen_handler must forward translate=translate to _stream_handler"
+
+    def test_translate_toggle_handler_exists(self):
+        """WebSocket text message handler must dispatch translate_toggle messages."""
+        source = self._read_transcribe_source()
+        assert (
+            "json_data.get('type') == 'translate_toggle'" in source
+        ), "translate_toggle message type must be handled in WebSocket text message handler"
+
+    def test_screen_state_handler_exists(self):
+        """WebSocket text message handler must dispatch screen_state messages."""
+        source = self._read_transcribe_source()
+        assert (
+            "json_data.get('type') == 'screen_state'" in source
+        ), "screen_state message type must be handled in WebSocket text message handler"
+
+    def test_deferred_segments_initialized(self):
+        """_stream_handler must initialize deferred_segments for screen-aware deferral."""
+        source = self._read_transcribe_source()
+        assert 'deferred_segments' in source, "deferred_segments must be initialized in _stream_handler"
+
+    def test_flush_deferred_translations_defined(self):
+        """_flush_deferred_translations must be defined for screen-aware deferral flush."""
+        source = self._read_transcribe_source()
+        assert 'async def _flush_deferred_translations' in source, "_flush_deferred_translations must be defined"
