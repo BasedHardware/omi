@@ -5,6 +5,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from database.auth import get_user_name
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -590,6 +591,7 @@ def get_transcript_structure(
     started_at: datetime,
     language_code: str,
     tz: str,
+    uid: str,
     photos: List[ConversationPhoto] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
     output_language_code: str = None,
@@ -599,6 +601,11 @@ def get_transcript_structure(
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
     response_language = output_language_code or language_code
+    try:
+        user_name = get_user_name(uid)
+    except Exception as e:
+        logger.warning(f'Failed to load user name for transcript structuring (uid={uid}): {e}')
+        user_name = 'The User'
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
@@ -647,7 +654,15 @@ def get_transcript_structure(
     ).strip()
 
     # Second system message: conversation context (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
+    context_message = (
+        "The content language is {language_code}. You MUST respond entirely in {response_language}.\n\n"
+        "USER CONTEXT:\n"
+        "The wearer/user's first name is {user_name}. When the transcript or summary would refer to the wearer "
+        'generically (e.g., "the user", "User"), use their name instead. Do NOT assume a specific numbered '
+        'speaker (e.g., "Speaker 0") is always the wearer - infer from context; prefer calendar participant '
+        'names for other speakers when available.\n\n'
+        "Content:\n{conversation_context}"
+    )
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
 
@@ -657,6 +672,7 @@ def get_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
+            'user_name': user_name,
             'started_at': started_at.isoformat(),
             'tz': tz,
         }
