@@ -9127,21 +9127,21 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Klepet: \$$used / \$$limit porabljeno ta mesec';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Klepet: \$$used porabljeno ta mesec';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Klepet: $used / $limit sporočil ta mesec';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Klepet: $used sporočil ta mesec';
   }
 }

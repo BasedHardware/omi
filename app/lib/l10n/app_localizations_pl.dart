@@ -9123,21 +9123,21 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Czat: \$$used / \$$limit wykorzystane w tym miesiącu';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Czat: \$$used wykorzystane w tym miesiącu';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Czat: $used / $limit wiadomości w tym miesiącu';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Czat: $used wiadomości w tym miesiącu';
   }
 }

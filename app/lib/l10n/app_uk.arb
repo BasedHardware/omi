@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} запитань на місяць",
     "operatorSubtitle": "{count} запитань на місяць",
     "architectSubtitle": "AI для просунутих — тисячі чатів + агентна автоматизація",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Чат: ${used} / ${limit} використано цього місяця",
+    "chatUsageCostNoLimit": "Чат: ${used} використано цього місяця",
+    "chatUsageMessages": "Чат: {used} / {limit} повідомлень цього місяця",
+    "chatUsageMessagesNoLimit": "Чат: {used} повідомлень цього місяця"
 }

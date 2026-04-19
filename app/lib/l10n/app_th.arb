@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} คำถามต่อเดือน",
     "operatorSubtitle": "{count} คำถามต่อเดือน",
     "architectSubtitle": "AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "แชท: ${used} / ${limit} ที่ใช้ในเดือนนี้",
+    "chatUsageCostNoLimit": "แชท: ${used} ที่ใช้ในเดือนนี้",
+    "chatUsageMessages": "แชท: {used} / {limit} ข้อความในเดือนนี้",
+    "chatUsageMessagesNoLimit": "แชท: {used} ข้อความในเดือนนี้"
 }

@@ -3008,8 +3008,8 @@
     "neoSubtitle": "Ayda {count} soru",
     "operatorSubtitle": "Ayda {count} soru",
     "architectSubtitle": "Güçlü AI — binlerce sohbet + ajans otomasyonu",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Sohbet: ${used} / ${limit} bu ay kullanıldı",
+    "chatUsageCostNoLimit": "Sohbet: ${used} bu ay kullanıldı",
+    "chatUsageMessages": "Sohbet: {used} / {limit} mesaj bu ay",
+    "chatUsageMessagesNoLimit": "Sohbet: {used} mesaj bu ay"
 }

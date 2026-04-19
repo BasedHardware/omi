@@ -2974,8 +2974,8 @@
     "neoSubtitle": "月{count}件の質問",
     "operatorSubtitle": "月{count}件の質問",
     "architectSubtitle": "パワーユーザーAI — 数千のチャット + エージェント自動化",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "チャット: ${used} / ${limit} 今月の使用量",
+    "chatUsageCostNoLimit": "チャット: ${used} 今月の使用量",
+    "chatUsageMessages": "チャット: {used} / {limit} 件の今月のメッセージ",
+    "chatUsageMessagesNoLimit": "チャット: {used} 件の今月のメッセージ"
 }

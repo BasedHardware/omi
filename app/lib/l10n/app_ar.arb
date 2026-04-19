@@ -2940,8 +2940,8 @@
     "neoSubtitle": "{count} سؤال شهرياً",
     "operatorSubtitle": "{count} سؤال شهرياً",
     "architectSubtitle": "ذكاء اصطناعي متقدم — آلاف المحادثات + أتمتة ذكية",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "الدردشة: ${used} / ${limit} مُستخدم هذا الشهر",
+    "chatUsageCostNoLimit": "الدردشة: ${used} مُستخدم هذا الشهر",
+    "chatUsageMessages": "الدردشة: {used} / {limit} رسالة هذا الشهر",
+    "chatUsageMessagesNoLimit": "الدردشة: {used} رسالة هذا الشهر"
 }

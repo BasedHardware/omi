@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} soalan sebulan",
     "operatorSubtitle": "{count} soalan sebulan",
     "architectSubtitle": "AI kuasa — ribuan sembang + automasi ejen",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Sembang: ${used} / ${limit} digunakan bulan ini",
+    "chatUsageCostNoLimit": "Sembang: ${used} digunakan bulan ini",
+    "chatUsageMessages": "Sembang: {used} / {limit} mesej bulan ini",
+    "chatUsageMessagesNoLimit": "Sembang: {used} mesej bulan ini"
 }

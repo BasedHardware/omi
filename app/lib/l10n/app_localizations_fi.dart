@@ -9102,21 +9102,21 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat: \$$used / \$$limit käytetty tässä kuussa';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat: \$$used käytetty tässä kuussa';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Chat: $used / $limit viestiä tässä kuussa';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Chat: $used viestiä tässä kuussa';
   }
 }

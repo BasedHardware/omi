@@ -2942,8 +2942,8 @@
     "neoSubtitle": "{count} въпроса на месец",
     "operatorSubtitle": "{count} въпроса на месец",
     "architectSubtitle": "AI за напреднали — хиляди чатове + агентна автоматизация",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Чат: ${used} / ${limit} използвани този месец",
+    "chatUsageCostNoLimit": "Чат: ${used} използвани този месец",
+    "chatUsageMessages": "Чат: {used} / {limit} съобщения този месец",
+    "chatUsageMessagesNoLimit": "Чат: {used} съобщения този месец"
 }

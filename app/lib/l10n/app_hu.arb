@@ -3069,8 +3069,8 @@
     "neoSubtitle": "{count} kérdés havonta",
     "operatorSubtitle": "{count} kérdés havonta",
     "architectSubtitle": "Haladó AI — ezernyi chat + ügynök automatizáció",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Chat: ${used} / ${limit} felhasználva ebben a hónapban",
+    "chatUsageCostNoLimit": "Chat: ${used} felhasználva ebben a hónapban",
+    "chatUsageMessages": "Chat: {used} / {limit} üzenet ebben a hónapban",
+    "chatUsageMessagesNoLimit": "Chat: {used} üzenet ebben a hónapban"
 }

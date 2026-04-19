@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} jautājumi mēnesī",
     "operatorSubtitle": "{count} jautājumi mēnesī",
     "architectSubtitle": "Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Tērzēšana: ${used} / ${limit} izmantots šomēnes",
+    "chatUsageCostNoLimit": "Tērzēšana: ${used} izmantots šomēnes",
+    "chatUsageMessages": "Tērzēšana: {used} / {limit} ziņojumi šomēnes",
+    "chatUsageMessagesNoLimit": "Tērzēšana: {used} ziņojumi šomēnes"
 }

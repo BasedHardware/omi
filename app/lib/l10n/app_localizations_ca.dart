@@ -9157,21 +9157,21 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Xat: \$$used / \$$limit utilitzat aquest mes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Xat: \$$used utilitzat aquest mes';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Xat: $used / $limit missatges aquest mes';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Xat: $used missatges aquest mes';
   }
 }

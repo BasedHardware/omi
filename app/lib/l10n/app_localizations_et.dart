@@ -9100,21 +9100,21 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Vestlus: \$$used / \$$limit kasutatud sel kuul';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Vestlus: \$$used kasutatud sel kuul';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Vestlus: $used / $limit sõnumit sel kuul';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Vestlus: $used sõnumit sel kuul';
   }
 }

@@ -9114,21 +9114,21 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'चॅट: \$$used / \$$limit या महिन्यात वापरले';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'चॅट: \$$used या महिन्यात वापरले';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'चॅट: $used / $limit संदेश या महिन्यात';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'चॅट: $used संदेश या महिन्यात';
   }
 }

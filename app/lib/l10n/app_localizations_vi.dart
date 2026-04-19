@@ -9103,21 +9103,21 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Trò chuyện: \$$used đã dùng tháng này';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Trò chuyện: $used / $limit tin nhắn tháng này';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Trò chuyện: $used tin nhắn tháng này';
   }
 }

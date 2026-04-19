@@ -9135,21 +9135,21 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'ಚಾಟ್: \$$used / \$$limit ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'ಚಾಟ್: \$$used ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'ಚಾಟ್: $used / $limit ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'ಚಾಟ್: $used ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು';
   }
 }

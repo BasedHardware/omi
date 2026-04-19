@@ -8954,21 +8954,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'チャット: \$$used / \$$limit 今月の使用量';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'チャット: \$$used 今月の使用量';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'チャット: $used / $limit 件の今月のメッセージ';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'チャット: $used 件の今月のメッセージ';
   }
 }

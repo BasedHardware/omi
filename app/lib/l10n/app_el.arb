@@ -2973,8 +2973,8 @@
     "neoSubtitle": "{count} ερωτήσεις ανά μήνα",
     "operatorSubtitle": "{count} ερωτήσεις ανά μήνα",
     "architectSubtitle": "AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί",
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
-    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
-    "chatUsageMessagesNoLimit": "Chat: {used} messages this month"
+    "chatUsageCost": "Συνομιλία: ${used} / ${limit} χρησιμοποιήθηκαν αυτόν τον μήνα",
+    "chatUsageCostNoLimit": "Συνομιλία: ${used} χρησιμοποιήθηκαν αυτόν τον μήνα",
+    "chatUsageMessages": "Συνομιλία: {used} / {limit} μηνύματα αυτόν τον μήνα",
+    "chatUsageMessagesNoLimit": "Συνομιλία: {used} μηνύματα αυτόν τον μήνα"
 }

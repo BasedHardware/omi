@@ -9168,21 +9168,21 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Συνομιλία: \$$used / \$$limit χρησιμοποιήθηκαν αυτόν τον μήνα';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Συνομιλία: \$$used χρησιμοποιήθηκαν αυτόν τον μήνα';
   }
 
   @override
   String chatUsageMessages(String used, String limit) {
-    return 'Chat: $used / $limit messages this month';
+    return 'Συνομιλία: $used / $limit μηνύματα αυτόν τον μήνα';
   }
 
   @override
   String chatUsageMessagesNoLimit(String used) {
-    return 'Chat: $used messages this month';
+    return 'Συνομιλία: $used μηνύματα αυτόν τον μήνα';
   }
 }
