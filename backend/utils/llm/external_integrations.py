@@ -7,7 +7,7 @@ from models.conversation import Conversation
 from models.structured import Structured
 from models.other import Person
 from utils.conversations.render import conversations_to_string
-from utils.llm.clients import parser, llm_mini, llm_medium_experiment
+from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 import logging
@@ -40,7 +40,7 @@ def get_message_structure(
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser
+    chain = prompt | get_llm('external_structure') | parser
 
     response = chain.invoke(
         {
@@ -79,7 +79,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       Text: ```{text}```
       '''.replace('    ', '').strip()
 
-    response = llm_mini.with_structured_output(Structured).invoke(prompt)
+    response = get_llm('external_structure').with_structured_output(Structured).invoke(prompt)
 
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
@@ -126,7 +126,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     """.replace('    ', '').strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
-        return llm_mini.invoke(prompt).content
+        return get_llm('daily_summary_simple').invoke(prompt).content
 
 
 def generate_comprehensive_daily_summary(
@@ -270,7 +270,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
 
     try:
         with track_usage(uid, Features.DAILY_SUMMARY):
-            response = llm_medium_experiment.invoke(prompt).content
+            response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(prompt).content
         # Clean up response - remove markdown if present
         response = response.strip()
         if response.startswith('```'):
