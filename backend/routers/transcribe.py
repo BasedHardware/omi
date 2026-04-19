@@ -88,7 +88,7 @@ from utils.fair_use import (
     record_dg_usage_ms,
 )
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
-from utils.translation import TranslationService
+from utils.translation import TranslationService, resolve_translation_language
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
     ConversationLanguageState,
@@ -120,6 +120,7 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+
 
 # Freemium: Send notification when credits threshold is reached
 FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
@@ -224,6 +225,7 @@ async def _stream_handler(
     speaker_auto_assign_enabled: bool = False,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
+    translate: str = '',
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -315,17 +317,16 @@ async def _stream_handler(
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
-    # Translation language (disabled in single language mode)
-    translation_language = None
-    if single_language_mode:
-        translation_language = None
-    elif stt_language == 'multi':
-        if language == "multi":
-            user_language_preference = user_db.get_user_language_preference(uid)
-            if user_language_preference:
-                translation_language = user_language_preference
-        else:
-            translation_language = language
+    # Translation language — uses extracted helper with explicit precedence
+    user_language_preference = user_db.get_user_language_preference(uid) if not single_language_mode else ''
+    translation_language = resolve_translation_language(
+        source=source,
+        translate_param=translate,
+        single_language_mode=single_language_mode,
+        stt_language=stt_language,
+        language=language,
+        user_language_preference=user_language_preference,
+    )
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
@@ -2781,6 +2782,7 @@ async def _listen(
     speaker_auto_assign_enabled: bool = False,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
+    translate: str = '',
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2808,6 +2810,7 @@ async def _listen(
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
+        translate=translate,
     )
     logger.info(f"_listen ended {uid}")
 
@@ -2829,6 +2832,7 @@ async def listen_handler(
     speaker_auto_assign: str = 'disabled',
     vad_gate: str = '',
     call_id: Optional[str] = None,
+    translate: str = '',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
@@ -2850,6 +2854,7 @@ async def listen_handler(
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
+        translate=translate,
     )
 
 
@@ -2866,6 +2871,7 @@ async def web_listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     call_id: Optional[str] = None,
+    translate: str = '',
 ):
     """
     WebSocket endpoint for web browser clients using first-message authentication.
@@ -2927,5 +2933,6 @@ async def web_listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         call_id=call_id,
+        translate=translate,
     )
     logger.info(f"web_listen_handler ended {uid}")
