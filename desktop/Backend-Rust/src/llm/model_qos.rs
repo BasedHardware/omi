@@ -36,7 +36,11 @@ pub fn active_tier() -> ModelTier {
 
 /// Default model for LlmClient (used by chat, conversations, personas, knowledge graph).
 pub fn gemini_default() -> &'static str {
-    match active_tier() {
+    gemini_default_for(active_tier())
+}
+
+fn gemini_default_for(tier: ModelTier) -> &'static str {
+    match tier {
         ModelTier::Standard => "gemini-3-flash-preview",
         ModelTier::Premium => "gemini-3-flash-preview",
     }
@@ -44,7 +48,11 @@ pub fn gemini_default() -> &'static str {
 
 /// Model for structured extraction tasks (conversations, knowledge graph).
 pub fn gemini_extraction() -> &'static str {
-    match active_tier() {
+    gemini_extraction_for(active_tier())
+}
+
+fn gemini_extraction_for(tier: ModelTier) -> &'static str {
+    match tier {
         ModelTier::Standard => "gemini-3-flash-preview",
         ModelTier::Premium => "gemini-pro-latest",
     }
@@ -67,7 +75,11 @@ pub fn gemini_degrade_target() -> &'static str {
 
 /// Tier description for logging.
 pub fn tier_description() -> &'static str {
-    match active_tier() {
+    tier_description_for(active_tier())
+}
+
+fn tier_description_for(tier: ModelTier) -> &'static str {
+    match tier {
         ModelTier::Standard => "Standard (cost-optimized)",
         ModelTier::Premium => "Premium (quality-optimized)",
     }
@@ -77,23 +89,76 @@ pub fn tier_description() -> &'static str {
 mod tests {
     use super::*;
 
+    // --- ModelTier::from_env ---
+
     #[test]
-    fn test_default_tier_is_standard() {
-        // Without OMI_MODEL_TIER set, should default to standard
-        // (OnceLock may already be initialized, so test the from_env logic directly)
-        let tier = ModelTier::from_env();
-        // In test environment without the env var, this should be Standard
-        assert_eq!(tier, ModelTier::Standard);
+    fn from_env_defaults_to_standard() {
+        std::env::remove_var("OMI_MODEL_TIER");
+        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
     }
 
     #[test]
-    fn test_gemini_default_returns_flash() {
-        // Standard tier always uses flash
-        assert_eq!(gemini_default(), "gemini-3-flash-preview");
+    fn from_env_premium() {
+        std::env::set_var("OMI_MODEL_TIER", "premium");
+        assert_eq!(ModelTier::from_env(), ModelTier::Premium);
+        std::env::remove_var("OMI_MODEL_TIER");
     }
 
     #[test]
-    fn test_proxy_allowed_contains_expected_models() {
+    fn from_env_invalid_falls_back_to_standard() {
+        std::env::set_var("OMI_MODEL_TIER", "garbage");
+        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
+        std::env::remove_var("OMI_MODEL_TIER");
+    }
+
+    #[test]
+    fn from_env_empty_falls_back_to_standard() {
+        std::env::set_var("OMI_MODEL_TIER", "");
+        assert_eq!(ModelTier::from_env(), ModelTier::Standard);
+        std::env::remove_var("OMI_MODEL_TIER");
+    }
+
+    // --- gemini_default_for (both tiers) ---
+
+    #[test]
+    fn gemini_default_standard_is_flash() {
+        assert_eq!(gemini_default_for(ModelTier::Standard), "gemini-3-flash-preview");
+    }
+
+    #[test]
+    fn gemini_default_premium_is_flash() {
+        // Default model is Flash for both tiers (cheap baseline)
+        assert_eq!(gemini_default_for(ModelTier::Premium), "gemini-3-flash-preview");
+    }
+
+    // --- gemini_extraction_for (the tier-dependent branch) ---
+
+    #[test]
+    fn gemini_extraction_standard_is_flash() {
+        assert_eq!(gemini_extraction_for(ModelTier::Standard), "gemini-3-flash-preview");
+    }
+
+    #[test]
+    fn gemini_extraction_premium_is_pro() {
+        assert_eq!(gemini_extraction_for(ModelTier::Premium), "gemini-pro-latest");
+    }
+
+    // --- tier_description_for ---
+
+    #[test]
+    fn tier_description_standard() {
+        assert!(tier_description_for(ModelTier::Standard).contains("Standard"));
+    }
+
+    #[test]
+    fn tier_description_premium() {
+        assert!(tier_description_for(ModelTier::Premium).contains("Premium"));
+    }
+
+    // --- Static accessors (pinned models) ---
+
+    #[test]
+    fn proxy_allowed_contains_expected_models() {
         let allowed = gemini_proxy_allowed();
         assert!(allowed.contains(&"gemini-3-flash-preview"));
         assert!(allowed.contains(&"gemini-pro-latest"));
@@ -102,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn test_degrade_target_is_flash() {
+    fn degrade_target_is_flash() {
         assert_eq!(gemini_degrade_target(), "gemini-3-flash-preview");
     }
 }
