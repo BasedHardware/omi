@@ -1383,7 +1383,7 @@ struct OnboardingChatView: View {
           prompt:
             "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
           systemPrompt: systemPrompt,
-          model: "claude-opus-4-6",
+          model: ModelQoS.Claude.synthesis,
           onTextDelta: { @Sendable delta in
             Task { @MainActor in
               explorationText += delta
