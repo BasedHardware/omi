@@ -34,6 +34,9 @@ class MainActivity: FlutterActivity() {
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
 
+        // Register WearOS audio bridge for omi4wearOS watch integration
+        WearOsAudioBridge.initialize(flutterEngine)
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
             if(call.method == "setNotificationOnKillService"){
