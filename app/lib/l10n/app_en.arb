@@ -10744,5 +10744,75 @@
     "youAreOnAPaidPlan": "You are on a paid plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "messages",
+    "unlimitedChatThisMonth": "Unlimited chat messages this month",
+    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "@chatUsedOfLimitCompute": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
+    "@chatUsedOfLimitMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageProgress": "{used} / {limit} used",
+    "@chatUsageProgress": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatLimitReachedUpgrade": "Chat limit reached. Upgrade for more messages.",
+    "chatLimitReachedTitle": "Chat Limit Reached",
+    "chatUsageDescription": "You've used {used} of your {limitDisplay} on the {plan} plan.",
+    "@chatUsageDescription": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limitDisplay": {
+                "type": "String"
+            },
+            "plan": {
+                "type": "String"
+            }
+        }
+    },
+    "resetsInDays": "Resets in {count} day(s)",
+    "@resetsInDays": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsInHours": "Resets in {count} hour(s)",
+    "@resetsInHours": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsSoon": "Resets soon",
+    "upgradePlan": "Upgrade Plan"
 }
