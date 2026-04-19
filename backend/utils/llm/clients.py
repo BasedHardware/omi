@@ -22,32 +22,41 @@ _usage_callback = get_usage_callback()
 # providers (OpenAI, Anthropic, OpenRouter, Perplexity). Within a profile,
 # each feature gets the model appropriate for that cost/quality level.
 #
-# Global switch:     MODEL_QOS=mini           (selects entire profile)
+# Global switch:     MODEL_QOS=premium        (selects entire profile)
 # Per-feature:       MODEL_QOS_CHAT_AGENT=claude-haiku-3.5  (overrides one feature)
 #
-# Default profile is "medium" which matches current production behavior.
+# Two profiles:
+#   max     — current production behavior (default)
+#   premium — cost-saving alternative with cheaper models
 # ---------------------------------------------------------------------------
 
 MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
-    'mini': {
+    'premium': {
         # OpenAI — conversation processing
         'conv_action_items': 'gpt-4.1-nano',
         'conv_structure': 'gpt-4.1-mini',
         'conv_apps': 'gpt-4.1-nano',
+        'conv_folder': 'gpt-4.1-nano',
+        'conv_discard': 'gpt-4.1-nano',
         'daily_summary': 'gpt-4.1-mini',
+        'daily_summary_simple': 'gpt-4.1-nano',
+        'external_structure': 'gpt-4.1-nano',
         # OpenAI — memories & knowledge
         'memories': 'gpt-4.1-nano',
+        'learnings': 'gpt-4.1-mini',
         'memory_conflict': 'gpt-4.1-nano',
         'memory_category': 'gpt-4.1-nano',
         'knowledge_graph': 'gpt-4.1-nano',
         # OpenAI — chat
         'chat_responses': 'gpt-4.1-mini',
         'chat_extraction': 'gpt-4.1-nano',
+        'chat_graph': 'gpt-4.1-mini',
         'session_titles': 'gpt-4.1-nano',
         # OpenAI — features
         'goals': 'gpt-4.1-nano',
         'goals_advice': 'gpt-4.1-mini',
         'notifications': 'gpt-4.1-mini',
+        'proactive_notification': 'gpt-4.1-nano',
         'followup': 'gpt-4.1-nano',
         'smart_glasses': 'gpt-4.1-nano',
         'onboarding': 'gpt-4.1-nano',
@@ -64,25 +73,32 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         # Perplexity
         'web_search': 'sonar',
     },
-    'medium': {
+    'max': {
         # OpenAI — conversation processing
         'conv_action_items': 'gpt-5.1',
         'conv_structure': 'gpt-5.1',
         'conv_apps': 'gpt-5.1',
+        'conv_folder': 'gpt-4.1-mini',
+        'conv_discard': 'gpt-4.1-mini',
         'daily_summary': 'gpt-5.1',
+        'daily_summary_simple': 'gpt-4.1-mini',
+        'external_structure': 'gpt-4.1-mini',
         # OpenAI — memories & knowledge
         'memories': 'gpt-4.1-mini',
+        'learnings': 'o4-mini',
         'memory_conflict': 'gpt-4.1-mini',
         'memory_category': 'gpt-4.1-mini',
         'knowledge_graph': 'gpt-4.1-mini',
         # OpenAI — chat
         'chat_responses': 'gpt-5.2',
         'chat_extraction': 'gpt-4.1-mini',
+        'chat_graph': 'gpt-4.1',
         'session_titles': 'gpt-4.1-mini',
         # OpenAI — features
         'goals': 'gpt-4.1-mini',
         'goals_advice': 'gpt-5.2',
         'notifications': 'gpt-5.2',
+        'proactive_notification': 'gpt-4.1-mini',
         'followup': 'gpt-4.1-mini',
         'smart_glasses': 'gpt-4.1-mini',
         'onboarding': 'gpt-4.1-mini',
@@ -99,41 +115,6 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         # Perplexity
         'web_search': 'sonar-pro',
     },
-    'high': {
-        # OpenAI — conversation processing
-        'conv_action_items': 'gpt-5.1',
-        'conv_structure': 'o4-mini',
-        'conv_apps': 'gpt-4.1-mini',
-        'daily_summary': 'gpt-5.1',
-        # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-mini',
-        'memory_conflict': 'gpt-4.1-mini',
-        'memory_category': 'gpt-4.1-mini',
-        'knowledge_graph': 'gpt-4.1-mini',
-        # OpenAI — chat
-        'chat_responses': 'gpt-5.2',
-        'chat_extraction': 'gpt-4.1-mini',
-        'session_titles': 'gpt-4.1-mini',
-        # OpenAI — features
-        'goals': 'gpt-4.1-mini',
-        'goals_advice': 'gpt-5.2',
-        'notifications': 'gpt-5.2',
-        'followup': 'gpt-4.1-mini',
-        'smart_glasses': 'gpt-4.1-mini',
-        'onboarding': 'gpt-4.1-mini',
-        'app_generator': 'gpt-5.2',
-        'app_integration': 'gpt-4.1-mini',
-        'persona_clone': 'gpt-5.1',
-        'trends': 'gpt-4.1-mini',
-        # Anthropic
-        'chat_agent': 'claude-sonnet-4-6',
-        # OpenRouter
-        'persona_chat': 'anthropic/claude-3.5-sonnet',
-        'persona_chat_premium': 'anthropic/claude-3.5-sonnet',
-        'wrapped_analysis': 'google/gemini-3-flash-preview',
-        # Perplexity
-        'web_search': 'sonar-pro',
-    },
 }
 
 # Pinned features — model is fixed regardless of profile or env override.
@@ -142,10 +123,10 @@ _PINNED_FEATURES: Dict[str, str] = {
 }
 
 # Resolve active profile once at startup (kai: OnceLock/singleton pattern).
-_active_profile_name = os.environ.get('MODEL_QOS', 'medium').strip().lower()
+_active_profile_name = os.environ.get('MODEL_QOS', 'max').strip().lower()
 if _active_profile_name not in MODEL_QOS_PROFILES:
-    logger.warning('MODEL_QOS=%s is not a valid profile, falling back to medium', _active_profile_name)
-    _active_profile_name = 'medium'
+    logger.warning('MODEL_QOS=%s is not a valid profile, falling back to max', _active_profile_name)
+    _active_profile_name = 'max'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 
 # Provider classification (fixed per feature, not overridable).
