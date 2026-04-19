@@ -26,13 +26,13 @@ _usage_callback = get_usage_callback()
 # Per-feature:       MODEL_QOS_CHAT_AGENT=claude-haiku-3.5  (overrides one feature)
 #
 # Two profiles:
-#   max     — current production behavior (default)
-#   premium — cost-saving alternative with cheaper models
+#   premium — cost-effective default (80% of max quality)
+#   max     — maximum quality, latest flagship models
 # ---------------------------------------------------------------------------
 
 MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
     'premium': {
-        # OpenAI — conversation processing (gpt-5.4-mini replaces gpt-5.4, gpt-4.1-nano replaces gpt-4.1-mini)
+        # OpenAI — conversation processing
         'conv_action_items': 'gpt-5.4-mini',
         'conv_structure': 'gpt-5.4-mini',
         'conv_app_result': 'gpt-5.4-mini',
@@ -67,11 +67,10 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         'trends': 'gpt-4.1-nano',
         # Anthropic (chat_agent — used via get_model() + anthropic_client)
         'chat_agent': 'claude-sonnet-4-6',
-        # OpenRouter — persona_chat stays cheap, wrapped_analysis stays cheap
-        'persona_chat': 'google/gemini-flash-1.5-8b',
-        # persona_chat_premium: geni proposed claude-sonnet-4-6 but persona.py uses get_llm()
-        # which rejects Anthropic models — use gpt-5.4-mini instead
+        # OpenAI — persona (moved from deprecated OpenRouter models to direct API)
+        'persona_chat': 'gpt-4.1-nano',
         'persona_chat_premium': 'gpt-5.4-mini',
+        # OpenRouter — wrapped_analysis only (gemini-3-flash-preview still active)
         'wrapped_analysis': 'google/gemini-3-flash-preview',
         # Perplexity
         'web_search': 'sonar-pro',
@@ -112,9 +111,10 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         'trends': 'gpt-4.1-mini',
         # Anthropic (unchanged)
         'chat_agent': 'claude-sonnet-4-6',
-        # OpenRouter (unchanged from production)
-        'persona_chat': 'google/gemini-flash-1.5-8b',
-        'persona_chat_premium': 'anthropic/claude-3.5-sonnet',
+        # OpenAI — persona (moved from deprecated OpenRouter models to direct API)
+        'persona_chat': 'gpt-4.1-nano',
+        'persona_chat_premium': 'gpt-5.4-mini',
+        # OpenRouter — wrapped_analysis only (gemini-3-flash-preview still active)
         'wrapped_analysis': 'google/gemini-3-flash-preview',
         # Perplexity (unchanged)
         'web_search': 'sonar-pro',
@@ -127,10 +127,10 @@ _PINNED_FEATURES: Dict[str, str] = {
 }
 
 # Resolve active profile once at startup (kai: OnceLock/singleton pattern).
-_active_profile_name = os.environ.get('MODEL_QOS', 'max').strip().lower()
+_active_profile_name = os.environ.get('MODEL_QOS', 'premium').strip().lower()
 if _active_profile_name not in MODEL_QOS_PROFILES:
-    logger.warning('MODEL_QOS=%s is not a valid profile, falling back to max', _active_profile_name)
-    _active_profile_name = 'max'
+    logger.warning('MODEL_QOS=%s is not a valid profile, falling back to premium', _active_profile_name)
+    _active_profile_name = 'premium'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 
 # Provider detection from model name — provider depends on profile, not feature.
