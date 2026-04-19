@@ -3002,5 +3002,7 @@
     "upgradePlan": "Обновить план",
     "billingMonthly": "Ежемесячно",
     "billingYearly": "Ежегодно",
-    "savePercent": "Экономия ~17%"
+    "savePercent": "Экономия ~17%",
+    "popular": "Популярный",
+    "currentPlan": "Текущий"
 }

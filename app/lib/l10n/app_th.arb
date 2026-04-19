@@ -2967,5 +2967,7 @@
     "upgradePlan": "อัปเกรดแผน",
     "billingMonthly": "รายเดือน",
     "billingYearly": "รายปี",
-    "savePercent": "ประหยัด ~17%"
+    "savePercent": "ประหยัด ~17%",
+    "popular": "ยอดนิยม",
+    "currentPlan": "ปัจจุบัน"
 }

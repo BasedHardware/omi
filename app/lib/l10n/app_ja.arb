@@ -2968,5 +2968,7 @@
     "upgradePlan": "プランをアップグレード",
     "billingMonthly": "月額",
     "billingYearly": "年額",
-    "savePercent": "約17%お得"
+    "savePercent": "約17%お得",
+    "popular": "人気",
+    "currentPlan": "現在"
 }

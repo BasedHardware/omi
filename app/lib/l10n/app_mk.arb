@@ -10690,5 +10690,7 @@
     "upgradePlan": "Надгради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишно",
-    "savePercent": "Заштедете ~17%"
+    "savePercent": "Заштедете ~17%",
+    "popular": "Популарно",
+    "currentPlan": "Тековен"
 }

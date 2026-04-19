@@ -10690,5 +10690,7 @@
     "upgradePlan": "Nadgradi načrt",
     "billingMonthly": "Mesečno",
     "billingYearly": "Letno",
-    "savePercent": "Prihranite ~17%"
+    "savePercent": "Prihranite ~17%",
+    "popular": "Priljubljeno",
+    "currentPlan": "Trenutni"
 }

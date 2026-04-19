@@ -3002,5 +3002,7 @@
     "upgradePlan": "Ulepsz plan",
     "billingMonthly": "Miesięcznie",
     "billingYearly": "Rocznie",
-    "savePercent": "Oszczędź ~17%"
+    "savePercent": "Oszczędź ~17%",
+    "popular": "Popularne",
+    "currentPlan": "Bieżący"
 }

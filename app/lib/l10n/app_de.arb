@@ -2935,5 +2935,7 @@
     "upgradePlan": "Plan upgraden",
     "billingMonthly": "Monatlich",
     "billingYearly": "Jährlich",
-    "savePercent": "~17% sparen"
+    "savePercent": "~17% sparen",
+    "popular": "Beliebt",
+    "currentPlan": "Aktuell"
 }

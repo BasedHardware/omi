@@ -2967,5 +2967,7 @@
     "upgradePlan": "Aggiorna piano",
     "billingMonthly": "Mensile",
     "billingYearly": "Annuale",
-    "savePercent": "Risparmia ~17%"
+    "savePercent": "Risparmia ~17%",
+    "popular": "Popolare",
+    "currentPlan": "Attuale"
 }

@@ -2934,5 +2934,7 @@
     "upgradePlan": "ترقية الخطة",
     "billingMonthly": "شهري",
     "billingYearly": "سنوي",
-    "savePercent": "وفّر ~17%"
+    "savePercent": "وفّر ~17%",
+    "popular": "شائع",
+    "currentPlan": "الحالي"
 }

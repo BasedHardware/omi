@@ -2967,5 +2967,7 @@
     "upgradePlan": "Uuenda plaani",
     "billingMonthly": "Kuine",
     "billingYearly": "Aastane",
-    "savePercent": "Säästa ~17%"
+    "savePercent": "Säästa ~17%",
+    "popular": "Populaarne",
+    "currentPlan": "Praegune"
 }

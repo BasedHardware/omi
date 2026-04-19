@@ -2967,5 +2967,7 @@
     "upgradePlan": "Atnaujinti planą",
     "billingMonthly": "Mėnesinis",
     "billingYearly": "Metinis",
-    "savePercent": "Sutaupykite ~17%"
+    "savePercent": "Sutaupykite ~17%",
+    "popular": "Populiarus",
+    "currentPlan": "Dabartinis"
 }

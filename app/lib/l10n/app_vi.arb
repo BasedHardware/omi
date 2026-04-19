@@ -2972,5 +2972,7 @@
     "upgradePlan": "Nâng cấp gói",
     "billingMonthly": "Hàng tháng",
     "billingYearly": "Hàng năm",
-    "savePercent": "Tiết kiệm ~17%"
+    "savePercent": "Tiết kiệm ~17%",
+    "popular": "Phổ biến",
+    "currentPlan": "Hiện tại"
 }

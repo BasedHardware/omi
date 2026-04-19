@@ -2989,5 +2989,7 @@
     "upgradePlan": "升级计划",
     "billingMonthly": "月付",
     "billingYearly": "年付",
-    "savePercent": "节省约17%"
+    "savePercent": "节省约17%",
+    "popular": "热门",
+    "currentPlan": "当前"
 }

@@ -2967,5 +2967,7 @@
     "upgradePlan": "Uppgradera plan",
     "billingMonthly": "Månadsvis",
     "billingYearly": "Årsvis",
-    "savePercent": "Spara ~17%"
+    "savePercent": "Spara ~17%",
+    "popular": "Populärt",
+    "currentPlan": "Nuvarande"
 }

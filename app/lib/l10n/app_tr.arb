@@ -3002,5 +3002,7 @@
     "upgradePlan": "Planı yükselt",
     "billingMonthly": "Aylık",
     "billingYearly": "Yıllık",
-    "savePercent": "~%17 tasarruf"
+    "savePercent": "~%17 tasarruf",
+    "popular": "Popüler",
+    "currentPlan": "Mevcut"
 }

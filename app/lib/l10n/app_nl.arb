@@ -2967,5 +2967,7 @@
     "upgradePlan": "Plan upgraden",
     "billingMonthly": "Maandelijks",
     "billingYearly": "Jaarlijks",
-    "savePercent": "Bespaar ~17%"
+    "savePercent": "Bespaar ~17%",
+    "popular": "Populair",
+    "currentPlan": "Huidig"
 }

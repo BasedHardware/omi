@@ -3009,5 +3009,7 @@
     "upgradePlan": "Upgrade paket",
     "billingMonthly": "Bulanan",
     "billingYearly": "Tahunan",
-    "savePercent": "Hemat ~17%"
+    "savePercent": "Hemat ~17%",
+    "popular": "Populer",
+    "currentPlan": "Saat ini"
 }

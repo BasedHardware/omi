@@ -2936,5 +2936,7 @@
     "upgradePlan": "Actualitzar pla",
     "billingMonthly": "Mensual",
     "billingYearly": "Anual",
-    "savePercent": "Estalvia ~17%"
+    "savePercent": "Estalvia ~17%",
+    "popular": "Popular",
+    "currentPlan": "Actual"
 }
