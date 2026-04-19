@@ -130,4 +130,34 @@ final class ModelQoSTests: XCTestCase {
         XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
         XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
     }
+
+    // MARK: - Sanitized selection (stale model regression)
+
+    func testSanitizedSelectionAllowsValidModel() {
+        ModelQoS.activeTier = .standard
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-sonnet-4-6"), "claude-sonnet-4-6")
+
+        ModelQoS.activeTier = .premium
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-opus-4-6")
+    }
+
+    func testSanitizedSelectionFallsBackForStaleModel() {
+        // User previously selected Opus while on premium tier
+        ModelQoS.activeTier = .premium
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-opus-4-6")
+
+        // Tier drops to standard — Opus is no longer available
+        ModelQoS.activeTier = .standard
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("claude-opus-4-6"), "claude-sonnet-4-6")
+    }
+
+    func testSanitizedSelectionHandlesNil() {
+        ModelQoS.activeTier = .standard
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection(nil), "claude-sonnet-4-6")
+    }
+
+    func testSanitizedSelectionHandlesUnknownModel() {
+        ModelQoS.activeTier = .standard
+        XCTAssertEqual(ModelQoS.Claude.sanitizedSelection("gpt-4o"), "claude-sonnet-4-6")
+    }
 }
