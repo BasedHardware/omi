@@ -75,8 +75,15 @@ final class ScreenCaptureService: Sendable {
 
   init() {}
 
-  /// Check if we have screen recording permission by actually testing capture
-  /// CGPreflightScreenCaptureAccess can return stale data after code signing changes
+  /// Check if we have screen recording permission.
+  /// Uses CGPreflightScreenCaptureAccess as the primary check, with an optional
+  /// ScreenCaptureKit verification for stale-csreq detection.
+  ///
+  /// Previous implementation spawned `/usr/sbin/screencapture` as a child process,
+  /// but on macOS 15+/26 the responsible-process TCC rules can cause that external
+  /// binary to fail even when the app itself has a valid screen-recording grant.
+  /// This caused a persistent mismatch: System Settings showed "granted" but the
+  /// app showed the permission as red/denied.
   static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
     let preflightGranted = CGPreflightScreenCaptureAccess()
 
@@ -87,31 +94,64 @@ final class ScreenCaptureService: Sendable {
         return false
       }
 
-      log("Screen capture: running forced actual capture test despite denied preflight")
-      let actualPermission = testCapturePermission()
-      if actualPermission {
-        log("Screen capture: actual capture succeeded even though CGPreflight returned false")
+      // CGPreflight can return stale false after code-signing changes.
+      // Try ScreenCaptureKit directly — if SCK works, the grant is real.
+      log("Screen capture: running SCK test despite denied preflight")
+      let sckResult = testCapturePermissionSync()
+      if sckResult {
+        log("Screen capture: SCK succeeded even though CGPreflight returned false")
       }
-      return actualPermission
+      return sckResult
     }
 
-    // CGPreflight can return stale data after rebuilds, so test actual capture
-    return testCapturePermission()
+    // CGPreflight says granted. Verify with ScreenCaptureKit to catch the
+    // stale-csreq case (TCC entry exists but code-signing requirement changed).
+    return testCapturePermissionSync()
   }
 
-  /// Test if screen capture actually works by attempting a real capture
-  /// This verifies the app has permission, not just cached permission data
-  static func testCapturePermission() -> Bool {
+  /// Test screen capture permission by querying ScreenCaptureKit directly.
+  /// This tests what the app actually uses for capture, rather than spawning an
+  /// external binary whose TCC context may differ from the app's own grant.
+  static func testCapturePermissionSync() -> Bool {
+    if #available(macOS 14.0, *) {
+      // Use a semaphore to bridge async SCK call into synchronous context.
+      // This runs on a background thread (never called from main), so blocking is safe.
+      let semaphore = DispatchSemaphore(value: 0)
+      var result = false
+      Task.detached {
+        do {
+          _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+          result = true
+        } catch {
+          result = false
+        }
+        semaphore.signal()
+      }
+      let timeout = semaphore.wait(timeout: .now() + 3.0)
+      if timeout == .timedOut {
+        log("Screen capture test: TIMEOUT (SCK query took >3s)")
+        // On timeout, trust CGPreflight rather than falsely denying
+        return CGPreflightScreenCaptureAccess()
+      }
+      log("Screen capture test: \(result ? "SUCCESS" : "FAILED")")
+      return result
+    } else {
+      // macOS < 14: fall back to CGPreflight (no SCK available)
+      let granted = CGPreflightScreenCaptureAccess()
+      log("Screen capture test: CGPreflight=\(granted) (pre-macOS-14 fallback)")
+      return granted
+    }
+  }
+
+  /// Legacy test using screencapture CLI. Kept only for explicit diagnostic use.
+  /// Not used in the normal permission check flow — see testCapturePermissionSync().
+  static func testCapturePermissionViaCLI() -> Bool {
     let tempPath = NSTemporaryDirectory() + "omi_permission_test_\(UUID().uuidString).jpg"
     defer { try? FileManager.default.removeItem(atPath: tempPath) }
 
-    // Try to capture the screen using screencapture CLI
-    // This requires Screen Recording permission to succeed
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-    process.arguments = ["-x", tempPath]  // Silent capture of entire screen
-
-    // Suppress any error output
+    process.arguments = ["-x", tempPath]
     process.standardError = FileHandle.nullDevice
     process.standardOutput = FileHandle.nullDevice
 
@@ -119,18 +159,17 @@ final class ScreenCaptureService: Sendable {
       try process.run()
       process.waitUntilExit()
 
-      // Check if capture succeeded and file was created with content
       if process.terminationStatus == 0,
         let data = try? Data(contentsOf: URL(fileURLWithPath: tempPath)),
         data.count > 100
       {
-        log("Screen capture test: SUCCESS")
+        log("Screen capture CLI test: SUCCESS")
         return true
       }
-      log("Screen capture test: FAILED (exit code: \(process.terminationStatus))")
+      log("Screen capture CLI test: FAILED (exit code: \(process.terminationStatus))")
       return false
     } catch {
-      logError("Screen capture test failed", error: error)
+      logError("Screen capture CLI test failed", error: error)
       return false
     }
   }
@@ -240,7 +279,7 @@ final class ScreenCaptureService: Sendable {
     // Do NOT auto-reset with tccutil — that removes the app from System Settings
     // and leaves the user stuck. Instead, just log the stale state and let the user
     // toggle off/on in System Settings, which refreshes the TCC entry in place.
-    if CGPreflightScreenCaptureAccess() && !testCapturePermission() {
+    if CGPreflightScreenCaptureAccess() && !testCapturePermissionSync() {
       log("Screen capture: stale TCC entry detected (signing identity changed). User should toggle off/on in System Settings.")
     }
 
@@ -307,7 +346,7 @@ final class ScreenCaptureService: Sendable {
     }
 
     // 3. Test if capture actually works now (covers cases where CGPreflight was stale)
-    let works = testCapturePermission()
+    let works = testCapturePermissionSync()
     log("Screen capture: Soft recovery capture test = \(works ? "SUCCESS" : "FAILED")")
     return works
   }
