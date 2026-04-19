@@ -442,14 +442,16 @@ def test_llm_calls_use_omi_qos_tier_system():
         struct_match.group(1) == "conv_structure"
     ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use get_llm('conv_apps', cache_key=...)
+    # get_app_result should use get_llm('conv_app_result', cache_key=...)
     app_match = re.search(
         r'def get_app_result.*?response = get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
     assert app_match is not None
-    assert app_match.group(1) == "conv_apps", f"Expected get_llm('conv_apps') for app result, got {app_match.group(1)}"
+    assert (
+        app_match.group(1) == "conv_app_result"
+    ), f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
 
     # extract_action_items should use get_llm('conv_action_items', cache_key=...)
     action_match = re.search(
@@ -477,7 +479,8 @@ def test_all_callsites_use_get_llm():
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text()
     conv_proc_calls = re.findall(r"get_llm\('(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
-    assert 'conv_apps' in conv_proc_calls, "Missing get_llm('conv_apps') in conversation_processing.py"
+    assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
+    assert 'conv_app_select' in conv_proc_calls, "Missing get_llm('conv_app_select') in conversation_processing.py"
     assert 'conv_folder' in conv_proc_calls, "Missing get_llm('conv_folder') in conversation_processing.py"
     assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
     assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
