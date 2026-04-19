@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
@@ -159,8 +160,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 users_db.update_user_subscription(uid, current_subscription.dict())
 
                 # Calculate next billing date
-                from datetime import datetime
-
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
 
                 return {
