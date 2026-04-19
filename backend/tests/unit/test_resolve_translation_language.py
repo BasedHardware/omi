@@ -244,3 +244,29 @@ class TestTranslateParamWiring:
         """_flush_deferred_translations must be defined for screen-aware deferral flush."""
         source = self._read_transcribe_source()
         assert 'async def _flush_deferred_translations' in source, "_flush_deferred_translations must be defined"
+
+    def test_toggle_handler_updates_translation_enabled(self):
+        """translate_toggle handler must update translation_enabled flag for stream_transcript_process gate."""
+        source = self._read_transcribe_source()
+        # Find the translate_toggle handler block
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        assert toggle_start != -1, "translate_toggle handler not found"
+        # Find the next message type handler to bound the search
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert 'translation_enabled = True' in toggle_block, "toggle-on must set translation_enabled = True"
+        assert 'translation_enabled = False' in toggle_block, "toggle-off must set translation_enabled = False"
+
+    def test_deferred_flush_routes_through_coordinator(self):
+        """_flush_deferred_translations must route through coordinator.observe() not direct API."""
+        source = self._read_transcribe_source()
+        # Find the function body
+        start = source.find('async def _flush_deferred_translations')
+        assert start != -1
+        # Find the next function definition
+        end = source.find('\n    async def ', start + 1)
+        body = source[start:end]
+        assert 'coordinator.observe(' in body, "_flush_deferred_translations must use coordinator.observe()"
+        assert (
+            'translate_units_batch' not in body
+        ), "_flush_deferred_translations must NOT call translate_units_batch directly"
