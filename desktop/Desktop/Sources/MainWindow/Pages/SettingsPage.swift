@@ -368,9 +368,12 @@ struct SettingsContentView: View {
   @State private var isDeletingAccount: Bool = false
   @State private var deleteAccountError: String?
 
-  // Developer API Key overrides
+  // Developer API Key overrides — also double as BYOK free-plan credentials
+  // when all four (Gemini, Anthropic, OpenAI, Deepgram) are provided.
   @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
+  @AppStorage("dev_openai_api_key") private var devOpenAIKey: String = ""
+  @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
 
   init(
     appState: AppState,
@@ -1864,6 +1867,47 @@ struct SettingsContentView: View {
       }
 
       chatUsageQuotaCard
+
+      byokPromoCard
+    }
+  }
+
+  @ViewBuilder
+  private var byokPromoCard: some View {
+    settingsCard(settingId: "planusage.byok") {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 12) {
+          Image(systemName: "key.fill")
+            .scaledFont(size: 20)
+            .foregroundColor(OmiColors.purplePrimary)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              APIKeyService.isByokActive
+                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
+                : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+          }
+          Spacer()
+        }
+
+        Button(action: openBYOKSettings) {
+          Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
+            .scaledFont(size: 13, weight: .semibold)
+        }
+        .buttonStyle(.bordered)
+      }
+    }
+  }
+
+  private func openBYOKSettings() {
+    selectedSection = .advanced
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+      highlightedSettingId = "advanced.devkeys.info"
     }
   }
 
@@ -4976,39 +5020,41 @@ struct SettingsContentView: View {
 
   private var developerKeysSubsection: some View {
     VStack(spacing: 20) {
-      settingsCard(settingId: "advanced.devkeys.info") {
-        HStack(spacing: 12) {
-          Image(systemName: "info.circle")
-            .foregroundColor(OmiColors.textTertiary)
-          Text("Override backend-provided API keys with your own. Leave blank to use default keys.")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-          Spacer()
-        }
-      }
+      byokStatusBanner
+
+      developerKeyField(
+        title: "OpenAI API Key",
+        subtitle: "For GPT calls.",
+        settingId: "advanced.devkeys.openai",
+        value: $devOpenAIKey
+      )
+
+      developerKeyField(
+        title: "Anthropic API Key",
+        subtitle: "For chat (Claude).",
+        settingId: "advanced.devkeys.anthropic",
+        value: $devAnthropicKey
+      )
 
       developerKeyField(
         title: "Gemini API Key",
-        subtitle: "For proactive AI (memory, tasks, insights, focus)",
+        subtitle: "For proactive AI (memory, tasks, insights, focus).",
         settingId: "advanced.devkeys.gemini",
         value: $devGeminiKey
       )
 
       developerKeyField(
-        title: "Anthropic API Key",
-        subtitle: "For chat (Claude)",
-        settingId: "advanced.devkeys.anthropic",
-        value: $devAnthropicKey
+        title: "Deepgram API Key",
+        subtitle: "For live transcription.",
+        settingId: "advanced.devkeys.deepgram",
+        value: $devDeepgramKey
       )
 
-      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+      if hasAnyBYOKKey {
         settingsCard(settingId: "advanced.devkeys.clear") {
           HStack {
             Spacer()
-            Button(action: {
-              devGeminiKey = ""
-              devAnthropicKey = ""
-            }) {
+            Button(action: clearAllBYOKKeys) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(.red)
@@ -5018,6 +5064,68 @@ struct SettingsContentView: View {
           }
         }
       }
+    }
+    .onChange(of: devOpenAIKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devAnthropicKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
+  }
+
+  private var hasAnyBYOKKey: Bool {
+    !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
+      || !devDeepgramKey.isEmpty
+  }
+
+  private var hasAllBYOKKeys: Bool {
+    !devOpenAIKey.isEmpty && !devAnthropicKey.isEmpty && !devGeminiKey.isEmpty
+      && !devDeepgramKey.isEmpty
+  }
+
+  @ViewBuilder
+  private var byokStatusBanner: some View {
+    settingsCard(settingId: "advanced.devkeys.info") {
+      HStack(alignment: .top, spacing: 12) {
+        Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
+          .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            hasAllBYOKKeys
+              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
+              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+          )
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+        Spacer()
+      }
+    }
+  }
+
+  private func clearAllBYOKKeys() {
+    devOpenAIKey = ""
+    devAnthropicKey = ""
+    devGeminiKey = ""
+    devDeepgramKey = ""
+    Task {
+      try? await APIClient.shared.deactivateBYOK()
+    }
+  }
+
+  private func refreshBYOKActivation() {
+    Task {
+      if APIKeyService.isByokActive {
+        let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
+          acc, entry in
+          acc[entry.key.rawValue] = entry.value.fingerprint
+        }
+        try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+      } else {
+        try? await APIClient.shared.deactivateBYOK()
+      }
+      await MainActor.run { loadSubscriptionInfo() }
     }
   }
 
