@@ -652,7 +652,11 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
           if (_tryParseQuotaError(chunk.text)) {
+            // Remove both AI placeholder and the human message that was never stored
             messages.removeAt(aiIndex);
+            if (aiIndex > 0) {
+              messages.removeAt(aiIndex - 1);
+            }
             notifyListeners();
             return;
           }
