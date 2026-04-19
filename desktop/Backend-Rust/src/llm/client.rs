@@ -221,7 +221,6 @@ impl LlmClient {
     }
 
     /// Set the model to use
-    #[allow(dead_code)]
     pub fn with_model(mut self, model: &str) -> Self {
         self.model = model.to_string();
         self
