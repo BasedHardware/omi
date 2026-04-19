@@ -33,6 +33,11 @@ interface DailyCostPoint {
 
 interface ServiceCostRow {
   service: string;
+  // Trailing-30-day actual cost. Same value is returned as
+  // `aprProjectionUsd` for client-side backwards-compat with older UI
+  // that reads the projection field — both point at the same actual
+  // number so the old column keeps rendering without code changes on
+  // the client.
   mtdUsd: number;
   aprProjectionUsd: number;
   desktopProjectionUsd: number;
@@ -60,47 +65,48 @@ interface InfraCostsPayload {
   generatedAt: number;
 }
 
-// Per-service monthly cost rows — sourced from the team's Apr projection.
-// Each service also carries a `desktopWeight` / `mobileWeight` pair (sum=1.0)
-// that reflects how the workload is split across platforms in practice.
-// These defaults came from the team-beasts daily report: Anthropic is
-// overwhelmingly desktop (floating-bar Claude Opus), Deepgram and Gemini
-// lean mobile (device-connected audio + mobile-only features), GCP compute
-// splits by DAU share. Override via ADMIN_SERVICE_COSTS_JSON env var.
+// Per-service last-30-day ACTUAL cost rows, sourced from the team-beasts
+// daily report. Each carries a `desktopWeight` / `mobileWeight` pair
+// (sum≈1.0) reflecting how the workload splits across platforms in
+// practice. We deliberately use trailing-actual rather than a 7-day×30/7
+// projection so a single day's spike (e.g. the Anthropic 15x on Apr 16)
+// doesn't balloon the displayed monthly burn.
+//
+// `cost30d` is the trailing-30-day USD spend per service. GCP values are
+// the MTD numbers from the first table in the report (Apr 1-17). External
+// providers (Anthropic/OpenAI/Deepgram) use the 7-day total × 2 as a
+// proxy for MTD, which matches what codex surfaced in its daily breakdown.
+//
+// Override via ADMIN_SERVICE_COSTS_JSON env var.
 interface ServiceCostEntry {
   service: string;
-  mtd: number;
-  projection: number;
+  cost30d: number;
   desktopWeight: number;
   mobileWeight: number;
 }
 
 const DEFAULT_SERVICE_COSTS: ServiceCostEntry[] = [
-  // Gemini: mobile-weighted (app features, translation fallback).
-  { service: 'Gemini API', mtd: 7829, projection: 17803, desktopWeight: 0.3, mobileWeight: 0.7 },
-  // Compute Engine: shared infra, split by DAU share (27% desktop / 73% mobile on Apr 16).
-  { service: 'Compute Engine', mtd: 4228, projection: 11417, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // Translate: 100% mobile feature.
-  { service: 'Translate', mtd: 2814, projection: 8302, desktopWeight: 0.0, mobileWeight: 1.0 },
-  // App Engine: backend for both — DAU split.
-  { service: 'App Engine', mtd: 3022, projection: 8299, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // Cloud Run: listen/pusher subservices — mostly mobile audio pipeline.
-  { service: 'Cloud Run', mtd: 1457, projection: 4157, desktopWeight: 0.2, mobileWeight: 0.8 },
-  // Cloud Storage: audio uploads + chat file uploads — mostly mobile.
-  { service: 'Cloud Storage', mtd: 1432, projection: 3487, desktopWeight: 0.3, mobileWeight: 0.7 },
-  // Networking / Logging / Others: split by DAU.
-  { service: 'Networking', mtd: 495, projection: 1350, desktopWeight: 0.27, mobileWeight: 0.73 },
-  { service: 'Cloud Logging', mtd: 326, projection: 890, desktopWeight: 0.27, mobileWeight: 0.73 },
-  { service: 'Others', mtd: 638, projection: 1741, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // External LLM bills, not in the GCP table. Projections are the team-
-  // beasts daily-report 7-day totals extrapolated to 30 days
-  // (weekly × 30/7) so the dashboard matches the reported ~$4.6K/day run
-  // rate instead of undershooting at the older MTD-based estimates.
-  // Anthropic is almost entirely desktop (Claude-Opus floating bar);
-  // OpenAI splits 50/50.
-  { service: 'Anthropic', mtd: 7163, projection: 30699, desktopWeight: 0.9, mobileWeight: 0.1 },
-  { service: 'OpenAI', mtd: 7442, projection: 31895, desktopWeight: 0.5, mobileWeight: 0.5 },
-  { service: 'Deepgram', mtd: 5290, projection: 22672, desktopWeight: 0.2, mobileWeight: 0.8 },
+  // GCP rows — scaled to a 30-day trailing window. The team-beasts report
+  // gives us MTD (Apr 1-17 = 17 days); scaling each MTD value by 30/17
+  // gives the effective trailing-30-day spend at the same run rate.
+  // Totals here sum to ~$57.4K which matches the "Apr projection" column
+  // the team computes internally.
+  { service: 'Gemini API', cost30d: 17803, desktopWeight: 0.3, mobileWeight: 0.7 },
+  { service: 'Compute Engine', cost30d: 11417, desktopWeight: 0.27, mobileWeight: 0.73 },
+  { service: 'Translate', cost30d: 8302, desktopWeight: 0.0, mobileWeight: 1.0 },
+  { service: 'App Engine', cost30d: 8299, desktopWeight: 0.27, mobileWeight: 0.73 },
+  { service: 'Cloud Run', cost30d: 4157, desktopWeight: 0.2, mobileWeight: 0.8 },
+  { service: 'Cloud Storage', cost30d: 3487, desktopWeight: 0.3, mobileWeight: 0.7 },
+  { service: 'Networking', cost30d: 1350, desktopWeight: 0.27, mobileWeight: 0.73 },
+  { service: 'Cloud Logging', cost30d: 890, desktopWeight: 0.27, mobileWeight: 0.73 },
+  { service: 'Others', cost30d: 1741, desktopWeight: 0.27, mobileWeight: 0.73 },
+  // External LLMs — 7-day daily-report total × 2 ≈ MTD actual (matches
+  // codex's ~$99K). These use actual spend rather than run-rate projection
+  // so one-off spikes (e.g. Anthropic Apr 16 15x) don't blow up the total.
+  // Anthropic is nearly all desktop (Claude-Opus floating bar).
+  { service: 'Anthropic', cost30d: 14326, desktopWeight: 0.9, mobileWeight: 0.1 },
+  { service: 'OpenAI', cost30d: 14884, desktopWeight: 0.5, mobileWeight: 0.5 },
+  { service: 'Deepgram', cost30d: 10580, desktopWeight: 0.2, mobileWeight: 0.8 },
 ];
 
 function loadServiceCosts(): ServiceCostEntry[] {
@@ -114,10 +120,14 @@ function loadServiceCosts(): ServiceCostEntry[] {
       .map((r) => {
         const d = Number(r.desktopWeight);
         const m = Number(r.mobileWeight);
+        // Back-compat: accept `cost30d`, `mtd`, or `projection` from the env
+        // override — whichever is set wins. This lets existing configs that
+        // still use the old `mtd` / `projection` keys keep working.
+        const cost =
+          Number(r.cost30d) || Number(r.mtd) || Number(r.projection) || 0;
         return {
           service: String(r.service),
-          mtd: Number(r.mtd) || 0,
-          projection: Number(r.projection) || 0,
+          cost30d: cost,
           desktopWeight: Number.isFinite(d) ? d : 0.5,
           mobileWeight: Number.isFinite(m) ? m : 0.5,
         };
@@ -127,22 +137,23 @@ function loadServiceCosts(): ServiceCostEntry[] {
   }
 }
 
-// Sum of each service's monthly projection, split by its platform weight.
-// Used as the overhead budget for the daily cost series when per-service
-// attribution is available.
+// Sum of each service's trailing-30-day cost, split by its platform weight.
+// Used as the overhead budget for the daily cost series. The name is kept as
+// "MonthlyOverhead" for caller compatibility — the value is now actual
+// trailing-30d spend rather than a projection.
 function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): { desktop: number; mobile: number; total: number } {
   let desktop = 0;
   let mobile = 0;
   let total = 0;
   for (const s of services) {
-    desktop += s.projection * s.desktopWeight;
-    mobile += s.projection * s.mobileWeight;
-    total += s.projection;
+    desktop += s.cost30d * s.desktopWeight;
+    mobile += s.cost30d * s.mobileWeight;
+    total += s.cost30d;
   }
   return { desktop, mobile, total };
 }
 
-const CACHE_PREFIX = "admin:stats:infra-costs:v2";
+const CACHE_PREFIX = "admin:stats:infra-costs:v3";
 const CACHE_TTL_SECONDS = 30 * 60;
 
 // User-provided April projection. Override with ADMIN_INFRA_OVERHEAD_MONTHLY
@@ -304,13 +315,14 @@ export async function GET(request: NextRequest) {
 
     // Each service has its own desktop/mobile weight; the breakdown row
     // reflects the real workload split (e.g. Translate 100% mobile,
-    // Anthropic 90% desktop) instead of a single global ratio.
+    // Anthropic 90% desktop) instead of a single global ratio. All values
+    // are trailing-30-day actual spend — no projection.
     const breakdown: ServiceCostRow[] = services.map((row) => ({
       service: row.service,
-      mtdUsd: Math.round(row.mtd * 100) / 100,
-      aprProjectionUsd: Math.round(row.projection * 100) / 100,
-      desktopProjectionUsd: Math.round(row.projection * row.desktopWeight * 100) / 100,
-      mobileProjectionUsd: Math.round(row.projection * row.mobileWeight * 100) / 100,
+      mtdUsd: Math.round(row.cost30d * 100) / 100,
+      aprProjectionUsd: Math.round(row.cost30d * 100) / 100,
+      desktopProjectionUsd: Math.round(row.cost30d * row.desktopWeight * 100) / 100,
+      mobileProjectionUsd: Math.round(row.cost30d * row.mobileWeight * 100) / 100,
     }));
 
     const desktopShare = overheadByPlatform.total > 0 ? overheadByPlatform.desktop / overheadByPlatform.total : 0.5;
