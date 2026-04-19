@@ -487,6 +487,11 @@ class ShortcutSettings: ObservableObject {
             ? storedVoiceID
             : Self.defaultVoiceID
         self.selectedVoiceID = validVoiceID
+
+        NotificationCenter.default.addObserver(forName: .modelTierDidChange, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.selectedModel = ModelQoS.Claude.sanitizedSelection(self.selectedModel)
+        }
     }
 
     private func persistShortcut(_ shortcut: KeyboardShortcut, forKey key: String) {
