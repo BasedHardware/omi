@@ -214,3 +214,195 @@ class TestToggleStateTransitions:
         next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
         toggle_block = source[toggle_start:next_handler]
         assert 'no language preference set' in toggle_block, "Must handle missing language preference"
+
+
+class TestSetAutoTranslatePreference:
+    """Verify set_user_transcription_preferences writes auto_translate_enabled correctly."""
+
+    def test_set_auto_translate_true(self):
+        """Setting auto_translate_enabled=True must write to Firestore."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            users_module.set_user_transcription_preferences('uid1', auto_translate_enabled=True)
+            mock_ref.update.assert_called_once_with({'transcription_preferences.auto_translate_enabled': True})
+
+    def test_set_auto_translate_false(self):
+        """Setting auto_translate_enabled=False must write to Firestore."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            users_module.set_user_transcription_preferences('uid2', auto_translate_enabled=False)
+            mock_ref.update.assert_called_once_with({'transcription_preferences.auto_translate_enabled': False})
+
+    def test_omitted_auto_translate_does_not_write(self):
+        """Omitting auto_translate_enabled must not write it to Firestore."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            users_module.set_user_transcription_preferences('uid3', vocabulary=['test'])
+            call_args = mock_ref.update.call_args[0][0]
+            assert 'transcription_preferences.auto_translate_enabled' not in call_args
+            assert 'transcription_preferences.vocabulary' in call_args
+
+    def test_auto_translate_with_vocabulary(self):
+        """Setting both auto_translate_enabled and vocabulary must write both."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            users_module.set_user_transcription_preferences('uid4', auto_translate_enabled=True, vocabulary=['a', 'b'])
+            call_args = mock_ref.update.call_args[0][0]
+            assert call_args['transcription_preferences.auto_translate_enabled'] is True
+            assert call_args['transcription_preferences.vocabulary'] == ['a', 'b']
+
+    def test_vocabulary_truncation_preserved(self):
+        """Vocabulary truncation to 100 items must still work."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            big_vocab = [f'word{i}' for i in range(150)]
+            users_module.set_user_transcription_preferences('uid5', vocabulary=big_vocab)
+            call_args = mock_ref.update.call_args[0][0]
+            assert len(call_args['transcription_preferences.vocabulary']) == 100
+
+    def test_no_args_does_not_update(self):
+        """Calling with no optional args must not call update."""
+        with patch.object(users_module, 'db') as mock_db:
+            mock_ref = mock_db.collection.return_value.document.return_value
+            users_module.set_user_transcription_preferences('uid6')
+            mock_ref.update.assert_not_called()
+
+
+class TestPydanticModelDefaults:
+    """Verify Pydantic model defaults match database defaults."""
+
+    def test_response_model_auto_translate_default(self):
+        """TranscriptionPreferencesResponse must default auto_translate_enabled=False."""
+        # Import inline to avoid module-level conflicts
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'users.py'), 'r') as f:
+            source = f.read()
+        assert 'auto_translate_enabled: bool = False' in source, "Response model must default to False"
+
+    def test_update_model_auto_translate_optional(self):
+        """TranscriptionPreferencesUpdate must have auto_translate_enabled as Optional."""
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'users.py'), 'r') as f:
+            source = f.read()
+        assert 'auto_translate_enabled: Optional[bool] = None' in source, "Update model must be Optional[bool]"
+
+    def test_endpoint_forwards_auto_translate(self):
+        """PATCH endpoint must forward auto_translate_enabled to set_user_transcription_preferences."""
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'users.py'), 'r') as f:
+            source = f.read()
+        assert 'auto_translate_enabled=data.auto_translate_enabled' in source, "Must forward auto_translate_enabled"
+
+
+class TestBatchTranslation24hBoundary:
+    """Boundary tests for the 24h filter in batch translation on toggle-on."""
+
+    @staticmethod
+    def _read_transcribe_source():
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
+            return f.read()
+
+    def test_missing_started_at_skips_time_filter(self):
+        """If conv_started is None, the time filter condition should not crash."""
+        source = self._read_transcribe_source()
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        # The code checks `if conv_started and s.get('end')` — both must be truthy
+        assert 'if conv_started and' in toggle_block, "Must guard against missing conv_started"
+
+    def test_missing_end_skips_time_filter(self):
+        """If segment has no 'end', the time filter should not crash."""
+        source = self._read_transcribe_source()
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert "s.get('end')" in toggle_block, "Must guard against missing segment end"
+
+    def test_cutoff_uses_conversation_start_plus_segment_end(self):
+        """Time filter must compute segment time as conv_started + segment.end."""
+        source = self._read_transcribe_source()
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert "conv_started + timedelta(seconds=s['end'])" in toggle_block, "Must use conv_started + segment end"
+
+
+class TestToggleIdempotency:
+    """Verify toggle handler handles edge cases gracefully."""
+
+    @staticmethod
+    def _read_transcribe_source():
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
+            return f.read()
+
+    def test_enable_guards_on_no_existing_coordinator(self):
+        """Toggle-on must check `not translation_coordinator` before creating."""
+        source = self._read_transcribe_source()
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert 'enabled and not translation_coordinator' in toggle_block, "Must guard enable on existing coordinator"
+
+    def test_disable_guards_on_existing_coordinator(self):
+        """Toggle-off must check `translation_coordinator` exists before flushing."""
+        source = self._read_transcribe_source()
+        toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
+        next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
+        toggle_block = source[toggle_start:next_handler]
+        assert 'not enabled and translation_coordinator' in toggle_block, "Must guard disable on existing coordinator"
+
+    def test_screen_state_only_acts_on_change(self):
+        """screen_state handler must only flush when state actually changes."""
+        source = self._read_transcribe_source()
+        screen_start = source.find("json_data.get('type') == 'screen_state'")
+        next_handler = source.find("elif json_data.get('type') ==", screen_start + 1)
+        if next_handler == -1:
+            next_handler = source.find("elif json_data.get('type')", screen_start + 50)
+        screen_block = (
+            source[screen_start:next_handler] if next_handler != -1 else source[screen_start : screen_start + 500]
+        )
+        assert 'active != screen_active' in screen_block, "Must only act on actual state change"
+
+    def test_deferred_flush_handles_empty_segments(self):
+        """_flush_deferred_translations must handle empty deferred_segments."""
+        source = self._read_transcribe_source()
+        start = source.find('async def _flush_deferred_translations')
+        end = source.find('\n    async def ', start + 1)
+        body = source[start:end]
+        assert 'not deferred_segments' in body, "Must early-return when no deferred segments"
+
+
+class TestAutoTranslateSessionWiring:
+    """Verify auto_translate_enabled is fetched and used at session start."""
+
+    @staticmethod
+    def _read_transcribe_source():
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
+            return f.read()
+
+    def test_auto_translate_fetched_from_prefs(self):
+        """_stream_handler must fetch auto_translate_enabled from transcription prefs."""
+        source = self._read_transcribe_source()
+        assert "auto_translate_enabled = transcription_prefs.get('auto_translate_enabled'" in source
+
+    def test_auto_translate_passed_to_resolver(self):
+        """resolve_translation_language must receive auto_translate_enabled."""
+        source = self._read_transcribe_source()
+        assert 'auto_translate_enabled=auto_translate_enabled' in source
+
+    def test_language_preference_fetched_unconditionally(self):
+        """user_language_preference must be fetched without gating on single_language_mode."""
+        source = self._read_transcribe_source()
+        # Find the line that fetches user_language_preference
+        lines = source.split('\n')
+        for line in lines:
+            if 'user_language_preference' in line and 'get_user_language_preference' in line:
+                assert 'single_language_mode' not in line, "Must not gate on single_language_mode"
+                break
+        else:
+            raise AssertionError("Could not find user_language_preference fetch line")
