@@ -1,12 +1,54 @@
+import CryptoKit
 import Foundation
 
 /// Fetches API keys from the backend at runtime instead of bundling them in the app.
 /// Developer overrides (set in Settings) take precedence over backend-provided keys.
 ///
+/// Also hosts the Bring-Your-Own-Key (BYOK) free-plan flow: when the user supplies
+/// their own OpenAI, Anthropic, Gemini, and Deepgram keys, the app sends them along
+/// with every request and the backend skips subscription billing. Keys live in
+/// UserDefaults (reusing the existing dev-override AppStorage pattern); the backend
+/// only ever sees SHA-256 fingerprints for state tracking.
+///
 /// NOTE: Deepgram and Gemini keys are NO LONGER fetched from the backend —
 /// they are proxied server-side (issue #5861).
 /// NOTE: ElevenLabs key is NO LONGER fetched — proxied via /v1/tts/synthesize (issue #6622).
 /// Anthropic, Firebase, and Calendar keys are still served via /v1/config/api-keys.
+
+/// Keys that participate in the BYOK free-plan flow.
+enum BYOKProvider: String, CaseIterable {
+    case openai
+    case anthropic
+    case gemini
+    case deepgram
+
+    var storageKey: String {
+        switch self {
+        case .openai: return "dev_openai_api_key"
+        case .anthropic: return "dev_anthropic_api_key"
+        case .gemini: return "dev_gemini_api_key"
+        case .deepgram: return "dev_deepgram_api_key"
+        }
+    }
+
+    var headerName: String {
+        switch self {
+        case .openai: return "X-BYOK-OpenAI"
+        case .anthropic: return "X-BYOK-Anthropic"
+        case .gemini: return "X-BYOK-Gemini"
+        case .deepgram: return "X-BYOK-Deepgram"
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .openai: return "OpenAI"
+        case .anthropic: return "Anthropic"
+        case .gemini: return "Gemini"
+        case .deepgram: return "Deepgram"
+        }
+    }
+}
 @MainActor
 final class APIKeyService: ObservableObject {
     static let shared = APIKeyService()
@@ -149,5 +191,37 @@ final class APIKeyService: ObservableObject {
     private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {
         guard let s, !s.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return s
+    }
+
+    // MARK: - BYOK (Bring Your Own Keys) — free plan
+
+    /// Read a BYOK key from UserDefaults. Returns nil if empty/whitespace.
+    nonisolated static func byokKey(_ provider: BYOKProvider) -> String? {
+        nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
+    }
+
+    /// True when the user has supplied keys for all four BYOK providers.
+    /// The subscription-bypass gate: when this is true, the user is on the free
+    /// plan and we attach their keys to every backend request.
+    nonisolated static var isByokActive: Bool {
+        BYOKProvider.allCases.allSatisfy { byokKey($0) != nil }
+    }
+
+    /// SHA-256 fingerprint of a key, used by the backend to detect when the
+    /// user rotated their keys without us ever storing the key itself.
+    nonisolated static func byokFingerprint(_ key: String) -> String {
+        let digest = SHA256.hash(data: Data(key.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Map of provider → (key, fingerprint) for every provider the user has configured.
+    nonisolated static var byokSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+        var out: [BYOKProvider: (String, String)] = [:]
+        for provider in BYOKProvider.allCases {
+            if let key = byokKey(provider) {
+                out[provider] = (key, byokFingerprint(key))
+            }
+        }
+        return out
     }
 }
