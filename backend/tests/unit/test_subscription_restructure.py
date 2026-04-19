@@ -29,7 +29,7 @@ from models.users import PlanType, PlanLimits, Subscription
 def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
     """F4: Operator and Unlimited chat caps must be independently configurable."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "750")
-    monkeypatch.setenv("PLUS_CHAT_QUESTIONS_PER_MONTH", "500")
+    monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "3000")
 
     # Re-import to pick up env vars
     import importlib
@@ -41,7 +41,7 @@ def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
     unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 750
-    assert unlimited_limits.chat_questions_per_month == 500
+    assert unlimited_limits.chat_questions_per_month == 3000
     assert operator_limits.chat_questions_per_month != unlimited_limits.chat_questions_per_month
 
 
