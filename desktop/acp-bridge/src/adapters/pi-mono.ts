@@ -778,13 +778,16 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     const message = event.message as PiAssistantMessage | undefined;
 
-    // When pi-mono stops to execute a tool (stopReason === "tool_use"),
-    // this is an intermediate turn — the model will continue after the
-    // tool executes. Keep the prompt state alive so subsequent text_delta
-    // events and the final turn_end are properly handled.
-    if (message?.stopReason === "tool_use") {
+    // When pi-mono stops to execute a tool, this is an intermediate turn —
+    // the model will continue after the tool executes. Keep the prompt state
+    // alive so subsequent text_delta events and the final turn_end are
+    // properly handled.
+    // Pi-mono uses camelCase "toolUse" (via pi-ai SDK), not Anthropic's
+    // snake_case "tool_use". Check both for robustness.
+    const stopReason = message?.stopReason;
+    if (stopReason === "toolUse" || stopReason === "tool_use") {
       process.stderr.write(
-        "[pi-mono] intermediate turn_end (tool_use) — keeping prompt alive\n"
+        `[pi-mono] intermediate turn_end (${stopReason}) — keeping prompt alive\n`
       );
       return;
     }
