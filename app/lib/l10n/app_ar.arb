@@ -552,7 +552,7 @@
     "leaveReviewAndroid": "ساعدنا في الوصول إلى المزيد من الأشخاص من خلال ترك تقييم في Google Play Store. ملاحظاتك تعني لنا الكثير!",
     "rateOnAppStore": "التقييم على App Store",
     "rateOnGooglePlay": "التقييم على Google Play",
-    "maybeLater": "ربما لاحقًا",
+    "maybeLater": "ربما لاحقاً",
     "speechProfileIntro": "يحتاج Omi إلى تعلم أهدافك وصوتك. ستتمكن من تعديله لاحقًا.",
     "getStarted": "ابدأ",
     "allDone": "تم كل شيء!",
@@ -2918,5 +2918,21 @@
     "youAreOnAPaidPlan": "أنت على خطة مدفوعة.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "الدردشة",
+    "chatMessages": "رسائل",
+    "unlimitedChatThisMonth": "رسائل دردشة غير محدودة هذا الشهر",
+    "chatUsedOfLimitCompute": "{used} من {limit} ميزانية الحوسبة مستخدمة",
+    "chatUsedOfLimitMessages": "{used} من {limit} رسالة مستخدمة هذا الشهر",
+    "chatUsageProgress": "{used} / {limit} مستخدم",
+    "chatLimitReachedUpgrade": "تم الوصول لحد الدردشة. قم بالترقية لمزيد من الرسائل.",
+    "chatLimitReachedTitle": "تم الوصول لحد الدردشة",
+    "chatUsageDescription": "لقد استخدمت {used} من {limitDisplay} في خطة {plan}.",
+    "resetsInDays": "يُعاد التعيين خلال {count} يوم",
+    "resetsInHours": "يُعاد التعيين خلال {count} ساعة",
+    "resetsSoon": "يُعاد التعيين قريباً",
+    "upgradePlan": "ترقية الخطة",
+    "billingMonthly": "شهري",
+    "billingYearly": "سنوي",
+    "savePercent": "وفّر ~17%"
 }

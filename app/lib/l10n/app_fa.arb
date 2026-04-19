@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "نتوانستیم طرح‌ها را بارگذاری کنیم",
+    "unableToLoadPlans": "بارگذاری طرح‌ها ممکن نشد",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "لطفا اتصال خود را بررسی کنید و دوباره تلاش کنید",
+    "checkConnectionTryAgain": "اتصال خود را بررسی کنید و دوباره تلاش کنید",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,21 @@
     "youAreOnAPaidPlan": "شما در یک طرح پولی هستید.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "چت",
+    "chatMessages": "پیام",
+    "unlimitedChatThisMonth": "پیام‌های چت نامحدود این ماه",
+    "chatUsedOfLimitCompute": "{used} از {limit} بودجه محاسباتی استفاده شده",
+    "chatUsedOfLimitMessages": "{used} از {limit} پیام این ماه استفاده شده",
+    "chatUsageProgress": "{used} / {limit} استفاده شده",
+    "chatLimitReachedUpgrade": "سقف چت تمام شد. برای پیام‌های بیشتر ارتقا دهید.",
+    "chatLimitReachedTitle": "سقف چت تمام شد",
+    "chatUsageDescription": "شما {used} از {limitDisplay} را در طرح {plan} استفاده کرده‌اید.",
+    "resetsInDays": "بازنشانی در {count} روز",
+    "resetsInHours": "بازنشانی در {count} ساعت",
+    "resetsSoon": "به‌زودی بازنشانی می‌شود",
+    "upgradePlan": "ارتقای طرح",
+    "billingMonthly": "ماهانه",
+    "billingYearly": "سالانه",
+    "savePercent": "~17% صرفه‌جویی"
 }

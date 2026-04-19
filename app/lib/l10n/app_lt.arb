@@ -2163,7 +2163,7 @@
     "unableToDeleteConversation": "Nepavyko ištrinti pokalbio",
     "unableToFetchApps": "Nepavyko gauti programėlių :(\n\nPatikrinkite interneto ryšį ir bandykite dar kartą.",
     "unableToLoadApps": "Nepavyko įkelti programų",
-    "unableToLoadPlans": "Nepavyksta įkelti planų",
+    "unableToLoadPlans": "Nepavyko įkelti planų",
     "unableToOpenWatchApp": "Nepavyko atidaryti Apple Watch programos. Rankiniu būdu atidarykite Watch programą savo Apple Watch ir įdiekite Omi iš skyriaus \"Galimos programos\".",
     "understanding": "Supratimas",
     "understandingSubtitle": "Žodžiai, suprasti iš jūsų pokalbių.",
@@ -2951,5 +2951,21 @@
     "youAreOnAPaidPlan": "Jūs naudojate mokamą planą.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Pokalbis",
+    "chatMessages": "žinučių",
+    "unlimitedChatThisMonth": "Neriboti pokalbių pranešimai šį mėnesį",
+    "chatUsedOfLimitCompute": "{used} iš {limit} skaičiavimo biudžeto panaudota",
+    "chatUsedOfLimitMessages": "{used} iš {limit} žinučių panaudota šį mėnesį",
+    "chatUsageProgress": "{used} / {limit} panaudota",
+    "chatLimitReachedUpgrade": "Pokalbio limitas pasiektas. Atnaujinkite daugiau žinučių.",
+    "chatLimitReachedTitle": "Pokalbio limitas pasiektas",
+    "chatUsageDescription": "Panaudojote {used} iš {limitDisplay} plane {plan}.",
+    "resetsInDays": "Atsistatys po {count} dienų",
+    "resetsInHours": "Atsistatys po {count} valandų",
+    "resetsSoon": "Greitai atsistatys",
+    "upgradePlan": "Atnaujinti planą",
+    "billingMonthly": "Mėnesinis",
+    "billingYearly": "Metinis",
+    "savePercent": "Sutaupykite ~17%"
 }

@@ -1399,8 +1399,8 @@
     "unlockOmiInfiniteMemory": "Atbloķējiet Omi bezgalīgo atmiņu",
     "youreOnAnnualPlan": "Jūs esat gada plānā",
     "alreadyBestValuePlan": "Jums jau ir vislabākās vērtības plāns. Nav nepieciešamas izmaiņas.",
-    "unableToLoadPlans": "Nevar ielādēt plānus",
-    "checkConnectionTryAgain": "Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz",
+    "unableToLoadPlans": "Neizdevās ielādēt plānus",
+    "checkConnectionTryAgain": "Pārbaudiet savienojumu un mēģiniet vēlreiz",
     "useFreePlan": "Izmantot bezmaksas plānu",
     "continueText": "Turpināt",
     "resubscribe": "Atkārtoti abonēt",
@@ -2951,5 +2951,21 @@
     "youAreOnAPaidPlan": "Jums ir maksas plāns.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Tērzēšana",
+    "chatMessages": "ziņas",
+    "unlimitedChatThisMonth": "Neierobežotas tērzēšanas ziņas šomēnes",
+    "chatUsedOfLimitCompute": "{used} no {limit} skaitļošanas budžeta izmantots",
+    "chatUsedOfLimitMessages": "{used} no {limit} ziņām izmantots šomēnes",
+    "chatUsageProgress": "{used} / {limit} izmantots",
+    "chatLimitReachedUpgrade": "Tērzēšanas limits sasniegts. Jauniniet vairāk ziņām.",
+    "chatLimitReachedTitle": "Tērzēšanas limits sasniegts",
+    "chatUsageDescription": "Esat izmantojis {used} no {limitDisplay} plānā {plan}.",
+    "resetsInDays": "Atiestatīsies pēc {count} dienām",
+    "resetsInHours": "Atiestatīsies pēc {count} stundām",
+    "resetsSoon": "Drīz atiestatīsies",
+    "upgradePlan": "Jaunināt plānu",
+    "billingMonthly": "Mēnesī",
+    "billingYearly": "Gadā",
+    "savePercent": "Ietaupiet ~17%"
 }
