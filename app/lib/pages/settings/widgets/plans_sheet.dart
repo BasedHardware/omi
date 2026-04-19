@@ -1779,7 +1779,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'Ends $endsOnDate',
+                            context.l10n.endsOnDate(endsOnDate!),
                             style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ),
