@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/chat_quota_paywall.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -27,6 +28,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -92,6 +94,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       provider.fetchChatApps();
       // Pre-connect agent WebSocket so it's ready when the user sends a message
       provider.preConnectAgent();
+      // Check chat quota
+      provider.checkChatQuota();
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
       // Auto-focus the text field only on initial load, not on app switches
@@ -209,113 +213,115 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           ],
                         )
                       : provider.isClearingChat
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                            const SizedBox(height: 16),
-                            Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                          ],
-                        )
-                      : (provider.messages.isEmpty)
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 32.0),
-                            child: Text(
-                              connectivityProvider.isConnected
-                                  ? context.l10n.noMessagesYet
-                                  : context.l10n.noInternetConnection,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                textSelectionTheme: TextSelectionThemeData(
-                                  selectionColor: Colors.white.withOpacity(0.3),
-                                  selectionHandleColor: Colors.blue,
-                                ),
-                              ),
-                              child: ListView.builder(
-                                shrinkWrap: false,
-                                reverse: false,
-                                controller: scrollController,
-                                padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                itemCount: provider.messages.length,
-                                itemBuilder: (context, chatIndex) {
-                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                    _hasInitialScrolled = true;
-                                    SchedulerBinding.instance.addPostFrameCallback((_) {
-                                      if (scrollController.hasClients) {
-                                        scrollController.jumpTo(scrollController.position.maxScrollExtent);
-                                      }
-                                    });
-                                  }
-
-                                  final message = provider.messages[chatIndex];
-                                  double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                  return Padding(
-                                    key: ValueKey(message.id),
-                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                    child: message.sender == MessageSender.ai
-                                        ? Builder(
-                                            builder: (context) {
-                                              final child = AIMessage(
-                                                showTypingIndicator:
-                                                    provider.showTypingIndicator &&
-                                                    chatIndex == provider.messages.length - 1,
-                                                showThinkingAfterText: provider.agentThinkingAfterText,
-                                                message: message,
-                                                sendMessage: _sendMessageUtil,
-                                                onAskOmi: (text) {
-                                                  setState(() {
-                                                    _selectedContext = text;
-                                                  });
-                                                  textFieldFocusNode.requestFocus();
-                                                },
-                                                displayOptions: provider.messages.length <= 1,
-                                                appSender: provider.messageSenderApp(message.appId),
-                                                updateConversation: (ServerConversation conversation) {
-                                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                                },
-                                                setMessageNps: (int value, {String? reason}) {
-                                                  provider.setMessageNps(message, value, reason: reason);
-                                                },
-                                              );
-
-                                              // Dynamic spacer logic
-                                              if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
-                                                return Container(
-                                                  constraints: BoxConstraints(
-                                                    minHeight: MediaQuery.of(context).size.height * 0.5,
-                                                  ),
-                                                  alignment: Alignment.topLeft,
-                                                  child: child,
-                                                );
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                                const SizedBox(height: 16),
+                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
+                              ],
+                            )
+                          : (provider.messages.isEmpty)
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 32.0),
+                                    child: Text(
+                                      connectivityProvider.isConnected
+                                          ? context.l10n.noMessagesYet
+                                          : context.l10n.noInternetConnection,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                )
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        textSelectionTheme: TextSelectionThemeData(
+                                          selectionColor: Colors.white.withOpacity(0.3),
+                                          selectionHandleColor: Colors.blue,
+                                        ),
+                                      ),
+                                      child: ListView.builder(
+                                        shrinkWrap: false,
+                                        reverse: false,
+                                        controller: scrollController,
+                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                        itemCount: provider.messages.length,
+                                        itemBuilder: (context, chatIndex) {
+                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                            _hasInitialScrolled = true;
+                                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                                              if (scrollController.hasClients) {
+                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
                                               }
-                                              return child;
-                                            },
-                                          )
-                                        : HumanMessage(
-                                            message: message,
-                                            onAskOmi: (text) {
-                                              setState(() {
-                                                _selectedContext = text;
-                                              });
-                                              textFieldFocusNode.requestFocus();
-                                            },
-                                          ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                                            });
+                                          }
+
+                                          final message = provider.messages[chatIndex];
+                                          double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                          double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                          return Padding(
+                                            key: ValueKey(message.id),
+                                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                            child: message.sender == MessageSender.ai
+                                                ? Builder(
+                                                    builder: (context) {
+                                                      final child = AIMessage(
+                                                        showTypingIndicator: provider.showTypingIndicator &&
+                                                            chatIndex == provider.messages.length - 1,
+                                                        showThinkingAfterText: provider.agentThinkingAfterText,
+                                                        message: message,
+                                                        sendMessage: _sendMessageUtil,
+                                                        onAskOmi: (text) {
+                                                          setState(() {
+                                                            _selectedContext = text;
+                                                          });
+                                                          textFieldFocusNode.requestFocus();
+                                                        },
+                                                        displayOptions: provider.messages.length <= 1,
+                                                        appSender: provider.messageSenderApp(message.appId),
+                                                        updateConversation: (ServerConversation conversation) {
+                                                          context
+                                                              .read<ConversationProvider>()
+                                                              .updateConversation(conversation);
+                                                        },
+                                                        setMessageNps: (int value, {String? reason}) {
+                                                          provider.setMessageNps(message, value, reason: reason);
+                                                        },
+                                                      );
+
+                                                      // Dynamic spacer logic
+                                                      if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                        return Container(
+                                                          constraints: BoxConstraints(
+                                                            minHeight: MediaQuery.of(context).size.height * 0.5,
+                                                          ),
+                                                          alignment: Alignment.topLeft,
+                                                          child: child,
+                                                        );
+                                                      }
+                                                      return child;
+                                                    },
+                                                  )
+                                                : HumanMessage(
+                                                    message: message,
+                                                    onAskOmi: (text) {
+                                                      setState(() {
+                                                        _selectedContext = text;
+                                                      });
+                                                      textFieldFocusNode.requestFocus();
+                                                    },
+                                                  ),
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
                 ),
                 // Send message area - fixed at bottom
                 Container(
@@ -437,9 +443,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 bottom: widget.isPivotBottom
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
-                                              (textController.text.length > 40 || textController.text.contains('\n'))
-                                          ? 0
-                                          : 2),
+                                            (textController.text.length > 40 || textController.text.contains('\n'))
+                                        ? 0
+                                        : 2),
                               ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -615,8 +621,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           bool hasText = value.text.trim().isNotEmpty;
                                           if (!hasText) return const SizedBox.shrink();
 
-                                          bool canSend =
-                                              hasText &&
+                                          bool canSend = hasText &&
                                               !provider.sendingMessage &&
                                               !provider.isUploadingFiles &&
                                               connectivityProvider.isConnected;
@@ -675,7 +680,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  _sendMessageUtil(String text) {
+  _sendMessageUtil(String text) async {
+    var provider = context.read<MessageProvider>();
+
+    // Check chat quota before sending
+    if (provider.isChatQuotaExceeded) {
+      _showChatQuotaPaywall(provider);
+      return;
+    }
+
     String? currentContext = _selectedContext;
     setState(() {
       _allowSpacer = true;
@@ -689,7 +702,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       text = 'Context: "$currentContext"\n\n$text';
     }
 
-    var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     textController.clear();
@@ -698,9 +710,28 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (mounted) scrollToBottomOnSend();
     });
 
-    provider.sendMessageStreamToServer(text);
+    await provider.sendMessageStreamToServer(text);
+
+    // Check if quota was hit during the send attempt
+    if (mounted && provider.isChatQuotaExceeded) {
+      _showChatQuotaPaywall(provider);
+    }
+
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+  }
+
+  void _showChatQuotaPaywall(MessageProvider provider) {
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ChatQuotaPaywall(
+        quota: provider.chatQuota!,
+        usageProvider: context.read<UsageProvider>(),
+      ),
+    );
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1192,18 +1223,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
             )
           : appId != null && onConfirmDelete != null
-          ? GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = appId;
-                });
-              },
-              child: const Padding(
-                padding: EdgeInsets.only(left: 2, top: 1),
-                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-              ),
-            )
-          : null,
+              ? GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _pendingDeleteAppId = appId;
+                    });
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+                  ),
+                )
+              : null,
       selected: isSelected,
       selectedTileColor: Colors.white.withOpacity(0.1),
       onTap: onTap,
