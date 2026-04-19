@@ -1399,8 +1399,8 @@
     "unlockOmiInfiniteMemory": "Lås opp Omis uendelige hukommelse",
     "youreOnAnnualPlan": "Du er på årsabonnementet",
     "alreadyBestValuePlan": "Du har allerede det beste verdi-abonnementet. Ingen endringer nødvendig.",
-    "unableToLoadPlans": "Kan ikke laste abonnementer",
-    "checkConnectionTryAgain": "Sjekk tilkoblingen din og prøv igjen",
+    "unableToLoadPlans": "Kunne ikke laste planer",
+    "checkConnectionTryAgain": "Sjekk tilkoblingen og prøv igjen",
     "useFreePlan": "Bruk gratis abonnement",
     "continueText": "Fortsett",
     "resubscribe": "Abonner på nytt",
@@ -2951,5 +2951,21 @@
     "youAreOnAPaidPlan": "Du er på en betalt plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "meldinger",
+    "unlimitedChatThisMonth": "Ubegrenset antall chatmeldinger denne måneden",
+    "chatUsedOfLimitCompute": "{used} av {limit} beregningsbudsjett brukt",
+    "chatUsedOfLimitMessages": "{used} av {limit} meldinger brukt denne måneden",
+    "chatUsageProgress": "{used} / {limit} brukt",
+    "chatLimitReachedUpgrade": "Chatgrense nådd. Oppgrader for flere meldinger.",
+    "chatLimitReachedTitle": "Chatgrense nådd",
+    "chatUsageDescription": "Du har brukt {used} av dine {limitDisplay} på {plan}-planen.",
+    "resetsInDays": "Tilbakestilles om {count} dager",
+    "resetsInHours": "Tilbakestilles om {count} timer",
+    "resetsSoon": "Tilbakestilles snart",
+    "upgradePlan": "Oppgrader plan",
+    "billingMonthly": "Månedlig",
+    "billingYearly": "Årlig",
+    "savePercent": "Spar ~17%"
 }

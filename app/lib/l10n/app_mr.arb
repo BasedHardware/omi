@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "योजना लोड करू शकत नाही",
+    "unableToLoadPlans": "प्लॅन लोड करता आले नाहीत",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "कृपया आपला जोडणी तपासा आणि पुन्हा प्रयत्न करा",
+    "checkConnectionTryAgain": "कनेक्शन तपासा आणि पुन्हा प्रयत्न करा",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,21 @@
     "youAreOnAPaidPlan": "तुम्ही सशुल्क प्लॅनवर आहात.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "चॅट",
+    "chatMessages": "संदेश",
+    "unlimitedChatThisMonth": "या महिन्यात अमर्यादित चॅट संदेश",
+    "chatUsedOfLimitCompute": "{used} / {limit} गणना बजेट वापरले",
+    "chatUsedOfLimitMessages": "या महिन्यात {used} / {limit} संदेश वापरले",
+    "chatUsageProgress": "{used} / {limit} वापरले",
+    "chatLimitReachedUpgrade": "चॅट मर्यादा गाठली. अधिक संदेशांसाठी अपग्रेड करा.",
+    "chatLimitReachedTitle": "चॅट मर्यादा गाठली",
+    "chatUsageDescription": "{plan} प्लॅनवर {limitDisplay} पैकी {used} वापरले.",
+    "resetsInDays": "{count} दिवसांत रीसेट होईल",
+    "resetsInHours": "{count} तासांत रीसेट होईल",
+    "resetsSoon": "लवकरच रीसेट होईल",
+    "upgradePlan": "प्लॅन अपग्रेड करा",
+    "billingMonthly": "मासिक",
+    "billingYearly": "वार्षिक",
+    "savePercent": "~17% बचत करा"
 }

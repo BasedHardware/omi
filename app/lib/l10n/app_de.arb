@@ -1400,7 +1400,7 @@
     "unlockOmiInfiniteMemory": "Schalten Sie Omis unendlichen Speicher frei",
     "youreOnAnnualPlan": "Sie haben den Jahresplan",
     "alreadyBestValuePlan": "Sie haben bereits den besten Wertplan. Keine Änderungen erforderlich.",
-    "unableToLoadPlans": "Pläne können nicht geladen werden",
+    "unableToLoadPlans": "Pläne konnten nicht geladen werden",
     "checkConnectionTryAgain": "Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut",
     "useFreePlan": "Kostenlosen Plan nutzen",
     "continueText": "Fortfahren",
@@ -2919,5 +2919,21 @@
     "youAreOnAPaidPlan": "Du hast einen kostenpflichtigen Plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "Nachrichten",
+    "unlimitedChatThisMonth": "Unbegrenzte Chatnachrichten diesen Monat",
+    "chatUsedOfLimitCompute": "{used} von {limit} Rechenbudget verwendet",
+    "chatUsedOfLimitMessages": "{used} von {limit} Nachrichten diesen Monat verwendet",
+    "chatUsageProgress": "{used} / {limit} verwendet",
+    "chatLimitReachedUpgrade": "Chatlimit erreicht. Upgraden für mehr Nachrichten.",
+    "chatLimitReachedTitle": "Chatlimit erreicht",
+    "chatUsageDescription": "Sie haben {used} von {limitDisplay} im {plan}-Plan verwendet.",
+    "resetsInDays": "Wird in {count} Tagen zurückgesetzt",
+    "resetsInHours": "Wird in {count} Stunden zurückgesetzt",
+    "resetsSoon": "Wird bald zurückgesetzt",
+    "upgradePlan": "Plan upgraden",
+    "billingMonthly": "Monatlich",
+    "billingYearly": "Jährlich",
+    "savePercent": "~17% sparen"
 }

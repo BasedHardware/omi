@@ -2920,5 +2920,21 @@
     "youAreOnAPaidPlan": "Estàs en un pla de pagament.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Xat",
+    "chatMessages": "missatges",
+    "unlimitedChatThisMonth": "Missatges de xat il·limitats aquest mes",
+    "chatUsedOfLimitCompute": "{used} de {limit} pressupost de càlcul utilitzat",
+    "chatUsedOfLimitMessages": "{used} de {limit} missatges utilitzats aquest mes",
+    "chatUsageProgress": "{used} / {limit} utilitzats",
+    "chatLimitReachedUpgrade": "Límit de xat assolit. Actualitza per a més missatges.",
+    "chatLimitReachedTitle": "Límit de xat assolit",
+    "chatUsageDescription": "Has utilitzat {used} dels teus {limitDisplay} al pla {plan}.",
+    "resetsInDays": "Es reinicia en {count} dies",
+    "resetsInHours": "Es reinicia en {count} hores",
+    "resetsSoon": "Es reinicia aviat",
+    "upgradePlan": "Actualitzar pla",
+    "billingMonthly": "Mensual",
+    "billingYearly": "Anual",
+    "savePercent": "Estalvia ~17%"
 }

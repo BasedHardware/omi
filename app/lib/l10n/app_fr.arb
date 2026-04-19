@@ -1400,7 +1400,7 @@
     "youreOnAnnualPlan": "Vous êtes sur le forfait annuel",
     "alreadyBestValuePlan": "Vous avez déjà le forfait au meilleur rapport qualité-prix. Aucun changement nécessaire.",
     "unableToLoadPlans": "Impossible de charger les forfaits",
-    "checkConnectionTryAgain": "Veuillez vérifier votre connexion et réessayer",
+    "checkConnectionTryAgain": "Vérifiez votre connexion et réessayez",
     "useFreePlan": "Utiliser le forfait gratuit",
     "continueText": "Continuer",
     "resubscribe": "Se réabonner",
@@ -2986,5 +2986,21 @@
     "youAreOnAPaidPlan": "Vous êtes sur un forfait payant.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "messages",
+    "unlimitedChatThisMonth": "Messages de chat illimités ce mois-ci",
+    "chatUsedOfLimitCompute": "{used} sur {limit} de budget de calcul utilisé",
+    "chatUsedOfLimitMessages": "{used} sur {limit} messages utilisés ce mois-ci",
+    "chatUsageProgress": "{used} / {limit} utilisés",
+    "chatLimitReachedUpgrade": "Limite de chat atteinte. Passez à un forfait supérieur pour plus de messages.",
+    "chatLimitReachedTitle": "Limite de chat atteinte",
+    "chatUsageDescription": "Vous avez utilisé {used} de vos {limitDisplay} sur le forfait {plan}.",
+    "resetsInDays": "Réinitialisation dans {count} jours",
+    "resetsInHours": "Réinitialisation dans {count} heures",
+    "resetsSoon": "Réinitialisation bientôt",
+    "upgradePlan": "Améliorer le forfait",
+    "billingMonthly": "Mensuel",
+    "billingYearly": "Annuel",
+    "savePercent": "Économisez ~17%"
 }

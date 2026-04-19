@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Siguro Mamaya",
+    "maybeLater": "Siguro mamaya",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Hindi maaaring i-load ang mga plano",
+    "unableToLoadPlans": "Hindi ma-load ang mga plan",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Mangyaring suriin ang iyong koneksyon at subukan ulit",
+    "checkConnectionTryAgain": "Suriin ang koneksyon at subukan ulit",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,21 @@
     "youAreOnAPaidPlan": "Ikaw ay nasa bayad na plano.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "mensahe",
+    "unlimitedChatThisMonth": "Walang limitasyon sa mensahe ngayong buwan",
+    "chatUsedOfLimitCompute": "{used} sa {limit} compute budget nagamit",
+    "chatUsedOfLimitMessages": "{used} sa {limit} mensahe nagamit ngayong buwan",
+    "chatUsageProgress": "{used} / {limit} nagamit",
+    "chatLimitReachedUpgrade": "Naabot na ang limitasyon ng chat. Mag-upgrade para sa mas maraming mensahe.",
+    "chatLimitReachedTitle": "Naabot na ang limitasyon ng chat",
+    "chatUsageDescription": "Ginamit mo na ang {used} sa {limitDisplay} sa {plan} plan.",
+    "resetsInDays": "Magre-reset sa {count} araw",
+    "resetsInHours": "Magre-reset sa {count} oras",
+    "resetsSoon": "Magre-reset na",
+    "upgradePlan": "I-upgrade ang plan",
+    "billingMonthly": "Buwanan",
+    "billingYearly": "Taunan",
+    "savePercent": "Makatipid ~17%"
 }

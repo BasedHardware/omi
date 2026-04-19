@@ -10814,5 +10814,8 @@
         }
     },
     "resetsSoon": "Resets soon",
-    "upgradePlan": "Upgrade Plan"
+    "upgradePlan": "Upgrade Plan",
+    "billingMonthly": "Monthly",
+    "billingYearly": "Yearly",
+    "savePercent": "Save ~17%"
 }

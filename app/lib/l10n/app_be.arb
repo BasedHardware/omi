@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Можа позней",
+    "maybeLater": "Магчыма пазней",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не ўдалося загрузіць планы",
+    "unableToLoadPlans": "Немагчыма загрузіць планы",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Калі ласка, праверце вашае падлучэнне і спробуйце яшчэ раз",
+    "checkConnectionTryAgain": "Праверце падключэнне і паспрабуйце зноў",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,21 @@
     "youAreOnAPaidPlan": "Вы на платным плане.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Чат",
+    "chatMessages": "паведамленняў",
+    "unlimitedChatThisMonth": "Неабмежаваныя паведамленні ў чаце гэты месяц",
+    "chatUsedOfLimitCompute": "{used} з {limit} бюджэту вылічэнняў выкарыстана",
+    "chatUsedOfLimitMessages": "{used} з {limit} паведамленняў выкарыстана гэты месяц",
+    "chatUsageProgress": "{used} / {limit} выкарыстана",
+    "chatLimitReachedUpgrade": "Ліміт чату дасягнуты. Абнавіце для большай колькасці паведамленняў.",
+    "chatLimitReachedTitle": "Ліміт чату дасягнуты",
+    "chatUsageDescription": "Вы выкарысталі {used} з {limitDisplay} на плане {plan}.",
+    "resetsInDays": "Скід праз {count} дзён",
+    "resetsInHours": "Скід праз {count} гадзін",
+    "resetsSoon": "Хутка скінецца",
+    "upgradePlan": "Абнавіць план",
+    "billingMonthly": "Штомесяц",
+    "billingYearly": "Штогод",
+    "savePercent": "Зэканомце ~17%"
 }

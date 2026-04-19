@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не могу да учитам планове",
+    "unableToLoadPlans": "Није могуће учитати планове",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Молим вас, проверите вашу везу и покушајте поново",
+    "checkConnectionTryAgain": "Проверите везу и покушајте поново",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -10674,5 +10674,21 @@
     "youAreOnAPaidPlan": "На плаћеном сте плану.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Ћаскање",
+    "chatMessages": "порука",
+    "unlimitedChatThisMonth": "Неограничене поруке овог месеца",
+    "chatUsedOfLimitCompute": "{used} од {limit} буџета за рачунање искоришћено",
+    "chatUsedOfLimitMessages": "{used} од {limit} порука искоришћено овог месеца",
+    "chatUsageProgress": "{used} / {limit} искоришћено",
+    "chatLimitReachedUpgrade": "Лимит ћаскања достигнут. Надоградите за више порука.",
+    "chatLimitReachedTitle": "Лимит ћаскања достигнут",
+    "chatUsageDescription": "Искористили сте {used} од {limitDisplay} на плану {plan}.",
+    "resetsInDays": "Ресетује се за {count} дана",
+    "resetsInHours": "Ресетује се за {count} сати",
+    "resetsSoon": "Ускоро се ресетује",
+    "upgradePlan": "Надогради план",
+    "billingMonthly": "Месечно",
+    "billingYearly": "Годишње",
+    "savePercent": "Уштедите ~17%"
 }

@@ -1399,8 +1399,8 @@
     "unlockOmiInfiniteMemory": "Avaa Omin rajaton muisti",
     "youreOnAnnualPlan": "Sinulla on vuositilaus",
     "alreadyBestValuePlan": "Sinulla on jo paras hinta-laatusuhteen tilaus. Muutoksia ei tarvita.",
-    "unableToLoadPlans": "Tilauksia ei voida ladata",
-    "checkConnectionTryAgain": "Tarkista yhteytesi ja yritä uudelleen",
+    "unableToLoadPlans": "Suunnitelmia ei voitu ladata",
+    "checkConnectionTryAgain": "Tarkista yhteys ja yritä uudelleen",
     "useFreePlan": "Käytä ilmaista tilausta",
     "continueText": "Jatka",
     "resubscribe": "Tilaa uudelleen",
@@ -2951,5 +2951,21 @@
     "youAreOnAPaidPlan": "Sinulla on maksullinen tilaus.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "viestiä",
+    "unlimitedChatThisMonth": "Rajoittamattomasti chat-viestejä tässä kuussa",
+    "chatUsedOfLimitCompute": "{used} / {limit} laskentabudjetista käytetty",
+    "chatUsedOfLimitMessages": "{used} / {limit} viestiä käytetty tässä kuussa",
+    "chatUsageProgress": "{used} / {limit} käytetty",
+    "chatLimitReachedUpgrade": "Chat-raja saavutettu. Päivitä saadaksesi lisää viestejä.",
+    "chatLimitReachedTitle": "Chat-raja saavutettu",
+    "chatUsageDescription": "Olet käyttänyt {used} / {limitDisplay} {plan}-suunnitelmassa.",
+    "resetsInDays": "Nollautuu {count} päivän kuluttua",
+    "resetsInHours": "Nollautuu {count} tunnin kuluttua",
+    "resetsSoon": "Nollautuu pian",
+    "upgradePlan": "Päivitä suunnitelma",
+    "billingMonthly": "Kuukausittain",
+    "billingYearly": "Vuosittain",
+    "savePercent": "Säästä ~17%"
 }

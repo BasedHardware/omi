@@ -552,7 +552,7 @@
     "leaveReviewAndroid": "Giúp chúng tôi tiếp cận nhiều người hơn bằng cách để lại đánh giá trên Google Play Store. Phản hồi của bạn có ý nghĩa rất lớn với chúng tôi!",
     "rateOnAppStore": "Đánh giá trên App Store",
     "rateOnGooglePlay": "Đánh giá trên Google Play",
-    "maybeLater": "Có thể Sau",
+    "maybeLater": "Có thể sau",
     "speechProfileIntro": "Omi cần học mục tiêu và giọng nói của bạn. Bạn có thể sửa đổi sau.",
     "getStarted": "Bắt đầu",
     "allDone": "Hoàn tất!",
@@ -1400,7 +1400,7 @@
     "youreOnAnnualPlan": "Bạn đang sử dụng gói năm",
     "alreadyBestValuePlan": "Bạn đã có gói giá trị tốt nhất rồi. Không cần thay đổi.",
     "unableToLoadPlans": "Không thể tải các gói",
-    "checkConnectionTryAgain": "Vui lòng kiểm tra kết nối và thử lại",
+    "checkConnectionTryAgain": "Kiểm tra kết nối và thử lại",
     "useFreePlan": "Sử dụng gói miễn phí",
     "continueText": "Tiếp tục",
     "resubscribe": "Đăng ký lại",
@@ -2956,5 +2956,21 @@
     "youAreOnAPaidPlan": "Bạn đang sử dụng gói trả phí.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Trò chuyện",
+    "chatMessages": "tin nhắn",
+    "unlimitedChatThisMonth": "Tin nhắn trò chuyện không giới hạn tháng này",
+    "chatUsedOfLimitCompute": "{used} trong {limit} ngân sách tính toán đã dùng",
+    "chatUsedOfLimitMessages": "{used} trong {limit} tin nhắn đã dùng tháng này",
+    "chatUsageProgress": "{used} / {limit} đã dùng",
+    "chatLimitReachedUpgrade": "Đã đạt giới hạn trò chuyện. Nâng cấp để có thêm tin nhắn.",
+    "chatLimitReachedTitle": "Đã đạt giới hạn trò chuyện",
+    "chatUsageDescription": "Bạn đã sử dụng {used} trong {limitDisplay} của gói {plan}.",
+    "resetsInDays": "Đặt lại sau {count} ngày",
+    "resetsInHours": "Đặt lại sau {count} giờ",
+    "resetsSoon": "Sắp đặt lại",
+    "upgradePlan": "Nâng cấp gói",
+    "billingMonthly": "Hàng tháng",
+    "billingYearly": "Hàng năm",
+    "savePercent": "Tiết kiệm ~17%"
 }

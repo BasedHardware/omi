@@ -1400,8 +1400,8 @@
     "unlockOmiInfiniteMemory": "Desbloquea la memoria infinita de Omi",
     "youreOnAnnualPlan": "Estás en el plan anual",
     "alreadyBestValuePlan": "Ya tienes el plan de mejor valor. No se necesitan cambios.",
-    "unableToLoadPlans": "No se pueden cargar los planes",
-    "checkConnectionTryAgain": "Comprueba tu conexión e inténtalo de nuevo",
+    "unableToLoadPlans": "No se pudieron cargar los planes",
+    "checkConnectionTryAgain": "Verifica tu conexión e intenta de nuevo",
     "useFreePlan": "Usar plan gratuito",
     "continueText": "Continuar",
     "resubscribe": "Volver a suscribirse",
@@ -2952,5 +2952,21 @@
     "youAreOnAPaidPlan": "Estás en un plan de pago.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "mensajes",
+    "unlimitedChatThisMonth": "Mensajes de chat ilimitados este mes",
+    "chatUsedOfLimitCompute": "{used} de {limit} presupuesto de cómputo usado",
+    "chatUsedOfLimitMessages": "{used} de {limit} mensajes usados este mes",
+    "chatUsageProgress": "{used} / {limit} usados",
+    "chatLimitReachedUpgrade": "Límite de chat alcanzado. Actualiza para más mensajes.",
+    "chatLimitReachedTitle": "Límite de chat alcanzado",
+    "chatUsageDescription": "Has usado {used} de tu {limitDisplay} en el plan {plan}.",
+    "resetsInDays": "Se restablece en {count} días",
+    "resetsInHours": "Se restablece en {count} horas",
+    "resetsSoon": "Se restablece pronto",
+    "upgradePlan": "Actualizar plan",
+    "billingMonthly": "Mensual",
+    "billingYearly": "Anual",
+    "savePercent": "Ahorra ~17%"
 }
