@@ -2969,5 +2969,8 @@
     "billingYearly": "Ετήσιο",
     "savePercent": "Εξοικονομήστε ~17%",
     "popular": "Δημοφιλές",
-    "currentPlan": "Τρέχον"
+    "currentPlan": "Τρέχον",
+    "neoSubtitle": "{count} ερωτήσεις ανά μήνα",
+    "operatorSubtitle": "{count} ερωτήσεις ανά μήνα",
+    "architectSubtitle": "AI για προχωρημένους — χιλιάδες συνομιλίες + αυτοματισμοί"
 }

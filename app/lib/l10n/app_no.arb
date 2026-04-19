@@ -2969,5 +2969,8 @@
     "billingYearly": "Årlig",
     "savePercent": "Spar ~17%",
     "popular": "Populært",
-    "currentPlan": "Nåværende"
+    "currentPlan": "Nåværende",
+    "neoSubtitle": "{count} spørsmål per måned",
+    "operatorSubtitle": "{count} spørsmål per måned",
+    "architectSubtitle": "Avansert AI — tusenvis av samtaler + agentautomatisering"
 }

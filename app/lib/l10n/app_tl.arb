@@ -10692,5 +10692,8 @@
     "billingYearly": "Taunan",
     "savePercent": "Makatipid ~17%",
     "popular": "Sikat",
-    "currentPlan": "Kasalukuyan"
+    "currentPlan": "Kasalukuyan",
+    "neoSubtitle": "{count} tanong bawat buwan",
+    "operatorSubtitle": "{count} tanong bawat buwan",
+    "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation"
 }

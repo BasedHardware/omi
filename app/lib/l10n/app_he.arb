@@ -10692,5 +10692,8 @@
     "billingYearly": "שנתי",
     "savePercent": "חסוך ~17%",
     "popular": "פופולרי",
-    "currentPlan": "נוכחי"
+    "currentPlan": "נוכחי",
+    "neoSubtitle": "{count} שאלות בחודש",
+    "operatorSubtitle": "{count} שאלות בחודש",
+    "architectSubtitle": "AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה"
 }

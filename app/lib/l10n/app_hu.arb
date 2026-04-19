@@ -3065,5 +3065,8 @@
     "billingYearly": "Éves",
     "savePercent": "~17% megtakarítás",
     "popular": "Népszerű",
-    "currentPlan": "Jelenlegi"
+    "currentPlan": "Jelenlegi",
+    "neoSubtitle": "{count} kérdés havonta",
+    "operatorSubtitle": "{count} kérdés havonta",
+    "architectSubtitle": "Haladó AI — ezernyi chat + ügynök automatizáció"
 }

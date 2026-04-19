@@ -3004,5 +3004,8 @@
     "billingYearly": "Annuel",
     "savePercent": "Économisez ~17%",
     "popular": "Populaire",
-    "currentPlan": "Actuel"
+    "currentPlan": "Actuel",
+    "neoSubtitle": "{count} questions par mois",
+    "operatorSubtitle": "{count} questions par mois",
+    "architectSubtitle": "IA avancée — des milliers de chats + automatisations d'agent"
 }

@@ -2937,5 +2937,8 @@
     "billingYearly": "Jährlich",
     "savePercent": "~17% sparen",
     "popular": "Beliebt",
-    "currentPlan": "Aktuell"
+    "currentPlan": "Aktuell",
+    "neoSubtitle": "{count} Fragen pro Monat",
+    "operatorSubtitle": "{count} Fragen pro Monat",
+    "architectSubtitle": "Power-User KI — tausende Chats + agentische Automatisierung"
 }

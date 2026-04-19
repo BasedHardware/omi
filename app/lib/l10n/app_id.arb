@@ -3011,5 +3011,8 @@
     "billingYearly": "Tahunan",
     "savePercent": "Hemat ~17%",
     "popular": "Populer",
-    "currentPlan": "Saat ini"
+    "currentPlan": "Saat ini",
+    "neoSubtitle": "{count} pertanyaan per bulan",
+    "operatorSubtitle": "{count} pertanyaan per bulan",
+    "architectSubtitle": "AI canggih — ribuan chat + otomatisasi agen"
 }

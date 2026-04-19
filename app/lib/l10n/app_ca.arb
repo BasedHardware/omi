@@ -2938,5 +2938,8 @@
     "billingYearly": "Anual",
     "savePercent": "Estalvia ~17%",
     "popular": "Popular",
-    "currentPlan": "Actual"
+    "currentPlan": "Actual",
+    "neoSubtitle": "{count} preguntes al mes",
+    "operatorSubtitle": "{count} preguntes al mes",
+    "architectSubtitle": "IA avançada — milers de xats + automatitzacions d'agent"
 }

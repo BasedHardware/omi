@@ -2969,5 +2969,8 @@
     "billingYearly": "Gadā",
     "savePercent": "Ietaupiet ~17%",
     "popular": "Populārs",
-    "currentPlan": "Pašreizējais"
+    "currentPlan": "Pašreizējais",
+    "neoSubtitle": "{count} jautājumi mēnesī",
+    "operatorSubtitle": "{count} jautājumi mēnesī",
+    "architectSubtitle": "Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija"
 }

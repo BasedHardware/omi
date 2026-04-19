@@ -2969,5 +2969,8 @@
     "billingYearly": "Vuosittain",
     "savePercent": "Säästä ~17%",
     "popular": "Suosittu",
-    "currentPlan": "Nykyinen"
+    "currentPlan": "Nykyinen",
+    "neoSubtitle": "{count} kysymystä kuukaudessa",
+    "operatorSubtitle": "{count} kysymystä kuukaudessa",
+    "architectSubtitle": "Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi"
 }

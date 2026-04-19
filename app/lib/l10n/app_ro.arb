@@ -2969,5 +2969,8 @@
     "billingYearly": "Anual",
     "savePercent": "Economisiți ~17%",
     "popular": "Popular",
-    "currentPlan": "Curent"
+    "currentPlan": "Curent",
+    "neoSubtitle": "{count} întrebări pe lună",
+    "operatorSubtitle": "{count} întrebări pe lună",
+    "architectSubtitle": "AI avansat — mii de conversații + automatizare agent"
 }

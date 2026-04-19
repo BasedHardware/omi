@@ -2969,5 +2969,8 @@
     "billingYearly": "Metinis",
     "savePercent": "Sutaupykite ~17%",
     "popular": "Populiarus",
-    "currentPlan": "Dabartinis"
+    "currentPlan": "Dabartinis",
+    "neoSubtitle": "{count} klausimų per mėnesį",
+    "operatorSubtitle": "{count} klausimų per mėnesį",
+    "architectSubtitle": "Pažangus AI — tūkstančiai pokalbių + agentinė automatizacija"
 }

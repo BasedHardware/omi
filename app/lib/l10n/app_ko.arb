@@ -2969,5 +2969,8 @@
     "billingYearly": "연간",
     "savePercent": "~17% 절약",
     "popular": "인기",
-    "currentPlan": "현재"
+    "currentPlan": "현재",
+    "neoSubtitle": "월 {count}개 질문",
+    "operatorSubtitle": "월 {count}개 질문",
+    "architectSubtitle": "파워유저 AI — 수천 건의 채팅 + 에이전트 자동화"
 }

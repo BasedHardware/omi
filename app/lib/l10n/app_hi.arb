@@ -2970,5 +2970,8 @@
     "billingYearly": "वार्षिक",
     "savePercent": "~17% बचाएं",
     "popular": "लोकप्रिय",
-    "currentPlan": "वर्तमान"
+    "currentPlan": "वर्तमान",
+    "neoSubtitle": "प्रति माह {count} प्रश्न",
+    "operatorSubtitle": "प्रति माह {count} प्रश्न",
+    "architectSubtitle": "पावर-यूजर AI — हज़ारों चैट + एजेंटिक ऑटोमेशन"
 }

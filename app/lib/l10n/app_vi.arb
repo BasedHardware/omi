@@ -2974,5 +2974,8 @@
     "billingYearly": "Hàng năm",
     "savePercent": "Tiết kiệm ~17%",
     "popular": "Phổ biến",
-    "currentPlan": "Hiện tại"
+    "currentPlan": "Hiện tại",
+    "neoSubtitle": "{count} câu hỏi mỗi tháng",
+    "operatorSubtitle": "{count} câu hỏi mỗi tháng",
+    "architectSubtitle": "AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân"
 }

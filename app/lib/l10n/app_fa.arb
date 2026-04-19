@@ -10692,5 +10692,8 @@
     "billingYearly": "سالانه",
     "savePercent": "~17% صرفه‌جویی",
     "popular": "محبوب",
-    "currentPlan": "فعلی"
+    "currentPlan": "فعلی",
+    "neoSubtitle": "{count} پرسش در ماه",
+    "operatorSubtitle": "{count} پرسش در ماه",
+    "architectSubtitle": "هوش مصنوعی پیشرفته — هزاران گفتگو + اتوماسیون عاملی"
 }
