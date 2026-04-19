@@ -71,6 +71,70 @@ class _AnthropicClientProxy:
         return getattr(self._resolve(), name)
 
 
+# Google's OpenAI-compatible endpoint lets us keep langchain_openai.ChatOpenAI
+# as the client class while routing to Gemini directly — no new langchain dep.
+_GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+class _OpenRouterGeminiProxy:
+    """For models served via OpenRouter that we want to route direct when BYOK Gemini is set.
+
+    Falls back to the OpenRouter-backed default client when no BYOK gemini key
+    is present — so non-BYOK users are unaffected.
+    """
+
+    __slots__ = ('_default', '_direct_model', '_ctor_kwargs')
+
+    def __init__(self, default: ChatOpenAI, direct_model: str, ctor_kwargs: Dict[str, Any]):
+        object.__setattr__(self, '_default', default)
+        object.__setattr__(self, '_direct_model', direct_model)
+        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _resolve(self) -> ChatOpenAI:
+        byok = get_byok_key('gemini')
+        if byok:
+            return _cached_openai_chat(
+                self._direct_model,
+                byok,
+                {**self._ctor_kwargs, 'base_url': _GEMINI_OPENAI_BASE_URL},
+            )
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    def __or__(self, other):
+        return self._resolve() | other
+
+    def __ror__(self, other):
+        return other | self._resolve()
+
+
+class _OpenAIEmbeddingsProxy:
+    """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
+
+    __slots__ = ('_model', '_default', '_ctor_kwargs')
+
+    def __init__(self, model: str, default: OpenAIEmbeddings, ctor_kwargs: Dict[str, Any]):
+        object.__setattr__(self, '_model', model)
+        object.__setattr__(self, '_default', default)
+        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _resolve(self) -> OpenAIEmbeddings:
+        byok = get_byok_key('openai')
+        if byok:
+            cache_key = f"emb:{self._model}:{hash(byok)}"
+            inst = _openai_cache.get(cache_key)
+            if inst is None:
+                inst = OpenAIEmbeddings(model=self._model, api_key=byok, **self._ctor_kwargs)
+                _openai_cache[cache_key] = inst
+            return inst
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+
 _openai_cache: Dict[str, ChatOpenAI] = {}
 _anthropic_cache: Dict[str, anthropic.AsyncAnthropic] = {}
 
@@ -179,16 +243,29 @@ llm_agent_stream = _byok_openai(
     callbacks=[_usage_callback],
     model_kwargs=_agent_cache_kwargs,
 )
-llm_persona_mini_stream = ChatOpenAI(
+_persona_mini_kwargs = dict(
     temperature=0.8,
-    model="google/gemini-flash-1.5-8b",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Chat"},
     streaming=True,
     stream_options={"include_usage": True},
     callbacks=[_usage_callback],
 )
+_persona_mini_default = ChatOpenAI(
+    model="google/gemini-flash-1.5-8b",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Chat"},
+    **_persona_mini_kwargs,
+)
+# BYOK Gemini → route direct to Google's OpenAI-compat endpoint.
+# Model name drops the `google/` prefix: gemini-flash-1.5-8b on Google direct.
+llm_persona_mini_stream = _OpenRouterGeminiProxy(
+    default=_persona_mini_default,
+    direct_model="gemini-flash-1.5-8b",
+    ctor_kwargs=_persona_mini_kwargs,
+)
+# Anthropic-via-OpenRouter stays on OpenRouter for now; direct-Anthropic via
+# langchain would need the langchain-anthropic dep. BYOK Anthropic users still
+# pay Omi for this specific persona model — flag for follow-up.
 llm_persona_medium_stream = ChatOpenAI(
     temperature=0.8,
     model="anthropic/claude-3.5-sonnet",
@@ -201,16 +278,29 @@ llm_persona_medium_stream = ChatOpenAI(
 )
 
 # Gemini models for large context analysis
-llm_gemini_flash = ChatOpenAI(
+_gemini_flash_kwargs = dict(
     temperature=0.7,
+    callbacks=[_usage_callback],
+)
+_gemini_flash_default = ChatOpenAI(
     model="google/gemini-3-flash-preview",
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Wrapped"},
-    callbacks=[_usage_callback],
+    **_gemini_flash_kwargs,
+)
+llm_gemini_flash = _OpenRouterGeminiProxy(
+    default=_gemini_flash_default,
+    direct_model="gemini-3-flash-preview",
+    ctor_kwargs=_gemini_flash_kwargs,
 )
 
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+_embeddings_default = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings = _OpenAIEmbeddingsProxy(
+    model="text-embedding-3-large",
+    default=_embeddings_default,
+    ctor_kwargs={},
+)
 parser = PydanticOutputParser(pydantic_object=Structured)
 
 encoding = tiktoken.encoding_for_model('gpt-4')
@@ -231,8 +321,11 @@ def gemini_embed_query(text: str) -> List[float]:
 
     Uses RETRIEVAL_QUERY task type to match the RETRIEVAL_DOCUMENT embeddings
     generated by the desktop app.
+
+    Prefers the per-request BYOK Gemini key; falls back to the process-wide
+    env key so non-BYOK callers behave exactly as before.
     """
-    api_key = os.environ.get('GEMINI_API_KEY', '')
+    api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
     url = f'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key={api_key}'
     payload = {
         'model': 'models/embedding-001',
