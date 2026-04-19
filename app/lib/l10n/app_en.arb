@@ -5349,13 +5349,11 @@
     "@cancelSubscription": {
         "description": "Button text to cancel a subscription"
     },
-    "endsOnDate": "Ends on {date}",
+    "endsOnDate": "Ends {date}",
     "@endsOnDate": {
-        "description": "Shows end date",
         "placeholders": {
             "date": {
-                "type": "String",
-                "example": "January 15, 2026"
+                "type": "String"
             }
         }
     },
