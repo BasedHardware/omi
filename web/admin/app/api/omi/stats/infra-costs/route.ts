@@ -14,12 +14,10 @@ export const dynamic = "force-dynamic";
 //      `mobile_chat`, `desktop_rag`, etc. give us the platform prefix for
 //      every call. We sum `cost_usd` per (date, platform) across all users.
 //
-//   2) A configurable monthly overhead for all the shared infra that doesn't
-//      attribute per-user (Gemini platform, Compute Engine, App Engine, Cloud
-//      Run, Storage, Networking, Logging, …). Defaults to the user's current
-//      projection of $57,447/mo. Split proportionally to each day's
-//      per-platform LLM share. Override via env or ?overhead_monthly=…
-//      query param.
+//   2) A configurable monthly overhead for shared infra (compute, storage,
+//      networking, etc). Set via ADMIN_INFRA_OVERHEAD_MONTHLY env var or
+//      ?overhead_monthly= query param. Split proportionally to each day's
+//      per-platform LLM share.
 
 type Platform = "desktop" | "mobile" | "unknown";
 
@@ -60,13 +58,11 @@ interface InfraCostsPayload {
   generatedAt: number;
 }
 
-// Per-service monthly cost rows — sourced from the team's Apr projection.
-// Each service also carries a `desktopWeight` / `mobileWeight` pair (sum=1.0)
-// that reflects how the workload is split across platforms in practice.
-// These defaults came from the team-beasts daily report: Anthropic is
-// overwhelmingly desktop (floating-bar Claude Opus), Deepgram and Gemini
-// lean mobile (device-connected audio + mobile-only features), GCP compute
-// splits by DAU share. Override via ADMIN_SERVICE_COSTS_JSON env var.
+// Per-service monthly cost rows with platform weights.
+// SECURITY: dollar amounts must NOT be hardcoded in source — this is a public repo.
+// Set the ADMIN_SERVICE_COSTS_JSON env var in Cloud Run with the actual values.
+// Format: JSON array of { service, mtd, projection, desktopWeight, mobileWeight }.
+// If the env var is not set, the breakdown section will be empty.
 interface ServiceCostEntry {
   service: string;
   mtd: number;
@@ -75,40 +71,12 @@ interface ServiceCostEntry {
   mobileWeight: number;
 }
 
-const DEFAULT_SERVICE_COSTS: ServiceCostEntry[] = [
-  // Gemini: mobile-weighted (app features, translation fallback).
-  { service: 'Gemini API', mtd: 7829, projection: 17803, desktopWeight: 0.3, mobileWeight: 0.7 },
-  // Compute Engine: shared infra, split by DAU share (27% desktop / 73% mobile on Apr 16).
-  { service: 'Compute Engine', mtd: 4228, projection: 11417, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // Translate: 100% mobile feature.
-  { service: 'Translate', mtd: 2814, projection: 8302, desktopWeight: 0.0, mobileWeight: 1.0 },
-  // App Engine: backend for both — DAU split.
-  { service: 'App Engine', mtd: 3022, projection: 8299, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // Cloud Run: listen/pusher subservices — mostly mobile audio pipeline.
-  { service: 'Cloud Run', mtd: 1457, projection: 4157, desktopWeight: 0.2, mobileWeight: 0.8 },
-  // Cloud Storage: audio uploads + chat file uploads — mostly mobile.
-  { service: 'Cloud Storage', mtd: 1432, projection: 3487, desktopWeight: 0.3, mobileWeight: 0.7 },
-  // Networking / Logging / Others: split by DAU.
-  { service: 'Networking', mtd: 495, projection: 1350, desktopWeight: 0.27, mobileWeight: 0.73 },
-  { service: 'Cloud Logging', mtd: 326, projection: 890, desktopWeight: 0.27, mobileWeight: 0.73 },
-  { service: 'Others', mtd: 638, projection: 1741, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // External LLM bills, not in the GCP table. Projections are the team-
-  // beasts daily-report 7-day totals extrapolated to 30 days
-  // (weekly × 30/7) so the dashboard matches the reported ~$4.6K/day run
-  // rate instead of undershooting at the older MTD-based estimates.
-  // Anthropic is almost entirely desktop (Claude-Opus floating bar);
-  // OpenAI splits 50/50.
-  { service: 'Anthropic', mtd: 7163, projection: 30699, desktopWeight: 0.9, mobileWeight: 0.1 },
-  { service: 'OpenAI', mtd: 7442, projection: 31895, desktopWeight: 0.5, mobileWeight: 0.5 },
-  { service: 'Deepgram', mtd: 5290, projection: 22672, desktopWeight: 0.2, mobileWeight: 0.8 },
-];
-
 function loadServiceCosts(): ServiceCostEntry[] {
   const raw = process.env.ADMIN_SERVICE_COSTS_JSON;
-  if (!raw) return DEFAULT_SERVICE_COSTS;
+  if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_SERVICE_COSTS;
+    if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((r) => r && typeof r.service === 'string')
       .map((r) => {
@@ -123,7 +91,7 @@ function loadServiceCosts(): ServiceCostEntry[] {
         };
       });
   } catch {
-    return DEFAULT_SERVICE_COSTS;
+    return [];
   }
 }
 
@@ -142,12 +110,12 @@ function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): { deskt
   return { desktop, mobile, total };
 }
 
-const CACHE_PREFIX = "admin:stats:infra-costs:v2";
+const CACHE_PREFIX = "admin:stats:infra-costs:v3";
 const CACHE_TTL_SECONDS = 30 * 60;
 
-// User-provided April projection. Override with ADMIN_INFRA_OVERHEAD_MONTHLY
-// env var or ?overhead_monthly= query param.
-const DEFAULT_OVERHEAD_MONTHLY = 57447;
+// Monthly overhead total. Must be set via ADMIN_INFRA_OVERHEAD_MONTHLY env var
+// or ?overhead_monthly= query param. Defaults to 0 when not configured.
+const DEFAULT_OVERHEAD_MONTHLY = 0;
 
 function platformFromBucket(bucket: string): Platform {
   const lower = bucket.toLowerCase();
