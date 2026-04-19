@@ -10692,5 +10692,8 @@
     "billingYearly": "Годишно",
     "savePercent": "Заштедете ~17%",
     "popular": "Популарно",
-    "currentPlan": "Тековен"
+    "currentPlan": "Тековен",
+    "neoSubtitle": "{count} прашања месечно",
+    "operatorSubtitle": "{count} прашања месечно",
+    "architectSubtitle": "Напреден AI — илјадници разговори + агентна автоматизација"
 }

@@ -10692,5 +10692,8 @@
     "billingYearly": "సంవత్సరానికి",
     "savePercent": "~17% ఆదా చేయండి",
     "popular": "ప్రజాదరణ",
-    "currentPlan": "ప్రస్తుత"
+    "currentPlan": "ప్రస్తుత",
+    "neoSubtitle": "నెలకు {count} ప్రశ్నలు",
+    "operatorSubtitle": "నెలకు {count} ప్రశ్నలు",
+    "architectSubtitle": "పవర్-యూజర్ AI — వేల చాట్‌లు + ఏజెంటిక్ ఆటోమేషన్"
 }

@@ -2974,5 +2974,8 @@
     "billingYearly": "Ročne",
     "savePercent": "Ušetrite ~17%",
     "popular": "Obľúbené",
-    "currentPlan": "Aktuálny"
+    "currentPlan": "Aktuálny",
+    "neoSubtitle": "{count} otázok mesačne",
+    "operatorSubtitle": "{count} otázok mesačne",
+    "architectSubtitle": "Pokročilé AI — tisíce chatov + agentná automatizácia"
 }

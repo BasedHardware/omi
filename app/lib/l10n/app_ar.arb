@@ -2936,5 +2936,8 @@
     "billingYearly": "سنوي",
     "savePercent": "وفّر ~17%",
     "popular": "شائع",
-    "currentPlan": "الحالي"
+    "currentPlan": "الحالي",
+    "neoSubtitle": "{count} سؤال شهرياً",
+    "operatorSubtitle": "{count} سؤال شهرياً",
+    "architectSubtitle": "ذكاء اصطناعي متقدم — آلاف المحادثات + أتمتة ذكية"
 }

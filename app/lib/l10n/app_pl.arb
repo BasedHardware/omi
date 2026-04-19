@@ -3004,5 +3004,8 @@
     "billingYearly": "Rocznie",
     "savePercent": "Oszczędź ~17%",
     "popular": "Popularne",
-    "currentPlan": "Bieżący"
+    "currentPlan": "Bieżący",
+    "neoSubtitle": "{count} pytań miesięcznie",
+    "operatorSubtitle": "{count} pytań miesięcznie",
+    "architectSubtitle": "Zaawansowane AI — tysiące czatów + automatyzacja agentowa"
 }

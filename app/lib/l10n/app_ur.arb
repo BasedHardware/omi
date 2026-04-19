@@ -10692,5 +10692,8 @@
     "billingYearly": "سالانہ",
     "savePercent": "~17% بچائیں",
     "popular": "مقبول",
-    "currentPlan": "موجودہ"
+    "currentPlan": "موجودہ",
+    "neoSubtitle": "ماہانہ {count} سوالات",
+    "operatorSubtitle": "ماہانہ {count} سوالات",
+    "architectSubtitle": "پاور یوزر AI — ہزاروں چیٹس + ایجنٹک آٹومیشن"
 }

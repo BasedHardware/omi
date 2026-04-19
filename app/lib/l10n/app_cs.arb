@@ -2938,5 +2938,8 @@
     "billingYearly": "Roční",
     "savePercent": "Ušetřete ~17%",
     "popular": "Oblíbené",
-    "currentPlan": "Aktuální"
+    "currentPlan": "Aktuální",
+    "neoSubtitle": "{count} dotazů měsíčně",
+    "operatorSubtitle": "{count} dotazů měsíčně",
+    "architectSubtitle": "AI pro pokročilé — tisíce chatů + agentní automatizace"
 }

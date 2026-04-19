@@ -3004,5 +3004,8 @@
     "billingYearly": "Ежегодно",
     "savePercent": "Экономия ~17%",
     "popular": "Популярный",
-    "currentPlan": "Текущий"
+    "currentPlan": "Текущий",
+    "neoSubtitle": "{count} вопросов в месяц",
+    "operatorSubtitle": "{count} вопросов в месяц",
+    "architectSubtitle": "AI для продвинутых — тысячи чатов + агентная автоматизация"
 }

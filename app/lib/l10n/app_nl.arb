@@ -2969,5 +2969,8 @@
     "billingYearly": "Jaarlijks",
     "savePercent": "Bespaar ~17%",
     "popular": "Populair",
-    "currentPlan": "Huidig"
+    "currentPlan": "Huidig",
+    "neoSubtitle": "{count} vragen per maand",
+    "operatorSubtitle": "{count} vragen per maand",
+    "architectSubtitle": "Geavanceerde AI — duizenden chats + agentautomatisering"
 }

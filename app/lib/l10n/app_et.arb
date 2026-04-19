@@ -2969,5 +2969,8 @@
     "billingYearly": "Aastane",
     "savePercent": "Säästa ~17%",
     "popular": "Populaarne",
-    "currentPlan": "Praegune"
+    "currentPlan": "Praegune",
+    "neoSubtitle": "{count} küsimust kuus",
+    "operatorSubtitle": "{count} küsimust kuus",
+    "architectSubtitle": "Võimas AI — tuhanded vestlused + agentne automatiseerimine"
 }

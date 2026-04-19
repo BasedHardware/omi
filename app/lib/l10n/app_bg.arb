@@ -2938,5 +2938,8 @@
     "billingYearly": "Годишно",
     "savePercent": "Спестете ~17%",
     "popular": "Популярен",
-    "currentPlan": "Текущ"
+    "currentPlan": "Текущ",
+    "neoSubtitle": "{count} въпроса на месец",
+    "operatorSubtitle": "{count} въпроса на месец",
+    "architectSubtitle": "AI за напреднали — хиляди чатове + агентна автоматизация"
 }

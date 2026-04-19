@@ -2969,5 +2969,8 @@
     "billingYearly": "Tahunan",
     "savePercent": "Jimat ~17%",
     "popular": "Popular",
-    "currentPlan": "Semasa"
+    "currentPlan": "Semasa",
+    "neoSubtitle": "{count} soalan sebulan",
+    "operatorSubtitle": "{count} soalan sebulan",
+    "architectSubtitle": "AI kuasa — ribuan sembang + automasi ejen"
 }

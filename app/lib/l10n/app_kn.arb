@@ -10692,5 +10692,8 @@
     "billingYearly": "ವಾರ್ಷಿಕ",
     "savePercent": "~17% ಉಳಿಸಿ",
     "popular": "ಜನಪ್ರಿಯ",
-    "currentPlan": "ಪ್ರಸ್ತುತ"
+    "currentPlan": "ಪ್ರಸ್ತುತ",
+    "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
+    "operatorSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
+    "architectSubtitle": "ಪವರ್-ಯೂಸರ್ AI — ಸಾವಿರಾರು ಚಾಟ್‌ಗಳು + ಏಜೆಂಟಿಕ್ ಆಟೋಮೇಶನ್"
 }

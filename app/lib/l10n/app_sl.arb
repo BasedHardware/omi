@@ -10692,5 +10692,8 @@
     "billingYearly": "Letno",
     "savePercent": "Prihranite ~17%",
     "popular": "Priljubljeno",
-    "currentPlan": "Trenutni"
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} vprašanj na mesec",
+    "operatorSubtitle": "{count} vprašanj na mesec",
+    "architectSubtitle": "Napreden AI — tisoče pogovorov + agentna avtomatizacija"
 }

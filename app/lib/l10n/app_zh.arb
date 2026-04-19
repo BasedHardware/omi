@@ -2991,5 +2991,8 @@
     "billingYearly": "年付",
     "savePercent": "节省约17%",
     "popular": "热门",
-    "currentPlan": "当前"
+    "currentPlan": "当前",
+    "neoSubtitle": "每月 {count} 个问题",
+    "operatorSubtitle": "每月 {count} 个问题",
+    "architectSubtitle": "高级用户 AI — 数千次对话 + 代理自动化"
 }

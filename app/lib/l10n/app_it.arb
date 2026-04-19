@@ -2969,5 +2969,8 @@
     "billingYearly": "Annuale",
     "savePercent": "Risparmia ~17%",
     "popular": "Popolare",
-    "currentPlan": "Attuale"
+    "currentPlan": "Attuale",
+    "neoSubtitle": "{count} domande al mese",
+    "operatorSubtitle": "{count} domande al mese",
+    "architectSubtitle": "AI avanzata — migliaia di chat + automazioni agentic"
 }

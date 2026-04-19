@@ -10692,5 +10692,8 @@
     "billingYearly": "বার্ষিক",
     "savePercent": "~17% সাশ্রয়",
     "popular": "জনপ্রিয়",
-    "currentPlan": "বর্তমান"
+    "currentPlan": "বর্তমান",
+    "neoSubtitle": "মাসে {count}টি প্রশ্ন",
+    "operatorSubtitle": "মাসে {count}টি প্রশ্ন",
+    "architectSubtitle": "পাওয়ার-ইউজার AI — হাজার হাজার চ্যাট + এজেন্টিক অটোমেশন"
 }

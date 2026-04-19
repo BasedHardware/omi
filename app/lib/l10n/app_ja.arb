@@ -2970,5 +2970,8 @@
     "billingYearly": "年額",
     "savePercent": "約17%お得",
     "popular": "人気",
-    "currentPlan": "現在"
+    "currentPlan": "現在",
+    "neoSubtitle": "月{count}件の質問",
+    "operatorSubtitle": "月{count}件の質問",
+    "architectSubtitle": "パワーユーザーAI — 数千のチャット + エージェント自動化"
 }

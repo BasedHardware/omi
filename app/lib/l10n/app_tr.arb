@@ -3004,5 +3004,8 @@
     "billingYearly": "Yıllık",
     "savePercent": "~%17 tasarruf",
     "popular": "Popüler",
-    "currentPlan": "Mevcut"
+    "currentPlan": "Mevcut",
+    "neoSubtitle": "Ayda {count} soru",
+    "operatorSubtitle": "Ayda {count} soru",
+    "architectSubtitle": "Güçlü AI — binlerce sohbet + ajans otomasyonu"
 }
