@@ -63,6 +63,14 @@ struct ModelQoS {
         /// Default model for user selection (floating bar / shortcut picker)
         static var defaultSelection: String { "claude-sonnet-4-6" }
 
+        /// Sanitize a persisted model ID against the current tier's allowed list.
+        /// Returns the saved model if it's still available, otherwise falls back to defaultSelection.
+        static func sanitizedSelection(_ savedModel: String?) -> String {
+            let model = savedModel ?? defaultSelection
+            let allowedIDs = availableModels.map(\.id)
+            return allowedIDs.contains(model) ? model : defaultSelection
+        }
+
         private static func model(standard: String, premium: String) -> String {
             activeTier == .standard ? standard : premium
         }
