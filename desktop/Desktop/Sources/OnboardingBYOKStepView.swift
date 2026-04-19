@@ -18,6 +18,7 @@ struct OnboardingBYOKStepView: View {
 
   @State private var isActivating = false
   @State private var activationError: String?
+  @State private var keyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
 
   var body: some View {
     OnboardingStepScaffold(
@@ -80,6 +81,7 @@ struct OnboardingBYOKStepView: View {
           .font(.system(size: 14, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
         Spacer()
+        statusBadge(for: keyStatuses[provider] ?? .notChecked)
         Text(help)
           .font(.system(size: 12))
           .foregroundColor(OmiColors.textTertiary)
@@ -97,8 +99,30 @@ struct OnboardingBYOKStepView: View {
             )
         )
         .foregroundColor(OmiColors.textPrimary)
+      if case .failed(let msg) = keyStatuses[provider] ?? .notChecked {
+        Text(msg)
+          .font(.system(size: 11))
+          .foregroundColor(OmiColors.warning)
+      }
     }
     .frame(maxWidth: 560)
+  }
+
+  @ViewBuilder
+  private func statusBadge(for status: BYOKValidator.Status) -> some View {
+    switch status {
+    case .notChecked:
+      EmptyView()
+    case .checking:
+      HStack(spacing: 4) {
+        ProgressView().controlSize(.mini)
+        Text("Checking…").font(.system(size: 11)).foregroundColor(OmiColors.textTertiary)
+      }
+    case .ok:
+      Text("Valid").font(.system(size: 11, weight: .semibold)).foregroundColor(OmiColors.success)
+    case .failed:
+      Text("Invalid").font(.system(size: 11, weight: .semibold)).foregroundColor(OmiColors.warning)
+    }
   }
 
   private func activate() async {
@@ -106,6 +130,31 @@ struct OnboardingBYOKStepView: View {
     isActivating = true
     defer { isActivating = false }
 
+    // Step 1: ping each provider. Refuse activation if any key is rejected —
+    // otherwise the user pays a subscription they shouldn't and nothing works.
+    let keysToCheck: [BYOKProvider: String] = [
+      .openai: openaiKey,
+      .anthropic: anthropicKey,
+      .gemini: geminiKey,
+      .deepgram: deepgramKey,
+    ]
+    for provider in BYOKProvider.allCases {
+      keyStatuses[provider] = .checking
+    }
+    let results = await BYOKValidator.validateAll(keysToCheck)
+    keyStatuses = results
+
+    let failed = results.filter {
+      if case .ok = $0.value { return false }
+      return true
+    }
+    if !failed.isEmpty {
+      let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
+      activationError = "These keys were rejected by their provider: \(names). Fix them to continue."
+      return
+    }
+
+    // Step 2: all four authenticate — flip the backend flag.
     do {
       try await APIClient.shared.activateBYOK(fingerprints: BYOKProvider.allCases.reduce(into: [:]) {
         acc, provider in
