@@ -544,7 +544,7 @@ def extract_action_items(
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_action_items') | action_items_parser
+    chain = prompt | get_llm('conv_action_items').bind(prompt_cache_key="omi-extract-actions") | action_items_parser
 
     current_time = datetime.now(timezone.utc)
 
@@ -649,7 +649,7 @@ def get_transcript_structure(
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_events') | parser
+    chain = prompt | get_llm('conv_structure').bind(prompt_cache_key="omi-transcript-structure") | parser
 
     response = chain.invoke(
         {
@@ -733,7 +733,7 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | get_llm('conv_structure') | parser
+    chain = prompt | get_llm('conv_structure').bind(prompt_cache_key="omi-transcript-structure") | parser
 
     response = chain.invoke(
         {
@@ -782,7 +782,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = get_llm('conv_apps').invoke(prompt)
+    response = get_llm('conv_apps').invoke(prompt, prompt_cache_key="omi-app-result")
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -966,5 +966,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     The conversation is:
     {conversation_text}
     """
-    response = get_llm('daily_summary').invoke(full_prompt)
+    response = get_llm('daily_summary').invoke(full_prompt, prompt_cache_key="omi-daily-summary")
     return response.content
