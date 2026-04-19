@@ -94,11 +94,8 @@ pub fn daily_hard_limit() -> u32 {
     daily_hard_limit_for(active_tier())
 }
 
-fn daily_hard_limit_for(tier: ModelTier) -> u32 {
-    match tier {
-        ModelTier::Standard => 500,
-        ModelTier::Premium => 1500,
-    }
+fn daily_hard_limit_for(_tier: ModelTier) -> u32 {
+    1500
 }
 
 /// Tier description for logging.
@@ -212,12 +209,8 @@ mod tests {
     }
 
     #[test]
-    fn daily_hard_limit_standard() {
-        assert_eq!(daily_hard_limit_for(ModelTier::Standard), 500);
-    }
-
-    #[test]
-    fn daily_hard_limit_premium() {
+    fn daily_hard_limit_same_for_both_tiers() {
+        assert_eq!(daily_hard_limit_for(ModelTier::Standard), 1500);
         assert_eq!(daily_hard_limit_for(ModelTier::Premium), 1500);
     }
 
