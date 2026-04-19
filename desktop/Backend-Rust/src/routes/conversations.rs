@@ -191,6 +191,7 @@ async fn create_conversation_from_segments(
         // Get LLM client (Gemini)
         let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
             LlmClient::new(api_key.clone())
+                .with_model(crate::llm::model_qos::gemini_extraction())
         } else {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -441,6 +442,7 @@ async fn reprocess_conversation(
     // Get LLM client (Gemini)
     let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
         LlmClient::new(api_key.clone())
+            .with_model(crate::llm::model_qos::gemini_extraction())
     } else {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
