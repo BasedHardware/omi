@@ -536,94 +536,141 @@ class TestExpandedCallsiteCoverage:
         backend_dir = Path(__file__).resolve().parent.parent.parent
         return (backend_dir / rel_path).read_text()
 
-    def test_chat_py_uses_get_llm(self):
+    def test_conversation_processing_all_keys(self):
+        import re
+
+        source = self._read_source("utils/llm/conversation_processing.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        for key in [
+            'conv_folder',
+            'conv_discard',
+            'conv_action_items',
+            'conv_structure',
+            'conv_app_result',
+            'conv_app_select',
+            'daily_summary',
+        ]:
+            assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
+        assert calls.count('conv_structure') >= 2, "conv_structure should appear at least twice"
+        assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
+
+    def test_memories_all_keys(self):
+        import re
+
+        source = self._read_source("utils/llm/memories.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
+            assert key in calls, f"Missing get_llm('{key}') in memories.py"
+        assert calls.count('memories') == 2, "memories should appear exactly twice"
+
+    def test_knowledge_graph_all_keys(self):
+        import re
+
+        source = self._read_source("utils/llm/knowledge_graph.py")
+        calls = re.findall(r"get_llm\('(\w+)'", source)
+        assert calls.count('knowledge_graph') == 2, "knowledge_graph should appear exactly twice"
+
+    def test_followup_key(self):
+        source = self._read_source("utils/llm/followup.py")
+        assert "get_llm('followup')" in source
+
+    def test_trends_key(self):
+        source = self._read_source("utils/llm/trends.py")
+        assert "get_llm('trends')" in source
+
+    def test_chat_py_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/chat.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'chat_responses' in calls
-        assert 'fair_use' in calls or 'chat_extraction' in calls
-        assert 'llm_mini.invoke' not in source
-        assert 'llm_medium_experiment' not in source
+        assert 'chat_extraction' in calls
 
-    def test_persona_py_uses_get_llm(self):
+    def test_persona_py_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/persona.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'persona_clone' in calls
-        assert 'llm_mini' not in source or 'llm_mini' in source.split('import')[0]
+        assert calls.count('persona_clone') >= 4, "persona_clone should appear in multiple clone functions"
+        # Dynamic persona_chat/persona_chat_premium routing via feature variable
+        assert "get_llm(feature" in source, "persona.py should pass dynamic feature for chat routing"
 
-    def test_goals_py_uses_get_llm(self):
+    def test_goals_py_key(self):
         import re
 
         source = self._read_source("utils/llm/goals.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'goals' in calls
 
-    def test_notifications_py_uses_get_llm(self):
+    def test_notifications_py_key(self):
         import re
 
         source = self._read_source("utils/llm/notifications.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'notifications' in calls
 
-    def test_app_generator_py_uses_get_llm(self):
+    def test_app_generator_py_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/app_generator.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'app_generator' in calls
+        assert 'app_integration' in calls
+        assert calls.count('app_integration') >= 2, "app_integration should appear in multiple functions"
 
-    def test_graph_py_uses_get_llm(self):
+    def test_graph_py_key(self):
         import re
 
         source = self._read_source("utils/retrieval/graph.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'chat_graph' in calls
 
-    def test_perplexity_tools_uses_get_model(self):
+    def test_perplexity_tools_key(self):
         import re
 
         source = self._read_source("utils/retrieval/tools/perplexity_tools.py")
         calls = re.findall(r"get_model\('(\w+)'", source)
         assert 'web_search' in calls
 
-    def test_chat_sessions_router_uses_get_llm(self):
+    def test_chat_sessions_router_key(self):
         source = self._read_source("routers/chat_sessions.py")
         assert "get_llm('session_titles')" in source
 
-    def test_apps_router_uses_get_llm(self):
+    def test_apps_router_key(self):
         source = self._read_source("routers/apps.py")
         assert "get_llm('app_integration')" in source
 
-    def test_app_integrations_uses_get_llm(self):
+    def test_app_integrations_key(self):
         source = self._read_source("utils/app_integrations.py")
         assert "get_llm('app_integration')" in source
 
-    def test_external_integrations_uses_get_llm(self):
+    def test_external_integrations_all_keys(self):
         import re
 
         source = self._read_source("utils/llm/external_integrations.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'external_structure' in calls
-        assert 'daily_summary' in calls or 'daily_summary_simple' in calls
+        assert calls.count('external_structure') >= 2, "external_structure should appear at least twice"
+        assert 'daily_summary_simple' in calls, "Missing get_llm('daily_summary_simple') in external_integrations.py"
+        assert 'daily_summary' in calls, "Missing get_llm('daily_summary') in external_integrations.py"
 
-    def test_proactive_notification_uses_get_llm(self):
+    def test_proactive_notification_key(self):
         import re
 
         source = self._read_source("utils/llm/proactive_notification.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'proactive_notification' in calls
+        assert calls.count('proactive_notification') >= 4, "proactive_notification should appear in 4 functions"
 
-    def test_generate_2025_uses_get_llm(self):
+    def test_generate_2025_key(self):
         import re
 
         source = self._read_source("utils/wrapped/generate_2025.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
         assert 'wrapped_analysis' in calls
 
-    def test_onboarding_uses_get_llm(self):
+    def test_onboarding_key(self):
         source = self._read_source("utils/onboarding.py")
         assert "get_llm('onboarding')" in source
 
