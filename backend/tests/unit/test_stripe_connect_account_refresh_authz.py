@@ -8,11 +8,11 @@ import asyncio
 import os
 import sys
 import types
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+    "test_fake_encryption_secret_not_used_in_production",
 )
 
 # --- Stub heavy infrastructure before importing project modules ---
@@ -120,54 +120,56 @@ class DummyRequest:
 
 def test_refresh_account_link_rejects_other_users_account_id():
     """Authenticated callers must not refresh a Stripe link for another account id."""
-    payment_router.get_stripe_connect_account_id = MagicMock(return_value="acct_attacker")
-    payment_router.refresh_connect_account_link = MagicMock()
-
-    with pytest_raises_http_exception(403) as exc:
-        asyncio.run(
-            payment_router.refresh_account_link_endpoint(
-                DummyRequest(), account_id="acct_victim", uid="attacker_uid"
+    with patch.object(
+        payment_router, "get_stripe_connect_account_id", return_value="acct_attacker"
+    ) as mock_get_account_id, patch.object(payment_router, "refresh_connect_account_link") as mock_refresh:
+        with pytest_raises_http_exception(403) as exc:
+            asyncio.run(
+                payment_router.refresh_account_link_endpoint(
+                    DummyRequest(), account_id="acct_victim", uid="attacker_uid"
+                )
             )
-        )
 
     assert "not authorized" in exc.detail.lower()
-    payment_router.get_stripe_connect_account_id.assert_called_once_with("attacker_uid")
-    payment_router.refresh_connect_account_link.assert_not_called()
+    mock_get_account_id.assert_called_once_with("attacker_uid")
+    mock_refresh.assert_not_called()
 
 
 def test_refresh_account_link_allows_own_account_id():
     """Authenticated callers may refresh the Stripe link for their own account id."""
-    payment_router.get_stripe_connect_account_id = MagicMock(return_value="acct_attacker")
-    payment_router.refresh_connect_account_link = MagicMock(
-        return_value={"account_id": "acct_attacker", "url": "https://example.test/onboard"}
-    )
-
-    result = asyncio.run(
-        payment_router.refresh_account_link_endpoint(
-            DummyRequest(), account_id="acct_attacker", uid="attacker_uid"
+    with patch.object(
+        payment_router, "get_stripe_connect_account_id", return_value="acct_attacker"
+    ) as mock_get_account_id, patch.object(
+        payment_router,
+        "refresh_connect_account_link",
+        return_value={"account_id": "acct_attacker", "url": "https://example.test/onboard"},
+    ) as mock_refresh:
+        result = asyncio.run(
+            payment_router.refresh_account_link_endpoint(
+                DummyRequest(), account_id="acct_attacker", uid="attacker_uid"
+            )
         )
-    )
 
     assert result["account_id"] == "acct_attacker"
-    payment_router.get_stripe_connect_account_id.assert_called_once_with("attacker_uid")
-    payment_router.refresh_connect_account_link.assert_called_once_with("acct_attacker")
+    mock_get_account_id.assert_called_once_with("attacker_uid")
+    mock_refresh.assert_called_once_with("acct_attacker")
 
 
 def test_refresh_account_link_requires_existing_connected_account():
     """Users without a stored Stripe Connect account should get a not-found error."""
-    payment_router.get_stripe_connect_account_id = MagicMock(return_value=None)
-    payment_router.refresh_connect_account_link = MagicMock()
-
-    with pytest_raises_http_exception(404) as exc:
-        asyncio.run(
-            payment_router.refresh_account_link_endpoint(
-                DummyRequest(), account_id="acct_missing", uid="attacker_uid"
+    with patch.object(payment_router, "get_stripe_connect_account_id", return_value=None) as mock_get_account_id, patch.object(
+        payment_router, "refresh_connect_account_link"
+    ) as mock_refresh:
+        with pytest_raises_http_exception(404) as exc:
+            asyncio.run(
+                payment_router.refresh_account_link_endpoint(
+                    DummyRequest(), account_id="acct_missing", uid="attacker_uid"
+                )
             )
-        )
 
     assert "connect account not found" in exc.detail.lower()
-    payment_router.get_stripe_connect_account_id.assert_called_once_with("attacker_uid")
-    payment_router.refresh_connect_account_link.assert_not_called()
+    mock_get_account_id.assert_called_once_with("attacker_uid")
+    mock_refresh.assert_not_called()
 
 
 class pytest_raises_http_exception:
