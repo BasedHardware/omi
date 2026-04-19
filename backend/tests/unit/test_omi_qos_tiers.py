@@ -788,12 +788,13 @@ class TestRuntimeProviderRouting:
         base_url = getattr(llm, 'openai_api_base', None) or ''
         assert 'openrouter' in base_url
 
-    def test_openrouter_temperature_applied(self):
-        """OpenRouter features should get their configured temperature."""
+    def test_openrouter_temperature_applied_via_get_llm(self, monkeypatch):
+        """When get_llm routes to OpenRouter, _OPENROUTER_TEMPERATURES config is applied."""
         from utils.llm.clients import _OPENROUTER_TEMPERATURES
 
-        # In premium profile, persona_chat is OpenRouter with temp 0.8
-        # In max profile, persona_chat is OpenAI — temperature config only applies to OpenRouter
-        # Test via direct factory
-        llm = _get_or_create_openrouter_llm('google/gemini-flash-1.5-8b', temperature=0.8)
-        assert llm.temperature == 0.8
+        # Override persona_chat to an OpenRouter model so get_llm routes via OpenRouter
+        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'google/gemini-flash-1.5-8b')
+        llm = get_llm('persona_chat')
+        expected_temp = _OPENROUTER_TEMPERATURES.get('persona_chat')
+        assert expected_temp == 0.8, "persona_chat should have temp 0.8 in config"
+        assert llm.temperature == expected_temp, "get_llm should apply _OPENROUTER_TEMPERATURES"
