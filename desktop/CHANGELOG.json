@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Right-click the floating bar to snooze it (and notifications) for 2 hours"
+  ],
   "releases": [
     {
       "version": "0.11.336",
