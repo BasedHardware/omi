@@ -16,7 +16,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
-import 'package:omi/pages/chat/widgets/chat_quota_paywall.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -705,25 +705,24 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     await provider.sendMessageStreamToServer(text);
 
-    // Show paywall if backend returned 402 quota exceeded
+    // Show plans sheet if backend returned 402 quota exceeded
     if (mounted && provider.isChatQuotaExceeded) {
-      _showChatQuotaPaywall(provider);
+      _showPlansSheetOnQuotaExceeded();
     }
 
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }
 
-  void _showChatQuotaPaywall(MessageProvider provider) {
+  void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
+    // Refresh subscription data so the plans sheet is up-to-date
+    context.read<UsageProvider>().fetchSubscription();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ChatQuotaPaywall(
-        quota: provider.chatQuota!,
-        usageProvider: context.read<UsageProvider>(),
-      ),
+      builder: (_) => const _PlansSheetWrapper(),
     );
   }
 
@@ -1378,5 +1377,47 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   Widget _buildDivider() {
     return Container(height: 0.5, color: Colors.grey.shade700, margin: const EdgeInsets.symmetric(horizontal: 20));
+  }
+}
+
+class _PlansSheetWrapper extends StatefulWidget {
+  const _PlansSheetWrapper();
+
+  @override
+  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
+}
+
+class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
+  late AnimationController _waveController;
+  late AnimationController _arrowController;
+  late AnimationController _notesController;
+  late Animation<double> _arrowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
+    _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+    _arrowAnimation = Tween<double>(begin: 0, end: 10)
+        .animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _arrowController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PlansSheet(
+      waveController: _waveController,
+      notesController: _notesController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
+    );
   }
 }
