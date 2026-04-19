@@ -24,6 +24,9 @@ from utils.subscription import (
     get_plan_type_from_price_id,
     get_plan_limits,
     is_paid_plan,
+    filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -225,12 +228,6 @@ def get_available_plans_endpoint(
         # Version-gate the new Operator + Architect catalog. Mobile and older
         # desktop builds see the pre-rollout plan shape. Then legacy-filter so
         # existing subscribers still see their current plan.
-        from utils.subscription import (
-            filter_plans_for_user,
-            should_show_new_plans,
-            adapt_plans_for_legacy_client,
-        )
-
         new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
         all_definitions = get_paid_plan_definitions()
         if not new_plans_enabled:
