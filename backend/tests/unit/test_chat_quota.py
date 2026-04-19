@@ -10,7 +10,19 @@ import pytest
 
 # ── Stub out heavy dependencies before importing production code ────────────
 _announcements_mod = types.ModuleType("database.announcements")
-_announcements_mod._compare_versions = lambda a, b: 0
+
+
+def _compare_versions(a, b):
+    """Semantic version comparison matching the real _compare_versions."""
+    a_parts = [int(x) for x in a.split('.')]
+    b_parts = [int(x) for x in b.split('.')]
+    for x, y in zip(a_parts, b_parts):
+        if x != y:
+            return 1 if x > y else -1
+    return len(a_parts) - len(b_parts)
+
+
+_announcements_mod._compare_versions = _compare_versions
 
 # Create stubs for database modules used by get_chat_quota_snapshot
 _db_users_mod = types.SimpleNamespace(get_user_valid_subscription=MagicMock())
