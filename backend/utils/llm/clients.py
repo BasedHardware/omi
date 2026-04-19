@@ -23,12 +23,12 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
 _usage_callback = get_usage_callback()
 
 # ---------------------------------------------------------------------------
-# QoS Tier System
+# Omi QoS Tier System
 #
-# Maps feature names to model tiers. Each tier resolves to a concrete
+# Maps Omi features to quality tiers. Each tier resolves to a concrete
 # ChatOpenAI instance.  Override per-feature via env vars:
-#   LLM_TIER_CONV_ACTION_ITEMS=medium   (use gpt-5.1 for action items)
-#   LLM_TIER_KNOWLEDGE_GRAPH=nano       (use gpt-4.1-nano for KG)
+#   OMI_QOS_CONV_ACTION_ITEMS=medium   (use gpt-5.1 for action items)
+#   OMI_QOS_KNOWLEDGE_GRAPH=nano       (use gpt-4.1-nano for KG)
 #
 # Tier names: nano, mini, medium, high
 # ---------------------------------------------------------------------------
@@ -65,8 +65,8 @@ _FEATURE_TIER_DEFAULTS: Dict[str, str] = {
 
 
 def _resolve_tier(feature: str) -> str:
-    """Resolve the tier for a feature: env var override > default > mini fallback."""
-    env_key = f'LLM_TIER_{feature.upper()}'
+    """Resolve the Omi QoS tier for a feature: env var override > default > mini fallback."""
+    env_key = f'OMI_QOS_{feature.upper()}'
     tier = os.environ.get(env_key, '').strip().lower()
     if tier and tier in _TIER_MODELS:
         return tier
@@ -87,20 +87,33 @@ def _get_or_create_llm(model_name: str) -> ChatOpenAI:
     return _llm_cache[model_name]
 
 
-def get_llm(feature: str) -> ChatOpenAI:
-    """Get the ChatOpenAI instance for a feature based on its QoS tier.
+# Models that support OpenAI prompt caching (prompt_cache_key routing).
+_CACHE_KEY_MODELS = {'gpt-5.1'}
+
+
+def get_llm(feature: str, cache_key: Optional[str] = None) -> ChatOpenAI:
+    """Get the ChatOpenAI instance for a feature based on its Omi QoS tier.
+
+    Args:
+        feature: Omi feature name (e.g. 'conv_action_items').
+        cache_key: Optional prompt cache routing key. Only applied when the
+            resolved model supports it (currently gpt-5.1). Safely ignored
+            for other models so tier swaps via env vars don't break.
 
     Usage:
-        llm = get_llm('conv_action_items')
+        llm = get_llm('conv_action_items', cache_key='omi-extract-actions')
         response = llm.invoke(prompt)
 
     Override via env var:
-        LLM_TIER_CONV_ACTION_ITEMS=medium  -> uses gpt-5.1
-        LLM_TIER_CONV_ACTION_ITEMS=nano    -> uses gpt-4.1-nano
+        OMI_QOS_CONV_ACTION_ITEMS=medium  -> uses gpt-5.1
+        OMI_QOS_CONV_ACTION_ITEMS=nano    -> uses gpt-4.1-nano
     """
     tier = _resolve_tier(feature)
     model_name = _TIER_MODELS[tier]
-    return _get_or_create_llm(model_name)
+    llm = _get_or_create_llm(model_name)
+    if cache_key and model_name in _CACHE_KEY_MODELS:
+        return llm.bind(prompt_cache_key=cache_key)
+    return llm
 
 
 def get_llm_tier_info() -> Dict[str, Dict[str, str]]:
