@@ -9110,4 +9110,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get savePercent => 'Экономия ~17%';
+
+  @override
+  String get popular => 'Популярный';
+
+  @override
+  String get currentPlan => 'Текущий';
 }

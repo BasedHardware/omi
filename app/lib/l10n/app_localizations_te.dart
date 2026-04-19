@@ -9132,4 +9132,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get savePercent => '~17% ఆదా చేయండి';
+
+  @override
+  String get popular => 'ప్రజాదరణ';
+
+  @override
+  String get currentPlan => 'ప్రస్తుత';
 }

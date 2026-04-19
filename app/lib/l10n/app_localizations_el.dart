@@ -9146,4 +9146,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get savePercent => 'Εξοικονομήστε ~17%';
+
+  @override
+  String get popular => 'Δημοφιλές';
+
+  @override
+  String get currentPlan => 'Τρέχον';
 }

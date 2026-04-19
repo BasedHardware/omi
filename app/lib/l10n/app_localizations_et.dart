@@ -9078,4 +9078,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get savePercent => 'Säästa ~17%';
+
+  @override
+  String get popular => 'Populaarne';
+
+  @override
+  String get currentPlan => 'Praegune';
 }

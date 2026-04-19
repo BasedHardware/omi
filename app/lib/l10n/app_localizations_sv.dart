@@ -9085,4 +9085,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get savePercent => 'Spara ~17%';
+
+  @override
+  String get popular => 'Populärt';
+
+  @override
+  String get currentPlan => 'Nuvarande';
 }

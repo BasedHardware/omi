@@ -9069,4 +9069,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get savePercent => 'Ušetrite ~17%';
+
+  @override
+  String get popular => 'Obľúbené';
+
+  @override
+  String get currentPlan => 'Aktuálny';
 }

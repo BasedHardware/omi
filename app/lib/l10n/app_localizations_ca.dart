@@ -9135,4 +9135,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get savePercent => 'Estalvia ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Actual';
 }

@@ -16964,6 +16964,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save ~17%'**
   String get savePercent;
+
+  /// No description provided for @popular.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular'**
+  String get popular;
+
+  /// No description provided for @currentPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get currentPlan;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

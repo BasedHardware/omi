@@ -9091,4 +9091,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get savePercent => 'Hemat ~17%';
+
+  @override
+  String get popular => 'Populer';
+
+  @override
+  String get currentPlan => 'Saat ini';
 }

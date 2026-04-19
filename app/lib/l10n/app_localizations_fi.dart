@@ -9080,4 +9080,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get savePercent => 'Säästä ~17%';
+
+  @override
+  String get popular => 'Suosittu';
+
+  @override
+  String get currentPlan => 'Nykyinen';
 }

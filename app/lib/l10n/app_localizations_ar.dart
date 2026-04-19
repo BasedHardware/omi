@@ -9020,4 +9020,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get savePercent => 'وفّر ~17%';
+
+  @override
+  String get popular => 'شائع';
+
+  @override
+  String get currentPlan => 'الحالي';
 }

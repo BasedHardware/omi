@@ -9166,4 +9166,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get savePercent => 'Makatipid ~17%';
+
+  @override
+  String get popular => 'Sikat';
+
+  @override
+  String get currentPlan => 'Kasalukuyan';
 }

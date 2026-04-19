@@ -9077,4 +9077,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get savePercent => 'Ušetřete ~17%';
+
+  @override
+  String get popular => 'Oblíbené';
+
+  @override
+  String get currentPlan => 'Aktuální';
 }

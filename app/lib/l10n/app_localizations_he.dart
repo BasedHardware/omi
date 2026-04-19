@@ -9009,4 +9009,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get savePercent => 'חסוך ~17%';
+
+  @override
+  String get popular => 'פופולרי';
+
+  @override
+  String get currentPlan => 'נוכחי';
 }

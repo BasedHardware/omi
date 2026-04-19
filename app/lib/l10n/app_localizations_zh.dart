@@ -8917,4 +8917,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get savePercent => '节省约17%';
+
+  @override
+  String get popular => '热门';
+
+  @override
+  String get currentPlan => '当前';
 }

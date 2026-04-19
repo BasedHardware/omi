@@ -9061,4 +9061,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get savePercent => '~17% बचाएं';
+
+  @override
+  String get popular => 'लोकप्रिय';
+
+  @override
+  String get currentPlan => 'वर्तमान';
 }

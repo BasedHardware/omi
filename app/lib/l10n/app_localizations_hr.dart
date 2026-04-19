@@ -9111,4 +9111,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get savePercent => 'Uštedite ~17%';
+
+  @override
+  String get popular => 'Popularno';
+
+  @override
+  String get currentPlan => 'Trenutni';
 }

@@ -9077,4 +9077,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get savePercent => 'Save ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Current';
 }
