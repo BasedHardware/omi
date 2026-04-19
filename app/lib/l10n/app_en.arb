@@ -10817,5 +10817,22 @@
     "billingYearly": "Yearly",
     "savePercent": "Save ~17%",
     "popular": "Popular",
-    "currentPlan": "Current"
+    "currentPlan": "Current",
+    "neoSubtitle": "{count} questions per month",
+    "@neoSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "operatorSubtitle": "{count} questions per month",
+    "@operatorSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations"
 }
