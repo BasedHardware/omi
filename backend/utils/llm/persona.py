@@ -202,5 +202,5 @@ def generate_persona_intro_message(prompt: str, name: str):
         },
     ]
 
-    response = llm_medium_experiment.invoke(messages)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(messages)
     return response.content.strip('"').strip()
