@@ -121,6 +121,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       params += '&vad_gate=enabled';
     }
 
+    // Send translation preference — enabled when user has auto-translation on
+    if (!SharedPreferencesUtil().cachedSingleLanguageMode) {
+      params += '&translate=enabled';
+    }
+
     String url =
         Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
 
