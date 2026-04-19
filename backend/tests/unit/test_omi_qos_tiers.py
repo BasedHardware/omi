@@ -1,4 +1,4 @@
-"""Tests for LLM QoS tier system in utils/llm/clients.py."""
+"""Tests for Omi QoS tier system in utils/llm/clients.py."""
 
 import os
 import sys
@@ -33,6 +33,7 @@ from utils.llm.clients import (
     TIER_MEDIUM,
     TIER_MINI,
     TIER_NANO,
+    _CACHE_KEY_MODELS,
     _FEATURE_TIER_DEFAULTS,
     _TIER_MODELS,
     _resolve_tier,
@@ -45,7 +46,7 @@ from utils.llm.clients import (
 # ---------------------------------------------------------------------------
 
 
-class TestQosTierDefaults:
+class TestOmiQosTierDefaults:
     """Verify default tier assignments."""
 
     def test_action_items_defaults_to_mini(self):
@@ -70,40 +71,39 @@ class TestQosTierDefaults:
         assert _resolve_tier('conv_apps') == TIER_MINI
 
 
-class TestQosTierEnvOverride:
-    """Verify env var overrides work."""
+class TestOmiQosEnvOverride:
+    """Verify OMI_QOS_ env var overrides work."""
 
     def test_override_action_items_to_medium(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', 'medium')
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', 'medium')
         assert _resolve_tier('conv_action_items') == TIER_MEDIUM
 
     def test_override_conv_structure_to_nano(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_STRUCTURE', 'nano')
+        monkeypatch.setenv('OMI_QOS_CONV_STRUCTURE', 'nano')
         assert _resolve_tier('conv_structure') == TIER_NANO
 
     def test_override_knowledge_graph_to_high(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_KNOWLEDGE_GRAPH', 'high')
+        monkeypatch.setenv('OMI_QOS_KNOWLEDGE_GRAPH', 'high')
         assert _resolve_tier('knowledge_graph') == TIER_HIGH
 
     def test_invalid_env_value_falls_back_to_default(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', 'ultra_mega')
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', 'ultra_mega')
         assert _resolve_tier('conv_action_items') == TIER_MINI
 
     def test_empty_env_value_falls_back_to_default(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', '')
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', '')
         assert _resolve_tier('conv_action_items') == TIER_MINI
 
     def test_override_memories_to_nano(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_MEMORIES', 'nano')
+        monkeypatch.setenv('OMI_QOS_MEMORIES', 'nano')
         assert _resolve_tier('memories') == TIER_NANO
 
     def test_case_insensitive_override(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', 'MEDIUM')
-        # .lower() in _resolve_tier should handle this
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', 'MEDIUM')
         assert _resolve_tier('conv_action_items') == TIER_MEDIUM
 
 
-class TestQosTierModelMapping:
+class TestOmiQosTierModelMapping:
     """Verify tiers map to correct model names."""
 
     def test_tier_model_names(self):
@@ -142,6 +142,36 @@ class TestGetLlm:
         assert llm_mini is not llm_med
 
 
+class TestCacheKeySafety:
+    """Verify cache_key is only applied when the model supports it."""
+
+    def test_cache_key_applied_for_medium_tier(self):
+        # conv_structure defaults to medium (gpt-5.1), which supports cache keys
+        llm_with_key = get_llm('conv_structure', cache_key='omi-test-key')
+        llm_without_key = get_llm('conv_structure')
+        # With cache_key returns a bound runnable, without returns the base instance
+        assert llm_with_key is not llm_without_key
+        assert hasattr(llm_with_key, 'invoke')
+
+    def test_cache_key_ignored_for_mini_tier(self):
+        # conv_action_items defaults to mini (gpt-4.1-mini), no cache key support
+        llm_with_key = get_llm('conv_action_items', cache_key='omi-test-key')
+        llm_without_key = get_llm('conv_action_items')
+        # Should be the same instance since cache_key is safely ignored
+        assert llm_with_key is llm_without_key
+
+    def test_cache_key_ignored_after_tier_downgrade(self, monkeypatch):
+        # Simulate downgrading conv_structure from medium to nano via env var
+        monkeypatch.setenv('OMI_QOS_CONV_STRUCTURE', 'nano')
+        llm_with_key = get_llm('conv_structure', cache_key='omi-test-key')
+        llm_without_key = get_llm('conv_structure')
+        # cache_key must be safely ignored for nano model
+        assert llm_with_key is llm_without_key
+
+    def test_cache_key_models_contains_gpt51(self):
+        assert 'gpt-5.1' in _CACHE_KEY_MODELS
+
+
 class TestGetLlmTierInfo:
     """Verify debugging helper returns complete mapping."""
 
@@ -153,7 +183,7 @@ class TestGetLlmTierInfo:
             assert 'model' in info[feature]
 
     def test_tier_info_reflects_env_override(self, monkeypatch):
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', 'high')
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', 'high')
         info = get_llm_tier_info()
         assert info['conv_action_items']['tier'] == 'high'
         assert info['conv_action_items']['model'] == 'o4-mini'
@@ -164,7 +194,7 @@ class TestRollbackScenario:
 
     def test_rollback_action_items_to_original_gpt51(self, monkeypatch):
         # Default is mini (downgraded). Rollback to medium (gpt-5.1)
-        monkeypatch.setenv('LLM_TIER_CONV_ACTION_ITEMS', 'medium')
+        monkeypatch.setenv('OMI_QOS_CONV_ACTION_ITEMS', 'medium')
         assert _resolve_tier('conv_action_items') == TIER_MEDIUM
         llm = get_llm('conv_action_items')
         assert 'gpt-5.1' in str(llm.model_name) or hasattr(llm, 'invoke')
