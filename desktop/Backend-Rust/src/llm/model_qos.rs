@@ -12,9 +12,9 @@ static ACTIVE_TIER: OnceLock<ModelTier> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ModelTier {
-    /// Cost-optimized: Flash for all Gemini workloads
+    /// Cost-optimized: Flash for all Gemini workloads, lower rate limits
     Premium,
-    /// Quality-optimized: Pro for structured extraction, Flash for simple tasks
+    /// Quality-optimized: same models, higher rate limits
     Max,
 }
 
@@ -51,11 +51,8 @@ pub fn gemini_extraction() -> &'static str {
     gemini_extraction_for(active_tier())
 }
 
-fn gemini_extraction_for(tier: ModelTier) -> &'static str {
-    match tier {
-        ModelTier::Premium => "gemini-3-flash-preview",
-        ModelTier::Max => "gemini-pro-latest",
-    }
+fn gemini_extraction_for(_tier: ModelTier) -> &'static str {
+    "gemini-3-flash-preview"
 }
 
 /// Allowed models for the Gemini proxy (passthrough from Swift app).
@@ -63,7 +60,6 @@ fn gemini_extraction_for(tier: ModelTier) -> &'static str {
 pub fn gemini_proxy_allowed() -> &'static [&'static str] {
     &[
         "gemini-3-flash-preview",
-        "gemini-pro-latest",
         "gemini-embedding-001",
     ]
 }
@@ -159,13 +155,9 @@ mod tests {
     // --- gemini_extraction_for (the tier-dependent branch) ---
 
     #[test]
-    fn gemini_extraction_premium_is_flash() {
+    fn gemini_extraction_is_flash_for_both_tiers() {
         assert_eq!(gemini_extraction_for(ModelTier::Premium), "gemini-3-flash-preview");
-    }
-
-    #[test]
-    fn gemini_extraction_max_is_pro() {
-        assert_eq!(gemini_extraction_for(ModelTier::Max), "gemini-pro-latest");
+        assert_eq!(gemini_extraction_for(ModelTier::Max), "gemini-3-flash-preview");
     }
 
     // --- tier_description_for ---
@@ -186,8 +178,8 @@ mod tests {
     fn proxy_allowed_contains_expected_models() {
         let allowed = gemini_proxy_allowed();
         assert!(allowed.contains(&"gemini-3-flash-preview"));
-        assert!(allowed.contains(&"gemini-pro-latest"));
         assert!(allowed.contains(&"gemini-embedding-001"));
+        assert!(!allowed.contains(&"gemini-pro-latest"), "pro removed from allowlist");
         assert!(!allowed.contains(&"gemini-ultra"));
     }
 
