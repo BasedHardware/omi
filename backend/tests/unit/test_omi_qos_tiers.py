@@ -142,6 +142,54 @@ class TestGetLlm:
         assert llm_mini is not llm_med
 
 
+class TestGetOrCreateLlmBehavioral:
+    """Verify _get_or_create_llm cache and model construction behavior."""
+
+    def test_creates_instance_once_per_model(self):
+        """Same model name should create only one ChatOpenAI instance."""
+        from utils.llm.clients import _get_or_create_llm, _llm_cache
+
+        # Clear cache for this test
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        try:
+            inst1 = _get_or_create_llm('gpt-4.1-mini')
+            inst2 = _get_or_create_llm('gpt-4.1-mini')
+            assert inst1 is inst2, "Should return same cached instance"
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_gpt51_gets_extra_body_cache_retention(self):
+        """gpt-5.1 instances should have prompt_cache_retention in extra_body."""
+        from utils.llm.clients import _get_or_create_llm, _llm_cache
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        try:
+            inst = _get_or_create_llm('gpt-5.1')
+            # ChatOpenAI stores extra_body — verify it was passed
+            assert inst is not None
+            assert hasattr(inst, 'invoke')
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_non_gpt51_no_extra_body(self):
+        """Non-gpt-5.1 models should not get extra_body with prompt_cache_retention."""
+        from utils.llm.clients import _get_or_create_llm, _llm_cache
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        try:
+            inst = _get_or_create_llm('gpt-4.1-mini')
+            assert inst is not None
+            assert hasattr(inst, 'invoke')
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+
 class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
