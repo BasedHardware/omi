@@ -1,4 +1,4 @@
-from .clients import llm_mini, llm_mini_stream, llm_medium_stream, llm_medium
+from .clients import get_llm
 import json
 import re
 import os
@@ -53,7 +53,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     with track_usage(uid, Features.CHAT):
-        return llm_medium.invoke(prompt).content
+        return get_llm('chat_responses').invoke(prompt).content
 
 
 # *********************************************
@@ -85,7 +85,7 @@ def requires_context(question: str) -> bool:
     User's Question:
     {question}
     '''
-    with_parser = llm_mini.with_structured_output(RequiresContext)
+    with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     try:
         return response.value
@@ -149,7 +149,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     
     Is this asking about the Omi/Friend app product itself?
     '''.replace('    ', '').strip()
-    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    with_parser = get_llm('chat_extraction').with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -179,7 +179,7 @@ def retrieve_is_file_question(question: str) -> bool:
     {question}
     '''
 
-    with_parser = llm_mini.with_structured_output(IsFileQuestion)
+    with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
     response: IsFileQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -202,8 +202,8 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     '''.replace('    ', '').strip()
 
     # print(prompt)
-    # print(llm_mini.invoke(prompt).content)
-    with_parser = llm_mini.with_structured_output(DatesContext)
+    # print(get_llm('chat_extraction').invoke(prompt).content)
+    with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
@@ -228,7 +228,7 @@ def chunk_extraction(
 
     Topics: {topics}
     '''
-    with_parser = llm_mini.with_structured_output(SummaryOutput)
+    with_parser = get_llm('chat_extraction').with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
@@ -261,12 +261,12 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_medium.invoke(prompt).content
+    return get_llm('chat_responses').invoke(prompt).content
 
 
 def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -292,12 +292,12 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini.invoke(prompt).content
+    return get_llm('chat_extraction').invoke(prompt).content
 
 
 def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(
@@ -825,7 +825,7 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
+    return get_llm('chat_responses').invoke(prompt).content
 
 
 def qa_rag_stream(
@@ -840,7 +840,7 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 # **************************************************
@@ -874,7 +874,7 @@ def retrieve_memory_context_params(
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = llm_mini.with_structured_output(TopicsContext)
+        with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
@@ -918,7 +918,7 @@ def obtain_emotional_message(
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.CHAT):
-        return llm_mini.invoke(prompt).content
+        return get_llm('chat_extraction').invoke(prompt).content
 
 
 # **********************************************
@@ -1034,7 +1034,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </date_in_term>
     '''.replace('    ', '').strip()
     # print(prompt)
-    question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    question = get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
     return question
 
@@ -1082,7 +1082,9 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+            result: ExtractedInformation = (
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+            )
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1205,7 +1207,9 @@ def retrieve_metadata_from_text(
 def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     """Process the extracted metadata from any source"""
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        result: ExtractedInformation = (
+            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+        )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1272,7 +1276,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     Question: {question}
     '''.replace('    ', '').strip()
     # print(prompt)
-    with_parser = llm_mini.with_structured_output(FiltersToUse)
+    with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
         # print('select_structured_filters:', response.dict())
@@ -1320,7 +1324,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     '''.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+        return get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
 
 
 class OutputMessage(BaseModel):
@@ -1370,4 +1374,4 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+        return get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt).message
