@@ -1425,5 +1425,28 @@
       "setup_instructions_file_path": ""
     },
     "deleted": true
+  },
+  {
+    "id": "omi-ms365-integration",
+    "name": "Microsoft 365",
+    "author": "Patrick Güra",
+    "description": "Connect to Outlook, Teams, SharePoint and OneDrive. Draft emails, schedule meetings, summarize threads and upload files from your OMI conversations.",
+    "image": "/plugins/logos/ms365.png",
+    "capabilities": [
+      "external_integration"
+    ],
+    "external_integration": {
+      "triggers_on": "memory_creation",
+      "webhook_url": "https://omi-ms365-plugin.onrender.com/webhook/memory",
+      "setup_completed_url": "https://omi-ms365-plugin.onrender.com/setup_check",
+      "setup_instructions_file_path": "/plugins/instructions/ms365/README.md",
+      "auth_steps": [
+        {
+          "name": "Sign in with Microsoft",
+          "url": "https://omi-ms365-plugin.onrender.com/setup/ms365"
+        }
+      ]
+    },
+    "deleted": false
   }
 ]
