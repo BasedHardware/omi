@@ -226,7 +226,7 @@ actor GeminiClient {
     }
   }
 
-  init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
+  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
     // the key server-side. Requires OMI_API_URL to be set (standard dev flow via run.sh).
