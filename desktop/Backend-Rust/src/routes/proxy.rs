@@ -27,14 +27,9 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
     "batchEmbedContents",
 ];
 
-// Allowed Gemini models — only these can be requested through the proxy.
+// Allowed Gemini models — driven by model_qos (issue #6834).
 // Desktop app uses: gemini-3-flash-preview (default), gemini-pro-latest (tasks/insights),
 // gemini-embedding-001 (embeddings). Rate limiting may rewrite pro → flash.
-const GEMINI_ALLOWED_MODELS: &[&str] = &[
-    "gemini-3-flash-preview",
-    "gemini-pro-latest",
-    "gemini-embedding-001",
-];
 
 /// Maximum request body size for Gemini proxy routes (5 MB).
 /// Normal app payloads are 300-600 KB (base64 JPEG + prompt); 5 MB gives ~8x headroom.
@@ -458,9 +453,9 @@ fn is_gemini_action_allowed(action: &str) -> bool {
     GEMINI_ALLOWED_ACTIONS.contains(&action)
 }
 
-/// Check if a Gemini model is in the allowlist (issue #6624)
+/// Check if a Gemini model is in the allowlist (issue #6624, #6834)
 fn is_gemini_model_allowed(model: &str) -> bool {
-    GEMINI_ALLOWED_MODELS.contains(&model)
+    crate::llm::model_qos::gemini_proxy_allowed().contains(&model)
 }
 
 /// Sanitize a Gemini request body (issue #6624).
