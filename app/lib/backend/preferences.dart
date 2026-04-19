@@ -346,7 +346,7 @@ class SharedPreferencesUtil {
   set shortConversationThreshold(int value) => saveInt('v2/shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
-  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
+  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode', defaultValue: true);
 
   set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
 
