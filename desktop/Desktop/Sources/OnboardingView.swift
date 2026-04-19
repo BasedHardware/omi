@@ -402,6 +402,11 @@ struct OnboardingView: View {
             AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Exports")
             currentStep = 16
           },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 15, stepName: "Exports_Skipped")
+            currentStep = 16
+          },
           onForceComplete: handleOnboardingComplete
         )
       } else if currentStep == 16 {
