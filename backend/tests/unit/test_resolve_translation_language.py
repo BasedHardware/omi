@@ -34,22 +34,9 @@ from utils.translation import resolve_translation_language
 class TestResolveTranslationLanguage:
     """Test the translation language resolution with explicit precedence rules."""
 
-    def test_desktop_source_disables_translation(self):
-        """Desktop source always disables translation — desktop doesn't display it."""
-        result = resolve_translation_language(
-            source='desktop',
-            translate_param='enabled',
-            single_language_mode=False,
-            stt_language='multi',
-            language='multi',
-            user_language_preference='en',
-        )
-        assert result is None
-
     def test_translate_disabled_overrides_settings(self):
         """Client sending translate=disabled disables translation even when settings would enable it."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='disabled',
             single_language_mode=False,
             stt_language='multi',
@@ -61,7 +48,6 @@ class TestResolveTranslationLanguage:
     def test_single_language_mode_disables_translation(self):
         """single_language_mode=True disables translation for higher accuracy."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='enabled',
             single_language_mode=True,
             stt_language='multi',
@@ -73,7 +59,6 @@ class TestResolveTranslationLanguage:
     def test_empty_translate_param_uses_settings_default(self):
         """Empty translate param (legacy clients) falls through to settings-based logic."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='',
             single_language_mode=False,
             stt_language='multi',
@@ -85,7 +70,6 @@ class TestResolveTranslationLanguage:
     def test_translate_enabled_with_multi_language_and_preference(self):
         """translate=enabled with language=multi uses user_language_preference as target."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='enabled',
             single_language_mode=False,
             stt_language='multi',
@@ -97,7 +81,6 @@ class TestResolveTranslationLanguage:
     def test_translate_enabled_with_specific_language(self):
         """translate=enabled with a specific language (not multi) uses that language as target."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='enabled',
             single_language_mode=False,
             stt_language='multi',
@@ -109,7 +92,6 @@ class TestResolveTranslationLanguage:
     def test_no_user_language_preference_disables_translation(self):
         """No user language preference means no target language — translation disabled."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='enabled',
             single_language_mode=False,
             stt_language='multi',
@@ -121,7 +103,6 @@ class TestResolveTranslationLanguage:
     def test_non_multi_stt_language_disables_translation(self):
         """Single-language STT (stt_language != 'multi') doesn't need translation."""
         result = resolve_translation_language(
-            source='phone',
             translate_param='enabled',
             single_language_mode=False,
             stt_language='en',
@@ -130,34 +111,9 @@ class TestResolveTranslationLanguage:
         )
         assert result is None
 
-    def test_none_source_does_not_disable_translation(self):
-        """None source (no source param sent) should not disable translation."""
-        result = resolve_translation_language(
-            source=None,
-            translate_param='enabled',
-            single_language_mode=False,
-            stt_language='multi',
-            language='multi',
-            user_language_preference='fr',
-        )
-        assert result == 'fr'
-
-    def test_precedence_desktop_over_translate_enabled(self):
-        """source=desktop takes precedence over translate=enabled."""
-        result = resolve_translation_language(
-            source='desktop',
-            translate_param='enabled',
-            single_language_mode=False,
-            stt_language='multi',
-            language='multi',
-            user_language_preference='en',
-        )
-        assert result is None
-
     def test_precedence_translate_disabled_over_single_language_mode(self):
         """translate=disabled is checked before single_language_mode (both disable, but order matters for logging)."""
         result = resolve_translation_language(
-            source=None,
             translate_param='disabled',
             single_language_mode=True,
             stt_language='multi',
@@ -169,7 +125,6 @@ class TestResolveTranslationLanguage:
     def test_unknown_translate_value_treated_as_legacy(self):
         """Unknown translate param values (not 'enabled' or 'disabled') fall through like empty."""
         result = resolve_translation_language(
-            source=None,
             translate_param='foobar',
             single_language_mode=False,
             stt_language='multi',
@@ -177,3 +132,25 @@ class TestResolveTranslationLanguage:
             user_language_preference='ja',
         )
         assert result == 'ja'
+
+    def test_backward_compat_legacy_client_multi_language(self):
+        """Legacy clients (no translate param) with multi-language STT still get translation."""
+        result = resolve_translation_language(
+            translate_param='',
+            single_language_mode=False,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='fr',
+        )
+        assert result == 'fr'
+
+    def test_backward_compat_legacy_client_single_language_mode(self):
+        """Legacy clients with single_language_mode still get translation disabled."""
+        result = resolve_translation_language(
+            translate_param='',
+            single_language_mode=True,
+            stt_language='multi',
+            language='multi',
+            user_language_preference='en',
+        )
+        assert result is None
