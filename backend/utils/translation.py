@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_translation_language(
-    source: Optional[str],
     translate_param: str,
     single_language_mode: bool,
     stt_language: str,
@@ -28,18 +27,13 @@ def resolve_translation_language(
     """Determine the target translation language for a listen session.
 
     Precedence (highest to lowest):
-    1. source=desktop → None (desktop doesn't display translations)
-    2. translate=disabled → None (client explicitly opted out)
-    3. single_language_mode=True → None (user prefers single-language accuracy)
-    4. translate param empty (legacy clients) → use settings-based default
-    5. stt_language != 'multi' → None (single-language STT, no translation needed)
-    6. No user_language_preference → None (no target language to translate to)
-    7. Otherwise → user_language_preference or language
+    1. translate=disabled → None (client explicitly opted out)
+    2. single_language_mode=True → None (user prefers single-language accuracy)
+    3. translate param empty/unknown (legacy clients) → use settings-based default
+    4. stt_language != 'multi' → None (single-language STT, no translation needed)
+    5. No user_language_preference → None (no target language to translate to)
+    6. Otherwise → user_language_preference or language
     """
-    # Desktop never needs translation — it doesn't display it
-    if source == 'desktop':
-        return None
-
     # Client explicitly disabled translation
     if translate_param == 'disabled':
         return None
