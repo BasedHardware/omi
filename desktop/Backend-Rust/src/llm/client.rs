@@ -1161,3 +1161,29 @@ Return relationships as source -> relationship -> target triples."#,
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_uses_qos_default_model() {
+        let client = LlmClient::new("test-key".to_string());
+        assert_eq!(client.model, super::super::model_qos::gemini_default());
+    }
+
+    #[test]
+    fn with_model_overrides_default() {
+        let client = LlmClient::new("test-key".to_string())
+            .with_model("gemini-pro-latest");
+        assert_eq!(client.model, "gemini-pro-latest");
+    }
+
+    #[test]
+    fn with_model_extraction_uses_extraction_accessor() {
+        let client = LlmClient::new("test-key".to_string())
+            .with_model(super::super::model_qos::gemini_extraction());
+        // In test env (standard tier), extraction == default == flash
+        assert_eq!(client.model, "gemini-3-flash-preview");
+    }
+}
