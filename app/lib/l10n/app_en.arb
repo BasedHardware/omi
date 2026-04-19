@@ -10817,5 +10817,7 @@
     "upgradePlan": "Upgrade Plan",
     "billingMonthly": "Monthly",
     "billingYearly": "Yearly",
-    "savePercent": "Save ~17%"
+    "savePercent": "Save ~17%",
+    "popular": "Popular",
+    "currentPlan": "Current"
 }
