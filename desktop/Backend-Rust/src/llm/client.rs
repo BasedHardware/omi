@@ -1183,7 +1183,7 @@ mod tests {
     fn with_model_extraction_uses_extraction_accessor() {
         let client = LlmClient::new("test-key".to_string())
             .with_model(super::super::model_qos::gemini_extraction());
-        // In test env (standard tier), extraction == default == flash
+        // In test env (premium tier), extraction == default == flash
         assert_eq!(client.model, "gemini-3-flash-preview");
     }
 }
