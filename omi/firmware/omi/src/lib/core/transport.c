@@ -15,6 +15,7 @@
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
 #include <shell/shell_bt_nus.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
@@ -583,6 +584,14 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_enable(conn);
     }
+
+#if defined(CONFIG_BT_SMP)
+    /* Request bonding so link keys are persisted by BT settings backend. */
+    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
+    if (sec_err && sec_err != -EALREADY) {
+        LOG_WRN("bt_conn_set_security failed (err %d)", sec_err);
+    }
+#endif
 
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -1210,6 +1219,16 @@ int transport_start()
         LOG_ERR("Transport bluetooth init failed (err %d)", err);
         return err;
     }
+
+#if defined(CONFIG_BT_SETTINGS)
+    err = settings_load_subtree("bt");
+    if (err == -ENOENT) {
+        LOG_INF("No persisted BT bond keys yet");
+    } else if (err) {
+        LOG_WRN("Failed to load BT settings (err %d)", err);
+    }
+#endif
+
     LOG_INF("Transport bluetooth initialized");
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
