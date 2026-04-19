@@ -149,7 +149,6 @@ class TestGetOrCreateLlmBehavioral:
         """Same model name should create only one ChatOpenAI instance."""
         from utils.llm.clients import _get_or_create_llm, _llm_cache
 
-        # Clear cache for this test
         saved = dict(_llm_cache)
         _llm_cache.clear()
         try:
@@ -160,31 +159,58 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_gpt51_gets_extra_body_cache_retention(self):
-        """gpt-5.1 instances should have prompt_cache_retention in extra_body."""
+    def test_gpt51_constructor_receives_extra_body(self):
+        """gpt-5.1 must pass extra_body={"prompt_cache_retention": "24h"} to ChatOpenAI."""
+        from unittest.mock import patch as _patch
+
         from utils.llm.clients import _get_or_create_llm, _llm_cache
 
         saved = dict(_llm_cache)
         _llm_cache.clear()
+        captured_kwargs = {}
+        original_init = None
+
         try:
-            inst = _get_or_create_llm('gpt-5.1')
-            # ChatOpenAI stores extra_body — verify it was passed
-            assert inst is not None
-            assert hasattr(inst, 'invoke')
+            from langchain_openai import ChatOpenAI as RealChatOpenAI
+
+            original_init = RealChatOpenAI.__init__
+
+            def capturing_init(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                original_init(self, **kwargs)
+
+            with _patch.object(RealChatOpenAI, '__init__', capturing_init):
+                _get_or_create_llm('gpt-5.1')
+
+            assert 'extra_body' in captured_kwargs, "gpt-5.1 must receive extra_body kwarg"
+            assert captured_kwargs['extra_body'] == {"prompt_cache_retention": "24h"}
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_non_gpt51_no_extra_body(self):
-        """Non-gpt-5.1 models should not get extra_body with prompt_cache_retention."""
+    def test_non_gpt51_constructor_no_extra_body(self):
+        """Non-gpt-5.1 models must NOT receive extra_body with prompt_cache_retention."""
+        from unittest.mock import patch as _patch
+
         from utils.llm.clients import _get_or_create_llm, _llm_cache
 
         saved = dict(_llm_cache)
         _llm_cache.clear()
+        captured_kwargs = {}
+
         try:
-            inst = _get_or_create_llm('gpt-4.1-mini')
-            assert inst is not None
-            assert hasattr(inst, 'invoke')
+            from langchain_openai import ChatOpenAI as RealChatOpenAI
+
+            original_init = RealChatOpenAI.__init__
+
+            def capturing_init(self, **kwargs):
+                captured_kwargs.update(kwargs)
+                original_init(self, **kwargs)
+
+            with _patch.object(RealChatOpenAI, '__init__', capturing_init):
+                _get_or_create_llm('gpt-4.1-mini')
+
+            assert 'extra_body' not in captured_kwargs, "gpt-4.1-mini must NOT receive extra_body"
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
