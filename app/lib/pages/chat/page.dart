@@ -683,7 +683,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   _sendMessageUtil(String text) async {
     var provider = context.read<MessageProvider>();
 
-    // Check chat quota before sending
+    // Refresh quota and block before adding message locally to avoid phantom messages
+    await provider.checkChatQuota();
     if (provider.isChatQuotaExceeded) {
       _showChatQuotaPaywall(provider);
       return;
