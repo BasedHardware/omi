@@ -92,12 +92,15 @@ const DEFAULT_SERVICE_COSTS: ServiceCostEntry[] = [
   { service: 'Networking', mtd: 495, projection: 1350, desktopWeight: 0.27, mobileWeight: 0.73 },
   { service: 'Cloud Logging', mtd: 326, projection: 890, desktopWeight: 0.27, mobileWeight: 0.73 },
   { service: 'Others', mtd: 638, projection: 1741, desktopWeight: 0.27, mobileWeight: 0.73 },
-  // External LLM bills, not in the GCP table — added so the total matches
-  // the team-report weekly trend (~$4.6K/day). Anthropic is almost
-  // entirely desktop (Claude-Opus floating bar); OpenAI splits 50/50.
-  { service: 'Anthropic', mtd: 7163, projection: 16710, desktopWeight: 0.9, mobileWeight: 0.1 },
-  { service: 'OpenAI', mtd: 7442, projection: 17365, desktopWeight: 0.5, mobileWeight: 0.5 },
-  { service: 'Deepgram', mtd: 5290, projection: 12343, desktopWeight: 0.2, mobileWeight: 0.8 },
+  // External LLM bills, not in the GCP table. Projections are the team-
+  // beasts daily-report 7-day totals extrapolated to 30 days
+  // (weekly × 30/7) so the dashboard matches the reported ~$4.6K/day run
+  // rate instead of undershooting at the older MTD-based estimates.
+  // Anthropic is almost entirely desktop (Claude-Opus floating bar);
+  // OpenAI splits 50/50.
+  { service: 'Anthropic', mtd: 7163, projection: 30699, desktopWeight: 0.9, mobileWeight: 0.1 },
+  { service: 'OpenAI', mtd: 7442, projection: 31895, desktopWeight: 0.5, mobileWeight: 0.5 },
+  { service: 'Deepgram', mtd: 5290, projection: 22672, desktopWeight: 0.2, mobileWeight: 0.8 },
 ];
 
 function loadServiceCosts(): ServiceCostEntry[] {
@@ -139,7 +142,7 @@ function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): { deskt
   return { desktop, mobile, total };
 }
 
-const CACHE_PREFIX = "admin:stats:infra-costs:v1";
+const CACHE_PREFIX = "admin:stats:infra-costs:v2";
 const CACHE_TTL_SECONDS = 30 * 60;
 
 // User-provided April projection. Override with ADMIN_INFRA_OVERHEAD_MONTHLY
