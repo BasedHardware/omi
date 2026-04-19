@@ -374,6 +374,8 @@ struct SettingsContentView: View {
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
   @AppStorage("dev_openai_api_key") private var devOpenAIKey: String = ""
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+  @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
+  @State private var byokActivationError: String?
 
   init(
     appState: AppState,
@@ -5023,6 +5025,7 @@ struct SettingsContentView: View {
       byokStatusBanner
 
       developerKeyField(
+        provider: .openai,
         title: "OpenAI API Key",
         subtitle: "For GPT calls.",
         settingId: "advanced.devkeys.openai",
@@ -5030,6 +5033,7 @@ struct SettingsContentView: View {
       )
 
       developerKeyField(
+        provider: .anthropic,
         title: "Anthropic API Key",
         subtitle: "For chat (Claude).",
         settingId: "advanced.devkeys.anthropic",
@@ -5037,6 +5041,7 @@ struct SettingsContentView: View {
       )
 
       developerKeyField(
+        provider: .gemini,
         title: "Gemini API Key",
         subtitle: "For proactive AI (memory, tasks, insights, focus).",
         settingId: "advanced.devkeys.gemini",
@@ -5044,11 +5049,24 @@ struct SettingsContentView: View {
       )
 
       developerKeyField(
+        provider: .deepgram,
         title: "Deepgram API Key",
         subtitle: "For live transcription.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
       )
+
+      if let byokActivationError {
+        settingsCard(settingId: "advanced.devkeys.error") {
+          HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundColor(OmiColors.warning)
+            Text(byokActivationError)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+      }
 
       if hasAnyBYOKKey {
         settingsCard(settingId: "advanced.devkeys.clear") {
@@ -5117,33 +5135,93 @@ struct SettingsContentView: View {
   private func refreshBYOKActivation() {
     Task {
       if APIKeyService.isByokActive {
-        let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
-          acc, entry in
-          acc[entry.key.rawValue] = entry.value.fingerprint
+        // Validate before flipping the backend flag — otherwise we'd put the
+        // user on the free plan with dead keys and every chat would 401.
+        let snapshot = APIKeyService.byokSnapshot.reduce(into: [BYOKProvider: String]()) {
+          acc, entry in acc[entry.key] = entry.value.key
         }
-        try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+        let results = await BYOKValidator.validateAll(snapshot)
+        let allOk = results.allSatisfy {
+          if case .ok = $0.value { return true }
+          return false
+        }
+        if allOk {
+          let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
+            acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
+          }
+          try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+          await MainActor.run {
+            byokKeyStatuses = results
+            byokActivationError = nil
+          }
+        } else {
+          let failed = results.filter {
+            if case .ok = $0.value { return false }
+            return true
+          }
+          let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
+          try? await APIClient.shared.deactivateBYOK()
+          await MainActor.run {
+            byokKeyStatuses = results
+            byokActivationError =
+              "Rejected by provider: \(names). Free plan stays off until all 4 keys authenticate."
+          }
+        }
       } else {
         try? await APIClient.shared.deactivateBYOK()
+        await MainActor.run {
+          byokKeyStatuses = [:]
+          byokActivationError = nil
+        }
       }
       await MainActor.run { loadSubscriptionInfo() }
     }
   }
 
   private func developerKeyField(
+    provider: BYOKProvider? = nil,
     title: String, subtitle: String, settingId: String, value: Binding<String>
   ) -> some View {
     settingsCard(settingId: settingId) {
       VStack(alignment: .leading, spacing: 8) {
-        Text(title)
-          .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+        HStack {
+          Text(title)
+            .scaledFont(size: 14, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+          Spacer()
+          if let provider, let status = byokKeyStatuses[provider] {
+            byokStatusBadge(status)
+          }
+        }
         Text(subtitle)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
         SecureField("Leave blank for default", text: value)
           .textFieldStyle(.roundedBorder)
           .scaledFont(size: 13)
+        if let provider, case .failed(let msg) = byokKeyStatuses[provider] ?? .notChecked {
+          Text(msg)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.warning)
+        }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func byokStatusBadge(_ status: BYOKValidator.Status) -> some View {
+    switch status {
+    case .notChecked:
+      EmptyView()
+    case .checking:
+      HStack(spacing: 4) {
+        ProgressView().controlSize(.mini)
+        Text("Checking…").scaledFont(size: 11).foregroundColor(OmiColors.textTertiary)
+      }
+    case .ok:
+      Text("Valid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.success)
+    case .failed:
+      Text("Invalid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.warning)
     }
   }
 
