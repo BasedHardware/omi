@@ -271,10 +271,10 @@ class TestPromptCacheRetention:
         assert match, "llm_medium_experiment missing extra_body with prompt_cache_retention='24h'"
 
     def test_qos_tier_medium_gets_cache_retention(self):
-        """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_llm."""
+        """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_openai_llm."""
         source = self._read_clients_source()
-        match = re.search(r'_get_or_create_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h', source, re.DOTALL)
-        assert match, "QoS _get_or_create_llm should set prompt_cache_retention='24h' for gpt-5.1"
+        match = re.search(r'_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h', source, re.DOTALL)
+        assert match, "QoS _get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
 
     def test_cache_retention_not_in_model_kwargs(self):
         """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""
