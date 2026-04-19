@@ -250,7 +250,8 @@ class App(AppBaseModel):
         Use this for reducing dicts before caching. For App instances, use to_reduced_dict().
         """
         reduced = {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
-        reduced['external_integration'] = redact_external_integration_secrets(reduced.get('external_integration'))
+        if 'external_integration' in reduced:
+            reduced['external_integration'] = redact_external_integration_secrets(reduced.get('external_integration'))
         return reduced
 
 

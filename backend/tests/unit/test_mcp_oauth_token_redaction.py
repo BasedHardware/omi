@@ -58,3 +58,23 @@ def test_reduce_dict_redacts_mcp_oauth_tokens_from_cached_dicts():
     assert 'external_integration' in reduced
     assert reduced['external_integration']['mcp_server_url'] == 'https://mcp.example.com'
     assert 'mcp_oauth_tokens' not in reduced['external_integration']
+
+
+def test_reduce_dict_does_not_inject_external_integration_when_missing():
+    raw = {
+        'id': 'app2',
+        'name': 'plain-app',
+        'uid': 'owner',
+        'private': False,
+        'approved': True,
+        'status': 'approved',
+        'category': 'utilities-and-tools',
+        'author': 'owner',
+        'description': 'demo',
+        'image': 'img',
+        'capabilities': ['chat'],
+    }
+
+    reduced = App.reduce_dict(raw)
+
+    assert 'external_integration' not in reduced

@@ -67,7 +67,7 @@ from database.redis_db import (
     set_persona_update_timestamp,
 )
 from database.users import get_stripe_connect_account_id
-from models.app import App, UsageHistoryItem, UsageHistoryType
+from models.app import App, UsageHistoryItem, UsageHistoryType, redact_external_integration_secrets
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils import stripe
@@ -81,6 +81,19 @@ logger = logging.getLogger(__name__)
 MarketplaceAppReviewUIDs = (
     os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
 )
+
+
+def _redact_cached_app_dict(app_dict: dict) -> dict:
+    """Defensively redact secret-bearing integration fields from cached app dicts."""
+    sanitized = dict(app_dict)
+    if 'external_integration' in sanitized:
+        sanitized['external_integration'] = redact_external_integration_secrets(sanitized.get('external_integration'))
+    return sanitized
+
+
+def _redact_cached_apps(apps: List[dict]) -> List[dict]:
+    """Defensively redact secret-bearing integration fields from cached app lists."""
+    return [_redact_cached_app_dict(app) for app in apps]
 
 
 # ********************************
@@ -183,7 +196,7 @@ def get_popular_apps() -> List[App]:
         # Check Redis cache
         if cached_apps := get_generic_cache(cache_key):
             logger.info('get_popular_apps from Redis cache')
-            popular_apps = cached_apps
+            popular_apps = _redact_cached_apps(cached_apps)
         else:
             # Database query
             logger.info('get_popular_apps from db')
@@ -226,7 +239,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         """Fetch from Redis or DB (called only once with singleflight)."""
         if data := get_generic_cache(cache_key):
             logger.info('get_public_approved_apps_data from Redis cache')
-            return data
+            return _redact_cached_apps(data)
         logger.info('get_public_approved_apps_data from db')
         data = get_public_approved_apps_db()
         # Reduce cache size by excluding large fields
@@ -282,6 +295,7 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         logger.info('get_app_cache_by_id from cache')
+        cached_app = _redact_cached_app_dict(cached_app)
         if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
@@ -368,7 +382,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         # Check Redis cache
         if cached_apps := get_generic_cache(redis_cache_key):
             logger.info('get_public_approved_apps_data from Redis cache')
-            all_apps = cached_apps
+            all_apps = _redact_cached_apps(cached_apps)
         else:
             # Database query
             logger.info('get_public_approved_apps_data from db')
