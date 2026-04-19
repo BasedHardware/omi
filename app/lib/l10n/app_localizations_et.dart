@@ -9084,4 +9084,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get currentPlan => 'Praegune';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count küsimust kuus';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count küsimust kuus';
+  }
+
+  @override
+  String get architectSubtitle => 'Võimas AI — tuhanded vestlused + agentne automatiseerimine';
 }

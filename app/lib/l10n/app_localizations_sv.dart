@@ -9091,4 +9091,17 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get currentPlan => 'Nuvarande';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count frågor per månad';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count frågor per månad';
+  }
+
+  @override
+  String get architectSubtitle => 'Avancerad AI — tusentals chattar + agentautomatisering';
 }

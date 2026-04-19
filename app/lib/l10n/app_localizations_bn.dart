@@ -9096,4 +9096,17 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get currentPlan => 'বর্তমান';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'মাসে $countটি প্রশ্ন';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'মাসে $countটি প্রশ্ন';
+  }
+
+  @override
+  String get architectSubtitle => 'পাওয়ার-ইউজার AI — হাজার হাজার চ্যাট + এজেন্টিক অটোমেশন';
 }

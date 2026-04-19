@@ -9108,4 +9108,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get currentPlan => 'Actual';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count preguntas al mes';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count preguntas al mes';
+  }
+
+  @override
+  String get architectSubtitle => 'IA avanzada — miles de chats + automatizaciones de agente';
 }

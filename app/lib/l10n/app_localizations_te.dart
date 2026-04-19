@@ -9138,4 +9138,17 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get currentPlan => 'ప్రస్తుత';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'నెలకు $count ప్రశ్నలు';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'నెలకు $count ప్రశ్నలు';
+  }
+
+  @override
+  String get architectSubtitle => 'పవర్-యూజర్ AI — వేల చాట్‌లు + ఏజెంటిక్ ఆటోమేషన్';
 }

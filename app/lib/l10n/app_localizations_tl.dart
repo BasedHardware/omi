@@ -9172,4 +9172,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get currentPlan => 'Kasalukuyan';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count tanong bawat buwan';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count tanong bawat buwan';
+  }
+
+  @override
+  String get architectSubtitle => 'Power-user AI — libu-libong chat + agentic automation';
 }

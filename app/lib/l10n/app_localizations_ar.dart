@@ -9026,4 +9026,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get currentPlan => 'الحالي';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count سؤال شهرياً';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count سؤال شهرياً';
+  }
+
+  @override
+  String get architectSubtitle => 'ذكاء اصطناعي متقدم — آلاف المحادثات + أتمتة ذكية';
 }

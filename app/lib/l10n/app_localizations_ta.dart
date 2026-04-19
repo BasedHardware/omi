@@ -9156,4 +9156,17 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get currentPlan => 'தற்போதைய';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String get architectSubtitle => 'பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்';
 }

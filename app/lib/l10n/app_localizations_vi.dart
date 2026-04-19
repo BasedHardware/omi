@@ -9087,4 +9087,17 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get currentPlan => 'Hiện tại';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count câu hỏi mỗi tháng';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count câu hỏi mỗi tháng';
+  }
+
+  @override
+  String get architectSubtitle => 'AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân';
 }

@@ -9067,4 +9067,17 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get currentPlan => 'वर्तमान';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'प्रति माह $count प्रश्न';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'प्रति माह $count प्रश्न';
+  }
+
+  @override
+  String get architectSubtitle => 'पावर-यूजर AI — हज़ारों चैट + एजेंटिक ऑटोमेशन';
 }

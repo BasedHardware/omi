@@ -16976,6 +16976,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Current'**
   String get currentPlan;
+
+  /// No description provided for @neoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String neoSubtitle(int count);
+
+  /// No description provided for @operatorSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String operatorSubtitle(int count);
+
+  /// No description provided for @architectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power-user AI — thousands of chats + agentic automations'**
+  String get architectSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

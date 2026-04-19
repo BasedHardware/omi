@@ -9126,4 +9126,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get currentPlan => 'Jelenlegi';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count kérdés havonta';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count kérdés havonta';
+  }
+
+  @override
+  String get architectSubtitle => 'Haladó AI — ezernyi chat + ügynök automatizáció';
 }

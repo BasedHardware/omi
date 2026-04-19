@@ -9112,4 +9112,17 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get currentPlan => 'Бягучы';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count пытанняў у месяц';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count пытанняў у месяц';
+  }
+
+  @override
+  String get architectSubtitle => 'AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя';
 }

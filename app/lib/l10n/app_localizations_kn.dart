@@ -9119,4 +9119,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get currentPlan => 'ಪ್ರಸ್ತುತ';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'ತಿಂಗಳಿಗೆ $count ಪ್ರಶ್ನೆಗಳು';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'ತಿಂಗಳಿಗೆ $count ಪ್ರಶ್ನೆಗಳು';
+  }
+
+  @override
+  String get architectSubtitle => 'ಪವರ್-ಯೂಸರ್ AI — ಸಾವಿರಾರು ಚಾಟ್‌ಗಳು + ಏಜೆಂಟಿಕ್ ಆಟೋಮೇಶನ್';
 }

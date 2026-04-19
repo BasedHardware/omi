@@ -9104,4 +9104,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get currentPlan => 'موجودہ';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'ماہانہ $count سوالات';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'ماہانہ $count سوالات';
+  }
+
+  @override
+  String get architectSubtitle => 'پاور یوزر AI — ہزاروں چیٹس + ایجنٹک آٹومیشن';
 }

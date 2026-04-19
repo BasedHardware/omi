@@ -8939,4 +8939,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get currentPlan => '현재';
+
+  @override
+  String neoSubtitle(int count) {
+    return '월 $count개 질문';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '월 $count개 질문';
+  }
+
+  @override
+  String get architectSubtitle => '파워유저 AI — 수천 건의 채팅 + 에이전트 자동화';
 }

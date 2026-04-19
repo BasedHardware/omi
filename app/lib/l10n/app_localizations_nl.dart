@@ -9115,4 +9115,17 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get currentPlan => 'Huidig';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count vragen per maand';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count vragen per maand';
+  }
+
+  @override
+  String get architectSubtitle => 'Geavanceerde AI — duizenden chats + agentautomatisering';
 }
