@@ -89,6 +89,9 @@ async fn main() {
     // Load environment variables
     dotenvy::dotenv().ok();
 
+    // Log active QoS tier
+    tracing::info!("Model QoS tier: {}", llm::model_qos::tier_description());
+
     // Load and validate config
     let config = Config::from_env();
     if let Err(e) = config.validate() {
