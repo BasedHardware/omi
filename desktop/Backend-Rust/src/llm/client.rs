@@ -211,12 +211,12 @@ struct GeminiPartResponse {
 }
 
 impl LlmClient {
-    /// Create a new Gemini client
+    /// Create a new Gemini client with the QoS-configured default model.
     pub fn new(api_key: String) -> Self {
         Self {
             client: Client::new(),
             api_key,
-            model: "gemini-3-flash-preview".to_string(),
+            model: super::model_qos::gemini_default().to_string(),
         }
     }
 
