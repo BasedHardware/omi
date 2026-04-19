@@ -88,33 +88,33 @@ fn tier_description_for(tier: ModelTier) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
-    // --- ModelTier::from_env ---
+    /// Serialize env-var–mutating tests to avoid races under parallel execution.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    // --- ModelTier::from_env (serialized — shares process env) ---
 
     #[test]
-    fn from_env_defaults_to_standard() {
+    fn from_env_all_cases() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        // Default (unset) → Standard
         std::env::remove_var("OMI_MODEL_TIER");
         assert_eq!(ModelTier::from_env(), ModelTier::Standard);
-    }
 
-    #[test]
-    fn from_env_premium() {
+        // Explicit premium → Premium
         std::env::set_var("OMI_MODEL_TIER", "premium");
         assert_eq!(ModelTier::from_env(), ModelTier::Premium);
-        std::env::remove_var("OMI_MODEL_TIER");
-    }
 
-    #[test]
-    fn from_env_invalid_falls_back_to_standard() {
+        // Invalid value → Standard fallback
         std::env::set_var("OMI_MODEL_TIER", "garbage");
         assert_eq!(ModelTier::from_env(), ModelTier::Standard);
-        std::env::remove_var("OMI_MODEL_TIER");
-    }
 
-    #[test]
-    fn from_env_empty_falls_back_to_standard() {
+        // Empty string → Standard fallback
         std::env::set_var("OMI_MODEL_TIER", "");
         assert_eq!(ModelTier::from_env(), ModelTier::Standard);
+
         std::env::remove_var("OMI_MODEL_TIER");
     }
 
