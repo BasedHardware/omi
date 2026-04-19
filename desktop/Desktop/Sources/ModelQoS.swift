@@ -26,6 +26,7 @@ struct ModelQoS {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: tierKey)
+            NotificationCenter.default.post(name: .modelTierDidChange, object: nil)
         }
     }
 
@@ -104,4 +105,8 @@ struct ModelQoS {
         case .max: return "Max (quality-optimized)"
         }
     }
+}
+
+extension Notification.Name {
+    static let modelTierDidChange = Notification.Name("modelTierDidChange")
 }
