@@ -7,6 +7,28 @@ enum PlanType { basic, unlimited, architect, operator }
 enum SubscriptionStatus { active, inactive }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
+class PlanLimits {
+  final int? transcriptionSeconds;
+  final int? wordsTranscribed;
+  final int? insightsGained;
+  final int? memoriesCreated;
+  final int? chatQuestionsPerMonth;
+  final double? chatCostUsdPerMonth;
+
+  PlanLimits({
+    this.transcriptionSeconds,
+    this.wordsTranscribed,
+    this.insightsGained,
+    this.memoriesCreated,
+    this.chatQuestionsPerMonth,
+    this.chatCostUsdPerMonth,
+  });
+
+  factory PlanLimits.fromJson(Map<String, dynamic> json) => _$PlanLimitsFromJson(json);
+  Map<String, dynamic> toJson() => _$PlanLimitsToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
 class Subscription {
   final PlanType plan;
   final SubscriptionStatus status;
@@ -20,6 +42,7 @@ class Subscription {
   @JsonKey(defaultValue: false)
   final bool deprecated;
   final String? deprecationMessage;
+  final PlanLimits limits;
 
   Subscription({
     required this.plan,
@@ -31,7 +54,8 @@ class Subscription {
     this.cancelAtPeriodEnd = false,
     this.deprecated = false,
     this.deprecationMessage,
-  });
+    PlanLimits? limits,
+  }) : limits = limits ?? PlanLimits();
 
   factory Subscription.fromJson(Map<String, dynamic> json) => _$SubscriptionFromJson(json);
   Map<String, dynamic> toJson() => _$SubscriptionToJson(this);
@@ -80,6 +104,15 @@ class UserSubscriptionResponse {
   final List<SubscriptionPlan> availablePlans;
   @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
+  // Chat quota fields — populated from subscription endpoint
+  @JsonKey(defaultValue: 0.0)
+  final double chatQuotaUsed;
+  final String? chatQuotaUnit;
+  @JsonKey(defaultValue: 0.0)
+  final double chatQuotaPercent;
+  @JsonKey(defaultValue: true)
+  final bool chatQuotaAllowed;
+  final int? chatQuotaResetAt;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -93,6 +126,11 @@ class UserSubscriptionResponse {
     required this.memoriesCreatedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.chatQuotaUsed = 0.0,
+    this.chatQuotaUnit,
+    this.chatQuotaPercent = 0.0,
+    this.chatQuotaAllowed = true,
+    this.chatQuotaResetAt,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);
