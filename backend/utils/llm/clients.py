@@ -75,45 +75,45 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         'web_search': 'sonar',
     },
     'max': {
-        # OpenAI — conversation processing
-        'conv_action_items': 'gpt-5.1',
-        'conv_structure': 'gpt-5.1',
-        'conv_app_result': 'gpt-5.1',
-        'conv_app_select': 'gpt-4.1-mini',
-        'conv_folder': 'gpt-4.1-mini',
-        'conv_discard': 'gpt-4.1-mini',
-        'daily_summary': 'gpt-5.1',
-        'daily_summary_simple': 'gpt-4.1-mini',
-        'external_structure': 'gpt-4.1-mini',
+        # OpenAI — conversation processing (gpt-5.4-mini for quality, gpt-4.1-nano for simple)
+        'conv_action_items': 'gpt-5.4-mini',
+        'conv_structure': 'gpt-5.4-mini',
+        'conv_app_result': 'gpt-5.4-mini',
+        'conv_app_select': 'gpt-4.1-nano',
+        'conv_folder': 'gpt-4.1-nano',
+        'conv_discard': 'gpt-4.1-nano',
+        'daily_summary': 'gpt-5.4-mini',
+        'daily_summary_simple': 'gpt-4.1-nano',
+        'external_structure': 'gpt-4.1-nano',
         # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-mini',
-        'learnings': 'o4-mini',
-        'memory_conflict': 'gpt-4.1-mini',
-        'memory_category': 'gpt-4.1-mini',
-        'knowledge_graph': 'gpt-4.1-mini',
-        # OpenAI — chat
-        'chat_responses': 'gpt-5.2',
-        'chat_extraction': 'gpt-4.1-mini',
-        'chat_graph': 'gpt-4.1',
-        'session_titles': 'gpt-4.1-mini',
+        'memories': 'gpt-4.1-nano',
+        'learnings': 'gpt-5.4-mini',
+        'memory_conflict': 'gpt-4.1-nano',
+        'memory_category': 'gpt-4.1-nano',
+        'knowledge_graph': 'gpt-4.1-nano',
+        # OpenAI — chat (gpt-5.4 for user-facing, gpt-4.1-nano for extraction)
+        'chat_responses': 'gpt-5.4',
+        'chat_extraction': 'gpt-4.1-nano',
+        'chat_graph': 'gpt-5.4-mini',
+        'session_titles': 'gpt-4.1-nano',
         # OpenAI — features
-        'goals': 'gpt-4.1-mini',
-        'goals_advice': 'gpt-5.2',
-        'notifications': 'gpt-5.2',
-        'proactive_notification': 'gpt-4.1-mini',
-        'followup': 'gpt-4.1-mini',
-        'smart_glasses': 'gpt-4.1-mini',
-        'onboarding': 'gpt-4.1-mini',
-        'app_generator': 'gpt-5.2',
-        'app_integration': 'gpt-4.1-mini',
-        'persona_clone': 'gpt-5.1',
-        'trends': 'gpt-4.1-mini',
-        # Anthropic
+        'goals': 'gpt-4.1-nano',
+        'goals_advice': 'gpt-5.4',
+        'notifications': 'gpt-5.4-mini',
+        'proactive_notification': 'gpt-4.1-nano',
+        'followup': 'gpt-4.1-nano',
+        'smart_glasses': 'gpt-4.1-nano',
+        'onboarding': 'gpt-4.1-nano',
+        'app_generator': 'gpt-5.4',
+        'app_integration': 'gpt-4.1-nano',
+        'persona_clone': 'gpt-5.4-mini',
+        'trends': 'gpt-4.1-nano',
+        # Anthropic (chat_agent only — used via get_model() + anthropic_client)
         'chat_agent': 'claude-sonnet-4-6',
-        # OpenRouter
-        'persona_chat': 'google/gemini-flash-1.5-8b',
-        'persona_chat_premium': 'anthropic/claude-3.5-sonnet',
-        'wrapped_analysis': 'google/gemini-3-flash-preview',
+        # OpenAI — persona & analysis (moved from OpenRouter to direct OpenAI)
+        'persona_chat': 'gpt-4.1-nano',
+        'persona_chat_premium': 'gpt-5.4-mini',
+        'wrapped_analysis': 'gpt-5.4-mini',
         # Perplexity
         'web_search': 'sonar-pro',
     },
@@ -131,12 +131,25 @@ if _active_profile_name not in MODEL_QOS_PROFILES:
     _active_profile_name = 'max'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 
-# Provider classification (fixed per feature, not overridable).
-_OPENROUTER_FEATURES = {'persona_chat', 'persona_chat_premium', 'wrapped_analysis'}
-_ANTHROPIC_FEATURES = {'chat_agent'}
-_PERPLEXITY_FEATURES = {'web_search'}
+# Provider detection from model name — provider depends on profile, not feature.
+# A feature like persona_chat may be OpenRouter in premium but OpenAI in max.
+_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}  # always Anthropic, used via get_model() + anthropic_client
+_PERPLEXITY_ONLY_FEATURES = {'web_search'}  # always Perplexity, used via get_model() + HTTP client
+
+
+def _classify_provider(model: str) -> str:
+    """Classify provider from model name. Provider follows the model, not the feature."""
+    if '/' in model:
+        return 'openrouter'
+    if model.startswith('claude'):
+        return 'anthropic'
+    if model.startswith('sonar'):
+        return 'perplexity'
+    return 'openai'
+
 
 # Feature-specific client config (temperature, headers — orthogonal to model choice).
+# Only applied when a feature resolves to an OpenRouter model.
 _OPENROUTER_TEMPERATURES: Dict[str, float] = {
     'persona_chat': 0.8,
     'persona_chat_premium': 0.8,
@@ -144,7 +157,7 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 }
 
 # Models that support OpenAI prompt caching (prompt_cache_key routing).
-_CACHE_KEY_MODELS = {'gpt-5.1'}
+_CACHE_KEY_MODELS = {'gpt-5.1', 'gpt-5.4', 'gpt-5.4-mini'}
 
 
 def get_model(feature: str) -> str:
@@ -167,17 +180,18 @@ def get_model(feature: str) -> str:
     env_key = f'MODEL_QOS_{feature.upper()}'
     override = os.environ.get(env_key, '').strip()
     if override:
-        # Warn if override model doesn't match the feature's provider expectations
-        if feature in _ANTHROPIC_FEATURES and not override.startswith('claude'):
-            logger.warning('QoS override %s=%s may be invalid — feature %s is Anthropic', env_key, override, feature)
-        elif feature in _PERPLEXITY_FEATURES and not override.startswith('sonar'):
-            logger.warning('QoS override %s=%s may be invalid — feature %s is Perplexity', env_key, override, feature)
-        elif feature in _OPENROUTER_FEATURES and '/' not in override:
+        # Warn if override model doesn't match the feature's expected provider
+        profile_model = _active_profile.get(feature, 'gpt-4.1-mini')
+        expected_provider = _classify_provider(profile_model)
+        override_provider = _classify_provider(override)
+        if expected_provider != override_provider:
             logger.warning(
-                'QoS override %s=%s may be invalid — feature %s is OpenRouter (expected org/model)',
+                'QoS override %s=%s (provider: %s) may be invalid — feature %s expects %s',
                 env_key,
                 override,
+                override_provider,
                 feature,
+                expected_provider,
             )
         return override
     return _active_profile.get(feature, 'gpt-4.1-mini')
@@ -244,31 +258,29 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         llm_stream = get_llm('chat_responses', streaming=True)
         response = llm_stream.invoke(prompt, {'callbacks': callbacks})
     """
-    if feature in _ANTHROPIC_FEATURES:
+    if feature in _ANTHROPIC_ONLY_FEATURES:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if feature in _PERPLEXITY_FEATURES:
+    if feature in _PERPLEXITY_ONLY_FEATURES:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
     model = get_model(feature)
+    provider = _classify_provider(model)
 
-    # Validate env overrides don't cross provider boundaries
-    env_key = f'MODEL_QOS_{feature.upper()}'
-    if os.environ.get(env_key, '').strip():
-        if feature in _OPENROUTER_FEATURES:
-            if '/' not in model:
-                raise ValueError(
-                    f"QoS override {env_key}={model} invalid — feature '{feature}' is OpenRouter (expected org/model)"
-                )
-        elif model.startswith('claude') or model.startswith('sonar') or '/' in model:
-            raise ValueError(
-                f"QoS override {env_key}={model} invalid — feature '{feature}' is OpenAI (expected gpt-*/o4-*/o3-*)"
-            )
+    # Reject models that can't be served via ChatOpenAI (Anthropic direct, Perplexity)
+    if provider == 'anthropic':
+        raise ValueError(
+            f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
+        )
+    if provider == 'perplexity':
+        raise ValueError(
+            f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
+        )
 
-    if feature in _OPENROUTER_FEATURES:
+    if provider == 'openrouter':
         temp = _OPENROUTER_TEMPERATURES.get(feature)
         return _get_or_create_openrouter_llm(model, streaming, temp)
 
@@ -283,19 +295,11 @@ def get_qos_info() -> Dict[str, Dict[str, str]]:
     info: Dict[str, Dict[str, str]] = {}
     all_features = set(_active_profile.keys()) | set(_PINNED_FEATURES.keys())
     for feature in sorted(all_features):
-        provider = (
-            'anthropic'
-            if feature in _ANTHROPIC_FEATURES
-            else (
-                'openrouter'
-                if feature in _OPENROUTER_FEATURES
-                else 'perplexity' if feature in _PERPLEXITY_FEATURES else 'openai'
-            )
-        )
+        model = get_model(feature)
         info[feature] = {
-            'model': get_model(feature),
+            'model': model,
             'profile': _active_profile_name,
-            'provider': provider,
+            'provider': _classify_provider(model),
         }
     return info
 
