@@ -43,11 +43,11 @@ def _count_user_messages_this_month(uid: str, month_start: datetime, month_end: 
     return count_agg[0][0].value if count_agg else 0
 
 
-def _process_user(uid: str, month_start: datetime, month_end: datetime, apply: bool) -> dict:
+def _process_user(uid: str, month_start: datetime, month_end: datetime, fixed_now: datetime, apply: bool) -> dict:
     """Process a single user: compare actual messages vs tracked llm_usage."""
     try:
         actual_count = _count_user_messages_this_month(uid, month_start, month_end)
-        usage = get_monthly_chat_usage(uid)
+        usage = get_monthly_chat_usage(uid, now=fixed_now)
         tracked_count = usage['questions']
 
         result = {
@@ -60,8 +60,7 @@ def _process_user(uid: str, month_start: datetime, month_end: datetime, apply: b
 
         if actual_count > tracked_count and apply:
             delta = actual_count - tracked_count
-            now = datetime.now(timezone.utc)
-            doc_id = f'{now.year}-{now.month:02d}-{now.day:02d}'
+            doc_id = f'{fixed_now.year}-{fixed_now.month:02d}-{fixed_now.day:02d}'
             usage_ref = db.collection('users').document(uid).collection('llm_usage').document(doc_id)
             usage_ref.set(
                 {
@@ -105,7 +104,7 @@ def main():
 
     results = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = [executor.submit(_process_user, uid, month_start, month_end, args.apply) for uid in uids]
+        futures = [executor.submit(_process_user, uid, month_start, month_end, now, args.apply) for uid in uids]
         for i, future in enumerate(futures):
             result = future.result()
             results.append(result)
