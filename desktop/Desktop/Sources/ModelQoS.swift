@@ -7,8 +7,8 @@ import Foundation
 // Individual workloads can also override their tier.
 
 enum ModelTier: String, CaseIterable {
-    case premium    // Cost-optimized: Sonnet for Claude, Flash for Gemini
-    case max        // Quality-optimized: Opus for Claude, Pro for Gemini
+    case premium    // Cost-optimized: Sonnet + Haiku for Claude, Flash for Gemini
+    case max        // Quality-optimized: higher rate limits, same models
 }
 
 struct ModelQoS {
@@ -33,14 +33,14 @@ struct ModelQoS {
     // MARK: - Claude Models
 
     struct Claude {
-        /// Main chat session model
-        static var chat: String { model(premium: "claude-sonnet-4-6", max: "claude-opus-4-6") }
+        /// Main chat session model (user-facing conversations)
+        static var chat: String { "claude-sonnet-4-6" }
 
         /// Floating bar responses
-        static var floatingBar: String { model(premium: "claude-sonnet-4-6", max: "claude-sonnet-4-6") }
+        static var floatingBar: String { "claude-sonnet-4-6" }
 
-        /// Synthesis tasks (calendar, gmail, notes, onboarding)
-        static var synthesis: String { model(premium: "claude-sonnet-4-6", max: "claude-opus-4-6") }
+        /// Synthesis extraction tasks (calendar, gmail, notes, memory import)
+        static var synthesis: String { "claude-haiku-4-5-20251001" }
 
         /// ChatLab test queries
         static var chatLabQuery: String { "claude-sonnet-4-20250514" }
@@ -50,15 +50,7 @@ struct ModelQoS {
 
         /// Available models shown in the UI picker
         static var availableModels: [(id: String, label: String)] {
-            switch activeTier {
-            case .premium:
-                return [("claude-sonnet-4-6", "Sonnet")]
-            case .max:
-                return [
-                    ("claude-sonnet-4-6", "Sonnet"),
-                    ("claude-opus-4-6", "Opus"),
-                ]
-            }
+            [("claude-sonnet-4-6", "Sonnet")]
         }
 
         /// Default model for user selection (floating bar / shortcut picker)
@@ -71,30 +63,22 @@ struct ModelQoS {
             let allowedIDs = availableModels.map(\.id)
             return allowedIDs.contains(model) ? model : defaultSelection
         }
-
-        private static func model(premium: String, max: String) -> String {
-            activeTier == .premium ? premium : max
-        }
     }
 
     // MARK: - Gemini Models
 
     struct Gemini {
         /// Proactive assistants (screenshot analysis, context detection)
-        static var proactive: String { model(premium: "gemini-3-flash-preview", max: "gemini-3-flash-preview") }
+        static var proactive: String { "gemini-3-flash-preview" }
 
         /// Task extraction
-        static var taskExtraction: String { model(premium: "gemini-3-flash-preview", max: "gemini-pro-latest") }
+        static var taskExtraction: String { "gemini-3-flash-preview" }
 
         /// Insight generation
-        static var insight: String { model(premium: "gemini-3-flash-preview", max: "gemini-pro-latest") }
+        static var insight: String { "gemini-3-flash-preview" }
 
         /// Embeddings (not tier-dependent, kept separate)
         static var embedding: String { "gemini-embedding-001" }
-
-        private static func model(premium: String, max: String) -> String {
-            activeTier == .premium ? premium : max
-        }
     }
 
     // MARK: - Tier Info (for UI / debugging)
