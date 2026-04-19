@@ -16946,6 +16946,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Upgrade Plan'**
   String get upgradePlan;
+
+  /// No description provided for @billingMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get billingMonthly;
+
+  /// No description provided for @billingYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get billingYearly;
+
+  /// No description provided for @savePercent.
+  ///
+  /// In en, this message translates to:
+  /// **'Save ~17%'**
+  String get savePercent;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

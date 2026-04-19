@@ -9062,53 +9062,62 @@ class AppLocalizationsHu extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Fizetős csomagod van.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Csevegés';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'üzenet';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Korlátlan csevegés ebben a hónapban';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit számítási keret felhasználva';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used / $limit üzenet felhasználva ebben a hónapban';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit felhasználva';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Csevegési korlát elérve. Frissítsen több üzenetért.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Csevegési korlát elérve';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Felhasznált $used / $limitDisplay a $plan csomagban.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Visszaáll $count nap múlva';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Visszaáll $count óra múlva';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Hamarosan visszaáll';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Csomag frissítése';
+
+  @override
+  String get billingMonthly => 'Havi';
+
+  @override
+  String get billingYearly => 'Éves';
+
+  @override
+  String get savePercent => '~17% megtakarítás';
 }

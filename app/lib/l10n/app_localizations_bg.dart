@@ -4576,7 +4576,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get alreadyBestValuePlan => 'Вече имате плана с най-добра стойност. Не са необходими промени.';
 
   @override
-  String get unableToLoadPlans => 'Не може да се заредят планове';
+  String get unableToLoadPlans => 'Неуспешно зареждане на планове';
 
   @override
   String get checkConnectionTryAgain => 'Моля, проверете връзката си и опитайте отново';
@@ -9058,53 +9058,62 @@ class AppLocalizationsBg extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Вие сте на платен план.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Чат';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'съобщения';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Неограничени чат съобщения този месец';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used от $limit изчислителен бюджет използван';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used от $limit съобщения използвани този месец';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit използвани';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Лимитът за чат е достигнат. Надградете за повече съобщения.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Лимитът за чат е достигнат';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Използвали сте $used от $limitDisplay в план $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Нулиране след $count дни';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Нулиране след $count часа';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Нулиране скоро';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Надграждане на плана';
+
+  @override
+  String get billingMonthly => 'Месечно';
+
+  @override
+  String get billingYearly => 'Годишно';
+
+  @override
+  String get savePercent => 'Спестете ~17%';
 }

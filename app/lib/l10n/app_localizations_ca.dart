@@ -9077,53 +9077,62 @@ class AppLocalizationsCa extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Estàs en un pla de pagament.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Xat';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'missatges';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Missatges de xat il·limitats aquest mes';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used de $limit pressupost de càlcul utilitzat';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used de $limit missatges utilitzats aquest mes';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit utilitzats';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Límit de xat assolit. Actualitza per a més missatges.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Límit de xat assolit';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Has utilitzat $used dels teus $limitDisplay al pla $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Es reinicia en $count dies';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Es reinicia en $count hores';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Es reinicia aviat';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Actualitzar pla';
+
+  @override
+  String get billingMonthly => 'Mensual';
+
+  @override
+  String get billingYearly => 'Anual';
+
+  @override
+  String get savePercent => 'Estalvia ~17%';
 }

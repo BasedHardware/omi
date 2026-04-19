@@ -1777,7 +1777,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get rateOnGooglePlay => 'Avaliar na Google Play';
 
   @override
-  String get maybeLater => 'Talvez Mais Tarde';
+  String get maybeLater => 'Talvez depois';
 
   @override
   String get speechProfileIntro =>
@@ -9030,50 +9030,59 @@ class AppLocalizationsPt extends AppLocalizations {
   String get chatTitle => 'Chat';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'mensagens';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Mensagens de chat ilimitadas este mês';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used de $limit orçamento de computação usado';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used de $limit mensagens usadas este mês';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit usado';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Limite de chat atingido. Faça upgrade para mais mensagens.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Limite de chat atingido';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Você usou $used de $limitDisplay no plano $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Reseta em $count dias';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Reseta em $count horas';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Reseta em breve';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Fazer upgrade';
+
+  @override
+  String get billingMonthly => 'Mensal';
+
+  @override
+  String get billingYearly => 'Anual';
+
+  @override
+  String get savePercent => 'Economize ~17%';
 }

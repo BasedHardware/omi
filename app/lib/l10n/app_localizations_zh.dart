@@ -1761,7 +1761,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rateOnGooglePlay => '在 Google Play 评价';
 
   @override
-  String get maybeLater => '稍后再说';
+  String get maybeLater => '以后再说';
 
   @override
   String get speechProfileIntro => 'Omi需要学习您的目标和声音。您稍后可以修改它。';
@@ -4477,7 +4477,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToLoadPlans => '无法加载计划';
 
   @override
-  String get checkConnectionTryAgain => '请检查您的连接并重试';
+  String get checkConnectionTryAgain => '请检查连接并重试';
 
   @override
   String get useFreePlan => '使用免费计划';
@@ -8859,53 +8859,62 @@ class AppLocalizationsZh extends AppLocalizations {
   String get youAreOnAPaidPlan => '你正在使用付费计划。';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => '聊天';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => '条消息';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => '本月无限聊天消息';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '已使用 $used / $limit 计算预算';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '本月已使用 $used / $limit 条消息';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '已使用 $used / $limit';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => '聊天限额已用完。升级以获取更多消息。';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => '聊天限额已用完';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return '您已在 $plan 计划中使用了 $limitDisplay 中的 $used。';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return '$count 天后重置';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return '$count 小时后重置';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => '即将重置';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => '升级计划';
+
+  @override
+  String get billingMonthly => '月付';
+
+  @override
+  String get billingYearly => '年付';
+
+  @override
+  String get savePercent => '节省约17%';
 }

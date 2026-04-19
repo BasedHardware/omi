@@ -9068,4 +9068,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get upgradePlan => 'Upgrade Plan';
+
+  @override
+  String get billingMonthly => 'Monthly';
+
+  @override
+  String get billingYearly => 'Yearly';
+
+  @override
+  String get savePercent => 'Save ~17%';
 }

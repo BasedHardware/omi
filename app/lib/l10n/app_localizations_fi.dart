@@ -4562,10 +4562,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get alreadyBestValuePlan => 'Sinulla on jo paras hinta-laatusuhteen tilaus. Muutoksia ei tarvita.';
 
   @override
-  String get unableToLoadPlans => 'Tilauksia ei voida ladata';
+  String get unableToLoadPlans => 'Suunnitelmia ei voitu ladata';
 
   @override
-  String get checkConnectionTryAgain => 'Tarkista yhteytesi ja yritä uudelleen';
+  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen';
 
   @override
   String get useFreePlan => 'Käytä ilmaista tilausta';
@@ -9025,50 +9025,59 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chatTitle => 'Chat';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'viestiä';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Rajoittamattomasti chat-viestejä tässä kuussa';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit laskentabudjetista käytetty';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used / $limit viestiä käytetty tässä kuussa';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit käytetty';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Chat-raja saavutettu. Päivitä saadaksesi lisää viestejä.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Chat-raja saavutettu';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Olet käyttänyt $used / $limitDisplay $plan-suunnitelmassa.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Nollautuu $count päivän kuluttua';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Nollautuu $count tunnin kuluttua';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Nollautuu pian';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Päivitä suunnitelma';
+
+  @override
+  String get billingMonthly => 'Kuukausittain';
+
+  @override
+  String get billingYearly => 'Vuosittain';
+
+  @override
+  String get savePercent => 'Säästä ~17%';
 }

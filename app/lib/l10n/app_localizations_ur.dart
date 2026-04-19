@@ -4570,10 +4570,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get alreadyBestValuePlan => 'آپ کے پاس پہلے سے بہترین قدر والا منصوبہ ہے۔ کوئی تبدیلی درکار نہیں۔';
 
   @override
-  String get unableToLoadPlans => 'منصوبے لوڈ کرنے میں ناکام';
+  String get unableToLoadPlans => 'پلان لوڈ نہیں ہو سکے';
 
   @override
-  String get checkConnectionTryAgain => 'براہ کرم اپنی کنکشن چیک کریں اور دوبارہ کوشش کریں';
+  String get checkConnectionTryAgain => 'کنکشن چیک کریں اور دوبارہ کوشش کریں';
 
   @override
   String get useFreePlan => 'مفت منصوبہ استعمال کریں';
@@ -9040,53 +9040,62 @@ class AppLocalizationsUr extends AppLocalizations {
   String get youAreOnAPaidPlan => 'آپ ایک ادا شدہ پلان پر ہیں۔';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'چیٹ';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'پیغامات';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'اس مہینے لامحدود چیٹ پیغامات';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used / $limit کمپیوٹ بجٹ استعمال ہوا';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return 'اس مہینے $used / $limit پیغامات استعمال ہوئے';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit استعمال ہوا';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'چیٹ کی حد پوری ہو گئی۔ مزید پیغامات کے لیے اپ گریڈ کریں۔';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'چیٹ کی حد پوری ہو گئی';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'آپ نے $plan پلان پر $limitDisplay میں سے $used استعمال کیے ہیں۔';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return '$count دنوں میں ری سیٹ ہوگا';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return '$count گھنٹوں میں ری سیٹ ہوگا';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'جلد ری سیٹ ہوگا';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'پلان اپ گریڈ کریں';
+
+  @override
+  String get billingMonthly => 'ماہانہ';
+
+  @override
+  String get billingYearly => 'سالانہ';
+
+  @override
+  String get savePercent => '~17% بچائیں';
 }

@@ -4561,7 +4561,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get alreadyBestValuePlan => 'Jau turite geriausios vertės planą. Pakeitimų nereikia.';
 
   @override
-  String get unableToLoadPlans => 'Nepavyksta įkelti planų';
+  String get unableToLoadPlans => 'Nepavyko įkelti planų';
 
   @override
   String get checkConnectionTryAgain => 'Patikrinkite ryšį ir bandykite dar kartą';
@@ -9031,53 +9031,62 @@ class AppLocalizationsLt extends AppLocalizations {
   String get youAreOnAPaidPlan => 'Jūs naudojate mokamą planą.';
 
   @override
-  String get chatTitle => 'Chat';
+  String get chatTitle => 'Pokalbis';
 
   @override
-  String get chatMessages => 'messages';
+  String get chatMessages => 'žinučių';
 
   @override
-  String get unlimitedChatThisMonth => 'Unlimited chat messages this month';
+  String get unlimitedChatThisMonth => 'Neriboti pokalbių pranešimai šį mėnesį';
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used iš $limit skaičiavimo biudžeto panaudota';
   }
 
   @override
   String chatUsedOfLimitMessages(String used, String limit) {
-    return '$used of $limit messages used this month';
+    return '$used iš $limit žinučių panaudota šį mėnesį';
   }
 
   @override
   String chatUsageProgress(String used, String limit) {
-    return '$used / $limit used';
+    return '$used / $limit panaudota';
   }
 
   @override
-  String get chatLimitReachedUpgrade => 'Chat limit reached. Upgrade for more messages.';
+  String get chatLimitReachedUpgrade => 'Pokalbio limitas pasiektas. Atnaujinkite daugiau žinučių.';
 
   @override
-  String get chatLimitReachedTitle => 'Chat Limit Reached';
+  String get chatLimitReachedTitle => 'Pokalbio limitas pasiektas';
 
   @override
   String chatUsageDescription(String used, String limitDisplay, String plan) {
-    return 'You\'ve used $used of your $limitDisplay on the $plan plan.';
+    return 'Panaudojote $used iš $limitDisplay plane $plan.';
   }
 
   @override
   String resetsInDays(int count) {
-    return 'Resets in $count day(s)';
+    return 'Atsistatys po $count dienų';
   }
 
   @override
   String resetsInHours(int count) {
-    return 'Resets in $count hour(s)';
+    return 'Atsistatys po $count valandų';
   }
 
   @override
-  String get resetsSoon => 'Resets soon';
+  String get resetsSoon => 'Greitai atsistatys';
 
   @override
-  String get upgradePlan => 'Upgrade Plan';
+  String get upgradePlan => 'Atnaujinti planą';
+
+  @override
+  String get billingMonthly => 'Mėnesinis';
+
+  @override
+  String get billingYearly => 'Metinis';
+
+  @override
+  String get savePercent => 'Sutaupykite ~17%';
 }
