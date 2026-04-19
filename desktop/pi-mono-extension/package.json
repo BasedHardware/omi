@@ -1,0 +1,12 @@
+{
+  "name": "omi-provider",
+  "version": "1.0.0",
+  "description": "Pi-mono extension that registers Omi as an LLM provider and enforces a dangerous-command denylist before pi runs tools, while routing all inference through api.omi.me",
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test index.test.ts"
+  }
+}

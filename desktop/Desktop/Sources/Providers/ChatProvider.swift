@@ -504,17 +504,24 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     // MARK: - Bridge (ACP-only, passApiKey controls OMI vs user's account)
     // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
     // not always defaulting to Omi mode on cold start.
+    //
+    // Default harness: piMono (Omi AI via the bundled pi-mono subprocess, authenticated
+    // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
+    // uses the user's own API key/env.
     private lazy var acpBridge: ACPBridge = {
-        let isOmi = (UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue) != BridgeMode.userClaude.rawValue
-        return ACPBridge(passApiKey: isOmi)
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
+        let useOmiKey = mode != BridgeMode.userClaude.rawValue
+        let harness = mode == BridgeMode.piMono.rawValue ? "piMono" : "acp"
+        return ACPBridge(passApiKey: useOmiKey, harnessMode: harness)
     }()
     private var acpBridgeStarted = false
 
     enum BridgeMode: String {
         case omiAI = "agentSDK"
         case userClaude = "claudeCode"
+        case piMono = "piMono"
     }
-    @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.omiAI.rawValue
+    @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
     /// Whether the ACP bridge requires authentication (shown as sheet in UI)
     @Published var isClaudeAuthRequired = false
@@ -624,6 +631,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     init() {
         log("ChatProvider initialized, will start Claude bridge on first use")
+
+        // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
+        // Pre-6594 installs may have the old agentSDK tag saved; the settings
+        // picker no longer offers it, so leaving it stored would leave the UI
+        // in an inconsistent state.
+        let stored = UserDefaults.standard.string(forKey: "chatBridgeMode")
+        if stored == BridgeMode.omiAI.rawValue {
+            UserDefaults.standard.set(BridgeMode.piMono.rawValue, forKey: "chatBridgeMode")
+            log("ChatProvider: migrated legacy agentSDK bridgeMode -> piMono")
+        }
 
         // Observe changes to multiChatEnabled setting
         multiChatObserver = UserDefaults.standard.publisher(for: \.multiChatEnabled)
@@ -798,13 +815,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         await loadSchemaIfNeeded()
     }
 
-    /// Switch between bridge modes (Omi AI vs user's Claude account)
+    /// Switch between bridge modes (Omi AI, Pi-Mono, or user's Claude account)
     func switchBridgeMode(to mode: BridgeMode) async {
-        // Compare against the actual running bridge state, not bridgeMode (@AppStorage updates
-        // immediately when the Picker changes, so bridgeMode already equals `mode` by the time
-        // this function is called — the old string comparison always exits early).
-        guard (mode == .omiAI) != acpBridge.passApiKey else { return }
         let oldMode = bridgeMode
+        // Skip if already in this mode
+        guard mode.rawValue != oldMode else { return }
         log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
 
         // Stop the current bridge
@@ -812,8 +827,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         acpBridgeStarted = false
 
         // Switch mode and recreate bridge with appropriate passApiKey
+        // Both omiAI and piMono use Omi's API key; userClaude uses OAuth
         bridgeMode = mode.rawValue
-        acpBridge = ACPBridge(passApiKey: mode == .omiAI)
+        let harness = mode == .piMono ? "piMono" : "acp"
+        acpBridge = ACPBridge(passApiKey: mode != .userClaude, harnessMode: harness)
         AnalyticsManager.shared.chatBridgeModeChanged(from: oldMode, to: mode.rawValue)
 
         // Check Claude connection status when switching to user's Claude account
@@ -909,9 +926,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         // 4. Update state
         isClaudeConnected = false
 
-        // 5. Switch back to Omi AI mode and recreate bridge with API key
-        bridgeMode = BridgeMode.omiAI.rawValue
-        acpBridge = ACPBridge(passApiKey: true)
+        // 5. Switch back to the default Omi harness (pi-mono) and recreate the bridge.
+        //    piMono authenticates with a Firebase ID token; passApiKey is still true
+        //    for consistency with the old Omi-server-side-key flow.
+        bridgeMode = BridgeMode.piMono.rawValue
+        acpBridge = ACPBridge(passApiKey: true, harnessMode: "piMono")
     }
 
     // MARK: - Session Management
@@ -1619,7 +1638,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 prompt: question,
                 systemPrompt: systemPrompt,
                 sessionKey: sessionKey,
-                model: "claude-sonnet-4-20250514",
+                model: "claude-sonnet-4-6",
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
@@ -1658,7 +1677,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
                 // Show upgrade prompt if over threshold but don't block chat
-                if self.bridgeMode == BridgeMode.omiAI.rawValue && serverCost >= 50.0 {
+                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0 {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
                 }
@@ -2154,7 +2173,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         // Show upgrade prompt if over threshold but don't block the message
-        if bridgeMode == BridgeMode.omiAI.rawValue && omiAICumulativeCostUsd >= 50.0 {
+        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
             showOmiThresholdAlert = true
         }
 
@@ -2502,19 +2521,25 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageLength: responseLength
             )
 
-            let isOmiMode = bridgeMode == BridgeMode.omiAI.rawValue
-            let accountType = isOmiMode ? "omi" : "personal"
-            let r = queryResult
-            Task.detached(priority: .background) {
-                await APIClient.shared.recordLlmUsage(
-                    inputTokens: r.inputTokens,
-                    outputTokens: r.outputTokens,
-                    cacheReadTokens: r.cacheReadTokens,
-                    cacheWriteTokens: r.cacheWriteTokens,
-                    totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
-                    costUsd: r.costUsd,
-                    account: accountType
-                )
+            // Skip client-side usage recording for piMono — the backend already
+            // logs usage server-side via POST /v2/chat/completions, so recording
+            // here would double-count.
+            let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
+            let isPiMono = bridgeMode == BridgeMode.piMono.rawValue
+            if !isPiMono {
+                let accountType = isOmiMode ? "omi" : "personal"
+                let r = queryResult
+                Task.detached(priority: .background) {
+                    await APIClient.shared.recordLlmUsage(
+                        inputTokens: r.inputTokens,
+                        outputTokens: r.outputTokens,
+                        cacheReadTokens: r.cacheReadTokens,
+                        cacheWriteTokens: r.cacheWriteTokens,
+                        totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
+                        costUsd: r.costUsd,
+                        account: accountType
+                    )
+                }
             }
             if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens

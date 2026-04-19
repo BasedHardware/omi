@@ -40,9 +40,11 @@ import type {
   OutboundMessage,
   QueryMessage,
   WarmupMessage,
+  RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
+import type { PromptBlock } from "./adapters/interface.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1101,10 +1103,329 @@ process.stdout.on("error", (err) => {
   logCrash(`stdout error: ${err.message}`);
 });
 
+// --- Pi-mono mode ---
+
+async function runPiMonoMode(): Promise<void> {
+  const { PiMonoAdapter } = await import("./adapters/pi-mono.js");
+
+  // SECURITY: pi-mono mode authenticates to api.omi.me with a Firebase ID
+  // token. Never fall back to ANTHROPIC_API_KEY — that would leak the
+  // upstream Anthropic provider secret to the Omi backend. If the token is
+  // missing the bridge must fail loudly so Swift can prompt the user to
+  // re-auth.
+  const omiAuthToken = process.env.OMI_AUTH_TOKEN;
+  if (!omiAuthToken) {
+    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+
+  // Start the omi-tools relay so pi-mono extension can forward tool calls
+  // back to Swift (execute_sql, semantic_search, etc.)
+  omiToolsPipePath = await startOmiToolsRelay();
+  // Set in process.env so it flows to the pi subprocess (which spreads process.env)
+  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
+  logErr("omi-tools relay started for pi-mono");
+
+  const config = {
+    passApiKey: false,
+    apiKey: undefined,
+    omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+    authToken: omiAuthToken,
+  };
+
+  const adapter = new PiMonoAdapter(config);
+  await adapter.start();
+  logErr("Pi-mono adapter started");
+
+  // Signal readiness
+  send({ type: "init", sessionId: "" });
+  logErr("Pi-mono Bridge started, waiting for queries...");
+
+  // Multi-session support: keyed sessions matching ACP mode's contract.
+  //
+  // Pi-mono RPC is a single-process harness with global conversation state,
+  // so true isolation between concurrent session keys (main, floating, chat
+  // lab) requires restarting the subprocess when the active key changes.
+  // We serialize: one session key "owns" the subprocess at a time, and we
+  // recycle the process on context switches. This costs a subprocess restart
+  // (~300-600 ms) per switch but gives real isolation instead of leaking
+  // conversation history across chats.
+  const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string; systemPrompt?: string }>();
+  let piActiveAbort: AbortController | null = null;
+  let piActiveSessionKey = "";
+
+  // Swap the subprocess to isolate a new session key. Stops the current
+  // pi-mono process (clearing conversation history), restarts it fresh, and
+  // re-applies model + system prompt for the target key.
+  async function switchActiveSession(
+    targetKey: string,
+    cwd: string,
+    model: string,
+    systemPrompt: string | undefined
+  ): Promise<string> {
+    logErr(`Pi-mono: switching session key ${piActiveSessionKey || "(none)"} -> ${targetKey}`);
+    // Bake the target system prompt before restart so pi spawns with the
+    // correct --system-prompt flag for this session key.
+    await adapter.setSystemPrompt(systemPrompt);
+    await adapter.stop();
+    await adapter.start();
+    const sessionId = await adapter.createSession({ cwd, model, systemPrompt });
+    piSessions.set(targetKey, { sessionId, cwd, model, systemPrompt });
+    piActiveSessionKey = targetKey;
+    return sessionId;
+  }
+
+  const rl = createInterface({ input: process.stdin, terminal: false });
+
+  rl.on("line", async (line: string) => {
+    if (!line.trim()) return;
+
+    let msg: InboundMessage;
+    try {
+      msg = JSON.parse(line) as InboundMessage;
+    } catch {
+      logErr(`Invalid JSON: ${line}`);
+      return;
+    }
+
+    switch (msg.type) {
+      case "query": {
+        const qm = msg as QueryMessage;
+        const cwd = qm.cwd || process.env.HOME || "/";
+        const model = qm.model || "omi-sonnet";
+        const sessionKey = qm.sessionKey ?? model;
+
+        // Abort any previous query
+        if (piActiveAbort) {
+          piActiveAbort.abort();
+          piActiveAbort = null;
+        }
+
+        try {
+          // Resolve session by key. Pi-mono's single-process model means
+          // only one sessionKey can "own" the subprocess at a time — any
+          // switch to a different key forces a subprocess restart so
+          // conversation history from the previous key can't leak in.
+          let entry = piSessions.get(sessionKey);
+          let sessionId = entry?.sessionId ?? "";
+
+          const isContextSwitch =
+            piActiveSessionKey !== "" && piActiveSessionKey !== sessionKey;
+          const needsNewSession =
+            !sessionId || (entry && entry.cwd !== cwd);
+
+          if (isContextSwitch) {
+            // Hard isolation: recycle the subprocess between session keys.
+            const prompt = qm.systemPrompt || entry?.systemPrompt;
+            sessionId = await switchActiveSession(sessionKey, cwd, model, prompt);
+            logErr(
+              `Pi-mono session isolated via restart: ${sessionId} (key=${sessionKey}, model=${model})`
+            );
+          } else if (needsNewSession) {
+            if (entry) {
+              logErr(`Pi-mono cwd changed for ${sessionKey}, creating new session`);
+            }
+            const prompt = qm.systemPrompt || entry?.systemPrompt;
+            sessionId = await adapter.createSession({
+              cwd,
+              model,
+              systemPrompt: prompt,
+            });
+            piSessions.set(sessionKey, { sessionId, cwd, model, systemPrompt: prompt });
+            piActiveSessionKey = sessionKey;
+            logErr(`Pi-mono session created: ${sessionId} (key=${sessionKey}, model=${model})`);
+          } else {
+            // Same-key reuse — re-apply system prompt + update model if needed.
+            // setSystemPrompt is a no-op when the value hasn't changed; it
+            // triggers a subprocess restart only when the baked --system-prompt
+            // flag differs from what pi was spawned with.
+            if (entry?.systemPrompt) {
+              await adapter.setSystemPrompt(entry.systemPrompt);
+            }
+            if (model && entry?.model !== model) {
+              await adapter.setModel(sessionId, model);
+              piSessions.set(sessionKey, { ...entry!, sessionId, model });
+            }
+            piActiveSessionKey = sessionKey;
+            logErr(`Reusing pi-mono session: ${sessionId} (key=${sessionKey})`);
+          }
+
+          const abortController = new AbortController();
+          piActiveAbort = abortController;
+
+          // Build prompt blocks — include screenshot if available
+          const promptBlocks: PromptBlock[] = [];
+          if (qm.imageBase64) {
+            promptBlocks.push({ type: "image" as const, data: qm.imageBase64, mimeType: "image/jpeg" });
+            logErr("Pi-mono: including screenshot image in prompt");
+          }
+          promptBlocks.push({ type: "text" as const, text: qm.prompt });
+
+          // sendPrompt's onEvent callback already emits "result" via handleTurnEnd,
+          // so we do NOT send a separate result here — that would duplicate it.
+          await adapter.sendPrompt(
+            sessionId,
+            promptBlocks,
+            [], // tools
+            qm.mode ?? "act",
+            (event) => {
+              // Forward adapter events to Swift via stdout, but skip tool_use
+              // events — pi-mono executes tools internally (built-in tools like
+              // bash/Read/Write) or via the OMI extension (which routes through
+              // the Unix socket relay). Forwarding tool_use here would cause
+              // Swift to double-execute the tool.
+              if ((event as any).type === "tool_use") return;
+              send(event as OutboundMessage);
+            },
+            async (_name, _input) => {
+              // Tool executor — pi-mono handles tools internally
+              return "";
+            },
+            abortController.signal
+          );
+
+          // After prompt completes, check for deferred token restart.
+          // After a restart the subprocess has no conversation state, so we
+          // only re-create the currently-active session key — others will be
+          // lazily re-created on their next use via switchActiveSession.
+          if (adapter.hasPendingRestart) {
+            logErr("Pi-mono: executing deferred token refresh after prompt completed");
+            await adapter.executePendingRestart();
+            const activeKey = piActiveSessionKey;
+            const activeEntry = activeKey ? piSessions.get(activeKey) : undefined;
+            piSessions.clear();
+            piActiveSessionKey = "";
+            if (activeKey && activeEntry) {
+              const newId = await adapter.createSession({
+                cwd: activeEntry.cwd,
+                model: activeEntry.model,
+                systemPrompt: activeEntry.systemPrompt,
+              });
+              piSessions.set(activeKey, { ...activeEntry, sessionId: newId });
+              piActiveSessionKey = activeKey;
+            }
+            logErr("Pi-mono: active session re-warmed after deferred token refresh");
+          }
+        } catch (err) {
+          logErr(`Pi-mono query error: ${err}`);
+          send({ type: "error", message: String(err) });
+        }
+        break;
+      }
+
+      case "warmup": {
+        // Pi-mono's single-process harness can only own one session key at a
+        // time, so we can't literally pre-create multiple isolated sessions.
+        // We just record the metadata so the first real query can create
+        // its session without a round-trip to Swift for config.
+        const wm = msg as WarmupMessage;
+        const cwd = wm.cwd || process.env.HOME || "/";
+        const warmupSessions = wm.sessions ?? [{ key: "main", model: wm.model || "omi-sonnet" }];
+        for (const s of warmupSessions) {
+          piSessions.set(s.key, {
+            sessionId: "",
+            cwd,
+            model: s.model,
+            systemPrompt: s.systemPrompt,
+          });
+          logErr(
+            `Pi-mono warmup recorded key=${s.key} (model=${s.model || "default"}); session created on first use`
+          );
+        }
+        break;
+      }
+
+      case "interrupt": {
+        logErr("Interrupt requested by user (pi-mono)");
+        if (piActiveAbort) piActiveAbort.abort();
+        const activeEntry = piActiveSessionKey
+          ? piSessions.get(piActiveSessionKey)
+          : undefined;
+        if (activeEntry?.sessionId) {
+          adapter.abort(activeEntry.sessionId);
+        } else {
+          adapter.abort("");
+        }
+        break;
+      }
+
+      case "invalidate_session":
+        piSessions.delete(msg.sessionKey);
+        adapter.invalidateSession(msg.sessionKey);
+        logErr(`Invalidated pi-mono session for key=${msg.sessionKey}`);
+        break;
+
+      case "refresh_token": {
+        // Swift pushes a refreshed Firebase ID token. Restart the subprocess
+        // (only when idle) so the extension picks up the fresh credential.
+        // If busy, deferred restart happens after the current prompt completes.
+        const rtm = msg as RefreshTokenMessage;
+        process.env.OMI_AUTH_TOKEN = rtm.token;
+        try {
+          const restarted = await adapter.updateAuthToken(rtm.token);
+          if (restarted) {
+            // Restart cleared subprocess state — only re-create the active
+            // session key. Other keys will be lazily isolated via
+            // switchActiveSession when they're next used.
+            const activeKey = piActiveSessionKey;
+            const activeEntry = activeKey ? piSessions.get(activeKey) : undefined;
+            piSessions.clear();
+            piActiveSessionKey = "";
+            if (activeKey && activeEntry) {
+              const newId = await adapter.createSession({
+                cwd: activeEntry.cwd,
+                model: activeEntry.model,
+                systemPrompt: activeEntry.systemPrompt,
+              });
+              piSessions.set(activeKey, { ...activeEntry, sessionId: newId });
+              piActiveSessionKey = activeKey;
+            }
+            logErr("Pi-mono: active session re-warmed after immediate token refresh");
+          }
+          // If not restarted (busy), the query handler will do it after prompt completes
+        } catch (err) {
+          logErr(`Pi-mono token refresh error: ${err}`);
+        }
+        break;
+      }
+
+      case "stop":
+        logErr("Received stop signal, exiting (pi-mono)");
+        await adapter.stop();
+        process.exit(0);
+        break;
+
+      case "tool_result":
+        resolveToolCall(msg as { callId: string; result: string });
+        break;
+
+      default:
+        logErr(`Unknown message type (pi-mono): ${(msg as any).type}`);
+    }
+  });
+
+  rl.on("close", async () => {
+    logErr("stdin closed, exiting (pi-mono)");
+    await adapter.stop();
+    process.exit(0);
+  });
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
+
+  const harnessMode = process.env.HARNESS_MODE || "acp";
+  logErr(`Harness mode: ${harnessMode}`);
+
+  if (harnessMode === "piMono") {
+    // Pi-mono mode: use PiMonoAdapter instead of ACP subprocess
+    await runPiMonoMode();
+    return;
+  }
 
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();

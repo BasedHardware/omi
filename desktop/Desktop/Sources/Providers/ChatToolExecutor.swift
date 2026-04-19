@@ -131,6 +131,9 @@ class ChatToolExecutor {
         ])
       return result
 
+    case "capture_screen":
+      return await executeCaptureScreen()
+
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
     case "get_conversations":
       return await executeBackendTool(toolCall)
@@ -161,6 +164,19 @@ class ChatToolExecutor {
     }
 
     return results
+  }
+
+  // MARK: - Screen Capture
+
+  /// Capture the current screen and return the file path
+  private static func executeCaptureScreen() async -> String {
+    guard CGPreflightScreenCaptureAccess() else {
+      return "Error: Screen recording permission not granted. Ask the user to enable it in System Settings > Privacy & Security > Screen & System Audio Recording."
+    }
+    guard let fileURL = ScreenCaptureManager.captureScreen() else {
+      return "Error: Failed to capture screen"
+    }
+    return fileURL.path
   }
 
   // MARK: - SQL Execution
@@ -617,7 +633,7 @@ class ChatToolExecutor {
       for result in vectorResults where result.similarity > 0.3 {
         // Try staged_tasks first (their embeddings overwrite action_items on ID collision),
         // then fall back to action_items
-        if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+        if let staged = try? await StagedTaskStorage.shared.getStagedTask(id: result.id) {
           if staged.deleted { continue }
           if !includeCompleted && staged.completed { continue }
           count += 1
@@ -626,7 +642,7 @@ class ChatToolExecutor {
           lines.append(
             "\(count). \(check) \(staged.description) (similarity: \(sim), id: \(result.id), source: staged_tasks)"
           )
-        } else if let record = try await ActionItemStorage.shared.getActionItem(id: result.id) {
+        } else if let record = try? await ActionItemStorage.shared.getActionItem(id: result.id) {
           if record.deleted { continue }
           if !includeCompleted && record.completed { continue }
           count += 1

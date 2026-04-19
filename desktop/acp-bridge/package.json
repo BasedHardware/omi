@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67.2",
     "@playwright/mcp": "^0.0.68",
     "@zed-industries/claude-agent-acp": "^0.18.0",
     "zod": "^4.0.0"

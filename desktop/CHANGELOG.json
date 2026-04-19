@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added Pi-Mono as an alternative AI provider with server-side cost tracking via Omi API"
+  ],
   "releases": [
     {
       "version": "0.11.335",
