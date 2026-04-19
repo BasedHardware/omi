@@ -1,12 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/http/shared.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/models/chat_quota.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -53,9 +48,11 @@ class UsageProvider with ChangeNotifier {
 
   bool _forceOutOfCredits = false;
 
-  // Chat quota state (for usage page display)
-  ChatUsageQuota? _chatQuota;
-  ChatUsageQuota? get chatQuota => _chatQuota;
+  // Chat quota derived from subscription response
+  double get chatQuotaUsed => _subscription?.chatQuotaUsed ?? 0.0;
+  String? get chatQuotaUnit => _subscription?.chatQuotaUnit;
+  double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
+  bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
 
   // Payment-related state
   Map<String, dynamic>? _availablePlans;
@@ -108,23 +105,6 @@ class UsageProvider with ChangeNotifier {
 
   /// Alias for fetchSubscription - refreshes subscription data from backend
   Future<void> refreshSubscription() => fetchSubscription();
-
-  Future<void> fetchChatQuota() async {
-    try {
-      var response = await makeApiCall(
-        url: '${Env.apiBaseUrl}v1/users/me/usage-quota',
-        headers: {},
-        method: 'GET',
-        body: '',
-      );
-      if (response != null && response.statusCode == 200) {
-        _chatQuota = ChatUsageQuota.fromJson(jsonDecode(response.body));
-        notifyListeners();
-      }
-    } catch (e) {
-      Logger.debug('Failed to fetch chat quota: $e');
-    }
-  }
 
   Future<void> fetchUsageStats({required String period}) async {
     if (_isUsageLoading) return;
