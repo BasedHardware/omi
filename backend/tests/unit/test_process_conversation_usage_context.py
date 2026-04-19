@@ -469,15 +469,17 @@ def test_llm_calls_use_omi_qos_tier_system():
     assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
 
 
-def test_all_11_callsites_use_get_llm():
-    """Verify ALL 11 callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
+def test_all_callsites_use_get_llm():
+    """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
-    # conversation_processing.py: 5 callsites
+    # conversation_processing.py: 9 callsites
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text()
     conv_proc_calls = re.findall(r"get_llm\('(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
     assert 'conv_apps' in conv_proc_calls, "Missing get_llm('conv_apps') in conversation_processing.py"
+    assert 'conv_folder' in conv_proc_calls, "Missing get_llm('conv_folder') in conversation_processing.py"
+    assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
     assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
     # conv_structure appears in both get_transcript_structure and get_reprocess_transcript_structure
     assert (
@@ -491,26 +493,35 @@ def test_all_11_callsites_use_get_llm():
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
 
-    # memories.py: 4 callsites (memories x2, memory_category x1, memory_conflict x1)
+    # memories.py: 5 callsites (memories x2, learnings x1, memory_category x1, memory_conflict x1)
     mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text()
     mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
     assert mem_calls.count('memories') == 2, f"Expected 2 get_llm('memories') calls, got {mem_calls.count('memories')}"
+    assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 5 + 2 + 4 = 11 callsites
+    # Total: 9 + 2 + 5 = 16 callsites
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 11, f"Expected 11 total get_llm() callsites, got {total}"
+    assert total == 16, f"Expected 16 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
-    """Verify wired files don't invoke direct llm_mini/llm_medium_experiment instances in function bodies."""
+    """Verify wired files don't invoke direct llm_mini/llm_medium_experiment/llm_high instances in function bodies."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
     for filename in ["conversation_processing.py", "knowledge_graph.py", "memories.py"]:
         filepath = backend_dir / "utils" / "llm" / filename
         source = filepath.read_text()
         # Check for actual invocations, not just imports
-        for usage_pattern in ['llm_medium_experiment.invoke', 'llm_medium_experiment |', 'llm_mini.invoke']:
+        for usage_pattern in [
+            'llm_medium_experiment.invoke',
+            'llm_medium_experiment |',
+            'llm_mini.invoke',
+            'llm_mini |',
+            'llm_mini.with_structured_output',
+            'llm_high |',
+            'llm_high.invoke',
+        ]:
             assert usage_pattern not in source, f"{filename} still invokes {usage_pattern} instead of get_llm()"
 
 
