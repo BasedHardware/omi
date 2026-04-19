@@ -678,6 +678,21 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     return result is not None
 
 
+def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:
+    """Return True once every `ttl` seconds per (uid, platform) to throttle
+    `last_active_platform` writes on chatty endpoints. The platform is part of
+    the key so switching platforms bypasses the throttle and records the
+    change immediately.
+    """
+    try:
+        result = r.set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        # Fail-open: if Redis is down, let the caller write through. Firestore
+        # merge is idempotent, so worst case we write more often than intended.
+        return True
+
+
 def set_persona_update_timestamp(uid: str):
     """Mark that user has updated personas (expires at 00:00 UTC)"""
     now = datetime.now(timezone.utc)

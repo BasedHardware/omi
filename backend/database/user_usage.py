@@ -59,8 +59,13 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
     }
 
 
-def update_hourly_usage(uid: str, date: datetime, updates: dict):
-    """Updates or creates usage stats for a specific hour using Firestore atomic increments."""
+def update_hourly_usage(uid: str, date: datetime, updates: dict, platform: Optional[str] = None):
+    """Updates or creates usage stats for a specific hour using Firestore atomic increments.
+
+    Optional `platform` ('desktop' | 'mobile') is accumulated as an
+    ArrayUnion so a single `hourly_usage/{date-hour}` doc can record activity
+    from both platforms in the same hour without double-writing.
+    """
     user_ref = db.collection('users').document(uid)
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
     hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
@@ -86,6 +91,8 @@ def update_hourly_usage(uid: str, date: datetime, updates: dict):
     update_doc['day'] = date.day
     update_doc['hour'] = date.hour
     update_doc['id'] = doc_id
+    if platform in ('desktop', 'mobile'):
+        update_doc['platforms'] = firestore.ArrayUnion([platform])
 
     hourly_usage_ref.set(update_doc, merge=True)
 

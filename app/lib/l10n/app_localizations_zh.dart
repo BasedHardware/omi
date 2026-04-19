@@ -8407,12 +8407,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 

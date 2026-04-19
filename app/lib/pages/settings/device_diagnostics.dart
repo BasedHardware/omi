@@ -84,18 +84,20 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': _diagnostics?.failToConnectCount ?? 0,
       'rssi_samples': _rssiPoints.map((p) => {'ts': p.time.millisecondsSinceEpoch, 'rssi': p.rssi}).toList(),
       'disconnect_history': (_diagnostics?.disconnectHistory ?? [])
-          .map((e) => {
-                'ts': e.timestamp,
-                'reason': e.reason,
-                'code': e.reasonCode,
-                'manual': e.isManual,
-                'event_type': e.eventType,
-                'last_rssi': e.lastRssi,
-                'connection_duration_ms': e.connectionDurationMs,
-                'app_state': e.appState,
-                'time_to_reconnect_ms': e.timeToReconnectMs,
-                'rssi_trend': e.rssiTrend,
-              })
+          .map(
+            (e) => {
+              'ts': e.timestamp,
+              'reason': e.reason,
+              'code': e.reasonCode,
+              'manual': e.isManual,
+              'event_type': e.eventType,
+              'last_rssi': e.lastRssi,
+              'connection_duration_ms': e.connectionDurationMs,
+              'app_state': e.appState,
+              'time_to_reconnect_ms': e.timeToReconnectMs,
+              'rssi_trend': e.rssiTrend,
+            },
+          )
           .toList(),
     };
 
@@ -486,10 +488,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
                 Text(timeStr, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                 if (metaParts.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    metaParts.join(' · '),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                  ),
+                  Text(metaParts.join(' · '), style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
                 ],
               ],
             ),

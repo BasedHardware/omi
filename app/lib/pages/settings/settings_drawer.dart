@@ -375,7 +375,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
                     final sp2 = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited = sp2 == PlanType.unlimited || sp2 == PlanType.operator || sp2 == PlanType.architect;
+                    final isUnlimited =
+                        sp2 == PlanType.unlimited || sp2 == PlanType.operator || sp2 == PlanType.architect;
                     if (!isUnlimited) return const SizedBox.shrink();
                     return Column(
                       children: [
