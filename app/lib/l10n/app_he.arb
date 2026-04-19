@@ -10690,5 +10690,7 @@
     "upgradePlan": "שדרג תוכנית",
     "billingMonthly": "חודשי",
     "billingYearly": "שנתי",
-    "savePercent": "חסוך ~17%"
+    "savePercent": "חסוך ~17%",
+    "popular": "פופולרי",
+    "currentPlan": "נוכחי"
 }

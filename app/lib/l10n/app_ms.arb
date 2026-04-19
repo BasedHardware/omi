@@ -2967,5 +2967,7 @@
     "upgradePlan": "Naik taraf pelan",
     "billingMonthly": "Bulanan",
     "billingYearly": "Tahunan",
-    "savePercent": "Jimat ~17%"
+    "savePercent": "Jimat ~17%",
+    "popular": "Popular",
+    "currentPlan": "Semasa"
 }

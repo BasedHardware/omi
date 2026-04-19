@@ -3063,5 +3063,7 @@
     "upgradePlan": "Csomag frissítése",
     "billingMonthly": "Havi",
     "billingYearly": "Éves",
-    "savePercent": "~17% megtakarítás"
+    "savePercent": "~17% megtakarítás",
+    "popular": "Népszerű",
+    "currentPlan": "Jelenlegi"
 }

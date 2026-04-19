@@ -2967,5 +2967,7 @@
     "upgradePlan": "Päivitä suunnitelma",
     "billingMonthly": "Kuukausittain",
     "billingYearly": "Vuosittain",
-    "savePercent": "Säästä ~17%"
+    "savePercent": "Säästä ~17%",
+    "popular": "Suosittu",
+    "currentPlan": "Nykyinen"
 }

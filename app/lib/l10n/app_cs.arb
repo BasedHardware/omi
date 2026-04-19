@@ -2936,5 +2936,7 @@
     "upgradePlan": "Upgradovat plán",
     "billingMonthly": "Měsíční",
     "billingYearly": "Roční",
-    "savePercent": "Ušetřete ~17%"
+    "savePercent": "Ušetřete ~17%",
+    "popular": "Oblíbené",
+    "currentPlan": "Aktuální"
 }

@@ -3002,5 +3002,7 @@
     "upgradePlan": "Améliorer le forfait",
     "billingMonthly": "Mensuel",
     "billingYearly": "Annuel",
-    "savePercent": "Économisez ~17%"
+    "savePercent": "Économisez ~17%",
+    "popular": "Populaire",
+    "currentPlan": "Actuel"
 }

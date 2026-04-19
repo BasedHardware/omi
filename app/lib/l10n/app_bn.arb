@@ -10690,5 +10690,7 @@
     "upgradePlan": "প্ল্যান আপগ্রেড করুন",
     "billingMonthly": "মাসিক",
     "billingYearly": "বার্ষিক",
-    "savePercent": "~17% সাশ্রয়"
+    "savePercent": "~17% সাশ্রয়",
+    "popular": "জনপ্রিয়",
+    "currentPlan": "বর্তমান"
 }

@@ -10690,5 +10690,7 @@
     "upgradePlan": "I-upgrade ang plan",
     "billingMonthly": "Buwanan",
     "billingYearly": "Taunan",
-    "savePercent": "Makatipid ~17%"
+    "savePercent": "Makatipid ~17%",
+    "popular": "Sikat",
+    "currentPlan": "Kasalukuyan"
 }

@@ -2967,5 +2967,7 @@
     "upgradePlan": "Αναβάθμιση πλάνου",
     "billingMonthly": "Μηνιαίο",
     "billingYearly": "Ετήσιο",
-    "savePercent": "Εξοικονομήστε ~17%"
+    "savePercent": "Εξοικονομήστε ~17%",
+    "popular": "Δημοφιλές",
+    "currentPlan": "Τρέχον"
 }

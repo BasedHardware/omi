@@ -2967,5 +2967,7 @@
     "upgradePlan": "Actualizare plan",
     "billingMonthly": "Lunar",
     "billingYearly": "Anual",
-    "savePercent": "Economisiți ~17%"
+    "savePercent": "Economisiți ~17%",
+    "popular": "Popular",
+    "currentPlan": "Curent"
 }

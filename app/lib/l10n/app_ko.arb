@@ -2967,5 +2967,7 @@
     "upgradePlan": "플랜 업그레이드",
     "billingMonthly": "월간",
     "billingYearly": "연간",
-    "savePercent": "~17% 절약"
+    "savePercent": "~17% 절약",
+    "popular": "인기",
+    "currentPlan": "현재"
 }

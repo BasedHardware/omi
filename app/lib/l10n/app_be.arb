@@ -10690,5 +10690,7 @@
     "upgradePlan": "Абнавіць план",
     "billingMonthly": "Штомесяц",
     "billingYearly": "Штогод",
-    "savePercent": "Зэканомце ~17%"
+    "savePercent": "Зэканомце ~17%",
+    "popular": "Папулярны",
+    "currentPlan": "Бягучы"
 }

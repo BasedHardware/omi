@@ -2967,5 +2967,7 @@
     "upgradePlan": "Оновити план",
     "billingMonthly": "Щомісячно",
     "billingYearly": "Щорічно",
-    "savePercent": "Заощаджуйте ~17%"
+    "savePercent": "Заощаджуйте ~17%",
+    "popular": "Популярний",
+    "currentPlan": "Поточний"
 }

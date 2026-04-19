@@ -2967,5 +2967,7 @@
     "upgradePlan": "Jaunināt plānu",
     "billingMonthly": "Mēnesī",
     "billingYearly": "Gadā",
-    "savePercent": "Ietaupiet ~17%"
+    "savePercent": "Ietaupiet ~17%",
+    "popular": "Populārs",
+    "currentPlan": "Pašreizējais"
 }

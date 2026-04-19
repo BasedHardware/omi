@@ -2968,5 +2968,7 @@
     "upgradePlan": "प्लान अपग्रेड करें",
     "billingMonthly": "मासिक",
     "billingYearly": "वार्षिक",
-    "savePercent": "~17% बचाएं"
+    "savePercent": "~17% बचाएं",
+    "popular": "लोकप्रिय",
+    "currentPlan": "वर्तमान"
 }

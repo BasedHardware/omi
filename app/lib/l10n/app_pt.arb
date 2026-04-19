@@ -3003,5 +3003,7 @@
     "upgradePlan": "Fazer upgrade",
     "billingMonthly": "Mensal",
     "billingYearly": "Anual",
-    "savePercent": "Economize ~17%"
+    "savePercent": "Economize ~17%",
+    "popular": "Popular",
+    "currentPlan": "Atual"
 }
