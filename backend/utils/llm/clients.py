@@ -48,15 +48,12 @@ _TIER_MODELS = {
 # Default tier for each feature.  Change these to downgrade/upgrade features.
 # Current defaults set cost-optimized tiers for high-volume features while
 # preserving quality on features that need it.
+# Only features currently wired through get_llm() are listed here.
 _FEATURE_TIER_DEFAULTS: Dict[str, str] = {
     # Conversation processing — high volume, structured extraction
     'conv_action_items': TIER_MINI,
     'conv_structure': TIER_MEDIUM,
-    'conv_events': TIER_MEDIUM,
     'conv_apps': TIER_MINI,
-    'conv_discard': TIER_MINI,
-    'conv_folder': TIER_MINI,
-    'conv_suggested_apps': TIER_MINI,
     'daily_summary': TIER_MEDIUM,
     # Memories
     'memories': TIER_MINI,
@@ -64,23 +61,6 @@ _FEATURE_TIER_DEFAULTS: Dict[str, str] = {
     'memory_category': TIER_MINI,
     # Knowledge graph
     'knowledge_graph': TIER_MINI,
-    # Notifications
-    'proactive_notification': TIER_MINI,
-    # Goals
-    'goals': TIER_MINI,
-    'goal_advice': TIER_MEDIUM,
-    # Other
-    'trends': TIER_MINI,
-    'followup': TIER_MINI,
-    'onboarding': TIER_MINI,
-    'openglass': TIER_MINI,
-    'fair_use_classifier': TIER_MEDIUM,
-    'chat_routing': TIER_MINI,
-    'chat_qa': TIER_MEDIUM,
-    'app_generator': TIER_MEDIUM,
-    'external_integrations': TIER_MINI,
-    'external_integrations_complex': TIER_MEDIUM,
-    'persona_condensing': TIER_MEDIUM,
 }
 
 
