@@ -62,7 +62,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SegmentsDeletedEvent;
 
 class CaptureProvider extends ChangeNotifier
-    with MessageNotifierMixin
+    with MessageNotifierMixin, WidgetsBindingObserver
     implements ITransctiptSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
@@ -159,6 +159,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
+    WidgetsBinding.instance.addObserver(this);
   }
 
   void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
@@ -285,6 +286,16 @@ class CaptureProvider extends ChangeNotifier
 
   void unmarkConversationForStarring() {
     _starOngoingConversation = false;
+    notifyListeners();
+  }
+
+  // Mid-session translation toggle (issue #6837)
+  bool _translationEnabled = false;
+  bool get translationEnabled => _translationEnabled;
+
+  void toggleTranslation() {
+    _translationEnabled = !_translationEnabled;
+    _socket?.sendText(jsonEncode({'type': 'translate_toggle', 'enabled': _translationEnabled}));
     notifyListeners();
   }
 
@@ -429,6 +440,7 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    _translationEnabled = false;  // Reset for new session
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
@@ -891,6 +903,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _bleBytesStream?.cancel();
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
@@ -901,6 +914,13 @@ class CaptureProvider extends ChangeNotifier
     _peopleRefreshFuture = null; // Clear in-flight tracker
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Send screen state to backend for translation cost deferral (issue #6837)
+    final active = state == AppLifecycleState.resumed;
+    _socket?.sendText(jsonEncode({'type': 'screen_state', 'active': active}));
   }
 
   void updateRecordingState(RecordingState state) {
