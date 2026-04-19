@@ -73,6 +73,34 @@ pub fn gemini_degrade_target() -> &'static str {
     "gemini-3-flash-preview"
 }
 
+// MARK: - Rate Limit Thresholds (tier-aware)
+
+/// Daily soft limit — at or above this, Pro requests degrade to Flash.
+/// Standard: aggressive (30) since standard already sends Flash.
+/// Premium: generous (300) to allow Pro usage.
+pub fn daily_soft_limit() -> u32 {
+    daily_soft_limit_for(active_tier())
+}
+
+fn daily_soft_limit_for(tier: ModelTier) -> u32 {
+    match tier {
+        ModelTier::Standard => 30,
+        ModelTier::Premium => 300,
+    }
+}
+
+/// Daily hard limit — at or above this, all requests are rejected (429).
+pub fn daily_hard_limit() -> u32 {
+    daily_hard_limit_for(active_tier())
+}
+
+fn daily_hard_limit_for(tier: ModelTier) -> u32 {
+    match tier {
+        ModelTier::Standard => 500,
+        ModelTier::Premium => 1500,
+    }
+}
+
 /// Tier description for logging.
 pub fn tier_description() -> &'static str {
     tier_description_for(active_tier())
@@ -169,5 +197,34 @@ mod tests {
     #[test]
     fn degrade_target_is_flash() {
         assert_eq!(gemini_degrade_target(), "gemini-3-flash-preview");
+    }
+
+    // --- Rate limit thresholds ---
+
+    #[test]
+    fn daily_soft_limit_standard_is_lower() {
+        assert_eq!(daily_soft_limit_for(ModelTier::Standard), 30);
+    }
+
+    #[test]
+    fn daily_soft_limit_premium_is_higher() {
+        assert_eq!(daily_soft_limit_for(ModelTier::Premium), 300);
+    }
+
+    #[test]
+    fn daily_hard_limit_standard() {
+        assert_eq!(daily_hard_limit_for(ModelTier::Standard), 500);
+    }
+
+    #[test]
+    fn daily_hard_limit_premium() {
+        assert_eq!(daily_hard_limit_for(ModelTier::Premium), 1500);
+    }
+
+    #[test]
+    fn soft_limit_always_below_hard_limit() {
+        for tier in [ModelTier::Standard, ModelTier::Premium] {
+            assert!(daily_soft_limit_for(tier) < daily_hard_limit_for(tier));
+        }
     }
 }
