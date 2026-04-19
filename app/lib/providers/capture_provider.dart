@@ -440,8 +440,8 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
-    // Sync toggle state with server: if socket connected with translate=enabled, reflect that
-    _translationEnabled = !SharedPreferencesUtil().cachedSingleLanguageMode;
+    // Sync toggle state with user's auto-translate preference
+    _translationEnabled = SharedPreferencesUtil().cachedAutoTranslateEnabled;
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
@@ -919,7 +919,8 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Send screen state to backend for translation cost deferral (issue #6837)
+    // Notify backend when app is not visible — covers screen off, home button,
+    // and switching to another app. Defers translation while user can't see it.
     final active = state == AppLifecycleState.resumed;
     _socket?.sendText(jsonEncode({'type': 'screen_state', 'active': active}));
   }

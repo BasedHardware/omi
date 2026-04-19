@@ -36,7 +36,8 @@ class UserProvider with ChangeNotifier {
   Geolocation? _lastKnownLocation;
 
   // Transcription preferences
-  bool _singleLanguageMode = true;
+  bool _singleLanguageMode = false;
+  bool _autoTranslateEnabled = false;
   List<String> _transcriptionVocabulary = [];
 
   // Loading states for transcription settings
@@ -45,6 +46,7 @@ class UserProvider with ChangeNotifier {
 
   // Transcription preferences getters
   bool get singleLanguageMode => _singleLanguageMode;
+  bool get autoTranslateEnabled => _autoTranslateEnabled;
   List<String> get transcriptionVocabulary => _transcriptionVocabulary;
   bool get isUpdatingSingleLanguageMode => _isUpdatingSingleLanguageMode;
   bool get isUpdatingVocabulary => _isUpdatingVocabulary;
@@ -139,12 +141,14 @@ class UserProvider with ChangeNotifier {
   void _preloadFromCache() {
     final prefs = SharedPreferencesUtil();
     _singleLanguageMode = prefs.cachedSingleLanguageMode;
+    _autoTranslateEnabled = prefs.cachedAutoTranslateEnabled;
     _transcriptionVocabulary = prefs.cachedTranscriptionVocabulary;
   }
 
   void _syncToCache() {
     final prefs = SharedPreferencesUtil();
     prefs.cachedSingleLanguageMode = _singleLanguageMode;
+    prefs.cachedAutoTranslateEnabled = _autoTranslateEnabled;
     prefs.cachedTranscriptionVocabulary = _transcriptionVocabulary;
   }
 
@@ -161,7 +165,8 @@ class UserProvider with ChangeNotifier {
     try {
       final prefs = await getTranscriptionPreferences();
       if (prefs != null) {
-        _singleLanguageMode = prefs['single_language_mode'] ?? true;
+        _singleLanguageMode = prefs['single_language_mode'] ?? false;
+        _autoTranslateEnabled = prefs['auto_translate_enabled'] ?? false;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
         _syncToCache();
         notifyListeners();

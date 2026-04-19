@@ -1140,12 +1140,13 @@ def get_user_transcription_preferences(uid: str) -> dict:
         user_data = user_doc.to_dict()
         prefs = user_data.get('transcription_preferences', {})
         return {
-            'single_language_mode': prefs.get('single_language_mode', True),
+            'single_language_mode': prefs.get('single_language_mode', False),
+            'auto_translate_enabled': prefs.get('auto_translate_enabled', False),
             'vocabulary': prefs.get('vocabulary', []),
             'language': user_data.get('language', ''),
         }
 
-    return {'single_language_mode': True, 'vocabulary': [], 'language': ''}
+    return {'single_language_mode': False, 'auto_translate_enabled': False, 'vocabulary': [], 'language': ''}
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
@@ -1164,13 +1165,16 @@ def get_agent_vm(uid: str) -> Optional[dict]:
     return None
 
 
-def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
+def set_user_transcription_preferences(
+    uid: str, single_language_mode: bool = None, auto_translate_enabled: bool = None, vocabulary: list = None
+) -> None:
     """
     Set the user's transcription preferences.
 
     Args:
         uid: User ID
         single_language_mode: If True, use exact language instead of multi-language detection
+        auto_translate_enabled: If True, enable real-time translation by default
         vocabulary: List of custom keywords/terms for better transcription accuracy
     """
     user_ref = db.collection('users').document(uid)
@@ -1178,6 +1182,9 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if single_language_mode is not None:
         update_data['transcription_preferences.single_language_mode'] = single_language_mode
+
+    if auto_translate_enabled is not None:
+        update_data['transcription_preferences.auto_translate_enabled'] = auto_translate_enabled
 
     if vocabulary is not None:
         # Limit vocabulary to 100 terms max

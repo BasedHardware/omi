@@ -40,29 +40,29 @@ class TestResolveTranslationLanguage:
         """Client sending translate=disabled disables translation even when settings would enable it."""
         result = resolve_translation_language(
             translate_param='disabled',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='en',
         )
         assert result is None
 
-    def test_single_language_mode_disables_translation(self):
-        """single_language_mode=True disables translation for higher accuracy."""
+    def test_auto_translate_disabled_prevents_translation(self):
+        """auto_translate_enabled=False disables translation."""
         result = resolve_translation_language(
             translate_param='enabled',
-            single_language_mode=True,
+            auto_translate_enabled=False,
             stt_language='multi',
             language='multi',
             user_language_preference='en',
         )
         assert result is None
 
-    def test_empty_translate_param_uses_settings_default(self):
-        """Empty translate param (legacy clients) falls through to settings-based logic."""
+    def test_empty_translate_param_with_auto_enabled(self):
+        """Empty translate param (legacy clients) with auto_translate_enabled falls through."""
         result = resolve_translation_language(
             translate_param='',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='en',
@@ -73,7 +73,7 @@ class TestResolveTranslationLanguage:
         """translate=enabled with language=multi uses user_language_preference as target."""
         result = resolve_translation_language(
             translate_param='enabled',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='vi',
@@ -84,7 +84,7 @@ class TestResolveTranslationLanguage:
         """translate=enabled with a specific language (not multi) uses that language as target."""
         result = resolve_translation_language(
             translate_param='enabled',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='es',
             user_language_preference='en',
@@ -95,7 +95,7 @@ class TestResolveTranslationLanguage:
         """No user language preference means no target language — translation disabled."""
         result = resolve_translation_language(
             translate_param='enabled',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='',
@@ -106,18 +106,18 @@ class TestResolveTranslationLanguage:
         """Single-language STT (stt_language != 'multi') doesn't need translation."""
         result = resolve_translation_language(
             translate_param='enabled',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='en',
             language='en',
             user_language_preference='en',
         )
         assert result is None
 
-    def test_precedence_translate_disabled_over_single_language_mode(self):
-        """translate=disabled is checked before single_language_mode (both disable, but order matters for logging)."""
+    def test_precedence_translate_disabled_over_auto_translate(self):
+        """translate=disabled is checked before auto_translate_enabled (both disable, but order matters for logging)."""
         result = resolve_translation_language(
             translate_param='disabled',
-            single_language_mode=True,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='en',
@@ -128,7 +128,7 @@ class TestResolveTranslationLanguage:
         """Unknown translate param values (not 'enabled' or 'disabled') fall through like empty."""
         result = resolve_translation_language(
             translate_param='foobar',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='ja',
@@ -136,21 +136,21 @@ class TestResolveTranslationLanguage:
         assert result == 'ja'
 
     def test_backward_compat_legacy_client_multi_language(self):
-        """Legacy clients (no translate param) with multi-language STT still get translation."""
+        """Legacy clients (no translate param) with auto_translate_enabled still get translation."""
         result = resolve_translation_language(
             translate_param='',
-            single_language_mode=False,
+            auto_translate_enabled=True,
             stt_language='multi',
             language='multi',
             user_language_preference='fr',
         )
         assert result == 'fr'
 
-    def test_backward_compat_legacy_client_single_language_mode(self):
-        """Legacy clients with single_language_mode still get translation disabled."""
+    def test_auto_translate_off_disables_for_legacy_clients(self):
+        """Legacy clients with auto_translate_enabled=False get translation disabled."""
         result = resolve_translation_language(
             translate_param='',
-            single_language_mode=True,
+            auto_translate_enabled=False,
             stt_language='multi',
             language='multi',
             user_language_preference='en',
@@ -189,10 +189,11 @@ class TestTranslateParamWiring:
         assert 'translate' in match.group(), "_stream_handler must have translate parameter"
 
     def test_resolve_called_with_translate_param(self):
-        """resolve_translation_language must be called with translate_param=translate."""
+        """resolve_translation_language must be called with translate_param and auto_translate_enabled."""
         source = self._read_transcribe_source()
         assert 'resolve_translation_language(' in source, "resolve_translation_language must be called"
         assert 'translate_param=translate' in source, "Must pass translate_param=translate"
+        assert 'auto_translate_enabled=auto_translate_enabled' in source, "Must pass auto_translate_enabled"
 
     def test_listen_handler_forwards_translate_to_listen(self):
         """listen_handler must pass translate=translate to _listen."""

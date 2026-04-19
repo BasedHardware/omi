@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def resolve_translation_language(
     translate_param: str,
-    single_language_mode: bool,
+    auto_translate_enabled: bool,
     stt_language: str,
     language: str,
     user_language_preference: str,
@@ -28,7 +28,7 @@ def resolve_translation_language(
 
     Precedence (highest to lowest):
     1. translate=disabled → None (client explicitly opted out)
-    2. single_language_mode=True → None (user prefers single-language accuracy)
+    2. auto_translate_enabled=False → None (user has not enabled auto-translate)
     3. translate param empty/unknown (legacy clients) → use settings-based default
     4. stt_language != 'multi' → None (single-language STT, no translation needed)
     5. No user_language_preference → None (no target language to translate to)
@@ -38,8 +38,8 @@ def resolve_translation_language(
     if translate_param == 'disabled':
         return None
 
-    # User prefers single-language mode (higher accuracy, no translation)
-    if single_language_mode:
+    # User has not opted into auto-translate
+    if not auto_translate_enabled:
         return None
 
     # For legacy clients (empty translate param), fall through to settings-based logic

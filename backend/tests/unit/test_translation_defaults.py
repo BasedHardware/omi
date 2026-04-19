@@ -43,47 +43,56 @@ for mod_name in [
 import database.users as users_module
 
 
-class TestSingleLanguageModeDefaults:
-    """Verify single_language_mode defaults to True for new/missing users."""
+class TestAutoTranslateEnabledDefaults:
+    """Verify auto_translate_enabled defaults to False for new/missing users."""
 
-    def test_missing_user_returns_true(self):
-        """A user that doesn't exist in Firestore should get single_language_mode=True."""
+    def test_missing_user_returns_false(self):
+        """A user that doesn't exist in Firestore should get auto_translate_enabled=False."""
         mock_doc = MagicMock()
         mock_doc.exists = False
         with patch.object(users_module, 'db') as mock_db:
             mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
             result = users_module.get_user_transcription_preferences('nonexistent_uid')
-        assert result['single_language_mode'] is True
+        assert result['auto_translate_enabled'] is False
 
-    def test_user_without_prefs_returns_true(self):
-        """A user doc that exists but has no transcription_preferences should default to True."""
+    def test_user_without_prefs_returns_false(self):
+        """A user doc that exists but has no transcription_preferences should default to False."""
         mock_doc = MagicMock()
         mock_doc.exists = True
         mock_doc.to_dict.return_value = {}
         with patch.object(users_module, 'db') as mock_db:
             mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
             result = users_module.get_user_transcription_preferences('uid_no_prefs')
-        assert result['single_language_mode'] is True
-
-    def test_user_with_explicit_false_returns_false(self):
-        """A user with explicit single_language_mode=False should keep it."""
-        mock_doc = MagicMock()
-        mock_doc.exists = True
-        mock_doc.to_dict.return_value = {'transcription_preferences': {'single_language_mode': False}}
-        with patch.object(users_module, 'db') as mock_db:
-            mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
-            result = users_module.get_user_transcription_preferences('uid_explicit_false')
-        assert result['single_language_mode'] is False
+        assert result['auto_translate_enabled'] is False
 
     def test_user_with_explicit_true_returns_true(self):
-        """A user with explicit single_language_mode=True should keep it."""
+        """A user with explicit auto_translate_enabled=True should keep it."""
         mock_doc = MagicMock()
         mock_doc.exists = True
-        mock_doc.to_dict.return_value = {'transcription_preferences': {'single_language_mode': True}}
+        mock_doc.to_dict.return_value = {'transcription_preferences': {'auto_translate_enabled': True}}
         with patch.object(users_module, 'db') as mock_db:
             mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
             result = users_module.get_user_transcription_preferences('uid_explicit_true')
-        assert result['single_language_mode'] is True
+        assert result['auto_translate_enabled'] is True
+
+    def test_user_with_explicit_false_returns_false(self):
+        """A user with explicit auto_translate_enabled=False should keep it."""
+        mock_doc = MagicMock()
+        mock_doc.exists = True
+        mock_doc.to_dict.return_value = {'transcription_preferences': {'auto_translate_enabled': False}}
+        with patch.object(users_module, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+            result = users_module.get_user_transcription_preferences('uid_explicit_false')
+        assert result['auto_translate_enabled'] is False
+
+    def test_single_language_mode_defaults_false(self):
+        """single_language_mode should default to False (separate from auto_translate_enabled)."""
+        mock_doc = MagicMock()
+        mock_doc.exists = False
+        with patch.object(users_module, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+            result = users_module.get_user_transcription_preferences('nonexistent_uid')
+        assert result['single_language_mode'] is False
 
 
 class TestBatchTranslation24hFilter:

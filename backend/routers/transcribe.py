@@ -297,6 +297,7 @@ async def _stream_handler(
     # Fetch user transcription preferences
     transcription_prefs = get_user_transcription_preferences(uid)
     single_language_mode = transcription_prefs.get('single_language_mode', False)
+    auto_translate_enabled = transcription_prefs.get('auto_translate_enabled', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
     # Onboarding mode: force single language for better accuracy
@@ -321,7 +322,7 @@ async def _stream_handler(
     user_language_preference = user_db.get_user_language_preference(uid) if not single_language_mode else ''
     translation_language = resolve_translation_language(
         translate_param=translate,
-        single_language_mode=single_language_mode,
+        auto_translate_enabled=auto_translate_enabled,
         stt_language=stt_language,
         language=language,
         user_language_preference=user_language_preference,
@@ -2606,7 +2607,7 @@ async def _stream_handler(
                                 translation_enabled = False
                                 translation_enabled_mid_session = False
                         elif json_data.get('type') == 'screen_state':
-                            # Screen on/off tracking for translation cost deferral (issue #6837)
+                            # App visibility tracking: screen off, home, or app switch (issue #6837)
                             active = json_data.get('active', True)
                             if active != screen_active:
                                 screen_active = active
