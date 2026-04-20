@@ -534,7 +534,9 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
-            messages.removeAt(aiIndex);
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly chat limit. Upgrade your plan to keep chatting.";
             notifyListeners();
             setShowTypingIndicator(false);
             return;
@@ -650,11 +652,10 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
           if (_tryParseQuotaError(chunk.text)) {
-            // Remove both AI placeholder and the human message that was never stored
-            messages.removeAt(aiIndex);
-            if (aiIndex > 0) {
-              messages.removeAt(aiIndex - 1);
-            }
+            // Keep the user's message visible; replace AI placeholder with quota message
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly chat limit. Upgrade your plan to keep chatting.";
             notifyListeners();
             return;
           }
