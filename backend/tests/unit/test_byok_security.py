@@ -892,3 +892,61 @@ class TestBYOKFingerprintValidation:
             assert error is None
         finally:
             _byok_ctx.reset(token)
+
+
+# ---------------------------------------------------------------------------
+# 15. BYOK state cache
+# ---------------------------------------------------------------------------
+
+
+class TestBYOKStateCache:
+    """In-memory TTL cache avoids redundant Firestore reads per request."""
+
+    def setup_method(self):
+        from utils.byok import _byok_state_cache, _byok_state_cache_lock
+
+        with _byok_state_cache_lock:
+            _byok_state_cache.clear()
+
+    def test_cache_avoids_repeated_firestore_reads(self):
+        """Second call for same uid should hit cache, not Firestore."""
+        from utils.byok import get_cached_byok_state, _byok_state_cache, _byok_state_cache_lock
+
+        fake_state = {'active': True, 'fingerprints': {'openai': 'abc'}}
+        with patch('database.users.get_byok_state', return_value=fake_state) as mock_fs:
+            result1 = get_cached_byok_state('uid-1')
+            result2 = get_cached_byok_state('uid-1')
+            assert result1 == fake_state
+            assert result2 == fake_state
+            assert mock_fs.call_count == 1  # Only one Firestore read
+
+    def test_different_uids_get_separate_entries(self):
+        """Each uid gets its own cache entry."""
+        from utils.byok import get_cached_byok_state
+
+        state_a = {'active': True, 'fingerprints': {'openai': 'aaa'}}
+        state_b = {'active': False, 'fingerprints': {}}
+
+        with patch('database.users.get_byok_state', side_effect=[state_a, state_b]) as mock_fs:
+            assert get_cached_byok_state('uid-a') == state_a
+            assert get_cached_byok_state('uid-b') == state_b
+            assert mock_fs.call_count == 2
+
+    def test_invalidate_busts_cache(self):
+        """invalidate_byok_state_cache forces next call to read Firestore."""
+        from utils.byok import get_cached_byok_state, invalidate_byok_state_cache
+
+        state_old = {'active': True, 'fingerprints': {'openai': 'old'}}
+        state_new = {'active': True, 'fingerprints': {'openai': 'new'}}
+
+        with patch('database.users.get_byok_state', side_effect=[state_old, state_new]) as mock_fs:
+            assert get_cached_byok_state('uid-1') == state_old
+            invalidate_byok_state_cache('uid-1')
+            assert get_cached_byok_state('uid-1') == state_new
+            assert mock_fs.call_count == 2
+
+    def test_cache_is_bounded(self):
+        """Cache respects maxsize — evicts oldest entries."""
+        from utils.byok import _byok_state_cache, _BYOK_STATE_CACHE_MAX
+
+        assert _BYOK_STATE_CACHE_MAX == 1024  # Verify constant

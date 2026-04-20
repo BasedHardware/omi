@@ -15,15 +15,53 @@ validated against enrolled fingerprints so that:
 
 import hashlib
 import logging
+import threading
+import time
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
+from cachetools import TTLCache
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocket
 
 logger = logging.getLogger('byok')
+
+# ---------------------------------------------------------------------------
+# In-memory TTL cache for Firestore BYOK state lookups.
+#
+# Without this, get_byok_state(uid) triggers a Firestore read 2-3 times per
+# request (once in validate_byok_request, again in is_byok_active inside
+# subscription code).  A short TTL (30 s) keeps reads fresh enough for key
+# rotation detection while cutting redundant Firestore traffic.
+# ---------------------------------------------------------------------------
+_BYOK_STATE_CACHE_MAX = 1024
+_BYOK_STATE_CACHE_TTL = 30  # seconds
+_byok_state_cache: TTLCache = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
+_byok_state_cache_lock = threading.Lock()
+
+
+def get_cached_byok_state(uid: str) -> dict:
+    """Return BYOK state for *uid*, hitting Firestore at most once per TTL window."""
+    with _byok_state_cache_lock:
+        cached = _byok_state_cache.get(uid)
+    if cached is not None:
+        return cached
+
+    import database.users as users_db
+
+    state = users_db.get_byok_state(uid)
+    with _byok_state_cache_lock:
+        _byok_state_cache[uid] = state
+    return state
+
+
+def invalidate_byok_state_cache(uid: str) -> None:
+    """Call after activation/deactivation to bust the cache immediately."""
+    with _byok_state_cache_lock:
+        _byok_state_cache.pop(uid, None)
+
 
 BYOK_HEADERS = {
     'openai': 'x-byok-openai',
@@ -114,7 +152,7 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     """
     import database.users as users_db
 
-    state = users_db.get_byok_state(uid)
+    state = get_cached_byok_state(uid)
 
     # Replicate is_byok_active logic on the already-fetched state to avoid a
     # second Firestore read.

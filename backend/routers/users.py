@@ -791,6 +791,9 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
                 status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
             )
     users_db.set_byok_active(uid, data.fingerprints)
+    from utils.byok import invalidate_byok_state_cache
+
+    invalidate_byok_state_cache(uid)
     return {"active": True}
 
 
@@ -798,6 +801,9 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
 def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
+    from utils.byok import invalidate_byok_state_cache
+
+    invalidate_byok_state_cache(uid)
     return {"active": False}
 
 
