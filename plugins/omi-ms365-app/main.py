@@ -14,6 +14,7 @@ Exposes:
 """
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from pathlib import Path
@@ -168,7 +169,6 @@ async def tool_manifest() -> JSONResponse:
 
 
 def _load_manifest() -> dict[str, Any]:
-    import json
     with open(MANIFEST_PATH) as f:
         manifest = json.load(f)
     base = get_settings().app_base_url.rstrip("/")
@@ -205,9 +205,11 @@ async def tool_dispatch(tool_name: str, request: Request) -> Any:
     await _auth_guard(uid)
 
     try:
-        return await _TOOLS[tool_name](uid, **args)
+        handler = _TOOLS[tool_name]
     except KeyError:
         raise HTTPException(404, f"Unknown tool: {tool_name}")
+    try:
+        return await handler(uid, **args)
     except TypeError as e:
         raise HTTPException(400, f"Bad arguments for {tool_name}: {e}")
 

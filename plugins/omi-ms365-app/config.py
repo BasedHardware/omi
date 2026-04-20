@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     microsoft_redirect_uri: str = "http://localhost:8080/auth/microsoft/callback"
 
     app_base_url: str = "http://localhost:8080"
-    session_secret: str = "change-me"
+    session_secret: str
     redis_url: str | None = None
     log_level: str = "INFO"
 

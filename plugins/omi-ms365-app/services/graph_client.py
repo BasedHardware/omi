@@ -100,3 +100,33 @@ class GraphClient:
         if resp.status_code >= 400:
             raise GraphError(resp.status_code, resp.text)
         return resp.json() if resp.content else None
+
+
+    async def get_bytes(self, path: str) -> bytes:
+        """GET raw bytes — used for file content downloads.
+
+        Reuses this client's session + auth so callers don't bypass
+        throttling/retry by instantiating their own httpx.AsyncClient.
+        """
+        url = path if path.startswith("http") else f"{GRAPH_BASE}{path}"
+
+        for attempt in range(MAX_RETRIES):
+            token = await get_access_token(self.user_id)
+            headers = {"Authorization": f"Bearer {token}"}
+            resp = await self._client.get(url, headers=headers)
+
+            if resp.status_code == 429 or resp.status_code >= 500:
+                if attempt == MAX_RETRIES - 1:
+                    raise GraphError(resp.status_code, resp.text)
+                retry_after = int(resp.headers.get("Retry-After", "2"))
+                backoff = min(retry_after, 2 ** attempt + 1)
+                log.warning("Graph %s on %s — backing off %ss", resp.status_code, path, backoff)
+                await asyncio.sleep(backoff)
+                continue
+
+            if resp.status_code >= 400:
+                raise GraphError(resp.status_code, resp.text)
+            return resp.content
+
+        raise GraphError(0, "Exhausted retries without response")
+

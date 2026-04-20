@@ -25,9 +25,11 @@ async def list_recent_files(user_id: str, limit: int = 15) -> list[dict[str, Any
 
 
 async def search_files(user_id: str, query: str, limit: int = 15) -> list[dict[str, Any]]:
+    # OData string literals must have single quotes escaped by doubling them.
+    safe_query = query.replace("'", "''")
     async with GraphClient(user_id) as g:
         data = await g.get(
-            f"/me/drive/root/search(q='{query}')",
+            f"/me/drive/root/search(q='{safe_query}')",
             params={"$top": limit},
         )
         return [_slim_item(i) for i in data.get("value", [])]
@@ -53,19 +55,10 @@ async def upload_text_file(
 async def read_file_text(user_id: str, item_id: str) -> dict[str, Any]:
     async with GraphClient(user_id) as g:
         meta = await g.get(f"/me/drive/items/{item_id}")
-        # Download content via /content endpoint
-        import httpx
-        from services.auth import get_access_token
-
-        token = await get_access_token(user_id)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.get(
-                f"https://graph.microsoft.com/v1.0/me/drive/items/{item_id}/content",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            try:
-                text = resp.content.decode("utf-8")
-            except UnicodeDecodeError:
-                text = f"<binary {len(resp.content)} bytes>"
+        # Reuse the GraphClient session so we inherit throttling + retry.
+        content = await g.get_bytes(f"/me/drive/items/{item_id}/content")
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = f"<binary {len(content)} bytes>"
         return {**_slim_item(meta), "content": text}

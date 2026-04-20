@@ -47,7 +47,7 @@ async def create_event(
     attendees: list[str] | None = None,
     body: str = "",
     online: bool = True,
-    timezone_str: str = "Europe/Vienna",
+    timezone_str: str = "UTC",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "subject": subject,
