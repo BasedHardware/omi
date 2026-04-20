@@ -3901,4 +3901,33 @@
   color: var(--color-destructive);
 }
 
+/* ========== Brain ========== */
+
+.brain-map-container {
+  position: relative;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(139, 92, 246, 0.05) 0%,
+    rgba(59, 130, 246, 0.03) 40%,
+    rgba(0, 0, 0, 0) 75%
+  );
+}
+
+.brain-map-container svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.brain-map-container svg [role="button"]:focus-visible > path {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+  outline: none;
+}
+
 
