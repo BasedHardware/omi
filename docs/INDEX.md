@@ -75,6 +75,6 @@ Complete index of all documentation in the Omi codebase.
 
 ## Related Files
 
-- Architecture: `.cursor/ARCHITECTURE.md`
-- API Reference: `.cursor/API_REFERENCE.md`
-- Data Flow: `.cursor/DATA_FLOW.md`
+- Cursor hooks: `.cursor/hooks.json`
+- Cursor MCP config: `.cursor/mcp.json`
+- Cursor rules: `.cursor/rules/`
