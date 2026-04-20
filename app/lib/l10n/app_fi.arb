@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Sinulla on maksullinen tilaus.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Monikielinen tunnistus",
+    "multiLanguageDetectionDesc": "Tunnista useita puhuttuja kieliä"
 }

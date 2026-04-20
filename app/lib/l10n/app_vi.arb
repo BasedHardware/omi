@@ -2956,5 +2956,7 @@
     "youAreOnAPaidPlan": "Bạn đang sử dụng gói trả phí.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Phát hiện đa ngôn ngữ",
+    "multiLanguageDetectionDesc": "Phát hiện nhiều ngôn ngữ nói"
 }

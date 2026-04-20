@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Jums ir maksas plāns.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Daudzvalodu noteikšana",
+    "multiLanguageDetectionDesc": "Noteikt vairākas runātās valodas"
 }

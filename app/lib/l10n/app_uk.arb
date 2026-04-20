@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Ви на платному плані.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Багатомовне виявлення",
+    "multiLanguageDetectionDesc": "Виявлення кількох розмовних мов"
 }

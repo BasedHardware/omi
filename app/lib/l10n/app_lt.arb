@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Jūs naudojate mokamą planą.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Daugiakalbis aptikimas",
+    "multiLanguageDetectionDesc": "Aptikti kelias kalbamas kalbas"
 }

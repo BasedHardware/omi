@@ -2920,5 +2920,7 @@
     "youAreOnAPaidPlan": "Máte placený plán.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Detekce více jazyků",
+    "multiLanguageDetectionDesc": "Detekovat více mluvených jazyků"
 }

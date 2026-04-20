@@ -2952,5 +2952,7 @@
     "youAreOnAPaidPlan": "有料プランをご利用中です。",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "多言語検出",
+    "multiLanguageDetectionDesc": "複数の話し言葉を検出"
 }

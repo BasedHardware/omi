@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "คุณอยู่ในแผนชำระเงิน",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "การตรวจจับหลายภาษา",
+    "multiLanguageDetectionDesc": "ตรวจจับภาษาพูดหลายภาษา"
 }

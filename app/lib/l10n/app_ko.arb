@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "유료 플랜을 사용 중입니다.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "다국어 감지",
+    "multiLanguageDetectionDesc": "여러 음성 언어 감지"
 }

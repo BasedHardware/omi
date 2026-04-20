@@ -2986,5 +2986,7 @@
     "youAreOnAPaidPlan": "Ücretli bir plandasınız.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Çok dilli algılama",
+    "multiLanguageDetectionDesc": "Birden fazla konuşulan dili algıla"
 }

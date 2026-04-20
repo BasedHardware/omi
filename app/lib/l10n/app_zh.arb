@@ -2973,5 +2973,7 @@
     "youAreOnAPaidPlan": "你正在使用付费计划。",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "多语言检测",
+    "multiLanguageDetectionDesc": "检测多种口语"
 }

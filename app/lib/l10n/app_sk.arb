@@ -2956,5 +2956,7 @@
     "youAreOnAPaidPlan": "Máte platený plán.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Viacjazyčná detekcia",
+    "multiLanguageDetectionDesc": "Detekovať viacero hovorených jazykov"
 }

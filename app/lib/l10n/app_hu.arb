@@ -3047,5 +3047,7 @@
     "youAreOnAPaidPlan": "Fizetős csomagod van.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Többnyelvű felismerés",
+    "multiLanguageDetectionDesc": "Több beszélt nyelv felismerése"
 }

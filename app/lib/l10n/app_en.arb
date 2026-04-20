@@ -10744,5 +10744,13 @@
     "youAreOnAPaidPlan": "You are on a paid plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
+    },
+    "multiLanguageDetection": "Multi-language Detection",
+    "@multiLanguageDetection": {
+        "description": "Title for multi-language transcription detection toggle"
+    },
+    "multiLanguageDetectionDesc": "Detect multiple spoken languages",
+    "@multiLanguageDetectionDesc": {
+        "description": "Description for multi-language detection toggle"
     }
 }

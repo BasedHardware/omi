@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Anda menggunakan pelan berbayar.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Pengesanan berbilang bahasa",
+    "multiLanguageDetectionDesc": "Kesan pelbagai bahasa pertuturan"
 }

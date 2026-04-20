@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Oled tasulisel plaanil.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Mitmekeelne tuvastus",
+    "multiLanguageDetectionDesc": "Tuvasta mitu räägitud keelt"
 }

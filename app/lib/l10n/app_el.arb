@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Είστε σε πληρωμένο πλάνο.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Πολυγλωσσική ανίχνευση",
+    "multiLanguageDetectionDesc": "Ανίχνευση πολλαπλών ομιλούμενων γλωσσών"
 }

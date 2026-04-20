@@ -2918,5 +2918,7 @@
     "youAreOnAPaidPlan": "أنت على خطة مدفوعة.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "كشف اللغات المتعددة",
+    "multiLanguageDetectionDesc": "كشف عدة لغات منطوقة"
 }

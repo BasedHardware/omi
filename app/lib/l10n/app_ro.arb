@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Ești pe un plan plătit.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Detectare multilingvă",
+    "multiLanguageDetectionDesc": "Detectează mai multe limbi vorbite"
 }

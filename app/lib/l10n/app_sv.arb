@@ -2951,5 +2951,7 @@
     "youAreOnAPaidPlan": "Du har en betald plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Flerspråkig igenkänning",
+    "multiLanguageDetectionDesc": "Identifiera flera talade språk"
 }

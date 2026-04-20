@@ -2960,5 +2960,7 @@
     "youAreOnAPaidPlan": "Du er på en betalt plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Flersproget registrering",
+    "multiLanguageDetectionDesc": "Registrer flere talte sprog"
 }

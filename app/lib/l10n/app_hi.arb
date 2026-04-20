@@ -2952,5 +2952,7 @@
     "youAreOnAPaidPlan": "आप एक सशुल्क प्लान पर हैं।",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "बहुभाषी पहचान",
+    "multiLanguageDetectionDesc": "कई बोली जाने वाली भाषाओं का पता लगाएं"
 }

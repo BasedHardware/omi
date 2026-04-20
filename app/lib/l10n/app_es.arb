@@ -2952,5 +2952,7 @@
     "youAreOnAPaidPlan": "Estás en un plan de pago.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "multiLanguageDetection": "Detección multilingüe",
+    "multiLanguageDetectionDesc": "Detectar múltiples idiomas hablados"
 }
