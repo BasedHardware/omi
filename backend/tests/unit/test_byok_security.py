@@ -276,14 +276,41 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
+    @patch('utils.byok.has_byok_keys', return_value=True)
     @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
     @patch('utils.subscription.users_db')
-    def test_enforce_chat_quota_bypasses_for_byok(self, mock_users_db):
+    def test_enforce_chat_quota_bypasses_for_byok(self, mock_users_db, _mock_has_keys):
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
         mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid')
+
+    @patch('utils.byok.has_byok_keys', return_value=False)
+    @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_chat_quota_enforces_when_byok_active_but_no_headers(
+        self, mock_snapshot, mock_users_db, _mock_has_keys
+    ):
+        """Abuse case: user activated BYOK with fake fingerprints but sends no BYOK headers."""
+        from models.users import PlanType
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        from fastapi import HTTPException
+        from utils.subscription import enforce_chat_quota
+
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_chat_quota('fake-byok-uid')
+        assert exc_info.value.status_code == 402
 
     @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
     @patch('utils.subscription.users_db')

@@ -283,7 +283,11 @@ def enforce_chat_quota(uid: str) -> None:
         return
 
     # BYOK users pay their own LLM provider — no Omi-side cost to cap.
-    if users_db.is_byok_active(uid):
+    # Require both: Firestore flag AND actual BYOK headers on this request,
+    # so a user can't activate with fake fingerprints then omit headers.
+    from utils.byok import has_byok_keys
+
+    if users_db.is_byok_active(uid) and has_byok_keys():
         return
 
     snapshot = get_chat_quota_snapshot(uid)

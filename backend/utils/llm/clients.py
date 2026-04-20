@@ -623,7 +623,7 @@ class _AnthropicViaOpenAIProxy:
         byok = get_byok_key('anthropic')
         if byok:
             return _cached_openai_chat(
-                'claude-3-5-sonnet-20241022',
+                'claude-sonnet-4-20250514',
                 byok,
                 {**self._ctor_kwargs, 'base_url': _ANTHROPIC_OPENAI_BASE_URL},
             )
