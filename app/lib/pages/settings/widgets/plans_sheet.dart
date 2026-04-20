@@ -1035,6 +1035,11 @@ class _PlansSheetState extends State<PlansSheet> {
                               ),
                               const SizedBox(height: 16),
                               _buildFeatureItem(faIcon: FontAwesomeIcons.brain, text: 'Unlock Omi\'s infinite memory'),
+                              const SizedBox(height: 16),
+                              _buildFeatureItem(
+                                faIcon: FontAwesomeIcons.globe,
+                                text: 'Available on Mac, mobile, and web',
+                              ),
                             ],
                           ),
                           const SizedBox(height: 32),
