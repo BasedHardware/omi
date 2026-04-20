@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: desktop-auto-release-main
@@ -257,7 +256,7 @@ jobs:
           print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
           "
 
-      - name: Commit changelog and create tag
+      - name: Commit changelog, update main, and create tag
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
@@ -267,45 +266,11 @@ jobs:
           git add desktop/CHANGELOG.json
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
+          # Keep main's changelog in sync. This push only changes desktop/CHANGELOG.json,
+          # which is excluded from this workflow's push trigger.
+          git push origin HEAD:main
+
+          # Tag the synced changelog commit; Codemagic uses this tag to trigger builds.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
-
-      - name: Create and auto-merge PR to sync changelog back to main
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "PAT_TOKEN is not configured; cannot auto-merge changelog PR."
-            exit 1
-          fi
-
-          VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="changelog/v${VERSION}"
-
-          git checkout -B "$BRANCH"
-          git push --force-with-lease origin "$BRANCH"
-
-          PR_NUMBER=$(gh pr list \
-            --head "$BRANCH" \
-            --base main \
-            --state open \
-            --json number \
-            --jq '.[0].number')
-
-          if [ -z "$PR_NUMBER" ]; then
-            PR_URL=$(gh pr create \
-              --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
-              --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
-              --base main \
-              --head "$BRANCH")
-            PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')
-          fi
-
-          # Merge changelog PR in protected branches:
-          # 1) admin merge if allowed, 2) auto-merge if repo supports it, 3) regular merge if already mergeable.
-          gh pr merge "$PR_NUMBER" --merge --admin || \
-          gh pr merge "$PR_NUMBER" --merge --auto || \
-          gh pr merge "$PR_NUMBER" --merge || \
-          echo "Changelog PR #$PR_NUMBER requires manual merge."
