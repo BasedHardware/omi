@@ -1,9 +1,22 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
+
+Widget getMarkdownWidget(
+  BuildContext context, 
+  String message, {
+  Function(String)? onAskOmi,
+  Function(String)? sendMessage,
+}) {
+  final genui = GenUIMessage.tryParse(message);
+  
+  if (genui != null) {
+    return _buildGenUIWidget(genui, onAskOmi, sendMessage);
+  }
+  
   return MarkdownBody(
     data: message.trimRight(),
     selectable: false,
@@ -22,4 +35,75 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
       }
     },
   );
+}
+
+Widget _buildGenUIWidget(GenUIMessage genui, Function(String)? onAskOmi, Function(String)? sendMessage) {
+  void handleAction(String action) {
+    if (sendMessage != null) {
+      sendMessage(action);
+    } else if (onAskOmi != null) {
+      onAskOmi(action);
+    }
+  }
+
+  switch (genui.component) {
+    case 'location_prompt':
+      return LocationSharePrompt(
+        message: genui.message,
+        actions: genui.actions ?? ['yes', 'no'],
+        onAction: handleAction,
+      );
+    
+    case 'location_answer':
+      if (genui.location != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (genui.message.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  genui.message,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+            MapCard(
+              location: genui.location!,
+              message: genui.location!.label,
+            ),
+          ],
+        );
+      }
+      return Text(genui.message, style: const TextStyle(color: Colors.white, fontSize: 16));
+    
+    case 'map_result':
+      if (genui.location != null) {
+        return MapCard(
+          message: genui.message,
+          location: genui.location!,
+        );
+      }
+      return Text(genui.message, style: const TextStyle(color: Colors.white, fontSize: 16));
+    
+    case 'result_card':
+    case 'result':
+      return ResultCard(
+        title: genui.title ?? '',
+        description: genui.description,
+        distance: genui.distance,
+        location: genui.location,
+        actions: genui.actions,
+        onAction: handleAction,
+      );
+    
+    case 'confirm_prompt':
+      return ConfirmPrompt(
+        message: genui.message,
+        actions: genui.actions ?? ['yes', 'no'],
+        onAction: handleAction,
+      );
+    
+    default:
+      return Text(genui.message, style: const TextStyle(color: Colors.white, fontSize: 16));
+  }
 }

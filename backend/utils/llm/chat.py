@@ -31,7 +31,9 @@ logger = logging.getLogger(__name__)
 # ****************************************
 
 
-def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
+def initial_chat_message(
+    uid: str, plugin: Optional[App] = None, prev_messages_str: str = ""
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
     if plugin is None:
         prompt = f"""
@@ -62,7 +64,9 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 
 
 class RequiresContext(BaseModel):
-    value: bool = Field(description="Based on the conversation, this tells if context is needed to respond")
+    value: bool = Field(
+        description="Based on the conversation, this tells if context is needed to respond"
+    )
 
 
 class TopicsContext(BaseModel):
@@ -72,19 +76,19 @@ class TopicsContext(BaseModel):
 class DatesContext(BaseModel):
     dates_range: List[datetime] = Field(
         default=[],
-        examples=[['2024-12-23T00:00:00+07:00', '2024-12-23T23:59:00+07:00']],
+        examples=[["2024-12-23T00:00:00+07:00", "2024-12-23T23:59:00+07:00"]],
         description="Dates range. (Optional)",
     )
 
 
 def requires_context(question: str) -> bool:
-    prompt = f'''
+    prompt = f"""
     Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
 
     User's Question:
     {question}
-    '''
+    """
     with_parser = llm_mini.with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     try:
@@ -98,7 +102,7 @@ class IsAnOmiQuestion(BaseModel):
 
 
 def retrieve_is_an_omi_question(question: str) -> bool:
-    prompt = f'''
+    prompt = f"""
     Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
     OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
@@ -148,7 +152,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     {question}
     
     Is this asking about the Omi/Friend app product itself?
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -162,7 +166,7 @@ class IsFileQuestion(BaseModel):
 
 
 def retrieve_is_file_question(question: str) -> bool:
-    prompt = f'''
+    prompt = f"""
     Based on the current question, your task is to determine whether the user is referring to a file or an image that was just attached or mentioned earlier in the conversation.
 
     Examples where the answer is True:
@@ -177,7 +181,7 @@ def retrieve_is_file_question(question: str) -> bool:
 
     User's Question:
     {question}
-    '''
+    """
 
     with_parser = llm_mini.with_structured_output(IsFileQuestion)
     response: IsFileQuestion = with_parser.invoke(prompt)
@@ -188,18 +192,18 @@ def retrieve_is_file_question(question: str) -> bool:
 
 
 def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]:
-    prompt = f'''
+    prompt = f"""
     You MUST determine the appropriate date range in {tz} that provides context for answering the <question> provided.
 
     If the <question> does not reference a date or a date range, respond with an empty list: []
 
-    Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+    Current date time in UTC: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}
 
     <question>
     {question}
     </question>
 
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -213,10 +217,15 @@ class SummaryOutput(BaseModel):
 
 
 def chunk_extraction(
-    segments: List[TranscriptSegment], topics: List[str], people: List[Person] = None, user_name: str = None
+    segments: List[TranscriptSegment],
+    topics: List[str],
+    people: List[Person] = None,
+    user_name: str = None,
 ) -> str:
-    content = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
-    prompt = f'''
+    content = TranscriptSegment.segments_as_string(
+        segments, people=people, user_name=user_name
+    )
+    prompt = f"""
     You are an experienced detective, your task is to extract the key points of the conversation related to the topics you were provided.
     You will be given a conversation transcript of a low quality recording, and a list of topics.
 
@@ -227,13 +236,15 @@ def chunk_extraction(
     {content}
 
     Topics: {topics}
-    '''
+    """
     with_parser = llm_mini.with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
 
-def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
+def _get_answer_simple_message_prompt(
+    uid: str, messages: List[Message], app: Optional[App] = None
+) -> str:
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
@@ -255,18 +266,30 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     Conversation History:
     {conversation_history}
 
+    <genui_instructions>
+    When the user asks a location-based question (nearest X, where is Y, find me Z nearby), respond with ONLY this JSON:
+    {{"type":"genui","component":"location_prompt","message":"Can you share your location?","actions":["yes","no"]}}
+    When the user provides coordinates (lat/lng) in a follow-up, respond with:
+    {{"type":"genui","component":"map_result","message":"<answer>","location":{{"lat":0.0,"lng":0.0,"label":"<place name>"}}}}
+    For all other queries respond with plain text. Never wrap genui JSON in markdown code fences.
+    </genui_instructions>
+
     Answer:
-    """.replace('    ', '').strip()
+    """.replace("    ", "").strip()
 
 
-def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
+def answer_simple_message(
+    uid: str, messages: List[Message], plugin: Optional[App] = None
+) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
     return llm_medium.invoke(prompt).content
 
 
-def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
+def answer_simple_message_stream(
+    uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]
+) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return llm_medium_stream.invoke(prompt, {"callbacks": callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -287,7 +310,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace("    ", "").strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -295,9 +318,11 @@ def answer_omi_question(messages: List[Message], context: str) -> str:
     return llm_mini.invoke(prompt).content
 
 
-def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
+def answer_omi_question_stream(
+    messages: List[Message], context: str, callbacks: []
+) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return llm_mini_stream.invoke(prompt, {"callbacks": callbacks}).content
 
 
 def _get_qa_rag_prompt(
@@ -310,10 +335,10 @@ def _get_qa_rag_prompt(
     tz: Optional[str] = "UTC",
 ) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
+    memories_str = "\n".join(memories_str.split("\n")[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
-    context = context.replace('\n\n', '\n').strip()
+    context = context.replace("\n\n", "\n").strip()
     plugin_info = ""
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
@@ -326,7 +351,8 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    return (
+        f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -335,7 +361,19 @@ def _get_qa_rag_prompt(
         Write an accurate, detailed, and comprehensive response to the <question> in the most personalized way possible, using the <memories>, <user_facts> provided.
     </task>
 
-    <instructions>
+<genui_instructions>
+When the user asks a location-based question (nearest X, where is Y, find me Z nearby), respond with ONLY a JSON object like:
+{"type":"genui","component":"location_prompt","message":"Can you share your location?","actions":["yes","no"]}
+
+When the user provides coordinates (lat/lng) in a follow-up, respond with:
+{"type":"genui","component":"map_result","message":"<answer>","location":{"lat":0.0,"lng":0.0,"label":"<place name>"}}
+
+For all other queries, respond with plain text as normal.
+
+Never wrap genui JSON in markdown code fences.
+</genui_instructions>
+
+<instructions>
     - Refine the <question> based on the last <previous_messages> before answering it.
     - DO NOT use the AI's message from <previous_messages> as references to answer the <question>
     - Use <question_timezone> and <current_datetime_utc> to refer to the time context of the <question>
@@ -361,7 +399,7 @@ def _get_qa_rag_prompt(
 
     <question>
     {question}
-    <question>
+    </question>
 
     <memories>
     {context}
@@ -377,7 +415,7 @@ def _get_qa_rag_prompt(
     </user_facts>
 
     <current_datetime_utc>
-        Current date time in UTC: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}
+        Current date time in UTC: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")}
     </current_datetime_utc>
 
     <question_timezone>
@@ -385,11 +423,17 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """.replace("    ", "")
+        .replace("\n\n\n", "\n\n")
+        .strip()
+    )
 
 
 def _get_agentic_qa_prompt(
-    uid: str, app: Optional[App] = None, messages: List[Message] = None, context: Optional[PageContext] = None
+    uid: str,
+    app: Optional[App] = None,
+    messages: List[Message] = None,
+    context: Optional[PageContext] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -413,13 +457,15 @@ def _get_agentic_qa_prompt(
     try:
         user_tz = ZoneInfo(tz)
         current_datetime_user = datetime.now(user_tz)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_str = current_datetime_user.strftime("%Y-%m-%d %H:%M:%S")
         current_datetime_iso = current_datetime_user.isoformat()
-        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
+        logger.info(
+            f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}"
+        )
     except Exception:
         # Fallback to UTC if timezone is invalid
         current_datetime_user = datetime.now(timezone.utc)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+        current_datetime_str = current_datetime_user.strftime("%Y-%m-%d %H:%M:%S")
         current_datetime_iso = current_datetime_user.isoformat()
         tz = "UTC"
         logger.warning(
@@ -444,9 +490,11 @@ def _get_agentic_qa_prompt(
     # Add file context if messages contain files
     file_context_section = ""
     if messages:
-        message_history_with_files = Message.get_messages_as_string(messages, include_file_info=True)
+        message_history_with_files = Message.get_messages_as_string(
+            messages, include_file_info=True
+        )
         # Check if any files are present
-        if '[Files attached:' in message_history_with_files:
+        if "[Files attached:" in message_history_with_files:
             file_context_section = f"""
 <conversation_history_with_files>
 Recent conversation (includes file attachment IDs):
@@ -462,9 +510,9 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
     if user_goals:
         goals_lines = []
         for g in user_goals:
-            g_title = g.get('title', '')
-            g_current = g.get('current_value', 0)
-            g_target = g.get('target_value', 0)
+            g_title = g.get("title", "")
+            g_current = g.get("current_value", 0)
+            g_target = g.get("target_value", 0)
             goals_lines.append(f'- "{g_title}" (Progress: {g_current}/{g_target})')
         goals_list = "\n".join(goals_lines)
         goal_section = f"""
@@ -480,16 +528,23 @@ Keep these goals in mind when giving advice or suggestions.
     context_section = ""
     if context:
         # Sanitize title to prevent prompt injection (escape angle brackets and quotes)
-        safe_title = (context.title or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        safe_title = (
+            (context.title or "")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
         context_section = f"""<current_context>
-{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or 'unknown'})
+{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or "unknown"})
 Keep this context in mind when answering their question.
 </current_context>
 
 """
 
     # Build conditional instruction hints for the template
-    plugin_instruction_hint = "- Regard the <plugin_instructions>" if plugin_info else ""
+    plugin_instruction_hint = (
+        "- Regard the <plugin_instructions>" if plugin_info else ""
+    )
     plugin_personality_hint = f"- Reflect {app.name}'s personality" if app else ""
 
     # Build template variables dict for LangSmith prompt
@@ -508,7 +563,10 @@ Keep this context in mind when answering their question.
 
     # Fetch and render the prompt template from LangSmith (with caching + fallback)
     try:
-        from utils.observability.langsmith_prompts import get_agentic_system_prompt_template, render_prompt
+        from utils.observability.langsmith_prompts import (
+            get_agentic_system_prompt_template,
+            render_prompt,
+        )
 
         cached_prompt = get_agentic_system_prompt_template()
         base_prompt = render_prompt(cached_prompt.template_text, template_variables)
@@ -520,7 +578,9 @@ Keep this context in mind when answering their question.
         return base_prompt.strip()
 
     except Exception as e:
-        logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
+        logger.error(
+            f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}"
+        )
 
     # Inline fallback prompt - used when LangSmith is unavailable
     #
@@ -622,6 +682,14 @@ When the user asks to "show a graph", "chart", "plot", or "visualize" data:
 3. Use "line" chart_type for trends over time, "bar" for comparisons
 4. In your text response, briefly describe key insights from the data
 </chart_visualization>
+
+<genui_instructions>
+When the user asks a location-based question (nearest X, where is Y, find me Z nearby), respond with ONLY this JSON:
+{"type":"genui","component":"location_prompt","message":"Can you share your location?","actions":["yes","no"]}
+When the user provides coordinates (lat/lng) in a follow-up, respond with:
+{"type":"genui","component":"map_result","message":"<answer>","location":{"lat":0.0,"lng":0.0,"label":"<place name>"}}
+For all other queries respond with plain text. Never wrap genui JSON in markdown code fences.
+</genui_instructions>
 
 <conversation_retrieval_strategies>
 To maximize context and find the most relevant conversations, follow these strategies:
@@ -801,6 +869,27 @@ NEVER make up information. If tools return empty, give SHORT 1-2 line response.
 Sound human: "I don't have that" not "no data in logs".
 </critical_accuracy_rules>
 
+<genui_instructions>
+**Generative UI (GenUI) - Interactive Components:**
+
+When responding to location-based or interactive queries, return structured JSON instead of plain text to enable interactive UI components on the user's device.
+
+When to use GenUI:
+- User asks about places, locations, or directions ("where is the nearest...?", "how do I get to...?", "what restaurants are nearby?")
+- User asks about conversation locations ("where was I when I talked to X?")
+- You need to ask the user to confirm an action or share information
+- User requests interactive prompts (yes/no questions, confirmations)
+
+GenUI JSON Formats:
+1. Location Prompt: {"type": "genui", "component": "location_prompt", "message": "Can you share your location?", "actions": ["yes", "no"]}
+2. Map Result: {"type": "genui", "component": "map_result", "message": "Nearest 7-Eleven is 200m away", "location": {"lat": 37.7749, "lng": -122.4194, "label": "7-Eleven"}}
+3. Location Answer: {"type": "genui", "component": "location_answer", "message": "You were at St. Mary Hospital", "location": {"lat": 37.7749, "lng": -122.4194, "label": "St. Mary Hospital"}}
+4. Result Card: {"type": "genui", "component": "result_card", "title": "Coffee Shop", "description": "Great espresso", "distance": "500m", "location": {"lat": 37.78, "lng": -122.41, "label": "Coffee Shop"}, "actions": ["yes", "no"]}
+5. Confirm Prompt: {"type": "genui", "component": "confirm_prompt", "message": "Do you want to save this?", "actions": ["yes", "no"]}
+
+Rules: Only use GenUI for locations/interactive queries. For regular questions, return plain text.
+</genui_instructions>
+
 <instructions>
 - Be casual, concise, direct—text like a friend
 - Give specific feedback; never generic
@@ -840,7 +929,7 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return llm_medium_stream.invoke(prompt, {"callbacks": callbacks}).content
 
 
 # **************************************************
@@ -858,12 +947,15 @@ def retrieve_memory_context_params(
 
     user_name = get_user_name(uid, use_default=False)
     transcript = TranscriptSegment.segments_as_string(
-        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+        transcript_segments,
+        include_timestamps=False,
+        user_name=user_name,
+        people=people,
     )
     if len(transcript) == 0:
         return []
 
-    prompt = f'''
+    prompt = f"""
     Based on the current transcript of a conversation.
 
     Your task is to extract the correct and most accurate context in the conversation, to be used to retrieve more information.
@@ -871,19 +963,23 @@ def retrieve_memory_context_params(
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
-        logger.error(f'Error determining memory discard: {e}')
+        logger.error(f"Error determining memory discard: {e}")
         return []
 
 
 def obtain_emotional_message(
-    uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str], context: str, emotion: str
+    uid: str,
+    transcript_segments: List[TranscriptSegment],
+    person_ids: List[str],
+    context: str,
+    emotion: str,
 ) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
@@ -893,7 +989,10 @@ def obtain_emotional_message(
         people = [Person(**p) for p in people_data]
 
     transcript = TranscriptSegment.segments_as_string(
-        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+        transcript_segments,
+        include_timestamps=False,
+        user_name=user_name,
+        people=people,
     )
     prompt = f"""
     You are a thoughtful and encouraging Friend.
@@ -916,7 +1015,7 @@ def obtain_emotional_message(
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     with track_usage(uid, Features.CHAT):
         return llm_mini.invoke(prompt).content
 
@@ -929,36 +1028,44 @@ def obtain_emotional_message(
 class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
-        examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation.',
+        examples=[["John Doe", "Jane Doe"]],
+        description="Identify all the people names who were mentioned during the conversation.",
     )
     topics: List[str] = Field(
         default=[],
-        examples=[['Artificial Intelligence', 'Machine Learning']],
-        description='List all the main topics and subtopics that were discussed.',
+        examples=[["Artificial Intelligence", "Machine Learning"]],
+        description="List all the main topics and subtopics that were discussed.",
     )
     entities: List[str] = Field(
         default=[],
-        examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation.',
+        examples=[["OpenAI", "GPT-4"]],
+        description="List any products, technologies, places, or other entities that are relevant to the conversation.",
     )
     dates: List[str] = Field(
         default=[],
-        examples=[['2024-01-01', '2024-01-02']],
-        description=f'Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.',
+        examples=[["2024-01-01", "2024-01-02"]],
+        description=f"Extract any dates mentioned in the conversation. Use the format YYYY-MM-DD.",
     )
 
 
 class FiltersToUse(BaseModel):
-    people: List[str] = Field(default=[], description='People, names that could be relevant')
-    topics: List[str] = Field(default=[], description='Topics and subtopics that can help finding more information')
+    people: List[str] = Field(
+        default=[], description="People, names that could be relevant"
+    )
+    topics: List[str] = Field(
+        default=[],
+        description="Topics and subtopics that can help finding more information",
+    )
     entities: List[str] = Field(
-        default=[], description='products, technologies, places, or other entities that could be relevant.'
+        default=[],
+        description="products, technologies, places, or other entities that could be relevant.",
     )
 
 
 class OutputQuestion(BaseModel):
-    question: str = Field(description='The extracted user question from the conversation.')
+    question: str = Field(
+        description="The extracted user question from the conversation."
+    )
 
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
@@ -974,7 +1081,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     if len(user_last_messages) == 0:
         return ""
 
-    prompt = f'''
+    prompt = f"""
     You will be given a recent conversation between a <user> and an <AI>. \
     The conversation may include a few messages exchanged in <previous_messages> and partly build up the proper question. \
     Your task is to understand the <user_last_messages> and identify the question or follow-up question the user is asking.
@@ -1032,7 +1139,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1040,35 +1147,45 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
 
 
 def retrieve_metadata_fields_from_transcript(
-    uid: str, created_at: datetime, transcript_segment: List[dict], tz: str, photos: List[ConversationPhoto] = None
+    uid: str,
+    created_at: datetime,
+    transcript_segment: List[dict],
+    tz: str,
+    photos: List[ConversationPhoto] = None,
 ) -> ExtractedInformation:
     context_parts = []
     if transcript_segment:
-        transcript = ''
+        transcript = ""
         for segment in transcript_segment:
-            transcript += f'{segment["text"].strip()}\n\n'
+            transcript += f"{segment['text'].strip()}\n\n"
         if transcript.strip():
-            context_parts.append(f"Conversation Transcript:\n```\n{transcript.strip()}\n```")
+            context_parts.append(
+                f"Conversation Transcript:\n```\n{transcript.strip()}\n```"
+            )
 
     if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+        photo_descriptions = ConversationPhoto.photos_as_string(
+            photos, include_timestamps=True
+        )
+        if photo_descriptions != "None":
+            context_parts.append(
+                f"Photo Descriptions from a wearable camera:\n{photo_descriptions}"
+            )
 
     if not context_parts:
-        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+        return {"people": [], "topics": [], "entities": [], "dates": []}
 
     full_context = "\n\n".join(context_parts)
 
     # TODO: ask it to use max 2 words? to have more standardization possibilities
-    prompt = f'''
+    prompt = f"""
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
     Your task is to extract the most accurate information from the content in the output object indicated below.
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime("%Y-%m-%d")} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
@@ -1079,57 +1196,59 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace('    ', '')
+    """.replace("    ", "")
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+            result: ExtractedInformation = llm_mini.with_structured_output(
+                ExtractedInformation
+            ).invoke(prompt)
     except Exception as e:
-        logger.error(f'e {e}')
-        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+        logger.error(f"e {e}")
+        return {"people": [], "topics": [], "entities": [], "dates": []}
 
     def normalize_filter(value: str) -> str:
         # Convert to lowercase and strip whitespace
         value = value.lower().strip()
 
         # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
+        value = re.sub(r"[^\w\s-]", "", value)
+        value = re.sub(r"\s+", " ", value)
 
         # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
+        filler_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"}
+        value = " ".join(word for word in value.split() if word not in filler_words)
 
         # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
+        value = value.replace("artificial intelligence", "ai")
+        value = value.replace("machine learning", "ml")
+        value = value.replace("natural language processing", "nlp")
 
         return value.strip()
 
     metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.topics],
-        'dates': [],
+        "people": [normalize_filter(p) for p in result.people],
+        "topics": [normalize_filter(t) for t in result.topics],
+        "entities": [normalize_filter(e) for e in result.topics],
+        "dates": [],
     }
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
     for date in result.dates:
         try:
-            date = datetime.strptime(date, '%Y-%m-%d')
+            date = datetime.strptime(date, "%Y-%m-%d")
             # if date.year > 2025:
             #    continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+            metadata["dates"].append(date.strftime("%Y-%m-%d"))
         except Exception as e:
-            logger.error(f'Error parsing date: {e}')
+            logger.error(f"Error parsing date: {e}")
 
-    for p in metadata['people']:
-        add_filter_category_item(uid, 'people', p)
-    for t in metadata['topics']:
-        add_filter_category_item(uid, 'topics', t)
-    for e in metadata['entities']:
-        add_filter_category_item(uid, 'entities', e)
-    for d in metadata['dates']:
-        add_filter_category_item(uid, 'dates', d)
+    for p in metadata["people"]:
+        add_filter_category_item(uid, "people", p)
+    for t in metadata["topics"]:
+        add_filter_category_item(uid, "topics", t)
+    for e in metadata["entities"]:
+        add_filter_category_item(uid, "entities", e)
+    for d in metadata["dates"]:
+        add_filter_category_item(uid, "dates", d)
 
     return metadata
 
@@ -1138,9 +1257,11 @@ def retrieve_metadata_from_message(
     uid: str, created_at: datetime, message_text: str, tz: str, source_spec: str = None
 ) -> ExtractedInformation:
     """Extract metadata from messaging app content"""
-    source_context = f"from {source_spec}" if source_spec else "from a messaging application"
+    source_context = (
+        f"from {source_spec}" if source_spec else "from a messaging application"
+    )
 
-    prompt = f'''
+    prompt = f"""
     You will be given the content of a message or conversation {source_context}.
 
     Your task is to extract the most accurate information from the message in the output object indicated below.
@@ -1151,7 +1272,7 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime("%Y-%m-%d")} in UTC. 
     {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
@@ -1163,7 +1284,7 @@ def retrieve_metadata_from_message(
     ```
     {message_text}
     ```
-    '''.replace('    ', '')
+    """.replace("    ", "")
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1174,7 +1295,7 @@ def retrieve_metadata_from_text(
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
-    prompt = f'''
+    prompt = f"""
     You will be given the content of a text {source_context}.
 
     Your task is to extract the most accurate information from the text in the output object indicated below.
@@ -1185,7 +1306,7 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
+    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime("%Y-%m-%d")} in UTC. 
     {tz} is the user's timezone, convert it to UTC and respond in UTC.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
@@ -1197,7 +1318,7 @@ def retrieve_metadata_from_text(
     ```
     {text}
     ```
-    '''.replace('    ', '')
+    """.replace("    ", "")
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1205,60 +1326,62 @@ def retrieve_metadata_from_text(
 def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     """Process the extracted metadata from any source"""
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        result: ExtractedInformation = llm_mini.with_structured_output(
+            ExtractedInformation
+        ).invoke(prompt)
     except Exception as e:
-        logger.error(f'Error extracting metadata: {e}')
-        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+        logger.error(f"Error extracting metadata: {e}")
+        return {"people": [], "topics": [], "entities": [], "dates": []}
 
     def normalize_filter(value: str) -> str:
         # Convert to lowercase and strip whitespace
         value = value.lower().strip()
 
         # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
+        value = re.sub(r"[^\w\s-]", "", value)
+        value = re.sub(r"\s+", " ", value)
 
         # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
+        filler_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to"}
+        value = " ".join(word for word in value.split() if word not in filler_words)
 
         # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
+        value = value.replace("artificial intelligence", "ai")
+        value = value.replace("machine learning", "ml")
+        value = value.replace("natural language processing", "nlp")
 
         return value.strip()
 
     metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.entities],
-        'dates': [],
+        "people": [normalize_filter(p) for p in result.people],
+        "topics": [normalize_filter(t) for t in result.topics],
+        "entities": [normalize_filter(e) for e in result.entities],
+        "dates": [],
     }
 
     for date in result.dates:
         try:
-            date = datetime.strptime(date, '%Y-%m-%d')
+            date = datetime.strptime(date, "%Y-%m-%d")
             if date.year > 2025:
                 continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
+            metadata["dates"].append(date.strftime("%Y-%m-%d"))
         except Exception as e:
-            logger.error(f'Error parsing date: {e}')
+            logger.error(f"Error parsing date: {e}")
 
-    for p in metadata['people']:
-        add_filter_category_item(uid, 'people', p)
-    for t in metadata['topics']:
-        add_filter_category_item(uid, 'topics', t)
-    for e in metadata['entities']:
-        add_filter_category_item(uid, 'entities', e)
-    for d in metadata['dates']:
-        add_filter_category_item(uid, 'dates', d)
+    for p in metadata["people"]:
+        add_filter_category_item(uid, "people", p)
+    for t in metadata["topics"]:
+        add_filter_category_item(uid, "topics", t)
+    for e in metadata["entities"]:
+        add_filter_category_item(uid, "entities", e)
+    for d in metadata["dates"]:
+        add_filter_category_item(uid, "dates", d)
 
     return metadata
 
 
 def select_structured_filters(question: str, filters_available: dict) -> dict:
-    prompt = f'''
+    prompt = f"""
     Based on a question asked by the user to an AI, the AI needs to search for the user information related to topics, entities, people, and dates that will help it answering.
     Your task is to identify the correct fields that can be related to the question and can help answering.
 
@@ -1270,15 +1393,21 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
         # print('select_structured_filters:', response.dict())
-        response.topics = [t for t in response.topics if t in filters_available['topics']]
-        response.people = [p for p in response.people if p in filters_available['people']]
-        response.entities = [e for e in response.entities if e in filters_available['entities']]
+        response.topics = [
+            t for t in response.topics if t in filters_available["topics"]
+        ]
+        response.people = [
+            p for p in response.people if p in filters_available["people"]
+        ]
+        response.entities = [
+            e for e in response.entities if e in filters_available["entities"]
+        ]
         return response.dict()
     except ValidationError:
         return {}
@@ -1289,16 +1418,20 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 # **************************************************
 
 
-def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
+def extract_question_from_transcript(
+    uid: str, segments: List[TranscriptSegment]
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
-    person_ids = list(set(segment.person_id for segment in segments if segment.person_id))
+    person_ids = list(
+        set(segment.person_id for segment in segments if segment.person_id)
+    )
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    prompt = f'''
+    prompt = f"""
     {user_name} is having a conversation.
 
     This is what you know about {user_name}: {memories_str}
@@ -1318,16 +1451,20 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     {TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)}
     ```
-    '''.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
         return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
 class OutputMessage(BaseModel):
-    message: str = Field(description='The message to be sent to the user.', max_length=200)
+    message: str = Field(
+        description="The message to be sent to the user.", max_length=200
+    )
 
 
-def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
+def provide_advice_message(
+    uid: str, segments: List[TranscriptSegment], context: str
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
     person_ids = [s.person_id for s in segments if s.person_id]
@@ -1336,7 +1473,9 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        segments, people=people, user_name=user_name
+    )
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
 
     prompt = f"""
@@ -1368,6 +1507,6 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace("    ", "").strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
         return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
