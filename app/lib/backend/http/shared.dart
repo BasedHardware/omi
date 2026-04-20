@@ -22,6 +22,14 @@ class ApiClient {
   }
 }
 
+class AuthTokenUnavailableException implements Exception {
+  final String message;
+  AuthTokenUnavailableException([this.message = 'No auth token found']);
+
+  @override
+  String toString() => 'AuthTokenUnavailableException: $message';
+}
+
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
@@ -42,7 +50,7 @@ Future<String> getAuthHeader() async {
     if (AuthService.instance.isSignedIn()) {
       // should only throw if the user is signed in but the token is not found
       // if the user is not signed in, the token will always be empty
-      throw Exception('No auth token found');
+      throw AuthTokenUnavailableException('No auth token found');
     }
   }
   return 'Bearer ${SharedPreferencesUtil().authToken}';
@@ -64,7 +72,18 @@ Future<Map<String, String>> buildHeaders({
   };
 
   if (requireAuthCheck) {
-    headers['Authorization'] = await getAuthHeader();
+    try {
+      headers['Authorization'] = await getAuthHeader();
+    } on AuthTokenUnavailableException {
+      // Signed-in user has no usable token (refresh returned null for a
+      // transient or degraded reason). Proceed without Authorization; the
+      // downstream HTTP 401 path in makeApiCall already calls
+      // AuthService.signOut(), so recovery runs where it was already wired.
+      // We avoid forcing sign-out here because getIdToken() treats generic
+      // failures as transient (e.g. offline / platform hiccups) and leaves
+      // currentUser intact.
+      Logger.debug('No auth token available for request, proceeding without Authorization header');
+    }
   }
 
   return headers;
