@@ -42,6 +42,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -74,6 +75,10 @@ class CaptureProvider extends ChangeNotifier
   Future<void>? _peopleRefreshFuture;
 
   TranscriptSegmentSocketService? _socket;
+  // Set to true while the BLE stream is being torn down as part of the
+  // desktop-audio handoff so that onClosed() does not reset the
+  // initialising lock prematurely.
+  bool _desktopHandoffInProgress = false;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
 
@@ -399,9 +404,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -415,13 +419,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -514,24 +518,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               MixpanelManager().omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               MixpanelManager().omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -619,8 +619,8 @@ class CaptureProvider extends ChangeNotifier
         }
 
         // Local storage syncs
-        var checkWalSupported =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+        var checkWalSupported = (_recordingDevice?.type == DeviceType.omi ||
+                _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
         if (checkWalSupported != _isWalSupported) {
@@ -723,9 +723,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1002,7 +1001,19 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+
+    // Hoist device update before any guard so _recordingDevice is always current.
     if (device != null) _updateRecordingDevice(device);
+
+    // On desktop, refuse to open a device stream while system audio is active or
+    // while the system-audio path is still initialising.  Both states are set
+    // synchronously by streamSystemAudioRecording() before its first await, so
+    // this check is race-free under the single-threaded Dart event loop.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug('streamDeviceRecording: skipped — system audio is active (state=$recordingState)');
+      return;
+    }
 
     bool wasPaused = _isPaused;
 
@@ -1010,7 +1021,29 @@ class CaptureProvider extends ChangeNotifier
     _sendCurrentGeolocation();
 
     await _resetStateVariables();
+
+    // Re-check after the first await so a near-simultaneous desktop
+    // system-audio start cannot race past the initial synchronous guard.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug('streamDeviceRecording: aborted after await — system audio is active (state=$recordingState)');
+      return;
+    }
+
     await _resetState();
+
+    // Re-check after the device-init await (_resetState opens BLE streams and
+    // the websocket).  A concurrent system-audio start that was queued while
+    // _resetState was suspended would now have set RecordingState.initialising;
+    // bail out so we do not leave a competing device WebSocket open.
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      Logger.debug(
+          'streamDeviceRecording: aborted after device-init await — system audio is active (state=$recordingState)');
+      await _cleanupCurrentState();
+      await _socket?.stop(reason: 'desktop handoff — aborting device init');
+      return;
+    }
 
     if (wasPaused) {
       await pauseDeviceRecording();
@@ -1024,6 +1057,89 @@ class CaptureProvider extends ChangeNotifier
     }
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream device recording');
+  }
+
+  /// Start streaming system audio on desktop.
+  ///
+  /// Sets [RecordingState.initialising] SYNCHRONOUSLY before the first await —
+  /// this acts as a mutex that prevents [streamDeviceRecording] and the keep-alive
+  /// timer from opening a competing WebSocket while the system-audio path is
+  /// being set up or already running.
+  ///
+  /// Device cleanup is done inline (not via [stopStreamDeviceRecording]) to
+  /// avoid an extra async hop that would widen the race window.
+  Future<void> streamSystemAudioRecording() async {
+    if (!PlatformService.isDesktop) return;
+
+    final previousRecordingDevice = _recordingDevice;
+
+    // --- SYNCHRONOUS state lock — this must come before any await ---
+    // Any concurrent call to streamDeviceRecording() or the keep-alive timer
+    // will see RecordingState.initialising and return early.
+    updateRecordingState(RecordingState.initialising);
+
+    // Capture the current (BLE) socket BEFORE _initiateWebsocket overwrites
+    // _socket with the new desktop socket.  The recovery helper must stop the
+    // OLD socket, not the newly-created one.
+    final socketBeforeDesktopInit = _socket;
+
+    Future<void> restorePreviousDeviceRecordingIfNeeded() async {
+      if (previousRecordingDevice == null) return;
+
+      Logger.debug('streamSystemAudioRecording: restoring prior device stream after desktop websocket startup failure');
+      // Stop the OLD BLE socket, not _socket which now points to the (failed)
+      // desktop socket after _initiateWebsocket ran.
+      await socketBeforeDesktopInit?.stop(reason: 'system audio websocket failed — restoring device stream');
+      updateRecordingState(RecordingState.stop);
+      await _resetState();
+    }
+
+    try {
+      await _resetStateVariables();
+
+      // Attempt to open the desktop websocket BEFORE tearing down the BLE path.
+      // This way, if _initiateWebsocket fails we still have a valid device stream
+      // to fall back to instead of silently dropping to RecordingState.stop.
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        channels: 1,
+        source: ConversationSource.desktop.name,
+      );
+
+      if (_socket == null) {
+        // Desktop socket did not come up — restore BLE device recording.
+        await restorePreviousDeviceRecordingIfNeeded();
+        return;
+      }
+
+      // Desktop websocket is confirmed up.  Now it is safe to tear down the
+      // prior BLE stream inline (no extra async hop needed after this point).
+      if (previousRecordingDevice != null) {
+        // Signal onClosed() not to reset the initialising lock when the BLE
+        // stream closes as part of this intentional handoff.
+        _desktopHandoffInProgress = true;
+        try {
+          await _cleanupCurrentState();
+        } finally {
+          _desktopHandoffInProgress = false;
+        }
+        await _socket?.stop(reason: 'system audio recording started — replacing device stream');
+      }
+
+      updateRecordingState(RecordingState.systemAudioRecord);
+    } catch (_) {
+      await restorePreviousDeviceRecordingIfNeeded();
+      rethrow;
+    }
+  }
+
+  /// Stop system audio recording and reset state.
+  Future<void> stopSystemAudioRecording() async {
+    if (!PlatformService.isDesktop) return;
+    await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop system audio recording');
   }
 
   @override
@@ -1043,7 +1159,13 @@ class CaptureProvider extends ChangeNotifier
       }
     }
 
-    notifyListeners();
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord ||
+            (recordingState == RecordingState.initialising && !_desktopHandoffInProgress))) {
+      updateRecordingState(RecordingState.stop);
+    } else {
+      notifyListeners();
+    }
     _startKeepAliveServices();
   }
 
@@ -1070,8 +1192,31 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
 
+      // Do not attempt a BLE or phone-mic WebSocket reconnect while system audio
+      // is streaming or while the system-audio path is still initialising.
+      // recordingDeviceServiceReady returns true for systemAudioRecord, so without
+      // this guard the timer would open a competing device WebSocket alongside the
+      // active system-audio one — the root cause of issue #3244.
+      if (PlatformService.isDesktop &&
+          (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+        Logger.debug('[Provider] keep alive - system audio active, skipping device reconnect');
+        t.cancel();
+        return;
+      }
+
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+
+        // Re-check after the codec await: system audio may have started
+        // initialising while _getAudioCodec was suspended.  Opening a device
+        // websocket now would create a competing stream alongside system audio.
+        if (PlatformService.isDesktop &&
+            (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+          Logger.debug('[Provider] keep alive - system audio started during codec await, skipping device websocket');
+          t.cancel();
+          return;
+        }
+
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
@@ -1091,7 +1236,12 @@ class CaptureProvider extends ChangeNotifier
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
 
-    notifyListeners();
+    if (PlatformService.isDesktop &&
+        (recordingState == RecordingState.systemAudioRecord || recordingState == RecordingState.initialising)) {
+      updateRecordingState(RecordingState.stop);
+    } else {
+      notifyListeners();
+    }
     _startKeepAliveServices();
   }
 
