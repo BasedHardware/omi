@@ -10,7 +10,7 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
-from .clients import llm_mini, parser, llm_high, llm_medium_experiment
+from .clients import get_llm, parser
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ Provide:
 
     folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | folder_parser
+    chain = prompt | get_llm('conv_folder') | folder_parser
 
     try:
         response: FolderAssignment = chain.invoke(
@@ -231,7 +231,7 @@ Content:
             ).strip()
         ]
     )
-    chain = prompt | llm_mini | custom_parser
+    chain = prompt | get_llm('conv_discard') | custom_parser
     try:
         response: DiscardConversation = chain.invoke(
             {
@@ -544,7 +544,7 @@ def extract_action_items(
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-extract-actions") | action_items_parser
+    chain = prompt | get_llm('conv_action_items', cache_key='omi-extract-actions') | action_items_parser
 
     current_time = datetime.now(timezone.utc)
 
@@ -649,7 +649,7 @@ def get_transcript_structure(
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
+    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
 
     response = chain.invoke(
         {
@@ -733,7 +733,7 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
+    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
 
     response = chain.invoke(
         {
@@ -782,7 +782,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = llm_medium_experiment.invoke(prompt, prompt_cache_key="omi-app-result")
+    response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -866,7 +866,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
     """
 
     try:
-        with_parser = llm_mini.with_structured_output(SuggestedAppsSelection)
+        with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
         response: SuggestedAppsSelection = with_parser.invoke(prompt)
 
         # Validate that suggested app IDs exist in the available apps
@@ -937,7 +937,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
     """
 
     try:
-        with_parser = llm_mini.with_structured_output(BestAppSelection)
+        with_parser = get_llm('conv_app_select').with_structured_output(BestAppSelection)
         response: BestAppSelection = with_parser.invoke(prompt)
         selected_app_id = response.app_id
 
@@ -966,5 +966,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     The conversation is:
     {conversation_text}
     """
-    response = llm_medium_experiment.invoke(full_prompt, prompt_cache_key="omi-daily-summary")
+    response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(full_prompt)
     return response.content

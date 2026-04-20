@@ -523,8 +523,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             }
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch
             if (packageSize == 0xFF && packageOffset + 5 <= value.length) {
-              var epoch =
-                  value[packageOffset + 1] |
+              var epoch = value[packageOffset + 1] |
                   (value[packageOffset + 2] << 8) |
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);
@@ -1309,8 +1308,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
             // Timestamp marker: 0xFF followed by 4-byte little-endian epoch (firmware >= 3.0.16)
             if (useMarkers && packageSize == 0xFF && packageOffset + 5 <= bufferLength) {
-              var epoch =
-                  tcpBuffer[packageOffset + 1] |
+              var epoch = tcpBuffer[packageOffset + 1] |
                   (tcpBuffer[packageOffset + 2] << 8) |
                   (tcpBuffer[packageOffset + 3] << 16) |
                   (tcpBuffer[packageOffset + 4] << 24);
@@ -1364,8 +1362,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             // Extract complete frame
             var frame = tcpBuffer.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
 
-            bool validToc =
-                frame.isNotEmpty &&
+            bool validToc = frame.isNotEmpty &&
                 (frame[0] == 0xb8 ||
                     frame[0] == 0xb0 ||
                     frame[0] == 0xbc ||

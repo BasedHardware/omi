@@ -3,7 +3,7 @@ from typing import Optional, List
 from models.app import App
 from models.chat import Message, MessageSender
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
-from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
+from .clients import get_llm
 from .usage_tracker import track_usage, Features
 import logging
 
@@ -23,11 +23,9 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'
         )
     )
-    llm_call = llm_persona_mini_stream
-    if app.is_influencer:
-        llm_call = llm_persona_medium_stream
+    feature = 'persona_chat_premium' if app.is_influencer else 'persona_chat'
     with track_usage(uid, Features.PERSONA):
-        return llm_call.invoke(chat_messages).content
+        return get_llm(feature, streaming=True).invoke(chat_messages).content
 
 
 def answer_persona_question_stream(uid: str, app: App, messages: List[Message], callbacks: []) -> str:
@@ -38,11 +36,9 @@ def answer_persona_question_stream(uid: str, app: App, messages: List[Message], 
             chat_messages.append(AIMessage(content=msg.text))
         else:
             chat_messages.append(HumanMessage(content=msg.text))
-    llm_call = llm_persona_mini_stream
-    if app.is_influencer:
-        llm_call = llm_persona_medium_stream
+    feature = 'persona_chat_premium' if app.is_influencer else 'persona_chat'
     with track_usage(uid, Features.PERSONA):
-        return llm_call.invoke(chat_messages, {'callbacks': callbacks}).content
+        return get_llm(feature, streaming=True).invoke(chat_messages, {'callbacks': callbacks}).content
 
 
 def condense_memories(memories, name):
@@ -72,7 +68,7 @@ The output must be as concise as possible while retaining all necessary informat
 Facts:
 {combined_memories}
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
     return response.content
 
 
@@ -86,7 +82,7 @@ Facts:
 
 Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
 
-    response = llm_medium_experiment.invoke(prompt)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
     description = response.content
     return description
 
@@ -121,7 +117,7 @@ The output must be as concise as possible while retaining all necessary context 
 Conversations:
 {combined_conversations}
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
     return response.content
 
 
@@ -158,7 +154,7 @@ Generate the condensed context now.
 Tweets:
 {tweets}
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
     return response.content
 
 
@@ -206,5 +202,5 @@ def generate_persona_intro_message(prompt: str, name: str):
         },
     ]
 
-    response = llm_medium_experiment.invoke(messages)
+    response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(messages)
     return response.content.strip('"').strip()

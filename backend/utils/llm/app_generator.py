@@ -10,7 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 from openai import OpenAI
 
-from utils.llm.clients import llm_medium, llm_mini
+from utils.llm.clients import get_llm
 
 # App categories available in the system
 APP_CATEGORIES = [
@@ -106,7 +106,7 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
         {"role": "user", "content": f"Create an app based on this description:\n\n{user_prompt}"},
     ]
 
-    response = await llm_medium.ainvoke(messages)
+    response = await get_llm('app_generator').ainvoke(messages)
 
     # Parse the JSON response
     content = response.content.strip()
@@ -200,7 +200,7 @@ def generate_description(app_name: str, description: str) -> str:
     Description: {description}
     """
     prompt = prompt.replace('    ', '').strip()
-    return llm_mini.invoke(prompt).content
+    return get_llm('app_integration').invoke(prompt).content
 
 
 def generate_description_and_emoji(app_name: str, prompt: str) -> dict:
@@ -219,7 +219,9 @@ Respond ONLY with the JSON object, no other text."""
     user_prompt = f"""App Name: {app_name}
 What it does: {prompt}"""
 
-    response = llm_mini.invoke([{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
+    response = get_llm('app_integration').invoke(
+        [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+    )
 
     content = response.content.strip()
 

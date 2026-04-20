@@ -10,7 +10,7 @@ from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
-from .clients import llm_mini, llm_high
+from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,8 +81,7 @@ def new_memories_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Memories)
-        chain = extract_memories_prompt | llm_mini | parser
-        # with_parser = llm_mini.with_structured_output(Facts)
+        chain = extract_memories_prompt | get_llm('memories') | parser
         response: Memories = chain.invoke(
             {
                 'user_name': user_name,
@@ -123,7 +122,7 @@ def extract_memories_from_text(
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
-        chain = extract_memories_text_content_prompt | llm_mini | parser
+        chain = extract_memories_text_content_prompt | get_llm('memories') | parser
         response: Memories = chain.invoke(
             {
                 'user_name': user_name,
@@ -175,7 +174,7 @@ def new_learnings_extractor(
 
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
-        chain = extract_learnings_prompt | llm_high | parser
+        chain = extract_learnings_prompt | get_llm('learnings') | parser
         response: Learnings = chain.invoke(
             {
                 'user_name': user_name,
@@ -221,7 +220,7 @@ Memory: "{memory}"
 Respond with ONLY "system" or "interesting" - nothing else."""
 
     try:
-        response = llm_mini.invoke(prompt)
+        response = get_llm('memory_category').invoke(prompt)
         category_str = response.content.strip().lower()
         if category_str == 'interesting':
             return MemoryCategory.interesting
@@ -295,7 +294,7 @@ Respond with the action and reasoning."""
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoryResolution)
-        chain = llm_mini | parser
+        chain = get_llm('memory_conflict') | parser
         response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
         return response
     except Exception as e:

@@ -14,7 +14,7 @@ from models.trend import (
     ai_product_options,
     TrendType,
 )
-from utils.llm.clients import llm_mini
+from utils.llm.clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], per
     {transcript}
     '''.replace('    ', '').strip()
     try:
-        with_parser = llm_mini.with_structured_output(ExpectedOutput)
+        with_parser = get_llm('trends').with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)
         filtered = []
         for item in response.items:

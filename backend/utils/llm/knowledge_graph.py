@@ -10,7 +10,7 @@ from utils.executors import critical_executor, storage_executor
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from .clients import llm_mini
+from .clients import get_llm
 from .usage_tracker import track_usage, Features
 from database import knowledge_graph as kg_db
 
@@ -97,7 +97,7 @@ def extract_knowledge_from_memory(
         )
 
         with track_usage(uid, Features.KNOWLEDGE_GRAPH):
-            response = llm_mini.invoke(prompt)
+            response = get_llm('knowledge_graph').invoke(prompt)
         extraction: KnowledgeGraphExtraction = parser.parse(response.content)
 
         label_to_node_id = {}
@@ -189,7 +189,7 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
             )
 
             with track_usage(uid, Features.KNOWLEDGE_GRAPH):
-                response = llm_mini.invoke(prompt)
+                response = get_llm('knowledge_graph').invoke(prompt)
             extraction: KnowledgeGraphExtraction = parser.parse(response.content)
 
             created_nodes = []
