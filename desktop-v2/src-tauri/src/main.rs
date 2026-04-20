@@ -104,6 +104,11 @@ fn main() {
                 }
             });
 
+            // Bluetooth state — shared Manager + Adapter + peripheral cache.
+            // The adapter itself is created lazily on first scan/connect so we
+            // don't touch the Bluetooth stack at startup.
+            commands::bluetooth::init(app.handle());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -117,7 +122,13 @@ fn main() {
             commands::config::get_gemini_api_key,
             commands::debug::debug_backend_ping,
             commands::debug::backend_request,
+            commands::insight_sql::execute_insight_sql,
             commands::system::get_memory_usage,
+            commands::bluetooth::bluetooth_start_scan,
+            commands::bluetooth::bluetooth_stop_scan,
+            commands::bluetooth::bluetooth_connect,
+            commands::bluetooth::bluetooth_disconnect,
+            commands::bluetooth::bluetooth_list_connected,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

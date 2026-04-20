@@ -14,9 +14,11 @@ import { GoalsPage } from "./components/goals/GoalsPage";
 import { GoalsHistoryPage } from "./components/goals/GoalsHistoryPage";
 import { GoalCelebrationOverlay } from "./components/goals/GoalCelebrationOverlay";
 import { MemoriesPage } from "./components/memories/MemoriesPage";
+import { InsightsPage } from "./components/insights/InsightsPage";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { AuraPage } from "./components/aura/AuraPage";
 import { AppsPage } from "./components/apps/AppsPage";
+import { DeviceSettingsPage } from "./components/devices/DeviceSettingsPage";
 import { MemoryIndicator } from "./components/settings/MemoryIndicator";
 import {
   startTaskDeduplication,
@@ -99,7 +101,9 @@ function KeepAliveRoutes() {
       <KeepAlivePane active={pathname === "/goals"}><GoalsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/goals/history")}><GoalsHistoryPage /></KeepAlivePane>
       <KeepAlivePane active={match("/memories")}><MemoriesPage /></KeepAlivePane>
+      <KeepAlivePane active={match("/insights")}><InsightsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/apps")}><AppsPage /></KeepAlivePane>
+      <KeepAlivePane active={match("/devices")}><DeviceSettingsPage /></KeepAlivePane>
       <KeepAlivePane active={auraActive}><AuraPage /></KeepAlivePane>
       <KeepAlivePane active={match("/settings")}><SettingsPage /></KeepAlivePane>
     </>

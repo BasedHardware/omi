@@ -31,6 +31,9 @@ sha2 = "0.10"
 url = "2"
 dotenvy = "0.15"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+btleplug = "0.11"
+futures = "0.3"
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Embedded backend — the existing Rust backend as a library crate
 nooto-desktop-backend = { path = "../../desktop/Backend-Rust" }

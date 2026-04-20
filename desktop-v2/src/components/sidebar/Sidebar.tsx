@@ -7,6 +7,7 @@ import {
   AudioLines,
   ListTodo,
   Brain,
+  Lightbulb,
   Mic,
   MicOff,
   Rewind,
@@ -17,6 +18,7 @@ import {
   LayoutGrid,
   ChevronsUpDown,
   Target,
+  Bluetooth,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useSidebarStore } from "../../stores/sidebarStore";
@@ -47,7 +49,9 @@ const navItems = [
   { to: "/tasks", label: "Tasks", icon: ListTodo },
   { to: "/goals", label: "Goals", icon: Target },
   { to: "/memories", label: "Memories", icon: Brain },
+  { to: "/insights", label: "Insights", icon: Lightbulb },
   { to: "/apps", label: "Apps", icon: LayoutGrid },
+  { to: "/devices", label: "Devices", icon: Bluetooth },
   { to: "/rewind", label: "Rewind", icon: Rewind },
 ];
 
