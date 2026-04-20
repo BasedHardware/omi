@@ -31,7 +31,7 @@ If you prefer to set up manually:
 cd backend
 
 # 1. Create your environment file
-cp .env.docker .env
+cp .env.example .env
 
 # 2. Edit .env and fill in your credentials:
 #    - SERVICE_ACCOUNT_JSON (GCP service account, single-line JSON)
