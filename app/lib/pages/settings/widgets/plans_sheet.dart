@@ -1023,8 +1023,8 @@ class _PlansSheetState extends State<PlansSheet> {
                           ),
                         ],
                         const SizedBox(height: 24),
-                        // Features list - only for paid plan users
-                        if (isUnlimited) ...[
+                        // Features list - shown to all users
+                        ...[
                           Column(
                             children: [
                               _buildFeatureItem(faIcon: FontAwesomeIcons.infinity, text: 'Unlimited conversations'),
