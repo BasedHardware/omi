@@ -9159,4 +9159,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Chat: $used üzenet ebben a hónapban';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

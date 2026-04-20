@@ -8972,4 +8972,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return '채팅: $used 이번 달 메시지';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

@@ -9138,4 +9138,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Tērzēšana: $used ziņojumi šomēnes';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

@@ -9059,4 +9059,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'الدردشة: $used رسالة هذا الشهر';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

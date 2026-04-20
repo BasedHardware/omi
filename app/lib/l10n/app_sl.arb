@@ -10699,5 +10699,6 @@
     "chatUsageCost": "Klepet: ${used} / ${limit} porabljeno ta mesec",
     "chatUsageCostNoLimit": "Klepet: ${used} porabljeno ta mesec",
     "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
-    "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec"
+    "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

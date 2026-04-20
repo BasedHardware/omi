@@ -3072,5 +3072,6 @@
     "chatUsageCost": "Chat: ${used} / ${limit} felhasználva ebben a hónapban",
     "chatUsageCostNoLimit": "Chat: ${used} felhasználva ebben a hónapban",
     "chatUsageMessages": "Chat: {used} / {limit} üzenet ebben a hónapban",
-    "chatUsageMessagesNoLimit": "Chat: {used} üzenet ebben a hónapban"
+    "chatUsageMessagesNoLimit": "Chat: {used} üzenet ebben a hónapban",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

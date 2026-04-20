@@ -2981,5 +2981,6 @@
     "chatUsageCost": "Chat: ${used} / ${limit} využité tento mesiac",
     "chatUsageCostNoLimit": "Chat: ${used} využité tento mesiac",
     "chatUsageMessages": "Chat: {used} / {limit} správ tento mesiac",
-    "chatUsageMessagesNoLimit": "Chat: {used} správ tento mesiac"
+    "chatUsageMessagesNoLimit": "Chat: {used} správ tento mesiac",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

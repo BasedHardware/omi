@@ -10699,5 +10699,6 @@
     "chatUsageCost": "چت: ${used} / ${limit} مصرف‌شده این ماه",
     "chatUsageCostNoLimit": "چت: ${used} مصرف‌شده این ماه",
     "chatUsageMessages": "چت: {used} / {limit} پیام این ماه",
-    "chatUsageMessagesNoLimit": "چت: {used} پیام این ماه"
+    "chatUsageMessagesNoLimit": "چت: {used} پیام این ماه",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

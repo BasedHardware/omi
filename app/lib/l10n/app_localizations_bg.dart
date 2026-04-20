@@ -9155,4 +9155,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Чат: $used съобщения този месец';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

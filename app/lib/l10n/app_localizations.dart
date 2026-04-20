@@ -17018,6 +17018,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chat: {used} messages this month'**
   String chatUsageMessagesNoLimit(String used);
+
+  /// No description provided for @chatQuotaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI chat messages used with Omi this month.'**
+  String get chatQuotaSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

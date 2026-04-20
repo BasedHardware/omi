@@ -2981,5 +2981,6 @@
     "chatUsageCost": "Trò chuyện: ${used} / ${limit} đã dùng tháng này",
     "chatUsageCostNoLimit": "Trò chuyện: ${used} đã dùng tháng này",
     "chatUsageMessages": "Trò chuyện: {used} / {limit} tin nhắn tháng này",
-    "chatUsageMessagesNoLimit": "Trò chuyện: {used} tin nhắn tháng này"
+    "chatUsageMessagesNoLimit": "Trò chuyện: {used} tin nhắn tháng này",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

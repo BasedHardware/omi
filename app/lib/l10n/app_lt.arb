@@ -2976,5 +2976,6 @@
     "chatUsageCost": "Pokalbis: ${used} / ${limit} panaudota šį mėnesį",
     "chatUsageCostNoLimit": "Pokalbis: ${used} panaudota šį mėnesį",
     "chatUsageMessages": "Pokalbis: {used} / {limit} žinučių šį mėnesį",
-    "chatUsageMessagesNoLimit": "Pokalbis: {used} žinučių šį mėnesį"
+    "chatUsageMessagesNoLimit": "Pokalbis: {used} žinučių šį mėnesį",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

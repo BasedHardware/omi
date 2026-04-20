@@ -3018,5 +3018,6 @@
     "chatUsageCost": "Obrolan: ${used} / ${limit} digunakan bulan ini",
     "chatUsageCostNoLimit": "Obrolan: ${used} digunakan bulan ini",
     "chatUsageMessages": "Obrolan: {used} / {limit} pesan bulan ini",
-    "chatUsageMessagesNoLimit": "Obrolan: {used} pesan bulan ini"
+    "chatUsageMessagesNoLimit": "Obrolan: {used} pesan bulan ini",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

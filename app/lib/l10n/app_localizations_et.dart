@@ -9117,4 +9117,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Vestlus: $used sõnumit sel kuul';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }
