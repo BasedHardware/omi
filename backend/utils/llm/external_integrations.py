@@ -36,7 +36,7 @@ def get_message_structure(
     For the overview, summarize the message with the main points discussed, make sure to capture the key information and important details.
     For the action items, include any tasks or actions that need to be taken based on the message.
     For the category, classify the message into one of the available categories.
-    For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, respond in user local timezone.
 
     Message Content: ```{text}```
     Message Source: {text_source_spec}
