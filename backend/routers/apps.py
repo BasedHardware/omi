@@ -1369,7 +1369,25 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
 
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'])
-async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+async def migrate_app_owner(
+    old_id: str,
+    old_authorization: str = Header(..., alias='X-Old-Authorization'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    # Security boundary: callers must prove control of the source legacy
+    # account before the backend migrates its apps or memories into the
+    # authenticated destination account.
+    if not old_authorization or len(str(old_authorization).split(' ')) != 2:
+        raise HTTPException(status_code=403, detail='You are not authorized to migrate this owner ID')
+
+    try:
+        old_uid = auth.verify_token(old_authorization.split(' ')[1])
+    except Exception:
+        raise HTTPException(status_code=403, detail='You are not authorized to migrate this owner ID')
+
+    if old_uid != old_id:
+        raise HTTPException(status_code=403, detail='You are not authorized to migrate a different owner ID')
+
     # Migrate app ownership in the database
     migrate_app_owner_id_db(uid, old_id)
 

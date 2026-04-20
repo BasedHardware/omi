@@ -218,10 +218,11 @@ class AuthenticationProvider extends BaseProvider {
     } catch (e) {
       if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
         final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+        final oldAuthToken = await FirebaseAuth.instance.currentUser?.getIdToken();
         if (oldUserId != null) {
           final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null) {
-            await migrateAppOwnerId(oldUserId);
+          if (newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
+            await migrateAppOwnerId(oldUserId, oldAuthToken);
           }
         }
         return;
@@ -247,6 +248,7 @@ class AuthenticationProvider extends BaseProvider {
           // Get existing user credentials
           final existingCred = e.credential;
           final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+          final oldAuthToken = await FirebaseAuth.instance.currentUser?.getIdToken();
 
           // Sign out current anonymous user
           await FirebaseAuth.instance.signOut();
@@ -260,8 +262,8 @@ class AuthenticationProvider extends BaseProvider {
           SharedPreferencesUtil().uid = newUserId ?? '';
           SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
           SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null) {
-            await migrateAppOwnerId(oldUserId);
+          if (oldUserId != null && newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
+            await migrateAppOwnerId(oldUserId, oldAuthToken);
           }
           return;
         }
@@ -282,7 +284,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<bool> migrateAppOwnerId(String oldId) async {
-    return await apps_api.migrateAppOwnerId(oldId);
+  Future<bool> migrateAppOwnerId(String oldId, String oldAuthToken) async {
+    return await apps_api.migrateAppOwnerId(oldId, oldAuthToken);
   }
 }
