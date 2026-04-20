@@ -768,18 +768,18 @@ class TestBYOKFingerprintValidation:
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
     def test_missing_header_raises_403(self, mock_get_state):
-        """BYOK-active user missing a required provider header → 403."""
+        """BYOK-active user sends some headers but missing a provider → 403."""
         from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
-        # Only send openai key, missing anthropic/gemini/deepgram
+        # Send only openai key — this is a broken BYOK attempt (partial headers)
         token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             with pytest.raises(HTTPException) as exc_info:
                 validate_byok_request('byok-uid')
             assert exc_info.value.status_code == 403
-            assert 'missing key header' in exc_info.value.detail
+            assert 'missing' in exc_info.value.detail
         finally:
             _byok_ctx.reset(token)
 
@@ -804,13 +804,28 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_no_headers_when_byok_active_raises_403(self, mock_get_state):
-        """BYOK-active user sending zero BYOK headers → 403."""
+    def test_no_headers_when_byok_active_falls_through(self, mock_get_state):
+        """BYOK-active user sending zero BYOK headers (e.g. mobile) → no error, falls through to Omi keys."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set({})
+        try:
+            validate_byok_request('byok-uid')  # Should NOT raise
+            assert get_byok_keys() == {}  # Context cleared, will use Omi keys
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_partial_headers_when_byok_active_raises_403(self, mock_get_state):
+        """BYOK-active user sending SOME but not all headers → 403 (incomplete BYOK attempt)."""
         from fastapi import HTTPException
         from utils.byok import _byok_ctx, validate_byok_request
 
         mock_get_state.return_value = self._mock_byok_state()
-        token = _byok_ctx.set({})
+        # Send only openai key, missing the rest — this is a broken BYOK attempt, not mobile
+        token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             with pytest.raises(HTTPException) as exc_info:
                 validate_byok_request('byok-uid')
@@ -866,16 +881,32 @@ class TestBYOKFingerprintValidation:
 
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
-    def test_websocket_validation_returns_error_string(self, mock_get_state):
-        """WebSocket validation returns error string instead of raising."""
+    def test_websocket_no_headers_falls_through(self, mock_get_state):
+        """BYOK-active user on WS with no headers (mobile) → falls through, no error."""
+        from utils.byok import _byok_ctx, validate_byok_websocket, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set({})  # No BYOK headers (mobile app)
+        try:
+            error = validate_byok_websocket('byok-uid')
+            assert error is None  # No error — mobile falls through
+            assert get_byok_keys() == {}  # Context cleared
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_websocket_partial_headers_returns_error(self, mock_get_state):
+        """BYOK-active user on WS with partial headers → error string."""
         from utils.byok import _byok_ctx, validate_byok_websocket
 
         mock_get_state.return_value = self._mock_byok_state()
-        token = _byok_ctx.set({})  # Missing all keys
+        # Send only one key — broken BYOK attempt
+        token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
         try:
             error = validate_byok_websocket('byok-uid')
             assert error is not None
-            assert 'missing key header' in error
+            assert 'missing' in error
         finally:
             _byok_ctx.reset(token)
 

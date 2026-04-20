@@ -146,9 +146,12 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     Behaviour:
     - If user is NOT BYOK-active → clears any BYOK headers from the context
       (so they are never used) and returns None.
-    - If user IS BYOK-active → every enrolled provider fingerprint must be
-      matched by a header whose SHA-256 equals the stored fingerprint.
-      Missing or mismatched headers → returns an error string.
+    - If user IS BYOK-active **and sends BYOK headers** → every header key's
+      SHA-256 must match the enrolled fingerprint.  Mismatch → error string.
+    - If user IS BYOK-active **but sends NO BYOK headers** (e.g. mobile app
+      which has no BYOK support) → clears context and falls through to normal
+      Omi keys + normal subscription enforcement.  The user can still use the
+      service on the platform that doesn't support BYOK.
     """
     import database.users as users_db
 
@@ -170,14 +173,23 @@ def _check_byok_validity(uid: str) -> Optional[str]:
             _byok_ctx.set(None)
         return None
 
-    # BYOK-active: validate every enrolled provider.
-    stored_fingerprints = state.get('fingerprints', {})
+    # BYOK-active user.
     request_keys = _byok_ctx.get() or {}
+
+    if not request_keys:
+        # BYOK-active but NO headers at all (e.g. mobile app).
+        # Fall through to normal Omi keys + normal subscription enforcement.
+        # Don't block — the user just isn't using BYOK on this platform.
+        _byok_ctx.set(None)
+        return None
+
+    # Headers present — validate every enrolled provider fingerprint.
+    stored_fingerprints = state.get('fingerprints', {})
 
     for provider, stored_fp in stored_fingerprints.items():
         raw_key = request_keys.get(provider)
         if not raw_key:
-            return f"BYOK active but missing key header for provider: {provider}"
+            return f"BYOK key header missing for enrolled provider: {provider}"
         request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
         if request_fp != stored_fp:
             return f"BYOK key fingerprint mismatch for provider: {provider}"
