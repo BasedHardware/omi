@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/main.dart' as app;
 
@@ -581,13 +582,14 @@ void _printFinalSummary(Map<String, List<FrameTiming>> allTimings) {
   debugPrint('');
 
   // Write results to file for comparison
-  _writeResultsToFile(allTimings);
+  await _writeResultsToFile(allTimings);
 }
 
-void _writeResultsToFile(Map<String, List<FrameTiming>> allTimings) {
+Future<void> _writeResultsToFile(Map<String, List<FrameTiming>> allTimings) async {
   try {
+    final dir = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_perf_$timestamp.csv');
+    final file = File('${dir.path}/omi_perf_$timestamp.csv');
 
     final buffer = StringBuffer();
     buffer.writeln('screen,frame_index,build_us,raster_us,total_us');
