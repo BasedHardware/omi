@@ -114,6 +114,7 @@ def _get_structured(
                         conversation.started_at,
                         language_code,
                         tz,
+                        uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                     )
@@ -194,6 +195,7 @@ def _get_structured(
                 conversation.started_at,
                 language_code,
                 tz,
+                uid,
                 photos=conversation.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,

@@ -5,6 +5,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from database.auth import get_user_name
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -590,6 +591,7 @@ def get_transcript_structure(
     started_at: datetime,
     language_code: str,
     tz: str,
+    uid: str,
     photos: List[ConversationPhoto] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
     output_language_code: str = None,
@@ -599,6 +601,11 @@ def get_transcript_structure(
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
     response_language = output_language_code or language_code
+    try:
+        user_name = get_user_name(uid)
+    except Exception as e:
+        logger.warning(f'Failed to load user name for transcript structuring (uid={uid}): {e}')
+        user_name = 'The User'
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
