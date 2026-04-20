@@ -9155,4 +9155,8 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಚಾಟ್ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ಚಾಟ್ ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
 }

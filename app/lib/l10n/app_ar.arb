@@ -2944,5 +2944,6 @@
     "chatUsageCostNoLimit": "الدردشة: ${used} مُستخدم هذا الشهر",
     "chatUsageMessages": "الدردشة: {used} / {limit} رسالة هذا الشهر",
     "chatUsageMessagesNoLimit": "الدردشة: {used} رسالة هذا الشهر",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "لقد وصلت إلى حد الدردشة الشهري. قم بترقية خطتك لمتابعة الدردشة."
 }

@@ -9133,4 +9133,8 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Anda telah mencapai batas chat bulanan. Upgrade paket Anda untuk melanjutkan chat.';
 }

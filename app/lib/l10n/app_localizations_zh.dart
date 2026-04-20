@@ -8959,4 +8959,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => '您已达到每月聊天限额。升级您的计划以继续聊天。';
 }

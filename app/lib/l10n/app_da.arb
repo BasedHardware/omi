@@ -2986,5 +2986,6 @@
     "chatUsageCostNoLimit": "Chat: ${used} brugt denne måned",
     "chatUsageMessages": "Chat: {used} / {limit} beskeder denne måned",
     "chatUsageMessagesNoLimit": "Chat: {used} beskeder denne måned",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
 }

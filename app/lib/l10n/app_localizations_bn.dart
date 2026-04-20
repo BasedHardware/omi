@@ -9132,4 +9132,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'আপনি আপনার মাসিক চ্যাট সীমায় পৌঁছেছেন। চ্যাট চালিয়ে যেতে আপনার প্ল্যান আপগ্রেড করুন।';
 }

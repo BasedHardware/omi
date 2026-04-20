@@ -9152,4 +9152,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => 'Вы достигли месячного лимита чата. Обновите план, чтобы продолжить общение.';
 }

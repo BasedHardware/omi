@@ -9200,4 +9200,8 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Du hast dein monatliches Chat-Limit erreicht. Upgrade deinen Plan, um weiterzuchatten.';
 }

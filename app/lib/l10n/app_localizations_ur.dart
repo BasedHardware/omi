@@ -9140,4 +9140,8 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'آپ اپنی ماہانہ چیٹ حد تک پہنچ گئے ہیں۔ چیٹ جاری رکھنے کے لیے اپنا پلان اپ گریڈ کریں۔';
 }

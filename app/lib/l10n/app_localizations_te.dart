@@ -9174,4 +9174,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'మీరు మీ నెలవారీ చాట్ పరిమితిని చేరుకున్నారు. చాట్ కొనసాగించడానికి మీ ప్లాన్‌ను అప్‌గ్రేడ్ చేయండి.';
 }

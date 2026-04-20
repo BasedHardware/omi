@@ -2977,5 +2977,6 @@
     "chatUsageCostNoLimit": "Vestlus: ${used} kasutatud sel kuul",
     "chatUsageMessages": "Vestlus: {used} / {limit} sõnumit sel kuul",
     "chatUsageMessagesNoLimit": "Vestlus: {used} sõnumit sel kuul",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
 }

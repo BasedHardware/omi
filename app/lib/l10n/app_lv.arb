@@ -2977,5 +2977,6 @@
     "chatUsageCostNoLimit": "Tērzēšana: ${used} izmantots šomēnes",
     "chatUsageMessages": "Tērzēšana: {used} / {limit} ziņojumi šomēnes",
     "chatUsageMessagesNoLimit": "Tērzēšana: {used} ziņojumi šomēnes",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
 }
