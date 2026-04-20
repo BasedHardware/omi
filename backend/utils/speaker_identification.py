@@ -231,6 +231,24 @@ for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
 
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
+    """
+    Detect speaker name from transcript text.
+
+    Uses NER (Named Entity Recognition) as the primary method for higher
+    accuracy, with regex patterns as fallback when spaCy isn't available.
+
+    NER catches natural mentions like "Tell John I'll be late" that regex misses.
+    """
+    # Primary: NER-based detection (catches natural mentions)
+    try:
+        from utils.ner_speaker_identification import detect_speaker_from_text_ner
+        ner_result = detect_speaker_from_text_ner(text)
+        if ner_result:
+            return ner_result
+    except Exception as e:
+        logger.debug(f"NER detection failed, using regex fallback: {e}")
+
+    # Fallback: regex patterns (original approach)
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
