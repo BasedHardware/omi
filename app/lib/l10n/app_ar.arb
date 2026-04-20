@@ -2943,5 +2943,6 @@
     "chatUsageCost": "الدردشة: ${used} / ${limit} مُستخدم هذا الشهر",
     "chatUsageCostNoLimit": "الدردشة: ${used} مُستخدم هذا الشهر",
     "chatUsageMessages": "الدردشة: {used} / {limit} رسالة هذا الشهر",
-    "chatUsageMessagesNoLimit": "الدردشة: {used} رسالة هذا الشهر"
+    "chatUsageMessagesNoLimit": "الدردشة: {used} رسالة هذا الشهر",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

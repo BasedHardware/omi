@@ -9144,4 +9144,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Klepet: $used sporočil ta mesec';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

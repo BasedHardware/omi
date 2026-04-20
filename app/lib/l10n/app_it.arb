@@ -2976,5 +2976,6 @@
     "chatUsageCost": "Chat: ${used} / ${limit} utilizzato questo mese",
     "chatUsageCostNoLimit": "Chat: ${used} utilizzato questo mese",
     "chatUsageMessages": "Chat: {used} / {limit} messaggi questo mese",
-    "chatUsageMessagesNoLimit": "Chat: {used} messaggi questo mese"
+    "chatUsageMessagesNoLimit": "Chat: {used} messaggi questo mese",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

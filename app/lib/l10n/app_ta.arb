@@ -10699,5 +10699,6 @@
     "chatUsageCost": "அரட்டை: ${used} / ${limit} இந்த மாதம் பயன்படுத்தப்பட்டது",
     "chatUsageCostNoLimit": "அரட்டை: ${used} இந்த மாதம் பயன்படுத்தப்பட்டது",
     "chatUsageMessages": "அரட்டை: {used} / {limit} செய்திகள் இந்த மாதம்",
-    "chatUsageMessagesNoLimit": "அரட்டை: {used} செய்திகள் இந்த மாதம்"
+    "chatUsageMessagesNoLimit": "அரட்டை: {used} செய்திகள் இந்த மாதம்",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

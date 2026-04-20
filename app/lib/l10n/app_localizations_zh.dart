@@ -8956,4 +8956,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return '聊天：$used 条消息本月';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

@@ -10699,5 +10699,6 @@
     "chatUsageCost": "Разговор: ${used} / ${limit} искористено овој месец",
     "chatUsageCostNoLimit": "Разговор: ${used} искористено овој месец",
     "chatUsageMessages": "Разговор: {used} / {limit} пораки овој месец",
-    "chatUsageMessagesNoLimit": "Разговор: {used} пораки овој месец"
+    "chatUsageMessagesNoLimit": "Разговор: {used} пораки овој месец",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

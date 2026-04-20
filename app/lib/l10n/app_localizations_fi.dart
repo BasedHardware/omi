@@ -9119,4 +9119,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String chatUsageMessagesNoLimit(String used) {
     return 'Chat: $used viestiä tässä kuussa';
   }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 }

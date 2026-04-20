@@ -10699,5 +10699,6 @@
     "chatUsageCost": "Chat: ${used} / ${limit} nagamit ngayong buwan",
     "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
     "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
-    "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan"
+    "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }

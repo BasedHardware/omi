@@ -10872,5 +10872,6 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
 }
