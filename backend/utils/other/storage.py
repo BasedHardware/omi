@@ -626,6 +626,39 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
+def delete_all_user_cloud_audio(uid: str) -> dict[str, int]:
+    """Delete all cloud-synced audio blobs for a user.
+
+    Removes raw chunks, per-conversation merged audio, and cached merged assets.
+    Returns the total number of deleted and failed blobs.
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    deleted = 0
+    failed = 0
+
+    for prefix in (f'chunks/{uid}/', f'audio/{uid}/', f'merged/{uid}/'):
+        try:
+            blobs = bucket.list_blobs(prefix=prefix)
+            for blob in blobs:
+                try:
+                    blob.delete()
+                    deleted += 1
+                except Exception as e:
+                    failed += 1
+                    logger.error(f'Failed to delete cloud audio blob {blob.name}: {e}')
+        except Exception as e:
+            failed += 1
+            logger.error(f'Failed to list cloud audio blobs for prefix {prefix}: {e}')
+
+    if failed:
+        logger.warning(f'Failed to delete {failed} cloud audio blobs for user {uid}')
+
+    return {
+        'deleted_blobs': deleted,
+        'failed_blobs': failed,
+    }
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,

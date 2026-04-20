@@ -45,6 +45,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    delete_all_user_cloud_audio,
 )
 
 from utils import encryption
@@ -167,6 +168,95 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
         logger.info(f"Pre-cached audio file: {audio_file_id}")
     except Exception as e:
         logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
+
+
+@router.get("/v1/sync/audio/conversations", tags=['v1'])
+def list_conversations_with_audio(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    List all conversations that have cloud-synced audio files.
+    Returns lightweight conversation info (id, title, date, audio file count, total duration).
+    """
+    result = []
+    for conv in conversations_db.iter_audio_metadata_conversations(uid, include_discarded=False):
+        audio_files = conv.get('audio_files') or []
+        if not audio_files or conv.get('is_locked', False):
+            continue
+
+        result.append(
+            {
+                'id': conv.get('id'),
+                'title': (conv.get('structured') or {}).get('title') or 'Untitled',
+                'created_at': conv.get('created_at'),
+                'audio_file_count': len(audio_files),
+                'total_duration': sum((af.get('duration') or 0) for af in audio_files),
+            }
+        )
+
+    result.sort(key=lambda conv: conv.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    return {'conversations': result}
+
+
+@router.delete("/v1/sync/audio", tags=['v1'])
+def delete_all_cloud_audio(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Delete all cloud-synced audio files for the current user.
+    This removes audio chunks, merged files, and cached files from cloud storage,
+    and clears the audio_files array from each conversation document.
+    """
+    conversations_to_clear = []
+    cleared_conversations = 0
+    for conv in conversations_db.iter_audio_metadata_conversations(uid, include_discarded=True):
+        if not conv.get('audio_files'):
+            continue
+        conversations_to_clear.append(conv['id'])
+
+    metadata_failures: list[str] = []
+    for conversation_id in conversations_to_clear:
+        try:
+            conversations_db.update_conversation(uid, conversation_id, {'audio_files': []})
+            cleared_conversations += 1
+        except Exception as e:
+            logger.error(f"Failed to clear audio_files for conversation {conversation_id}: {e}")
+            metadata_failures.append(conversation_id)
+
+    # Always attempt blob cleanup even if some metadata clears failed.
+    # Skipping blob deletion on partial metadata failure leaves orphaned blobs in
+    # storage while metadata is already gone — a privacy and cost leak with no
+    # self-healing path.
+    delete_result = delete_all_user_cloud_audio(uid)
+    deleted_count = delete_result['deleted_blobs']
+    failed_blob_count = delete_result['failed_blobs']
+
+    if metadata_failures or failed_blob_count:
+        logger.error(
+            f"delete-all-audio partial failure for user {uid}: "
+            f"metadata_failures={len(metadata_failures)} conversation(s), "
+            f"failed_blobs={failed_blob_count}, deleted_blobs={deleted_count}, "
+            f"cleared_conversations={cleared_conversations}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                'message': 'Partial failure during cloud audio deletion.',
+                'deleted_blobs': deleted_count,
+                'failed_blobs': failed_blob_count,
+                'cleared_conversations': cleared_conversations,
+                'failed_metadata_conversations': len(metadata_failures),
+            },
+        )
+
+    logger.info(
+        f"Deleted {deleted_count} cloud audio blobs and cleared {cleared_conversations} conversations for user {uid}"
+    )
+    return {
+        'deleted_blobs': deleted_count,
+        'cleared_conversations': cleared_conversations,
+    }
 
 
 @router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
