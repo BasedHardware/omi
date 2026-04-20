@@ -1,0 +1,65 @@
+name: Maestro E2E Tests
+
+on:
+  push:
+    paths:
+      - 'app/**'
+  pull_request:
+    paths:
+      - 'app/**'
+  workflow_dispatch:
+
+jobs:
+  maestro-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Build dev APK
+        working-directory: app
+        run: flutter build apk --flavor dev --debug
+
+      - name: Start Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
+          script: |
+            # Install the app
+            adb install app/build/app/outputs/flutter-apk/app-dev-debug.apk
+
+            # Run smoke tests
+            cd app/.maestro
+            bash scripts/run_all.sh --tags smoke --report || true
+
+      - name: Upload test screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maestro-screenshots
+          path: |
+            app/.maestro/reports/
+            ~/.maestro/tests/
+          retention-days: 7
