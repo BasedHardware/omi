@@ -9077,4 +9077,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => 'คุณถึงขีดจำกัดแชทรายเดือนแล้ว อัปเกรดแผนของคุณเพื่อแชทต่อ';
 }

@@ -10700,5 +10700,6 @@
     "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
     "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
     "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
 }

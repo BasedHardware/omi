@@ -2977,5 +2977,6 @@
     "chatUsageCostNoLimit": "채팅: ${used} 이번 달 사용량",
     "chatUsageMessages": "채팅: {used} / {limit} 이번 달 메시지",
     "chatUsageMessagesNoLimit": "채팅: {used} 이번 달 메시지",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "월간 채팅 한도에 도달했습니다. 채팅을 계속하려면 플랜을 업그레이드하세요."
 }

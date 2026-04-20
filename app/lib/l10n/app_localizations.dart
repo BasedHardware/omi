@@ -17024,6 +17024,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI chat messages used with Omi this month.'**
   String get chatQuotaSubtitle;
+
+  /// AI reply message shown when user exceeds chat quota
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve hit your monthly chat limit. Upgrade your plan to keep chatting.'**
+  String get chatQuotaExceededReply;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

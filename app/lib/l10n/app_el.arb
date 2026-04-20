@@ -2977,5 +2977,6 @@
     "chatUsageCostNoLimit": "Συνομιλία: ${used} χρησιμοποιήθηκαν αυτόν τον μήνα",
     "chatUsageMessages": "Συνομιλία: {used} / {limit} μηνύματα αυτόν τον μήνα",
     "chatUsageMessagesNoLimit": "Συνομιλία: {used} μηνύματα αυτόν τον μήνα",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
 }

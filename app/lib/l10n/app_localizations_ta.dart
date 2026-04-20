@@ -9192,4 +9192,8 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'நீங்கள் உங்கள் மாதாந்திர அரட்டை வரம்பை அடைந்துவிட்டீர்கள். அரட்டையைத் தொடர உங்கள் திட்டத்தை மேம்படுத்தவும்.';
 }

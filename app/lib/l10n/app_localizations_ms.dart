@@ -9147,4 +9147,8 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Anda telah mencapai had sembang bulanan. Naik taraf pelan anda untuk terus bersembang.';
 }

@@ -2978,5 +2978,6 @@
     "chatUsageCostNoLimit": "チャット: ${used} 今月の使用量",
     "chatUsageMessages": "チャット: {used} / {limit} 件の今月のメッセージ",
     "chatUsageMessagesNoLimit": "チャット: {used} 件の今月のメッセージ",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "月間チャット制限に達しました。チャットを続けるにはプランをアップグレードしてください。"
 }

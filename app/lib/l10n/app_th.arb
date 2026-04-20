@@ -2977,5 +2977,6 @@
     "chatUsageCostNoLimit": "แชท: ${used} ที่ใช้ในเดือนนี้",
     "chatUsageMessages": "แชท: {used} / {limit} ข้อความในเดือนนี้",
     "chatUsageMessagesNoLimit": "แชท: {used} ข้อความในเดือนนี้",
-    "chatQuotaSubtitle": "AI chat messages used with Omi this month."
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "คุณถึงขีดจำกัดแชทรายเดือนแล้ว อัปเกรดแผนของคุณเพื่อแชทต่อ"
 }
