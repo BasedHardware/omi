@@ -706,3 +706,189 @@ class TestQuotaBoundaryTests:
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('below-limit-uid')  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# 14. Per-request fingerprint validation against Firestore enrollment
+# ---------------------------------------------------------------------------
+
+
+class TestBYOKFingerprintValidation:
+    """Firestore BYOK state is the source of truth.
+
+    - BYOK-active users MUST send keys whose SHA-256 matches enrolled fingerprints.
+    - Non-BYOK users' headers are silently cleared.
+    """
+
+    _FAKE_KEY_OPENAI = 'sk-test-openai-key-12345'
+    _FAKE_KEY_ANTHROPIC = 'sk-ant-test-key-67890'
+    _FAKE_KEY_GEMINI = 'AIzaSy-test-gemini-key'
+    _FAKE_KEY_DEEPGRAM = 'dg-test-deepgram-key'
+
+    @property
+    def _enrolled_fingerprints(self):
+        return {
+            'openai': hashlib.sha256(self._FAKE_KEY_OPENAI.encode()).hexdigest(),
+            'anthropic': hashlib.sha256(self._FAKE_KEY_ANTHROPIC.encode()).hexdigest(),
+            'gemini': hashlib.sha256(self._FAKE_KEY_GEMINI.encode()).hexdigest(),
+            'deepgram': hashlib.sha256(self._FAKE_KEY_DEEPGRAM.encode()).hexdigest(),
+        }
+
+    @property
+    def _valid_request_keys(self):
+        return {
+            'openai': self._FAKE_KEY_OPENAI,
+            'anthropic': self._FAKE_KEY_ANTHROPIC,
+            'gemini': self._FAKE_KEY_GEMINI,
+            'deepgram': self._FAKE_KEY_DEEPGRAM,
+        }
+
+    def _mock_byok_state(self, active=True, fingerprints=None):
+        from datetime import datetime, timezone
+
+        return {
+            'active': active,
+            'fingerprints': fingerprints if fingerprints is not None else self._enrolled_fingerprints,
+            'last_seen_at': datetime.now(timezone.utc),
+        }
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_valid_keys_pass_validation(self, mock_get_state):
+        """BYOK-active user with matching keys passes validation."""
+        from utils.byok import _byok_ctx, validate_byok_request
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set(self._valid_request_keys)
+        try:
+            validate_byok_request('byok-uid')  # Should not raise
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_missing_header_raises_403(self, mock_get_state):
+        """BYOK-active user missing a required provider header → 403."""
+        from fastapi import HTTPException
+        from utils.byok import _byok_ctx, validate_byok_request
+
+        mock_get_state.return_value = self._mock_byok_state()
+        # Only send openai key, missing anthropic/gemini/deepgram
+        token = _byok_ctx.set({'openai': self._FAKE_KEY_OPENAI})
+        try:
+            with pytest.raises(HTTPException) as exc_info:
+                validate_byok_request('byok-uid')
+            assert exc_info.value.status_code == 403
+            assert 'missing key header' in exc_info.value.detail
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_wrong_key_raises_403(self, mock_get_state):
+        """BYOK-active user with a key that doesn't match fingerprint → 403."""
+        from fastapi import HTTPException
+        from utils.byok import _byok_ctx, validate_byok_request
+
+        mock_get_state.return_value = self._mock_byok_state()
+        bad_keys = dict(self._valid_request_keys)
+        bad_keys['openai'] = 'sk-WRONG-key-does-not-match'
+        token = _byok_ctx.set(bad_keys)
+        try:
+            with pytest.raises(HTTPException) as exc_info:
+                validate_byok_request('byok-uid')
+            assert exc_info.value.status_code == 403
+            assert 'mismatch' in exc_info.value.detail
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_no_headers_when_byok_active_raises_403(self, mock_get_state):
+        """BYOK-active user sending zero BYOK headers → 403."""
+        from fastapi import HTTPException
+        from utils.byok import _byok_ctx, validate_byok_request
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set({})
+        try:
+            with pytest.raises(HTTPException) as exc_info:
+                validate_byok_request('byok-uid')
+            assert exc_info.value.status_code == 403
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_non_byok_user_headers_are_cleared(self, mock_get_state):
+        """Non-BYOK user sending BYOK headers → headers silently cleared."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state(active=False)
+        token = _byok_ctx.set({'openai': 'sk-sneaky-key'})
+        try:
+            validate_byok_request('non-byok-uid')  # Should not raise
+            # Headers must have been cleared
+            assert get_byok_keys() == {}
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_non_byok_user_no_headers_passes(self, mock_get_state):
+        """Non-BYOK user with no BYOK headers → normal flow, no error."""
+        from utils.byok import _byok_ctx, validate_byok_request
+
+        mock_get_state.return_value = self._mock_byok_state(active=False)
+        token = _byok_ctx.set(None)
+        try:
+            validate_byok_request('normal-uid')  # Should not raise
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_expired_byok_headers_cleared(self, mock_get_state):
+        """BYOK activation expired (>7 days) → headers silently cleared."""
+        from datetime import datetime as dt, timezone as tz
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        expired_state = self._mock_byok_state()
+        expired_state['last_seen_at'] = dt(2020, 1, 1, tzinfo=tz.utc)
+        mock_get_state.return_value = expired_state
+
+        token = _byok_ctx.set(self._valid_request_keys)
+        try:
+            validate_byok_request('expired-uid')  # Should not raise
+            assert get_byok_keys() == {}  # Headers cleared
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_websocket_validation_returns_error_string(self, mock_get_state):
+        """WebSocket validation returns error string instead of raising."""
+        from utils.byok import _byok_ctx, validate_byok_websocket
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set({})  # Missing all keys
+        try:
+            error = validate_byok_websocket('byok-uid')
+            assert error is not None
+            assert 'missing key header' in error
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_websocket_validation_returns_none_on_success(self, mock_get_state):
+        """WebSocket validation returns None when keys are valid."""
+        from utils.byok import _byok_ctx, validate_byok_websocket
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set(self._valid_request_keys)
+        try:
+            error = validate_byok_websocket('byok-uid')
+            assert error is None
+        finally:
+            _byok_ctx.reset(token)

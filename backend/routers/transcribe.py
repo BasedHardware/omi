@@ -36,7 +36,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
-from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
+from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys, validate_byok_websocket
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
@@ -242,6 +242,17 @@ async def _stream_handler(
     byok_ws_keys = extract_byok_from_websocket(websocket)
     if byok_ws_keys:
         set_byok_keys(byok_ws_keys)
+
+    # Validate BYOK keys against Firestore enrollment.
+    # BYOK-active users MUST send keys matching their enrolled fingerprints.
+    # Non-BYOK users' headers are silently cleared.
+    byok_error = validate_byok_websocket(uid)
+    if byok_error:
+        logger.warning(f'_stream_handler BYOK validation failed {uid}: {byok_error}')
+        await websocket.send_json({'error': byok_error})
+        await websocket.close(code=4003)
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
+        return
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
     is_multi_channel = channels >= 2
