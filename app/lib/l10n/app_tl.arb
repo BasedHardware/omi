@@ -10701,5 +10701,5 @@
     "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
     "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon."
 }

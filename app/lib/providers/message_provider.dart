@@ -536,7 +536,7 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
-                "You've hit your monthly chat limit. Upgrade your plan to keep chatting.";
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             setShowTypingIndicator(false);
             return;
@@ -655,7 +655,7 @@ class MessageProvider extends ChangeNotifier {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
-                "You've hit your monthly chat limit. Upgrade your plan to keep chatting.";
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             return;
           }

@@ -9150,5 +9150,5 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'Anda telah mencapai had sembang bulanan. Naik taraf pelan anda untuk terus bersembang.';
+      'Anda telah mencapai had bulanan. Naik taraf untuk terus bersembang dengan Omi tanpa sekatan.';
 }

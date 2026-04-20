@@ -3074,5 +3074,5 @@
     "chatUsageMessages": "Chat: {used} / {limit} üzenet ebben a hónapban",
     "chatUsageMessagesNoLimit": "Chat: {used} üzenet ebben a hónapban",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Elérted a havi limitedet. Frissíts, hogy korlátozás nélkül folytasd a csevegést az Omival."
 }

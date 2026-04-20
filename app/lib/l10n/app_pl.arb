@@ -3013,5 +3013,5 @@
     "chatUsageMessages": "Czat: {used} / {limit} wiadomości w tym miesiącu",
     "chatUsageMessagesNoLimit": "Czat: {used} wiadomości w tym miesiącu",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "Osiągnąłeś miesięczny limit czatu. Ulepsz swój plan, aby kontynuować czatowanie."
+    "chatQuotaExceededReply": "Osiągnąłeś miesięczny limit. Ulepsz, aby kontynuować czatowanie z Omi bez ograniczeń."
 }

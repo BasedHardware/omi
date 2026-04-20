@@ -9130,5 +9130,5 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'Você atingiu seu limite mensal de chat. Atualize seu plano para continuar conversando.';
+      'Você atingiu seu limite mensal. Atualize para continuar conversando com Omi sem restrições.';
 }

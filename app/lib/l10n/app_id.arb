@@ -3020,5 +3020,5 @@
     "chatUsageMessages": "Obrolan: {used} / {limit} pesan bulan ini",
     "chatUsageMessagesNoLimit": "Obrolan: {used} pesan bulan ini",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "Anda telah mencapai batas chat bulanan. Upgrade paket Anda untuk melanjutkan chat."
+    "chatQuotaExceededReply": "Anda telah mencapai batas bulanan. Upgrade untuk terus mengobrol dengan Omi tanpa batasan."
 }

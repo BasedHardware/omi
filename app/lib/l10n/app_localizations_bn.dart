@@ -9135,5 +9135,5 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'আপনি আপনার মাসিক চ্যাট সীমায় পৌঁছেছেন। চ্যাট চালিয়ে যেতে আপনার প্ল্যান আপগ্রেড করুন।';
+      'আপনি আপনার মাসিক সীমায় পৌঁছেছেন। বিনা সীমাবদ্ধতায় Omi-এর সাথে চ্যাট চালিয়ে যেতে আপগ্রেড করুন।';
 }

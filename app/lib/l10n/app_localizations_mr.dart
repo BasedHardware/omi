@@ -9137,5 +9137,5 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'तुम्ही तुमची मासिक चॅट मर्यादा गाठली आहे. चॅट सुरू ठेवण्यासाठी तुमचा प्लॅन अपग्रेड करा.';
+      'तुम्ही तुमची मासिक मर्यादा गाठली आहे. निर्बंधांशिवाय Omi सोबत चॅट सुरू ठेवण्यासाठी अपग्रेड करा.';
 }

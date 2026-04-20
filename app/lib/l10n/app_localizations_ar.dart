@@ -9064,5 +9064,5 @@ class AppLocalizationsAr extends AppLocalizations {
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 
   @override
-  String get chatQuotaExceededReply => 'لقد وصلت إلى حد الدردشة الشهري. قم بترقية خطتك لمتابعة الدردشة.';
+  String get chatQuotaExceededReply => 'لقد وصلت إلى حدك الشهري. قم بالترقية لمتابعة الدردشة مع Omi بدون قيود.';
 }

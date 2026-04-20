@@ -2947,5 +2947,5 @@
     "chatUsageMessages": "Чат: {used} / {limit} съобщения този месец",
     "chatUsageMessagesNoLimit": "Чат: {used} съобщения този месец",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Достигнахте месечния си лимит. Надградете, за да продължите да чатите с Omi без ограничения."
 }

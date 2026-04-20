@@ -9126,5 +9126,5 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'Bạn đã đạt giới hạn trò chuyện hàng tháng. Nâng cấp gói để tiếp tục trò chuyện.';
+      'Bạn đã đạt giới hạn hàng tháng. Nâng cấp để tiếp tục trò chuyện với Omi không giới hạn.';
 }

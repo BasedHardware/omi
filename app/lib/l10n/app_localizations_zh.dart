@@ -8961,5 +8961,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 
   @override
-  String get chatQuotaExceededReply => '您已达到每月聊天限额。升级您的计划以继续聊天。';
+  String get chatQuotaExceededReply => '您已达到每月限额。升级以无限制地继续与Omi聊天。';
 }
