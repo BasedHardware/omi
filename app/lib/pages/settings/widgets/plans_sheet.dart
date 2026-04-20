@@ -47,6 +47,7 @@ class PlansSheet extends StatefulWidget {
 class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // 'unlimited', 'operator', 'architect'
+  final Set<String> _expandedTierIds = {}; // tracks which tier cards show full features
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
@@ -1607,6 +1608,10 @@ class _PlansSheetState extends State<PlansSheet> {
           final planDataWithName = Map<String, dynamic>.from(planForPeriod);
           planDataWithName['title'] = displayTitle;
 
+          // Get features from subscription's available_plans
+          final planFeatures = matchingPlan?.features ?? [];
+          final planSubtitle = planForPeriod['subtitle'] as String?;
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _buildDynamicPlanOption(
@@ -1614,6 +1619,19 @@ class _PlansSheetState extends State<PlansSheet> {
               planData: planDataWithName,
               saveTag: isYearly ? '2 Months Free' : null,
               isPopular: eyebrow == 'Most popular',
+              featureSummary: planSubtitle,
+              features: planFeatures,
+              isExpanded: _expandedTierIds.contains(tierId),
+              onToggleExpand: () {
+                HapticFeedback.lightImpact();
+                setState(() {
+                  if (_expandedTierIds.contains(tierId)) {
+                    _expandedTierIds.remove(tierId);
+                  } else {
+                    _expandedTierIds.add(tierId);
+                  }
+                });
+              },
               onTap: () {
                 HapticFeedback.lightImpact();
                 setState(() => selectedTierId = tierId);
@@ -1710,115 +1728,180 @@ class _PlansSheetState extends State<PlansSheet> {
     bool isPopular = false,
     bool isActive = false,
     String? endsOnDate,
+    String? featureSummary,
+    List<String> features = const [],
+    bool isExpanded = false,
+    VoidCallback? onToggleExpand,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25), // Use conversation list background
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 2),
-        ),
-        child: Column(
-          children: [
-            // Popular badge only at the top
-            if (isPopular) ...[
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                    child: const Text(
-                      'POPULAR',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 2),
+      ),
+      child: Column(
+        children: [
+          // Main card area — tappable for plan selection
+          GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                    ],
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      monthlyPrice,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    if (saveTag != null) ...[
-                      const SizedBox(height: 8),
+                if (isPopular) ...[
+                  Row(
+                    children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
-                        child: Text(
-                          saveTag,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (endsOnDate != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
-                        child: Text(
-                          'Ends on $endsOnDate',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ] else if (isActive) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                         child: const Text(
-                          'Active',
+                          'POPULAR',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Colors.black,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                        ],
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          monthlyPrice,
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        if (saveTag != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration:
+                                BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                              saveTag,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (endsOnDate != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration:
+                                BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                            child: Text(
+                              'Ends on $endsOnDate',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ] else if (isActive) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration:
+                                BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                            child: const Text(
+                              'Active',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ],
             ),
+          ),
+          // Feature summary + expand/collapse — separate tap target
+          if (featureSummary != null && features.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: onToggleExpand,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      featureSummary,
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(
+                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: Colors.grey[500],
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  children: features
+                      .map((f) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.check, color: Colors.green[400], size: 14),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    f,
+                                    style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+              crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1912,6 +1995,10 @@ class _PlansSheetState extends State<PlansSheet> {
     required Map<String, dynamic> planData,
     String? saveTag,
     bool isPopular = false,
+    String? featureSummary,
+    List<String> features = const [],
+    bool isExpanded = false,
+    VoidCallback? onToggleExpand,
     required VoidCallback onTap,
   }) {
     final title = planData['title'] as String;
@@ -1945,6 +2032,10 @@ class _PlansSheetState extends State<PlansSheet> {
       onTap: isActive ? () {} : onTap,
       isActive: isActive && !isCancelled,
       endsOnDate: endsOnDate,
+      featureSummary: featureSummary,
+      features: features,
+      isExpanded: isExpanded,
+      onToggleExpand: onToggleExpand,
     );
   }
 
