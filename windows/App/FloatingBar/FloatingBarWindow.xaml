@@ -1,0 +1,31 @@
+<Window x:Class="Omi.Windows.App.FloatingBar.FloatingBarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Omi Floating Bar"
+        Width="400"
+        Height="80"
+        Topmost="True"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        Background="#AA202020"
+        ShowInTaskbar="False">
+    <Border CornerRadius="8" Background="#DD202020" Padding="8">
+        <DockPanel>
+            <Button Content="🎙"
+                    Width="32"
+                    Height="32"
+                    Margin="0,0,8,0"
+                    DockPanel.Dock="Left"
+                    ToolTip="Push-to-talk (Ctrl+Alt+O)" />
+            <TextBox x:Name="QueryTextBox"
+                     VerticalContentAlignment="Center"
+                     Background="#FF303030"
+                     Foreground="White"
+                     BorderThickness="0"
+                     Padding="4"
+                     Text="Posez une question à Omi..." />
+        </DockPanel>
+    </Border>
+</Window>
+
