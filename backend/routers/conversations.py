@@ -689,7 +689,7 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
             suggested_apps.append(app)
 
-    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
+    return {"suggested_apps": [app.to_safe_response_dict() for app in suggested_apps], "conversation_id": conversation_id}
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])

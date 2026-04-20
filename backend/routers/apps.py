@@ -647,7 +647,7 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
 
-    return app
+    return app.to_safe_response_dict()
 
 
 @router.post('/v1/user/persona', tags=['v1'])
@@ -859,7 +859,7 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.thumbnails:
         app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
 
-    return app
+    return app.to_safe_response_dict()
 
 
 @router.get('/v1/app-categories', tags=['v1'])
