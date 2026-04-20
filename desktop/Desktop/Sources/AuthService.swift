@@ -780,17 +780,23 @@ class AuthService {
     // MARK: - Token Storage
 
     private func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) {
-        UserDefaults.standard.set(idToken, forKey: kAuthIdToken)
-        UserDefaults.standard.set(refreshToken, forKey: kAuthRefreshToken)
-        // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
+        AuthKeychain.set(idToken, forKey: kAuthIdToken)
+        AuthKeychain.set(refreshToken, forKey: kAuthRefreshToken)
+        // Non-sensitive metadata stays in UserDefaults so it remains accessible
+        // for lightweight state checks without hitting Keychain.
         let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
         UserDefaults.standard.set(expiryTime.timeIntervalSince1970, forKey: kAuthTokenExpiry)
-        // Store the user ID that owns these tokens (for validation on retrieval)
         UserDefaults.standard.set(userId, forKey: kAuthTokenUserId)
+        // Defensively wipe any legacy plaintext tokens written by earlier versions.
+        UserDefaults.standard.removeObject(forKey: kAuthIdToken)
+        UserDefaults.standard.removeObject(forKey: kAuthRefreshToken)
         NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
     }
 
     private func clearTokens() {
+        AuthKeychain.set(nil, forKey: kAuthIdToken)
+        AuthKeychain.set(nil, forKey: kAuthRefreshToken)
+        // Purge legacy plaintext copies too.
         UserDefaults.standard.removeObject(forKey: kAuthIdToken)
         UserDefaults.standard.removeObject(forKey: kAuthRefreshToken)
         UserDefaults.standard.removeObject(forKey: kAuthTokenExpiry)
@@ -798,12 +804,27 @@ class AuthService {
         NSLog("OMI AUTH: Cleared all tokens")
     }
 
+    /// Read a token from Keychain. On first access after upgrade, transparently
+    /// migrate any legacy plaintext value out of UserDefaults.
+    private func readStoredToken(forKey key: String) -> String? {
+        if let value = AuthKeychain.get(key), !value.isEmpty {
+            return value
+        }
+        if let legacy = UserDefaults.standard.string(forKey: key), !legacy.isEmpty {
+            AuthKeychain.set(legacy, forKey: key)
+            UserDefaults.standard.removeObject(forKey: key)
+            NSLog("OMI AUTH: Migrated %@ from UserDefaults to Keychain", key)
+            return legacy
+        }
+        return nil
+    }
+
     private var storedIdToken: String? {
-        UserDefaults.standard.string(forKey: kAuthIdToken)
+        readStoredToken(forKey: kAuthIdToken)
     }
 
     private var storedRefreshToken: String? {
-        UserDefaults.standard.string(forKey: kAuthRefreshToken)
+        readStoredToken(forKey: kAuthRefreshToken)
     }
 
     private var storedTokenUserId: String? {
@@ -1107,6 +1128,11 @@ class AuthService {
         // monitoring regardless of this setting.
         // transcriptionEnabled: removeObject works since nothing writes it back.
         UserDefaults.standard.removeObject(forKey: "transcriptionEnabled")
+
+        // Browser automation token binds the app to the user's Chrome session.
+        // Leaving it in place after sign-out would let the next user of this Mac
+        // drive the previous user's still-logged-in browser.
+        UserDefaults.standard.removeObject(forKey: "playwrightExtensionToken")
 
         NSLog("OMI AUTH: Signed out and cleared saved state + onboarding")
     }

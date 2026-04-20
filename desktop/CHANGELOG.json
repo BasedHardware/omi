@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Hardened sign-in by storing auth tokens in the macOS Keychain instead of UserDefaults",
+    "Cleared the browser extension token on sign-out so a new account cannot reuse the previous browser session",
+    "Restricted the local automation bridge to loopback and required a per-launch bearer token"
+  ],
   "releases": [
     {
       "version": "0.11.343",
