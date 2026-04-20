@@ -77,16 +77,25 @@ class TestModelQosProfiles:
             assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
 
     def test_premium_profile_models(self):
-        """Premium uses gpt-5.4-mini for flagship, gpt-4.1-nano for cheap tasks."""
+        """Premium uses gpt-5.4-mini for flagship, gpt-4.1-mini for quality-sensitive, gpt-4.1-nano for simple."""
         premium = MODEL_QOS_PROFILES['premium']
         # Flagship features use gpt-5.4-mini
         assert premium['conv_structure'] == 'gpt-5.4-mini'
         assert premium['chat_responses'] == 'gpt-5.4-mini'
         assert premium['goals_advice'] == 'gpt-5.4-mini'
-        # Cheap features use gpt-4.1-nano
-        assert premium['memories'] == 'gpt-4.1-nano'
-        assert premium['chat_extraction'] == 'gpt-4.1-nano'
-        assert premium['chat_graph'] == 'gpt-4.1-nano'
+        # Quality-sensitive features use gpt-4.1-mini
+        assert premium['memories'] == 'gpt-4.1-mini'
+        assert premium['chat_extraction'] == 'gpt-4.1-mini'
+        assert premium['chat_graph'] == 'gpt-4.1-mini'
+        assert premium['external_structure'] == 'gpt-4.1-mini'
+        assert premium['memory_conflict'] == 'gpt-4.1-mini'
+        assert premium['knowledge_graph'] == 'gpt-4.1-mini'
+        assert premium['goals'] == 'gpt-4.1-mini'
+        assert premium['proactive_notification'] == 'gpt-4.1-mini'
+        # Simple features use gpt-4.1-nano
+        assert premium['conv_app_select'] == 'gpt-4.1-nano'
+        assert premium['session_titles'] == 'gpt-4.1-nano'
+        assert premium['followup'] == 'gpt-4.1-nano'
         # Unchanged
         assert premium['chat_agent'] == 'claude-sonnet-4-6'
         assert premium['web_search'] == 'sonar-pro'
@@ -207,13 +216,13 @@ class TestGetLlm:
         assert llm1 is llm2
 
     def test_different_features_same_model_share_instance(self):
-        # Both default to gpt-4.1-nano in premium profile
+        # Both use gpt-4.1-mini in premium profile (quality-sensitive)
         llm1 = get_llm('memories')
         llm2 = get_llm('goals')
         assert llm1 is llm2
 
     def test_different_models_return_different_instances(self):
-        # memories=gpt-4.1-nano, conv_structure=gpt-5.4-mini in premium
+        # memories=gpt-4.1-mini, conv_structure=gpt-5.4-mini in premium
         llm1 = get_llm('memories')
         llm2 = get_llm('conv_structure')
         assert llm1 is not llm2
