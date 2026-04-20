@@ -1,19 +1,22 @@
-import { useEffect } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { motion, useMotionValue, useTransform, useSpring, animate } from "motion/react";
+import { memo, useEffect } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { motion, useMotionValue, useTransform, animate } from "motion/react";
 import {
+  Home,
   MessageSquare,
   AudioLines,
   ListTodo,
   Brain,
-  Rewind,
-  Eye,
   Mic,
-  Monitor,
+  MicOff,
+  Rewind,
   Settings,
-  ChevronsLeft,
-  ChevronsRight,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
+  LayoutGrid,
+  ChevronsUpDown,
+  Target,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useSidebarStore } from "../../stores/sidebarStore";
@@ -22,16 +25,30 @@ import { useRewindStore } from "../../stores/rewindStore";
 import { useAudioStore } from "../../stores/audioStore";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { Switch } from "../ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import {
+  OrbIndicator,
+  type OrbVariant,
+  type PersonaState,
+} from "../feedback/OrbIndicator";
 import { useElapsed } from "../../hooks/useElapsed";
 
 const navItems = [
-  { to: "/", label: "Chat", icon: MessageSquare },
+  { to: "/dashboard", label: "Home", icon: Home },
+  { to: "/chat", label: "Chat", icon: MessageSquare },
   { to: "/meetings", label: "Meetings", icon: AudioLines },
   { to: "/tasks", label: "Tasks", icon: ListTodo },
+  { to: "/goals", label: "Goals", icon: Target },
   { to: "/memories", label: "Memories", icon: Brain },
+  { to: "/apps", label: "Apps", icon: LayoutGrid },
   { to: "/rewind", label: "Rewind", icon: Rewind },
-  { to: "/focus", label: "Focus", icon: Eye },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const EXPANDED = 220;
@@ -42,22 +59,19 @@ export function Sidebar() {
   const { userEmail, signOut } = useAuthStore();
   const { isCollapsed, toggle } = useSidebarStore();
 
-  // Single motion value drives everything — 0 = collapsed, 1 = expanded
+  // Single motion value drives everything — 0 = collapsed, 1 = expanded.
+  // Width animation pushes the main content; reflows are scoped by
+  // `contain: layout paint` on `.main-content` so they don't cascade
+  // into mounted routes (KeepAlivePane wraps each in its own block).
   const progress = useMotionValue(isCollapsed ? 0 : 1);
   const width = useTransform(progress, [0, 1], [COLLAPSED, EXPANDED]);
-  const smoothWidth = useSpring(width, { stiffness: 500, damping: 35, mass: 0.6 });
   const textOpacity = useTransform(progress, [0, 0.5, 1], [0, 0, 1]);
 
   useEffect(() => {
-    if (isCollapsed) {
-      // Collapsing: progress 1 → 0
-      // Text fades out in first half (1→0.5), then width shrinks (0.5→0)
-      animate(progress, 0, { duration: 0.3, ease: [0.4, 0, 0.2, 1] });
-    } else {
-      // Expanding: progress 0 → 1
-      // Width grows first (0→0.5), then text fades in (0.5→1)
-      animate(progress, 1, { duration: 0.3, ease: [0.4, 0, 0.2, 1] });
-    }
+    // Snappy easeOut — front-loaded so the sidebar reaches its final
+    // size quickly and any reflow cost concentrates in the first frames.
+    const opts = { duration: 0.22, ease: [0.32, 0.72, 0, 1] as const };
+    animate(progress, isCollapsed ? 0 : 1, opts);
   }, [isCollapsed, progress]);
 
   // Cmd+B / Ctrl+B
@@ -73,10 +87,13 @@ export function Sidebar() {
   }, [toggle]);
 
   return (
-    <motion.aside
-      className="flex flex-col flex-shrink-0 bg-secondary/40 border-r border-border/40"
-      style={{ width: smoothWidth, overflow: "hidden" }}
+    <motion.div
+      className="group/sidebar relative flex flex-shrink-0"
+      style={{ width }}
     >
+      <aside
+        className="flex h-full w-full flex-col overflow-hidden bg-secondary/40"
+      >
       {/* Header */}
       <div className="flex items-center h-12 flex-shrink-0 overflow-hidden px-2">
         <div className="flex items-center h-9" style={{ paddingLeft: ICON_PL }}>
@@ -102,46 +119,55 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="flex flex-col gap-0.5 px-2 pb-1.5">
+      <div className="mt-2 flex flex-col border-t border-border/60 bg-background/30 px-2 pb-1.5 pt-2">
         {/* Capture toggles */}
-        <RewindToggle isCollapsed={isCollapsed} textOpacity={textOpacity} />
-        <AudioToggle isCollapsed={isCollapsed} textOpacity={textOpacity} />
-        <FocusToggle isCollapsed={isCollapsed} textOpacity={textOpacity} />
+        <div className="flex flex-col gap-0.5">
+          <AuraToggle isCollapsed={isCollapsed} textOpacity={textOpacity} />
+          <AudioToggle isCollapsed={isCollapsed} textOpacity={textOpacity} />
+        </div>
 
-        <div className="border-t border-border/30 pt-0.5 mt-0.5">
-          <motion.div
-            className="overflow-hidden"
-            style={{ paddingLeft: ICON_PL, opacity: textOpacity }}
-          >
-            <span className="text-[11px] text-muted-foreground/60 truncate block whitespace-nowrap leading-tight py-0.5">
-              {userEmail}
-            </span>
-          </motion.div>
-
-          <SidebarRow
-            icon={LogOut}
-            label="Sign Out"
+        {/* Account */}
+        <div className="mt-2">
+          <ProfileMenu
+            email={userEmail ?? ""}
             isCollapsed={isCollapsed}
             textOpacity={textOpacity}
-            onClick={signOut}
+            onSignOut={signOut}
           />
         </div>
 
-        <div className="border-t border-border/30 pt-0.5">
-          <SidebarRow
-            icon={isCollapsed ? ChevronsRight : ChevronsLeft}
-            label={isCollapsed ? "Expand (⌘B)" : "Collapse (⌘B)"}
-            isCollapsed={isCollapsed}
-            textOpacity={textOpacity}
-            onClick={toggle}
-          />
-        </div>
       </div>
-    </motion.aside>
+      </aside>
+
+      {/* Clickable divider — whole right edge toggles collapse */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={toggle}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="group/divider absolute inset-y-0 -right-1 z-20 flex w-2 cursor-pointer justify-center focus-visible:outline-none"
+          >
+            {/* Hairline divider — thickens and brightens on hover */}
+            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/40 transition-all group-hover/divider:w-[2px] group-hover/divider:bg-primary/60" />
+            {/* Circular chevron aligned with the content header (h-12 → center at 24px) */}
+            <span className="pointer-events-none absolute left-1/2 top-6 z-10 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground opacity-0 shadow-sm transition-all group-hover/divider:border-primary/60 group-hover/divider:bg-accent group-hover/divider:text-foreground group-hover/divider:opacity-100 group-focus-visible/divider:opacity-100 group-hover/sidebar:opacity-100">
+              {isCollapsed ? (
+                <ChevronRight size={12} strokeWidth={2.5} />
+              ) : (
+                <ChevronLeft size={12} strokeWidth={2.5} />
+              )}
+            </span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          {isCollapsed ? "Expand (⌘B)" : "Collapse (⌘B)"}
+        </TooltipContent>
+      </Tooltip>
+    </motion.div>
   );
 }
 
-function NavItem({
+const NavItem = memo(function NavItem({
   to,
   label,
   icon: Icon,
@@ -155,7 +181,14 @@ function NavItem({
   textOpacity: ReturnType<typeof useTransform<number, number>>;
 }) {
   const location = useLocation();
-  const isActive = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
+  // "/dashboard" is the canonical home, but the router also accepts "/" as an
+  // alias so we mark Home active in both cases.
+  const isActive =
+    to === "/"
+      ? location.pathname === "/"
+      : to === "/dashboard"
+        ? location.pathname === "/" || location.pathname.startsWith("/dashboard")
+        : location.pathname.startsWith(to);
 
   const row = (
     <NavLink
@@ -198,50 +231,7 @@ function NavItem({
   }
 
   return row;
-}
-
-function SidebarRow({
-  icon: Icon,
-  label,
-  isCollapsed,
-  textOpacity,
-  onClick,
-}: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  isCollapsed: boolean;
-  textOpacity: ReturnType<typeof useTransform<number, number>>;
-  onClick: () => void;
-}) {
-  const button = (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 h-8 rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50 w-full overflow-hidden"
-      style={{ paddingLeft: ICON_PL, paddingRight: ICON_PL }}
-    >
-      <Icon size={16} className="flex-shrink-0" />
-      <motion.span
-        className="whitespace-nowrap text-[13px] font-medium"
-        style={{ opacity: textOpacity }}
-      >
-        {label}
-      </motion.span>
-    </button>
-  );
-
-  if (isCollapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return button;
-}
+});
 
 function SwitchRow({
   icon: Icon,
@@ -251,6 +241,7 @@ function SwitchRow({
   onToggle,
   active,
   elapsed,
+  orbVariant,
   isCollapsed,
   textOpacity,
 }: {
@@ -263,21 +254,42 @@ function SwitchRow({
   active: boolean;
   /** Human-readable elapsed duration shown below the label. */
   elapsed?: string | null;
+  /** If set, renders the animated orb in place of the Lucide icon. */
+  orbVariant?: OrbVariant;
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
 }) {
+  const orbState: PersonaState = active
+    ? "listening"
+    : checked
+      ? "idle"
+      : "asleep";
+
+  const leading = orbVariant ? (
+    <OrbIndicator
+      state={orbState}
+      variant={orbVariant}
+      size="sm"
+      orbClassName="size-5"
+    />
+  ) : (
+    <Icon
+      size={16}
+      className={`flex-shrink-0 ${active ? "text-green-500" : ""}`}
+    />
+  );
+
   const row = (
-    <div
-      className="flex items-center gap-3 h-9 rounded-lg text-muted-foreground w-full overflow-hidden"
+    <button
+      onClick={isCollapsed ? onToggle : undefined}
+      className="flex items-center gap-3 h-9 rounded-lg text-muted-foreground w-full overflow-hidden transition-colors hover:bg-accent/50"
       style={{ paddingLeft: ICON_PL, paddingRight: ICON_PL }}
+      aria-label={label}
       title={tooltip}
     >
-      <Icon
-        size={16}
-        className={`flex-shrink-0 ${active ? "text-green-500" : ""}`}
-      />
+      {leading}
       <motion.div
-        className="flex flex-col min-w-0 flex-1"
+        className="flex flex-col min-w-0 flex-1 items-start"
         style={{ opacity: textOpacity }}
       >
         <span className="whitespace-nowrap text-[13px] font-medium truncate leading-tight">
@@ -289,33 +301,19 @@ function SwitchRow({
           </span>
         )}
       </motion.div>
-      <motion.div style={{ opacity: textOpacity }}>
+      <motion.div
+        style={{ opacity: textOpacity, pointerEvents: isCollapsed ? "none" : "auto" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <Switch checked={checked} onCheckedChange={onToggle} aria-label={label} />
       </motion.div>
-    </div>
+    </button>
   );
 
   if (isCollapsed) {
     return (
       <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={onToggle}
-            className="flex items-center justify-center h-8 w-full rounded-lg transition-colors hover:bg-accent/50"
-            aria-label={label}
-          >
-            <Icon
-              size={16}
-              className={
-                checked
-                  ? active
-                    ? "text-green-500"
-                    : "text-amber-500"
-                  : "text-muted-foreground"
-              }
-            />
-          </button>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{row}</TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
           {tooltip}
         </TooltipContent>
@@ -326,37 +324,51 @@ function SwitchRow({
   return row;
 }
 
-function RewindToggle(props: {
+function AuraToggle(props: {
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
 }) {
   const { rewindEnabled, isCapturing, inCommercialHours, captureStartedAt, toggleRewind } =
     useRewindStore();
-  const elapsed = useElapsed(captureStartedAt);
+  const { focusEnabled, isAnalyzing, monitoringStartedAt, toggleFocus } = useFocusStore();
+  const elapsed = useElapsed(captureStartedAt ?? monitoringStartedAt);
 
-  const tooltip = !rewindEnabled
-    ? "Screen recording off"
-    : isCapturing
-      ? `Recording screen${elapsed ? ` — ${elapsed}` : ""}`
+  const enabled = rewindEnabled || focusEnabled;
+  const active = isCapturing || (focusEnabled && isAnalyzing);
+
+  const onToggle = () => {
+    const turnOn = !enabled;
+    if (rewindEnabled !== turnOn) toggleRewind();
+    if (focusEnabled !== turnOn) toggleFocus();
+  };
+
+  const tooltip = !enabled
+    ? "Rewind off — turn on to capture screen + focus"
+    : active
+      ? `Rewind on${elapsed ? ` — ${elapsed}` : ""} • Rewind + Focus active`
       : !inCommercialHours
-        ? "Paused — only captures Mon-Fri 9am-5pm"
-        : "Screen recording on";
+        ? "Rewind paused — only captures Mon-Fri 9am-5pm"
+        : "Rewind on • Rewind + Focus armed";
 
   return (
     <SwitchRow
-      icon={Monitor}
+      icon={Rewind}
       label="Rewind"
       tooltip={tooltip}
-      checked={rewindEnabled}
-      onToggle={toggleRewind}
-      active={isCapturing}
+      checked={enabled}
+      onToggle={onToggle}
+      active={active}
       elapsed={elapsed}
+      orbVariant="halo"
       {...props}
     />
   );
 }
 
-function AudioToggle(props: {
+function AudioToggle({
+  isCollapsed,
+  textOpacity,
+}: {
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
 }) {
@@ -364,52 +376,176 @@ function AudioToggle(props: {
     useAudioStore();
   const elapsed = useElapsed(recordingStartedAt);
 
-  const tooltip = !audioEnabled
-    ? "Audio recording off"
-    : isRecording
-      ? `Recording audio${elapsed ? ` — ${elapsed}` : ""}`
-      : !inCommercialHours
-        ? "Paused — only captures Mon-Fri 9am-5pm"
-        : "Audio recording on";
+  const isActive = audioEnabled || isRecording;
+  const Icon = isActive ? MicOff : Mic;
+  const label = isRecording
+    ? "Stop meeting"
+    : audioEnabled
+      ? "Stop meeting"
+      : "Start a meeting";
+  const tooltip = isRecording
+    ? `Recording${elapsed ? ` — ${elapsed}` : ""} • click to stop`
+    : audioEnabled
+      ? !inCommercialHours
+        ? "Paused — only captures Mon-Fri 9am-5pm • click to stop"
+        : "Audio recording armed • click to stop"
+      : "Start a meeting";
 
-  return (
-    <SwitchRow
-      icon={Mic}
-      label="Audio"
-      tooltip={tooltip}
-      checked={audioEnabled}
-      onToggle={toggleAudio}
-      active={isRecording}
-      elapsed={elapsed}
-      {...props}
-    />
+  const button = (
+    <button
+      onClick={toggleAudio}
+      aria-label={label}
+      title={tooltip}
+      className={[
+        "flex items-center gap-3 h-9 rounded-lg w-full overflow-hidden transition-colors",
+        isRecording
+          ? "bg-red-500/10 text-red-500 hover:bg-red-500/15"
+          : isActive
+            ? "bg-amber-500/10 text-amber-600 hover:bg-amber-500/15 dark:text-amber-400"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+      ].join(" ")}
+      style={{ paddingLeft: ICON_PL, paddingRight: ICON_PL }}
+    >
+      <Icon size={16} className="flex-shrink-0" />
+      <motion.div
+        className="flex flex-col min-w-0 flex-1 items-start"
+        style={{ opacity: textOpacity }}
+      >
+        <span className="whitespace-nowrap text-[13px] font-medium truncate leading-tight">
+          {label}
+        </span>
+        {isRecording && elapsed && (
+          <span className="whitespace-nowrap text-[10px] text-red-500/70 truncate leading-tight tabular-nums">
+            {elapsed}
+          </span>
+        )}
+      </motion.div>
+      {isRecording && (
+        <motion.span
+          className="relative flex size-2 shrink-0"
+          style={{ opacity: textOpacity }}
+        >
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500/60" />
+          <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+        </motion.span>
+      )}
+    </button>
   );
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return button;
 }
 
-function FocusToggle(props: {
+function initialsFrom(email: string): string {
+  if (!email) return "?";
+  const name = email.split("@")[0] ?? "";
+  const parts = name.split(/[._-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return (name.slice(0, 2) || "?").toUpperCase();
+}
+
+function ProfileMenu({
+  email,
+  isCollapsed,
+  textOpacity,
+  onSignOut,
+}: {
+  email: string;
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
+  onSignOut: () => void | Promise<void>;
 }) {
-  const { focusEnabled, isAnalyzing, monitoringStartedAt, toggleFocus } =
-    useFocusStore();
-  const elapsed = useElapsed(monitoringStartedAt);
+  const navigate = useNavigate();
+  const initials = initialsFrom(email);
 
-  const tooltip = !focusEnabled
-    ? "Focus monitoring off"
-    : isAnalyzing
-      ? `Analyzing focus${elapsed ? ` — ${elapsed}` : ""}`
-      : `Focus monitoring on${elapsed ? ` — ${elapsed}` : ""}`;
-
-  return (
-    <SwitchRow
-      icon={Eye}
-      label="Focus"
-      tooltip={tooltip}
-      checked={focusEnabled}
-      onToggle={toggleFocus}
-      active={focusEnabled && isAnalyzing}
-      elapsed={elapsed}
-      {...props}
-    />
+  const avatar = (
+    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-semibold text-foreground">
+      {initials}
+    </span>
   );
+
+  const trigger = (
+    <button
+      className="flex h-10 w-full items-center gap-3 rounded-lg text-left transition-colors hover:bg-accent/50 overflow-hidden"
+      style={{ paddingLeft: ICON_PL - 4, paddingRight: ICON_PL }}
+      aria-label="Account"
+    >
+      {avatar}
+      <motion.div
+        className="flex min-w-0 flex-1 flex-col leading-tight"
+        style={{ opacity: textOpacity }}
+      >
+        <span className="truncate whitespace-nowrap text-[12px] font-medium text-foreground">
+          {email || "Account"}
+        </span>
+      </motion.div>
+      <motion.span
+        className="shrink-0 text-muted-foreground"
+        style={{ opacity: textOpacity }}
+      >
+        <ChevronsUpDown size={14} />
+      </motion.span>
+    </button>
+  );
+
+  const content = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="end"
+        sideOffset={8}
+        className="min-w-[220px]"
+      >
+        <DropdownMenuLabel className="flex items-center gap-2 py-2">
+          {avatar}
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-[12px] font-medium text-foreground">
+              {email || "Account"}
+            </span>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate("/settings")}>
+          <Settings className="size-4" />
+          Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          onSelect={() => void onSignOut()}
+        >
+          <LogOut className="size-4" />
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="w-full">{content}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          {email || "Account"}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return content;
 }
