@@ -1021,9 +1021,20 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           : context.l10n.chatUsageMessagesNoLimit('${used.toInt()}');
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Icon(FontAwesomeIcons.solidMessage, color: Colors.blue.shade300, size: 16),
+          const SizedBox(width: 12),
+          Text(text, style: TextStyle(fontSize: 14, color: Colors.grey.shade300)),
+        ],
+      ),
     );
   }
 
