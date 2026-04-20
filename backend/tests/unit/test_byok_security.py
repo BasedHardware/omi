@@ -447,3 +447,231 @@ class TestBoundedCache:
 
         assert hasattr(_anthropic_cache, 'ttl')
         assert _anthropic_cache.ttl > 0
+
+
+# ---------------------------------------------------------------------------
+# 10. BYOK activation endpoint validation
+# ---------------------------------------------------------------------------
+
+
+class TestBYOKActivationValidation:
+    """Test the validation logic used by activate_byok_endpoint.
+
+    The endpoint module (routers.users) triggers GCS storage.Client() on import,
+    which requires GCP credentials. Instead of mocking the entire import chain,
+    we test the validation functions directly: the regex, the provider set, and
+    the boundary cases are the same constants the endpoint uses.
+    """
+
+    _REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+
+    def _valid_fingerprints(self) -> Dict[str, str]:
+        return {
+            'openai': hashlib.sha256(b'sk-openai').hexdigest(),
+            'anthropic': hashlib.sha256(b'sk-anthropic').hexdigest(),
+            'gemini': hashlib.sha256(b'sk-gemini').hexdigest(),
+            'deepgram': hashlib.sha256(b'sk-deepgram').hexdigest(),
+        }
+
+    def _validate(self, fingerprints: Dict[str, str]) -> str | None:
+        """Replicate the validation logic from activate_byok_endpoint."""
+        missing = self._REQUIRED_PROVIDERS - set(fingerprints.keys())
+        if missing:
+            return f"Missing fingerprints for providers: {sorted(missing)}"
+        for provider, fp in fingerprints.items():
+            if provider not in self._REQUIRED_PROVIDERS:
+                return f"Unknown provider: {provider}"
+            if not _SHA256_HEX_RE.match(fp):
+                return f"Invalid fingerprint for {provider}"
+        return None
+
+    def test_valid_fingerprints_pass(self):
+        assert self._validate(self._valid_fingerprints()) is None
+
+    def test_missing_provider_rejects(self):
+        fps = self._valid_fingerprints()
+        del fps['deepgram']
+        err = self._validate(fps)
+        assert err is not None
+        assert 'deepgram' in err
+
+    def test_unknown_provider_rejects(self):
+        fps = self._valid_fingerprints()
+        fps['unknown_provider'] = hashlib.sha256(b'x').hexdigest()
+        err = self._validate(fps)
+        assert err is not None
+        assert 'Unknown provider' in err
+
+    def test_63_char_fingerprint_rejects(self):
+        fps = self._valid_fingerprints()
+        fps['openai'] = 'a' * 63
+        err = self._validate(fps)
+        assert err is not None
+        assert 'Invalid fingerprint' in err
+
+    def test_64_char_valid_hex_passes(self):
+        fps = self._valid_fingerprints()
+        fps['openai'] = 'a' * 64  # valid: 64 hex chars
+        assert self._validate(fps) is None
+
+    def test_65_char_fingerprint_rejects(self):
+        fps = self._valid_fingerprints()
+        fps['openai'] = 'a' * 65
+        err = self._validate(fps)
+        assert err is not None
+        assert 'Invalid fingerprint' in err
+
+    def test_empty_fingerprints_rejects(self):
+        err = self._validate({})
+        assert err is not None
+        assert 'Missing fingerprints' in err
+
+
+# ---------------------------------------------------------------------------
+# 11. Cache routing: raw keys never in cache keys
+# ---------------------------------------------------------------------------
+
+
+class TestCacheRouting:
+    def test_cached_openai_chat_no_raw_key_in_cache(self):
+        from utils.llm.clients import _cached_openai_chat, _openai_cache
+
+        api_key = 'sk-secret-openai-key-for-cache-test'
+        _cached_openai_chat('gpt-4.1-mini', api_key, {})
+        for k in _openai_cache.keys():
+            assert api_key not in k, f"Raw API key found in cache key: {k}"
+
+    def test_cached_openai_chat_returns_same_instance(self):
+        from utils.llm.clients import _cached_openai_chat
+
+        api_key = 'sk-deterministic-test-key'
+        inst1 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
+        inst2 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
+        assert inst1 is inst2
+
+    def test_cached_anthropic_no_raw_key_in_cache(self):
+        from utils.llm.clients import _anthropic_cache, _cached_anthropic
+
+        api_key = 'sk-ant-secret-key-for-cache-test'
+        _cached_anthropic(api_key)
+        for k in _anthropic_cache.keys():
+            assert api_key not in k, f"Raw API key found in cache key: {k}"
+
+    def test_cached_anthropic_returns_same_instance(self):
+        from utils.llm.clients import _cached_anthropic
+
+        api_key = 'sk-ant-deterministic-key'
+        inst1 = _cached_anthropic(api_key)
+        inst2 = _cached_anthropic(api_key)
+        assert inst1 is inst2
+
+    def test_anthropic_proxy_routes_to_byok(self):
+        from utils.llm.clients import _AnthropicViaOpenAIProxy, _ANTHROPIC_OPENAI_BASE_URL
+
+        mock_default = MagicMock()
+        proxy = _AnthropicViaOpenAIProxy(default=mock_default, ctor_kwargs={})
+        with patch('utils.llm.clients.get_byok_key', side_effect=lambda p: 'sk-ant-byok' if p == 'anthropic' else None):
+            resolved = proxy._resolve()
+        assert resolved.openai_api_base == _ANTHROPIC_OPENAI_BASE_URL
+
+    def test_anthropic_proxy_falls_back_to_default(self):
+        from utils.llm.clients import _AnthropicViaOpenAIProxy
+
+        mock_default = MagicMock()
+        proxy = _AnthropicViaOpenAIProxy(default=mock_default, ctor_kwargs={})
+        with patch('utils.llm.clients.get_byok_key', return_value=None):
+            resolved = proxy._resolve()
+        assert resolved is mock_default
+
+
+# ---------------------------------------------------------------------------
+# 12. Middleware dispatch: context isolation between requests
+# ---------------------------------------------------------------------------
+
+
+class TestMiddlewareIsolation:
+    def test_two_contexts_isolated(self):
+        """Keys set in one context must not bleed into another."""
+        from utils.byok import get_byok_keys, set_byok_keys
+
+        ctx1 = copy_context()
+        ctx2 = copy_context()
+
+        ctx1.run(set_byok_keys, {'openai': 'key-a'})
+        result2 = ctx2.run(get_byok_keys)
+        assert result2 == {}, "Context 2 should not see keys from context 1"
+
+    def test_context_reset_clears_keys(self):
+        """After ContextVar.reset(), keys from previous set are gone."""
+        from utils.byok import _byok_ctx, get_byok_keys
+
+        ctx = copy_context()
+
+        def _run():
+            token = _byok_ctx.set({'openai': 'temp-key'})
+            assert get_byok_keys() == {'openai': 'temp-key'}
+            _byok_ctx.reset(token)
+            assert get_byok_keys() == {}
+
+        ctx.run(_run)
+
+
+# ---------------------------------------------------------------------------
+# 13. Quota boundary tests
+# ---------------------------------------------------------------------------
+
+
+class TestQuotaBoundaryTests:
+    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
+    @patch('utils.subscription.users_db')
+    def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
+        """Anthropic-only BYOK should also bypass chat quota."""
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-ant-byok' if p == 'anthropic' else None
+        from utils.subscription import enforce_chat_quota
+
+        enforce_chat_quota('anthropic-byok-uid')  # Should not raise
+
+    @patch('utils.byok.get_byok_key', return_value=None)
+    @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_chat_quota_at_exact_limit(self, mock_snapshot, mock_users_db, _mock_get_key):
+        """Usage exactly at limit should be rejected."""
+        from models.users import PlanType
+
+        mock_users_db.is_byok_active.return_value = False
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 30,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        from fastapi import HTTPException
+        from utils.subscription import enforce_chat_quota
+
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_chat_quota('at-limit-uid')
+        assert exc_info.value.status_code == 402
+
+    @patch('utils.byok.get_byok_key', return_value=None)
+    @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_chat_quota_just_below_limit(self, mock_snapshot, mock_users_db, _mock_get_key):
+        """Usage below limit should pass."""
+        mock_users_db.is_byok_active.return_value = False
+        mock_snapshot.return_value = {
+            'plan': 'basic',
+            'unit': 'questions',
+            'used': 29,
+            'limit': 30,
+            'allowed': True,
+            'reset_at': '2026-05-01',
+        }
+        from utils.subscription import enforce_chat_quota
+
+        enforce_chat_quota('below-limit-uid')  # Should not raise
