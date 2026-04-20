@@ -16,11 +16,12 @@ import json
 import secrets
 import socket
 import time
+from contextlib import asynccontextmanager
 from typing import Optional
-from unittest.mock import patch
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
+import httpcore
 
 from models.app import ChatTool
 from utils.log_sanitizer import sanitize
@@ -45,7 +46,7 @@ def _is_forbidden_ip(ip_str: str) -> bool:
     )
 
 
-def validate_mcp_server_url(server_url: str) -> str:
+def validate_mcp_server_url(server_url: str) -> None:
     """Validate outbound MCP/OAuth URLs against SSRF-prone destinations."""
     parsed = urlparse(server_url)
     if parsed.scheme not in ("http", "https"):
@@ -58,7 +59,6 @@ def validate_mcp_server_url(server_url: str) -> str:
     host = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     _resolve_public_addresses(host, port)
-    return server_url
 
 
 def _resolve_public_addresses(host: str, port: int):
@@ -78,16 +78,68 @@ def _resolve_public_addresses(host: str, port: int):
     return infos
 
 
-def _patch_resolution(host: str, port: int):
-    resolved_infos = _resolve_public_addresses(host, port)
-    original_getaddrinfo = socket.getaddrinfo
+class _PinnedAsyncNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Per-client network backend that pins hostname resolution to validated IPs."""
 
-    def _pinned_getaddrinfo(query_host, query_port, *args, **kwargs):
-        if query_host == host and int(query_port or port) == int(port):
-            return resolved_infos
-        return original_getaddrinfo(query_host, query_port, *args, **kwargs)
+    def __init__(self, pinned_hosts: dict[tuple[str, int], list[str]]):
+        self._backend = httpcore.AnyIOBackend()
+        self._pinned_hosts = pinned_hosts
 
-    return patch('socket.getaddrinfo', side_effect=_pinned_getaddrinfo)
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        pinned_addresses = self._pinned_hosts.get((host, int(port)))
+        if not pinned_addresses:
+            return await self._backend.connect_tcp(host, port, timeout, local_address, socket_options)
+
+        last_error = None
+        for pinned_ip in pinned_addresses:
+            try:
+                return await self._backend.connect_tcp(
+                    pinned_ip,
+                    port,
+                    timeout,
+                    local_address,
+                    socket_options,
+                )
+            except Exception as exc:
+                last_error = exc
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError(f"No validated addresses available for {host}:{port}")
+
+    async def connect_unix_socket(self, path: str, timeout: float | None = None, socket_options=None):
+        return await self._backend.connect_unix_socket(path, timeout, socket_options)
+
+    async def sleep(self, seconds: float) -> None:
+        await self._backend.sleep(seconds)
+
+
+def _validated_host_config(server_url: str) -> tuple[str, int, list[str]]:
+    validate_mcp_server_url(server_url)
+    parsed = urlparse(server_url)
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    infos = _resolve_public_addresses(host, port)
+    pinned_ips = list(dict.fromkeys(info[4][0] for info in infos))
+    return host, port, pinned_ips
+
+
+@asynccontextmanager
+async def _safe_async_client(server_url: str, timeout):
+    host, port, pinned_ips = _validated_host_config(server_url)
+    transport = httpx.AsyncHTTPTransport()
+    transport._pool._network_backend = _PinnedAsyncNetworkBackend({(host, port): pinned_ips})
+
+    async with transport:
+        async with httpx.AsyncClient(timeout=timeout, transport=transport) as client:
+            yield client
 
 
 # ---------------------------------------------------------------------------
@@ -101,16 +153,15 @@ async def discover_oauth_metadata(server_url: str) -> Optional[dict]:
     Checks /.well-known/oauth-authorization-server relative to the server origin.
     Returns metadata dict or None if the server does not require OAuth.
     """
-    validated_server_url = validate_mcp_server_url(server_url)
-    parsed = urlparse(validated_server_url)
+    validate_mcp_server_url(server_url)
+    parsed = urlparse(server_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     metadata_url = urljoin(origin, "/.well-known/oauth-authorization-server")
     validate_mcp_server_url(metadata_url)
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with _safe_async_client(metadata_url, timeout=15.0) as client:
         try:
-            with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-                resp = await client.get(metadata_url, follow_redirects=False)
+            resp = await client.get(metadata_url, follow_redirects=False)
             if resp.status_code == 200:
                 data = resp.json()
                 return {
@@ -140,10 +191,8 @@ async def register_oauth_client(registration_endpoint: str, redirect_uri: str, s
     if scopes:
         payload["scope"] = " ".join(scopes)
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        parsed = urlparse(registration_endpoint)
-        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-            resp = await client.post(registration_endpoint, json=payload, follow_redirects=False)
+    async with _safe_async_client(registration_endpoint, timeout=15.0) as client:
+        resp = await client.post(registration_endpoint, json=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         logger.info(f"[MCP OAuth] Registration response: {sanitize(data)}")
@@ -208,10 +257,8 @@ async def exchange_oauth_code(
     if code_verifier:
         payload["code_verifier"] = code_verifier
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        parsed = urlparse(token_endpoint)
-        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-            resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
+    async with _safe_async_client(token_endpoint, timeout=15.0) as client:
+        resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         token_type = data.get("token_type", "Bearer")
@@ -245,10 +292,8 @@ async def refresh_oauth_token(
     if client_secret:
         payload["client_secret"] = client_secret
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        parsed = urlparse(token_endpoint)
-        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-            resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
+    async with _safe_async_client(token_endpoint, timeout=15.0) as client:
+        resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -314,10 +359,8 @@ async def _mcp_post(
     if session_id:
         headers["Mcp-Session-Id"] = session_id
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        parsed = urlparse(server_url)
-        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-            resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=False)
+    async with _safe_async_client(server_url, timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+        resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=False)
 
         if resp.status_code == 401:
             raise PermissionError("MCP server returned 401 Unauthorized")
@@ -401,29 +444,28 @@ async def _sse_send_and_receive_inner(
     responses: list[dict] = []
     post_endpoint = None
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
-            async with client.stream("GET", sse_url, headers=headers, follow_redirects=False) as stream:
-                if stream.status_code == 401:
-                    raise PermissionError("MCP server returned 401 Unauthorized")
-                if stream.status_code >= 400:
-                    await stream.aread()
-                    raise httpx.HTTPStatusError(
-                        f"SSE connection failed with {stream.status_code}",
-                        request=stream._request,
-                        response=httpx.Response(stream.status_code),
-                    )
+    async with _safe_async_client(sse_url, timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+        async with client.stream("GET", sse_url, headers=headers, follow_redirects=False) as stream:
+            if stream.status_code == 401:
+                raise PermissionError("MCP server returned 401 Unauthorized")
+            if stream.status_code >= 400:
+                await stream.aread()
+                raise httpx.HTTPStatusError(
+                    f"SSE connection failed with {stream.status_code}",
+                    request=stream._request,
+                    response=httpx.Response(stream.status_code),
+                )
 
-                logger.info(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
-                buf = ""
-                event_type = ""
-                event_data_lines: list[str] = []
+            logger.info(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
+            buf = ""
+            event_type = ""
+            event_data_lines: list[str] = []
 
-                async for raw_chunk in stream.aiter_text():
-                    buf += raw_chunk
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        line = line.rstrip("\r")
+            async for raw_chunk in stream.aiter_text():
+                buf += raw_chunk
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    line = line.rstrip("\r")
 
                     if line.startswith("event:"):
                         event_type = line[6:].strip()
@@ -447,13 +489,9 @@ async def _sse_send_and_receive_inner(
                             post_headers = {"Content-Type": "application/json"}
                             if access_token:
                                 post_headers["Authorization"] = f"Bearer {access_token}"
-                            post_parsed = urlparse(post_endpoint)
-                            with _patch_resolution(
-                                post_parsed.hostname,
-                                post_parsed.port or (443 if post_parsed.scheme == 'https' else 80),
-                            ):
+                            async with _safe_async_client(post_endpoint, timeout=httpx.Timeout(30.0, connect=10.0)) as post_client:
                                 for payload in payloads:
-                                    await client.post(
+                                    await post_client.post(
                                         post_endpoint,
                                         json=payload,
                                         headers=post_headers,
