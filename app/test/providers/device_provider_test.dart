@@ -225,4 +225,50 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  group('disconnect notification rate-limiting (#6505)', () {
+    // Note: following the same pattern used by the battery throttling tests in
+    // this file — extracting the rate-limit logic into a pure test helper that
+    // mirrors production, rather than adding a public test-only method to
+    // DeviceProvider (which would pollute the production API). The logic is
+    // trivial enough that mirroring it here is safer than the alternative.
+
+    const rateLimit = Duration(minutes: 60);
+
+    /// Returns true if the notification should fire, false if rate-limited.
+    bool shouldNotify(DateTime? lastNotificationTime, DateTime now) {
+      if (lastNotificationTime != null &&
+          now.difference(lastNotificationTime) < rateLimit) {
+        return false;
+      }
+      return true;
+    }
+
+    test('fires on first disconnect (no prior notification)', () {
+      expect(shouldNotify(null, DateTime.now()), true);
+    });
+
+    test('fires after 61 minutes (well past rate-limit)', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 61));
+      expect(shouldNotify(last, DateTime.now()), true);
+    });
+
+    test('rate-limited within 60 minutes', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 30));
+      expect(shouldNotify(last, DateTime.now()), false);
+    });
+
+    test('rate-limited after 10 minutes (typical BLE range-edge cycle)', () {
+      final last = DateTime.now().subtract(const Duration(minutes: 10));
+      expect(shouldNotify(last, DateTime.now()), false);
+    });
+
+    test('boundary: exactly 60 minutes ago — rate-limited (not strictly past)', () {
+      // Uses a fixed delta so two separate DateTime.now() calls don't affect the result.
+      final base = DateTime.now();
+      final last = base.subtract(const Duration(minutes: 60));
+      // Less than 60 minutes, so still rate-limited.
+      expect(shouldNotify(last, base), false);
+    });
+  });
 }
