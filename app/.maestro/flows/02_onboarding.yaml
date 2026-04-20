@@ -1,0 +1,58 @@
+# Flow: New User Onboarding
+# Tests: Complete onboarding journey after first sign-in
+# Tags: smoke, onboarding
+# Prerequisites: User just signed in for the first time
+
+appId: com.friend.ios.dev
+tags:
+  - smoke
+  - onboarding
+
+---
+# After successful sign-in, onboarding should appear
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 15000
+
+- takeScreenshot: "02_onboarding_welcome"
+
+# Name entry step
+- tapOn: "What should Omi call you?"
+- inputText: ${TEST_USER_NAME}
+- takeScreenshot: "02_onboarding_name"
+
+# Continue through onboarding steps
+- tapOn: "Continue"
+
+# Permission prompts (notification, microphone)
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Allow"
+        - "Continue"
+        - "Skip"
+    timeout: 5000
+
+# Try to proceed (handle permission dialogs)
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+
+# Should reach the main screen eventually
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Conversations"
+        - "Home"
+        - "Memories"
+    timeout: 20000
+
+- takeScreenshot: "02_onboarding_complete"

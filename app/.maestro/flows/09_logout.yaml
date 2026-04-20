@@ -1,0 +1,65 @@
+# Flow: User Logout
+# Tests: Signing out of the app
+# Tags: smoke, auth
+# Prerequisites: User authenticated
+
+appId: com.friend.ios.dev
+tags:
+  - smoke
+  - auth
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Navigate to settings
+- tapOn:
+    anyOf:
+      - id: ".*settings.*"
+      - id: ".*profile.*"
+      - "Settings"
+
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 10000
+
+# Scroll down to find logout
+- scrollUntilVisible:
+    element:
+      anyOf:
+        - "Sign Out"
+        - "Log Out"
+        - "Logout"
+    direction: DOWN
+    timeout: 10000
+
+- takeScreenshot: "09_before_logout"
+
+- tapOn:
+    anyOf:
+      - "Sign Out"
+      - "Log Out"
+      - "Logout"
+
+# Confirm logout if prompted
+- runFlow:
+    when:
+      visible:
+        anyOf:
+          - "Confirm"
+          - "Yes"
+          - "Are you sure"
+    commands:
+      - tapOn:
+          anyOf:
+            - "Confirm"
+            - "Yes"
+
+# Should return to login screen
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Sign in with Google"
+        - "Welcome"
+    timeout: 10000
+
+- takeScreenshot: "09_logged_out"

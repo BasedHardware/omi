@@ -1,0 +1,47 @@
+# Flow: Settings & Profile
+# Tests: Opening settings, checking profile info, privacy section
+# Tags: core, settings
+# Prerequisites: User authenticated
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - settings
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Open settings (usually gear icon or profile)
+- tapOn:
+    anyOf:
+      - id: ".*settings.*"
+      - id: ".*profile.*"
+      - "Settings"
+
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 10000
+
+- takeScreenshot: "07_settings_main"
+
+# Verify key settings sections exist
+- assertVisible:
+    anyOf:
+      - "Account"
+      - "Profile"
+      - "Notifications"
+- assertVisible:
+    anyOf:
+      - "Privacy"
+      - "Data"
+      - "Storage"
+
+# Open privacy/data section
+- tapOn:
+    anyOf:
+      - "Privacy"
+      - "Data"
+      - "Storage"
+
+- takeScreenshot: "07_settings_privacy"
+- back

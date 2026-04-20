@@ -1,0 +1,37 @@
+# Flow: Apps Marketplace
+# Tests: Browsing available plugins/integrations
+# Tags: core, apps
+# Prerequisites: User authenticated
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - apps
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Navigate to Apps tab
+- tapOn:
+    anyOf:
+      - id: ".*apps.*"
+      - "Apps"
+      - "Plugins"
+
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Apps"
+        - "Plugins"
+        - "Marketplace"
+    timeout: 10000
+
+- takeScreenshot: "06_apps_list"
+
+# Verify categories or app list is visible
+- assertVisible:
+    anyOf:
+      - "Popular"
+      - "All"
+      - "Installed"
+      - "Categories"

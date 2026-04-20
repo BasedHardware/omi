@@ -1,0 +1,59 @@
+# Flow: Memories (List, Create, Delete)
+# Tests: Viewing memories, creating a new memory, deleting it
+# Tags: core, memories
+# Prerequisites: User authenticated
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - memories
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Navigate to Memories
+- tapOn:
+    id: ".*memories.*"
+- extendedWaitUntil:
+    visible: "Memories"
+    timeout: 10000
+
+- takeScreenshot: "04_memories_list"
+
+# Try creating a new memory via the add button
+- runFlow:
+    when:
+      visible: "+"
+    commands:
+      - tapOn: "+"
+      - extendedWaitUntil:
+          visible:
+            anyOf:
+              - "Create Memory"
+              - "Add Memory"
+              - "Title"
+          timeout: 5000
+      - inputText: ${TEST_MEMORY_TITLE}
+      - tapOn:
+          anyOf:
+            - "Save"
+            - "Create"
+            - "Done"
+      - takeScreenshot: "04_memory_created"
+
+# Verify memory appears in list
+- assertVisible: ${TEST_MEMORY_TITLE}
+
+# Clean up: delete the test memory
+- tapOn: ${TEST_MEMORY_TITLE}
+- extendedWaitUntil:
+    visible: "Delete"
+    timeout: 5000
+- tapOn: "Delete"
+- runFlow:
+    when:
+      visible: "Confirm"
+    commands:
+      - tapOn: "Confirm"
+
+- takeScreenshot: "04_memory_deleted"

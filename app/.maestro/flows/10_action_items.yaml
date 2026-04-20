@@ -1,0 +1,29 @@
+# Flow: Action Items
+# Tests: Viewing and managing action items from conversations
+# Tags: core, conversations
+# Prerequisites: User authenticated, has conversations with action items
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - conversations
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Navigate to action items (often under conversations or as a tab)
+- tapOn:
+    anyOf:
+      - "Action Items"
+      - "Tasks"
+      - id: ".*action.*items.*"
+
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Action Items"
+        - "Tasks"
+        - "No action items"
+    timeout: 10000
+
+- takeScreenshot: "10_action_items"

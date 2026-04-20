@@ -1,0 +1,51 @@
+# Flow: Chat with Omi
+# Tests: Opening chat, sending a message, receiving a response
+# Tags: core, chat
+# Prerequisites: User authenticated
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - chat
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Open the chat interface
+- tapOn:
+    anyOf:
+      - id: ".*chat.*"
+      - "Chat"
+      - "Ask Omi"
+
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Ask anything"
+        - "Type a message"
+        - "Chat"
+    timeout: 10000
+
+- takeScreenshot: "05_chat_opened"
+
+# Type and send a question
+- tapOn:
+    anyOf:
+      - id: ".*input.*"
+      - "Ask anything"
+      - "Type a message"
+- inputText: ${TEST_CHAT_QUESTION}
+- takeScreenshot: "05_chat_typed"
+
+# Send the message
+- tapOn:
+    anyOf:
+      - id: ".*send.*"
+      - "Send"
+
+# Wait for response (network-dependent, generous timeout)
+- extendedWaitUntil:
+    notVisible: "Thinking"
+    timeout: 30000
+
+- takeScreenshot: "05_chat_response"

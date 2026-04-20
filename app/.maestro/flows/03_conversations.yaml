@@ -1,0 +1,45 @@
+# Flow: Conversations (List, View, Details)
+# Tests: Viewing conversation list, opening a conversation, checking details
+# Tags: core, conversations
+# Prerequisites: User authenticated, has at least 1 conversation
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - conversations
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Navigate to Conversations tab
+- tapOn:
+    id: ".*conversations.*"
+- extendedWaitUntil:
+    visible: "Conversations"
+    timeout: 10000
+
+- takeScreenshot: "03_conversations_list"
+
+# Check conversation list renders
+- assertVisible:
+    anyOf:
+      - "Today"
+      - "Yesterday"
+      - "No conversations yet"
+
+# If conversations exist, tap the first one
+- runFlow:
+    when:
+      visible: "Today"
+    commands:
+      - tapOn:
+          index: 0
+          below: "Today"
+      - extendedWaitUntil:
+          visible:
+            anyOf:
+              - "Summary"
+              - "Transcript"
+          timeout: 5000
+      - takeScreenshot: "03_conversation_detail"
+      - back

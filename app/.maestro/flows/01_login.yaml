@@ -1,0 +1,30 @@
+# Flow: User Sign-In
+# Tests: Google Sign-In button presence, auth flow initiation
+# Tags: smoke, auth
+# Prerequisites: App freshly installed (no existing session)
+
+appId: com.friend.ios.dev
+tags:
+  - smoke
+  - auth
+
+---
+# Verify we're on the sign-in screen
+- assertVisible: "Sign in with Google"
+- assertVisible: "Sign in with Apple"
+
+# Take evidence of initial state
+- takeScreenshot: "01_login_initial"
+
+# Attempt Google Sign-In (will open system auth dialog)
+- tapOn: "Sign in with Google"
+
+# Wait for the Google auth sheet or webview to appear
+- extendedWaitUntil:
+    visible: "Google"
+    timeout: 10000
+
+- takeScreenshot: "01_login_google_sheet"
+
+# Note: Actual sign-in requires real credentials or mock auth.
+# In CI, we use a pre-authenticated session via setup script.

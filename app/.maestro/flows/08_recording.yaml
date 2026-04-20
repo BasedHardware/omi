@@ -1,0 +1,47 @@
+# Flow: Recording & Transcription UI
+# Tests: Recording button, transcription display (UI only, no BLE needed)
+# Tags: device, recording
+# Prerequisites: User authenticated, phone microphone available
+# Note: Full recording test requires physical Omi device; this tests phone mic fallback
+
+appId: com.friend.ios.dev
+tags:
+  - device
+  - recording
+
+---
+- runFlow: ../shared/launch_app.yaml
+
+# Check if recording UI is accessible
+- tapOn:
+    anyOf:
+      - id: ".*record.*"
+      - "Record"
+      - "Start"
+
+# If phone mic recording is available, test it
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Recording"
+        - "Listening"
+        - "Transcribing"
+        - "No device connected"
+    timeout: 10000
+
+- takeScreenshot: "08_recording_state"
+
+# If recording started, wait a few seconds then stop
+- runFlow:
+    when:
+      visible:
+        anyOf:
+          - "Recording"
+          - "Listening"
+    commands:
+      - wait: 5000
+      - tapOn:
+          anyOf:
+            - "Stop"
+            - id: ".*stop.*"
+      - takeScreenshot: "08_recording_stopped"
