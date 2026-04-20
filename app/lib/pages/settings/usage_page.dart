@@ -1004,36 +1004,82 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final sub = provider.subscription;
     if (sub == null) return const SizedBox.shrink();
 
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
     final used = sub.chatQuotaUsed;
     final unit = sub.chatQuotaUnit;
     final limits = sub.subscription.limits;
+    final color = Colors.blue.shade300;
 
-    String text;
+    String value;
+    String usageText;
+    double percentage = 0.0;
+
     if (unit == 'cost_usd') {
+      value = '\$${used.toStringAsFixed(2)}';
       final limit = limits.chatCostUsdPerMonth;
-      text = limit != null
-          ? context.l10n.chatUsageCost('\$${used.toStringAsFixed(2)}', '\$${limit.toStringAsFixed(0)}')
-          : context.l10n.chatUsageCostNoLimit('\$${used.toStringAsFixed(2)}');
+      if (limit != null && limit > 0) {
+        usageText = '\$${used.toStringAsFixed(2)} of \$${limit.toStringAsFixed(0)} used this month';
+        percentage = (used / limit).clamp(0.0, 1.0);
+      } else {
+        usageText = '\$${used.toStringAsFixed(2)} used this month';
+      }
     } else {
+      value = '${numberFormatter.format(used.toInt())} ${context.l10n.chatTitle}';
       final limit = limits.chatQuestionsPerMonth;
-      text = limit != null
-          ? context.l10n.chatUsageMessages('${used.toInt()}', '$limit')
-          : context.l10n.chatUsageMessagesNoLimit('${used.toInt()}');
+      if (limit != null && limit > 0) {
+        usageText = '${numberFormatter.format(used.toInt())} of $limit messages used this month';
+        percentage = (used / limit).clamp(0.0, 1.0);
+      } else {
+        usageText = '${numberFormatter.format(used.toInt())} messages used this month';
+      }
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(FontAwesomeIcons.solidMessage, color: Colors.blue.shade300, size: 16),
-          const SizedBox(width: 12),
-          Text(text, style: TextStyle(fontSize: 14, color: Colors.grey.shade300)),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
         ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value, style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                FaIcon(FontAwesomeIcons.solidMessage, color: color, size: 16),
+                const SizedBox(width: 8),
+                Text(context.l10n.chatTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.chatQuotaSubtitle,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
+            ),
+            if (percentage > 0) ...[
+              const SizedBox(height: 16),
+              Text(usageText, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: percentage,
+                backgroundColor: Colors.grey.shade700,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
