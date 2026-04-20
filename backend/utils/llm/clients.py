@@ -130,7 +130,7 @@ class _OpenAIEmbeddingsProxy:
     def _resolve(self) -> OpenAIEmbeddings:
         byok = get_byok_key('openai')
         if byok:
-            cache_key = f"emb:{self._model}:{hash(byok)}"
+            cache_key = f"emb:{self._model}:{_hash_key(byok)}"
             inst = _openai_cache.get(cache_key)
             if inst is None:
                 inst = OpenAIEmbeddings(model=self._model, api_key=byok, **self._ctor_kwargs)
