@@ -276,24 +276,25 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.byok.has_byok_keys', return_value=True)
+    @patch('utils.byok.get_byok_key')
     @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
     @patch('utils.subscription.users_db')
-    def test_enforce_chat_quota_bypasses_for_byok(self, mock_users_db, _mock_has_keys):
+    def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
         mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-openai' if p == 'openai' else None
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
         mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid')
 
-    @patch('utils.byok.has_byok_keys', return_value=False)
+    @patch('utils.byok.get_byok_key', return_value=None)
     @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
     @patch('utils.subscription.users_db')
     @patch('utils.subscription.get_chat_quota_snapshot')
-    def test_enforce_chat_quota_enforces_when_byok_active_but_no_headers(
-        self, mock_snapshot, mock_users_db, _mock_has_keys
+    def test_enforce_chat_quota_enforces_when_byok_active_but_no_llm_headers(
+        self, mock_snapshot, mock_users_db, _mock_get_key
     ):
-        """Abuse case: user activated BYOK with fake fingerprints but sends no BYOK headers."""
+        """Abuse case: user activated BYOK but sends no LLM provider headers."""
         from models.users import PlanType
 
         mock_users_db.is_byok_active.return_value = True
@@ -310,6 +311,31 @@ class TestChatQuotaBYOKBypass:
 
         with pytest.raises(HTTPException) as exc_info:
             enforce_chat_quota('fake-byok-uid')
+        assert exc_info.value.status_code == 402
+
+    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_chat_quota_enforces_when_only_deepgram_header(self, mock_snapshot, mock_users_db, mock_get_key):
+        """Partial-header abuse: only x-byok-deepgram sent, chat uses Omi's OpenAI key."""
+        from models.users import PlanType
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'dg-key' if p == 'deepgram' else None
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        from fastapi import HTTPException
+        from utils.subscription import enforce_chat_quota
+
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_chat_quota('partial-byok-uid')
         assert exc_info.value.status_code == 402
 
     @patch('utils.subscription.CHAT_CAP_ENFORCEMENT_ENABLED', True)
@@ -341,19 +367,31 @@ class TestChatQuotaBYOKBypass:
 
 
 class TestTranscriptionCreditBYOKBypass:
+    @patch('utils.byok.get_byok_key', return_value='dg-user-key')
     @patch('utils.subscription.users_db')
-    def test_has_transcription_credits_bypasses_for_byok(self, mock_users_db):
+    def test_has_transcription_credits_bypasses_for_byok(self, mock_users_db, _mock_get_key):
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import has_transcription_credits
 
         assert has_transcription_credits('byok-uid') is True
 
+    @patch('utils.byok.get_byok_key', return_value='dg-user-key')
     @patch('utils.subscription.users_db')
-    def test_remaining_seconds_is_none_for_byok(self, mock_users_db):
+    def test_remaining_seconds_is_none_for_byok(self, mock_users_db, _mock_get_key):
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import get_remaining_transcription_seconds
 
         assert get_remaining_transcription_seconds('byok-uid') is None
+
+    @patch('utils.byok.get_byok_key', return_value=None)
+    @patch('utils.subscription.users_db')
+    def test_transcription_not_bypassed_when_no_deepgram_header(self, mock_users_db, _mock_get_key):
+        """BYOK active but no x-byok-deepgram header — should NOT bypass."""
+        mock_users_db.is_byok_active.return_value = True
+        mock_users_db.get_user_valid_subscription.return_value = None
+        from utils.subscription import has_transcription_credits
+
+        assert has_transcription_credits('fake-byok-uid') is False
 
 
 # ---------------------------------------------------------------------------
