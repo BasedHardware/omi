@@ -58,9 +58,9 @@ echo ""
 cd "$BACKEND_DIR"
 
 if [ ! -f .env ]; then
-    if [ -f .env.docker ]; then
-        cp .env.docker .env
-        echo -e "${YELLOW}Created .env from .env.docker template${NC}"
+    if [ -f .env.example ]; then
+        cp .env.example .env
+        echo -e "${YELLOW}Created .env from .env.example template${NC}"
     elif [ -f .env.template ]; then
         cp .env.template .env
         echo -e "${YELLOW}Created .env from .env.template${NC}"
