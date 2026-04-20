@@ -16,14 +16,15 @@ from utils.http_client import get_webhook_client
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
+    generate_pkce_pair,
     build_authorization_url,
+    generate_state_token,
+    parse_state_token,
     exchange_oauth_code,
     refresh_oauth_token,
     discover_mcp_tools,
     fetch_brandfetch_logo,
-    generate_state_token,
-    parse_state_token,
-    generate_pkce_pair,
+    validate_mcp_server_url,
 )
 
 from database.apps import (
@@ -1447,6 +1448,10 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=422, detail='App name is required')
     if not server_url:
         raise HTTPException(status_code=422, detail='MCP server URL is required')
+    try:
+        validate_mcp_server_url(server_url)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f'MCP server URL rejected: {str(e)}')
 
     # Extract domain for logo
     parsed = urlparse(server_url)
