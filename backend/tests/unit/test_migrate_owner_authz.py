@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 
 def _load_migrate_app_owner(verified_old_uid='legacy-user', verify_raises=None):
-    path = Path('/tmp/omi-audit/backend/routers/apps.py')
+    path = Path(__file__).resolve().parents[2] / 'routers' / 'apps.py'
     source = path.read_text()
     module = ast.parse(source)
     fn = next(node for node in module.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'migrate_app_owner')

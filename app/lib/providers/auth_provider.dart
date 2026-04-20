@@ -217,13 +217,22 @@ class AuthenticationProvider extends BaseProvider {
       }
     } catch (e) {
       if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
+        final existingCred = e.credential;
         final oldUserId = FirebaseAuth.instance.currentUser?.uid;
         final oldAuthToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-        if (oldUserId != null) {
-          final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
-            await migrateAppOwnerId(oldUserId, oldAuthToken);
-          }
+
+        await FirebaseAuth.instance.signOut();
+        await FirebaseAuth.instance.signInWithCredential(existingCred!);
+        final newUserId = FirebaseAuth.instance.currentUser?.uid;
+        await AuthService.instance.getIdToken();
+
+        SharedPreferencesUtil().onboardingCompleted = false;
+        SharedPreferencesUtil().uid = newUserId ?? '';
+        SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
+        SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
+
+        if (oldUserId != null && newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
+          await migrateAppOwnerId(oldUserId, oldAuthToken);
         }
         return;
       }

@@ -1377,11 +1377,12 @@ async def migrate_app_owner(
     # Security boundary: callers must prove control of the source legacy
     # account before the backend migrates its apps or memories into the
     # authenticated destination account.
-    if not old_authorization or len(str(old_authorization).split(' ')) != 2:
+    scheme, _, token = old_authorization.partition(' ')
+    if scheme != 'Bearer' or not token:
         raise HTTPException(status_code=403, detail='You are not authorized to migrate this owner ID')
 
     try:
-        old_uid = auth.verify_token(old_authorization.split(' ')[1])
+        old_uid = auth.verify_token(token)
     except Exception:
         raise HTTPException(status_code=403, detail='You are not authorized to migrate this owner ID')
 
