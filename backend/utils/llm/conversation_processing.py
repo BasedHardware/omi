@@ -654,15 +654,7 @@ def get_transcript_structure(
     ).strip()
 
     # Second system message: conversation context (dynamic, per-conversation)
-    context_message = (
-        "The content language is {language_code}. You MUST respond entirely in {response_language}.\n\n"
-        "USER CONTEXT:\n"
-        "The wearer/user's first name is {user_name}. When the transcript or summary would refer to the wearer "
-        'generically (e.g., "the user", "User"), use their name instead. Do NOT assume a specific numbered '
-        'speaker (e.g., "Speaker 0") is always the wearer - infer from context; prefer calendar participant '
-        'names for other speakers when available.\n\n'
-        "Content:\n{conversation_context}"
-    )
+    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
 
@@ -672,7 +664,6 @@ def get_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
-            'user_name': user_name,
             'started_at': started_at.isoformat(),
             'tz': tz,
         }
