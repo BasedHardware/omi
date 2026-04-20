@@ -1598,11 +1598,20 @@ class _PlansSheetState extends State<PlansSheet> {
           final isSelected = selectedTierId == tierId;
           final eyebrow = planForPeriod['eyebrow'] as String?;
 
+          // Look up plan display name from subscription's available_plans
+          final subPlans = context.read<UsageProvider>().subscription?.availablePlans ?? [];
+          final matchingPlan = subPlans.firstWhereOrNull((sp) => sp.id == tierId);
+          final displayTitle = matchingPlan?.title ?? planForPeriod['title'] as String;
+
+          // Override title with plan name for tier display
+          final planDataWithName = Map<String, dynamic>.from(planForPeriod);
+          planDataWithName['title'] = displayTitle;
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _buildDynamicPlanOption(
               isSelected: isSelected,
-              planData: planForPeriod,
+              planData: planDataWithName,
               saveTag: isYearly ? '2 Months Free' : null,
               isPopular: eyebrow == 'Most popular',
               onTap: () {
