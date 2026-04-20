@@ -1472,7 +1472,7 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// Groups available plans by plan_id and shows a tier selector + billing period toggle.
+  /// Groups available plans by plan_id and shows tier cards using the existing card style.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
 
@@ -1509,84 +1509,85 @@ class _PlansSheetState extends State<PlansSheet> {
 
     return Column(
       children: [
-        // Billing period toggle
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    setState(() => selectedPlan = 'monthly');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: !isYearly ? Colors.deepPurple : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      context.l10n.billingMonthly,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: !isYearly ? Colors.white : Colors.grey.shade400,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+        // Billing period toggle — yearly/monthly
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  setState(() => selectedPlan = 'yearly');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isYearly ? Colors.white : Colors.transparent, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        context.l10n.billingYearly,
+                        style: TextStyle(
+                          color: isYearly ? Colors.white : Colors.grey.shade500,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    setState(() => selectedPlan = 'yearly');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isYearly ? Colors.deepPurple : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          context.l10n.billingYearly,
-                          style: TextStyle(
-                            color: isYearly ? Colors.white : Colors.grey.shade400,
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade800,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          context.l10n.savePercent,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
                             fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                            letterSpacing: 0.3,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            context.l10n.savePercent,
-                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  setState(() => selectedPlan = 'monthly');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: !isYearly ? Colors.white : Colors.transparent, width: 2),
+                  ),
+                  child: Text(
+                    context.l10n.billingMonthly,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: !isYearly ? Colors.white : Colors.grey.shade500,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         const SizedBox(height: 18),
-        // Tier cards
+        // Tier cards — reuse the existing _buildDynamicPlanOption card style
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
           final planForPeriod = tierPlans.firstWhereOrNull(
@@ -1595,80 +1596,24 @@ class _PlansSheetState extends State<PlansSheet> {
           if (planForPeriod == null) return const SizedBox.shrink();
 
           final isSelected = selectedTierId == tierId;
-          final title = _tierDisplayName(tierId);
           final eyebrow = planForPeriod['eyebrow'] as String?;
-          final subtitle = _localizedSubtitle(context, tierId, planForPeriod['subtitle'] as String?);
-          final priceString = planForPeriod['price_string'] as String? ?? '';
-          final isActive = planForPeriod['is_active'] as bool? ?? false;
-
-          // Check cancellation
-          final provider = context.read<UsageProvider>();
-          final sub = provider.subscription?.subscription;
-          final isCancelled = sub?.cancelAtPeriodEnd ?? false;
-          final planPriceId = planForPeriod['id'] as String;
-          String? endsOnDate;
-          if (isCancelled && sub?.currentPeriodEnd != null && sub?.currentPriceId == planPriceId) {
-            final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
-            endsOnDate = '${date.month}/${date.day}/${date.year}';
-          }
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _buildTierCard(
+            child: _buildDynamicPlanOption(
               isSelected: isSelected,
-              title: title,
-              eyebrow: eyebrow,
-              subtitle: subtitle,
-              priceString: priceString,
-              isActive: isActive && !isCancelled,
-              endsOnDate: endsOnDate,
-              onTap: isActive && !isCancelled
-                  ? () {}
-                  : () {
-                      HapticFeedback.lightImpact();
-                      setState(() => selectedTierId = tierId);
-                    },
+              planData: planForPeriod,
+              saveTag: isYearly ? '2 Months Free' : null,
+              isPopular: eyebrow == 'Most popular',
+              onTap: () {
+                HapticFeedback.lightImpact();
+                setState(() => selectedTierId = tierId);
+              },
             ),
           );
         }),
       ],
     );
-  }
-
-  String _tierDisplayName(String tierId) {
-    switch (tierId) {
-      case 'unlimited':
-        return 'Neo';
-      case 'operator':
-        return 'Operator';
-      case 'architect':
-        return 'Architect';
-      default:
-        return tierId.substring(0, 1).toUpperCase() + tierId.substring(1);
-    }
-  }
-
-  String? _localizedSubtitle(BuildContext context, String tierId, String? apiSubtitle) {
-    // Extract the leading number from the API subtitle (e.g. "200 questions per month" → 200)
-    // so the UI always reflects the backend-configured cap.
-    int? _extractCount(String? s) {
-      if (s == null) return null;
-      final match = RegExp(r'(\d+)').firstMatch(s);
-      return match != null ? int.tryParse(match.group(1)!) : null;
-    }
-
-    switch (tierId) {
-      case 'unlimited':
-        final count = _extractCount(apiSubtitle) ?? 200;
-        return context.l10n.neoSubtitle(count);
-      case 'operator':
-        final count = _extractCount(apiSubtitle) ?? 500;
-        return context.l10n.operatorSubtitle(count);
-      case 'architect':
-        return context.l10n.architectSubtitle;
-      default:
-        return apiSubtitle;
-    }
   }
 
   /// Fallback for single-tier plan display (old monthly/yearly cards).
@@ -1695,142 +1640,6 @@ class _PlansSheetState extends State<PlansSheet> {
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildTierCard({
-    required bool isSelected,
-    required String title,
-    String? eyebrow,
-    String? subtitle,
-    required String priceString,
-    required bool isActive,
-    String? endsOnDate,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withOpacity(0.15) : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isActive
-                ? Colors.green.withOpacity(0.5)
-                : isSelected
-                    ? Colors.deepPurple
-                    : Colors.white.withOpacity(0.1),
-            width: isSelected || isActive ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Selection indicator
-            Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isActive
-                      ? Colors.green
-                      : isSelected
-                          ? Colors.deepPurple
-                          : Colors.grey.shade600,
-                  width: 2,
-                ),
-                color: isActive
-                    ? Colors.green
-                    : isSelected
-                        ? Colors.deepPurple
-                        : Colors.transparent,
-              ),
-              child: isActive || isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
-            ),
-            const SizedBox(width: 14),
-            // Plan info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (eyebrow != null && eyebrow == 'Most popular') ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            context.l10n.popular,
-                            style: const TextStyle(color: Colors.deepPurple, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                      if (isActive) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            context.l10n.currentPlan,
-                            style: const TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                      if (endsOnDate != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            context.l10n.endsOnDate(endsOnDate!),
-                            style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Price
-            Text(
-              priceString,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
