@@ -85,6 +85,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               .key
         : context.l10n.notSet;
 
+    final isUpdatingMultiLanguage = userProvider.isUpdatingSingleLanguageMode;
+    final isMultiLanguageEnabled = !userProvider.singleLanguageMode;
     final isUpdatingTranslation = userProvider.isUpdatingAutoTranslate;
     final isAutoTranslationEnabled = userProvider.autoTranslateEnabled;
 
@@ -147,6 +149,60 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 height: 40,
                 decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
                 child: Center(child: FaIcon(FontAwesomeIcons.language, color: Colors.grey.shade400, size: 16)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.multiLanguageDetection,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(context.l10n.multiLanguageDetectionDesc,
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (isUpdatingMultiLanguage)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              else
+                Switch(
+                  value: isMultiLanguageEnabled,
+                  onChanged: (value) async {
+                    // singleLanguageMode is inverted: toggle ON = multi-language = singleLanguageMode false
+                    final success = await userProvider.setSingleLanguageMode(!value);
+                    if (success && context.mounted) {
+                      context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+                    }
+                  },
+                  activeColor: const Color(0xFF22C55E),
+                ),
+            ],
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, color: Colors.grey.shade800),
+          ),
+
+          // Automatic Translation Row
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+                child: Center(child: FaIcon(FontAwesomeIcons.earthAmericas, color: Colors.grey.shade400, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
