@@ -11,10 +11,13 @@ Handles:
 import asyncio
 import base64
 import hashlib
+import ipaddress
 import json
 import secrets
+import socket
 import time
 from typing import Optional
+from unittest.mock import patch
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
@@ -30,6 +33,63 @@ MCP_CLIENT_VERSION = "1.0.0"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 
 
+def _is_forbidden_ip(ip_str: str) -> bool:
+    ip = ipaddress.ip_address(ip_str)
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def validate_mcp_server_url(server_url: str) -> str:
+    """Validate outbound MCP/OAuth URLs against SSRF-prone destinations."""
+    parsed = urlparse(server_url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("URL scheme is not allowed")
+    if not parsed.hostname:
+        raise ValueError("URL host is required")
+    if parsed.username or parsed.password:
+        raise ValueError("URL credentials are not allowed")
+
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    _resolve_public_addresses(host, port)
+    return server_url
+
+
+def _resolve_public_addresses(host: str, port: int):
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        raise ValueError(f"Unable to resolve host: {host}") from e
+
+    if not infos:
+        raise ValueError(f"Unable to resolve host: {host}")
+
+    for info in infos:
+        ip_str = info[4][0]
+        if _is_forbidden_ip(ip_str):
+            raise ValueError("URL host is not allowed")
+
+    return infos
+
+
+def _patch_resolution(host: str, port: int):
+    resolved_infos = _resolve_public_addresses(host, port)
+    original_getaddrinfo = socket.getaddrinfo
+
+    def _pinned_getaddrinfo(query_host, query_port, *args, **kwargs):
+        if query_host == host and int(query_port or port) == int(port):
+            return resolved_infos
+        return original_getaddrinfo(query_host, query_port, *args, **kwargs)
+
+    return patch('socket.getaddrinfo', side_effect=_pinned_getaddrinfo)
+
+
 # ---------------------------------------------------------------------------
 # OAuth helpers
 # ---------------------------------------------------------------------------
@@ -41,13 +101,16 @@ async def discover_oauth_metadata(server_url: str) -> Optional[dict]:
     Checks /.well-known/oauth-authorization-server relative to the server origin.
     Returns metadata dict or None if the server does not require OAuth.
     """
-    parsed = urlparse(server_url)
+    validated_server_url = validate_mcp_server_url(server_url)
+    parsed = urlparse(validated_server_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     metadata_url = urljoin(origin, "/.well-known/oauth-authorization-server")
+    validate_mcp_server_url(metadata_url)
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            resp = await client.get(metadata_url, follow_redirects=True)
+            with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+                resp = await client.get(metadata_url, follow_redirects=False)
             if resp.status_code == 200:
                 data = resp.json()
                 return {
@@ -66,6 +129,7 @@ async def register_oauth_client(registration_endpoint: str, redirect_uri: str, s
 
     Returns dict with client_id and optionally client_secret.
     """
+    validate_mcp_server_url(registration_endpoint)
     payload = {
         "client_name": MCP_CLIENT_NAME,
         "redirect_uris": [redirect_uri],
@@ -77,7 +141,9 @@ async def register_oauth_client(registration_endpoint: str, redirect_uri: str, s
         payload["scope"] = " ".join(scopes)
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(registration_endpoint, json=payload)
+        parsed = urlparse(registration_endpoint)
+        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            resp = await client.post(registration_endpoint, json=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         logger.info(f"[MCP OAuth] Registration response: {sanitize(data)}")
@@ -130,6 +196,7 @@ async def exchange_oauth_code(
     code_verifier: Optional[str] = None,
 ) -> dict:
     """Exchange an authorization code for access + refresh tokens."""
+    validate_mcp_server_url(token_endpoint)
     payload = {
         "grant_type": "authorization_code",
         "code": code,
@@ -142,7 +209,9 @@ async def exchange_oauth_code(
         payload["code_verifier"] = code_verifier
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(token_endpoint, data=payload)
+        parsed = urlparse(token_endpoint)
+        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         token_type = data.get("token_type", "Bearer")
@@ -167,6 +236,7 @@ async def refresh_oauth_token(
     client_secret: Optional[str] = None,
 ) -> dict:
     """Refresh an expired access token."""
+    validate_mcp_server_url(token_endpoint)
     payload = {
         "grant_type": "refresh_token",
         "refresh_token": refresh_token,
@@ -176,7 +246,9 @@ async def refresh_oauth_token(
         payload["client_secret"] = client_secret
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(token_endpoint, data=payload)
+        parsed = urlparse(token_endpoint)
+        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            resp = await client.post(token_endpoint, data=payload, follow_redirects=False)
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -232,6 +304,7 @@ async def _mcp_post(
     Returns (response_dict, session_id). The session_id may be updated from the
     Mcp-Session-Id response header and should be passed to subsequent requests.
     """
+    validate_mcp_server_url(server_url)
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
@@ -242,7 +315,9 @@ async def _mcp_post(
         headers["Mcp-Session-Id"] = session_id
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=True)
+        parsed = urlparse(server_url)
+        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=False)
 
         if resp.status_code == 401:
             raise PermissionError("MCP server returned 401 Unauthorized")
@@ -302,6 +377,7 @@ async def _sse_send_and_receive(
 
     Returns a list of JSON-RPC response dicts (one per payload that has an id).
     """
+    validate_mcp_server_url(sse_url)
     return await asyncio.wait_for(
         _sse_send_and_receive_inner(sse_url, payloads, access_token),
         timeout=timeout_seconds,
@@ -326,27 +402,28 @@ async def _sse_send_and_receive_inner(
     post_endpoint = None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        async with client.stream("GET", sse_url, headers=headers, follow_redirects=True) as stream:
-            if stream.status_code == 401:
-                raise PermissionError("MCP server returned 401 Unauthorized")
-            if stream.status_code >= 400:
-                await stream.aread()
-                raise httpx.HTTPStatusError(
-                    f"SSE connection failed with {stream.status_code}",
-                    request=stream._request,
-                    response=httpx.Response(stream.status_code),
-                )
+        with _patch_resolution(parsed.hostname, parsed.port or (443 if parsed.scheme == 'https' else 80)):
+            async with client.stream("GET", sse_url, headers=headers, follow_redirects=False) as stream:
+                if stream.status_code == 401:
+                    raise PermissionError("MCP server returned 401 Unauthorized")
+                if stream.status_code >= 400:
+                    await stream.aread()
+                    raise httpx.HTTPStatusError(
+                        f"SSE connection failed with {stream.status_code}",
+                        request=stream._request,
+                        response=httpx.Response(stream.status_code),
+                    )
 
-            logger.info(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
-            buf = ""
-            event_type = ""
-            event_data_lines: list[str] = []
+                logger.info(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
+                buf = ""
+                event_type = ""
+                event_data_lines: list[str] = []
 
-            async for raw_chunk in stream.aiter_text():
-                buf += raw_chunk
-                while "\n" in buf:
-                    line, buf = buf.split("\n", 1)
-                    line = line.rstrip("\r")
+                async for raw_chunk in stream.aiter_text():
+                    buf += raw_chunk
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        line = line.rstrip("\r")
 
                     if line.startswith("event:"):
                         event_type = line[6:].strip()
@@ -363,19 +440,25 @@ async def _sse_send_and_receive_inner(
                                 post_endpoint = data_str
                             else:
                                 post_endpoint = origin + data_str
+                            validate_mcp_server_url(post_endpoint)
                             logger.info(f"[MCP SSE] Got endpoint: {sanitize(post_endpoint)}")
 
                             # Now send all payloads
                             post_headers = {"Content-Type": "application/json"}
                             if access_token:
                                 post_headers["Authorization"] = f"Bearer {access_token}"
-                            for payload in payloads:
-                                await client.post(
-                                    post_endpoint,
-                                    json=payload,
-                                    headers=post_headers,
-                                    follow_redirects=True,
-                                )
+                            post_parsed = urlparse(post_endpoint)
+                            with _patch_resolution(
+                                post_parsed.hostname,
+                                post_parsed.port or (443 if post_parsed.scheme == 'https' else 80),
+                            ):
+                                for payload in payloads:
+                                    await client.post(
+                                        post_endpoint,
+                                        json=payload,
+                                        headers=post_headers,
+                                        follow_redirects=False,
+                                    )
 
                         elif event_type == "message" and data_str:
                             try:
