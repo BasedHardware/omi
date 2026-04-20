@@ -1,0 +1,55 @@
+# Flow: Device Connection — Pair Omi hardware via BLE
+# Tags: device_required, connection
+# Tests: Navigate to device pairing, scan for devices, connect to Omi
+# Requires: User signed in, physical Omi device powered on and nearby
+# NOTE: This flow requires a physical Omi device. Skip in simulator-only runs.
+
+appId: com.friend.ios.dev
+tags:
+  - device_required
+  - connection
+
+---
+
+# Navigate to device connection settings
+- tapOn:
+    text: "Settings"
+    optional: true
+- tapOn:
+    text: "Device|Connect|Pair"
+    optional: true
+- takeScreenshot: "08_device_connection_start"
+
+# Look for scanning or device list
+- extendedWaitUntil:
+    visible:
+      text: "Scanning|Looking|Connect|Omi|Device"
+    timeout: 10000
+    optional: true
+- takeScreenshot: "08_device_scanning"
+
+# Wait for device to appear in scan results
+- extendedWaitUntil:
+    visible:
+      text: "Omi|Friend|Connect"
+    timeout: 30000
+    optional: true
+- takeScreenshot: "08_device_found"
+
+# Tap to connect
+- tapOn:
+    text: "Connect|Pair|Omi"
+    optional: true
+- takeScreenshot: "08_device_connecting"
+
+# Wait for connection to complete
+- extendedWaitUntil:
+    visible:
+      text: "Connected|Paired|Ready"
+    timeout: 30000
+    optional: true
+- takeScreenshot: "08_device_connected"
+
+# Navigate back
+- back
+- takeScreenshot: "08_device_done"

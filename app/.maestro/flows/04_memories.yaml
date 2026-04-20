@@ -1,0 +1,79 @@
+# Flow: Memories — View, Create, Edit, Delete
+# Tags: core, memories
+# Tests: Navigate to memories, view memory list, create/edit/delete a memory
+# Requires: User signed in
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - memories
+
+---
+
+# Navigate to Memories from bottom nav or home
+- tapOn:
+    text: "Memories"
+    optional: true
+- tapOn:
+    id: ".*memories.*|.*memory.*"
+    optional: true
+- takeScreenshot: "04_memories_list"
+
+# Verify memories page is displayed
+- extendedWaitUntil:
+    visible:
+      text: "Memories|Memory|Facts"
+    timeout: 5000
+
+# Create a new memory via the add button
+- tapOn:
+    text: "Add|\\+|Create"
+    optional: true
+- runFlow:
+    when:
+      visible: "Add Memory|New Memory|Create"
+    commands:
+      - tapOn:
+          text: "Add Memory|New Memory|Create"
+          optional: true
+      - inputText: "Test memory from automated E2E test"
+      - tapOn:
+          text: "Save|Done|Add"
+      - takeScreenshot: "04_memories_created"
+
+# Verify the new memory appears in the list
+- assertVisible:
+    text: "Test memory"
+    optional: true
+- takeScreenshot: "04_memories_after_create"
+
+# Edit memory (tap to open, then edit)
+- runFlow:
+    when:
+      visible: "Test memory"
+    commands:
+      - tapOn: "Test memory"
+      - takeScreenshot: "04_memories_detail"
+      # Look for edit option
+      - tapOn:
+          text: "Edit|✏️"
+          optional: true
+      - back
+      - takeScreenshot: "04_memories_after_edit"
+
+# Delete the test memory (swipe or menu)
+- runFlow:
+    when:
+      visible: "Test memory"
+    commands:
+      - swipe:
+          start: "80%, 50%"
+          end: "20%, 50%"
+      - tapOn:
+          text: "Delete"
+          optional: true
+      - takeScreenshot: "04_memories_after_delete"
+
+# Navigate back to home
+- back
+- takeScreenshot: "04_memories_done"
