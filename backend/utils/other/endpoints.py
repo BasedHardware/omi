@@ -59,6 +59,8 @@ def get_current_user_uid(
     `record_user_platform`, which is throttled via Redis to one Firestore
     write per (uid, platform) every 10 minutes. Failures here never fail the
     request — it's telemetry, not auth.
+
+    Also validates BYOK headers against Firestore enrollment (if applicable).
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
@@ -76,6 +78,14 @@ def get_current_user_uid(
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    # Validate BYOK keys against Firestore enrollment for ALL authenticated
+    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
+    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
+    # headers are present.
+    from utils.byok import validate_byok_request
+
+    validate_byok_request(uid)
 
     return uid
 
@@ -107,6 +117,9 @@ def get_current_user_uid_ws_listen(authorization: str = Header(None)):
 
     Mobile apps reconnect legitimately on network switch / backgrounding,
     so the per-UID rate limiter must not block them.
+
+    BYOK validation is done inside _stream_handler after header extraction
+    (BaseHTTPMiddleware doesn't fire for WebSocket scope).
     """
     return _verify_ws_auth(authorization)
 

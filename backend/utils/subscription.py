@@ -282,6 +282,15 @@ def enforce_chat_quota(uid: str) -> None:
     if not CHAT_CAP_ENFORCEMENT_ENABLED:
         return
 
+    # BYOK users pay their own LLM provider — no Omi-side cost to cap.
+    # Require an LLM provider key on this request (not just any BYOK header)
+    # so a user can't activate with fake fingerprints or send only x-byok-deepgram
+    # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
+    from utils.byok import get_byok_key
+
+    if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
+        return
+
     snapshot = get_chat_quota_snapshot(uid)
     if snapshot['allowed']:
         return
@@ -497,7 +506,11 @@ def has_transcription_credits(uid: str) -> bool:
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
     """
     # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
-    if users_db.is_byok_active(uid):
+    # Require the Deepgram header on this request so a user can't activate BYOK
+    # with fake fingerprints then omit x-byok-deepgram to ride Omi's key.
+    from utils.byok import get_byok_key
+
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return True
 
     subscription = users_db.get_user_valid_subscription(uid)
@@ -522,7 +535,10 @@ def get_remaining_transcription_seconds(uid: str) -> int | None:
     Used for freemium auto-switch to on-device transcription.
     """
     # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
-    if users_db.is_byok_active(uid):
+    # Require the Deepgram header to prevent fake-fingerprint abuse.
+    from utils.byok import get_byok_key
+
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return None
 
     subscription = users_db.get_user_valid_subscription(uid)

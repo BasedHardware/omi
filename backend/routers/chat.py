@@ -99,6 +99,7 @@ def send_message(
 ):
     # Hard cap: Free/Plus by question count, Pro by cost_usd. Raises 402 with a
     # structured body the client can use to render the upgrade modal.
+    # (BYOK validation already ran in get_current_user_uid dependency.)
     enforce_chat_quota(uid)
 
     compat_app_id = app_id or plugin_id

@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -52,7 +53,9 @@ from datetime import datetime, time, timedelta
 from models.users import (
     WebhookType,
     UserSubscriptionResponse,
+    Subscription,
     SubscriptionPlan,
+    SubscriptionStatus,
     PlanType,
     PricingOption,
     ChatUsageQuota,
@@ -758,6 +761,10 @@ def get_user_usage_stats_endpoint(
     return stats
 
 
+_SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
+_BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+
+
 class BYOKActivateRequest(BaseModel):
     fingerprints: Dict[str, str]
 
@@ -770,14 +777,23 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     detect rotation without ever seeing the keys. The live keys themselves
     travel on every request as headers; they are never persisted.
     """
-    required = {'openai', 'anthropic', 'gemini', 'deepgram'}
-    missing = required - set(data.fingerprints.keys())
+    missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
     if missing:
         raise HTTPException(
             status_code=400,
             detail=f"Missing fingerprints for providers: {sorted(missing)}",
         )
+    for provider, fp in data.fingerprints.items():
+        if provider not in _BYOK_REQUIRED_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        if not _SHA256_HEX_RE.match(fp):
+            raise HTTPException(
+                status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
+            )
     users_db.set_byok_active(uid, data.fingerprints)
+    from utils.byok import invalidate_byok_state_cache
+
+    invalidate_byok_state_cache(uid)
     return {"active": True}
 
 
@@ -785,6 +801,9 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
 def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
+    from utils.byok import invalidate_byok_state_cache
+
+    invalidate_byok_state_cache(uid)
     return {"active": False}
 
 
@@ -811,8 +830,11 @@ def get_user_subscription_endpoint(
 ):
     """Gets the user's subscription plan and usage."""
     # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
-    # Skip Stripe entirely and return an unlimited plan tagged with the `byok` feature.
-    if users_db.is_byok_active(uid):
+    # Only return unlimited when the request actually carries BYOK headers (desktop).
+    # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
+    from utils.byok import has_byok_keys
+
+    if users_db.is_byok_active(uid) and has_byok_keys():
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
             transcription_seconds_used=0,
@@ -1013,8 +1035,11 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
     - Resets at the start of each UTC month
     """
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
-    # to meter. Return unlimited so the client doesn't gate sendMessage.
-    if users_db.is_byok_active(uid):
+    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
+    # Mobile (no headers) should see real quota.
+    from utils.byok import has_byok_keys
+
+    if users_db.is_byok_active(uid) and has_byok_keys():
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
