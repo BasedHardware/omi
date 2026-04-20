@@ -53,7 +53,9 @@ from datetime import datetime, time, timedelta
 from models.users import (
     WebhookType,
     UserSubscriptionResponse,
+    Subscription,
     SubscriptionPlan,
+    SubscriptionStatus,
     PlanType,
     PricingOption,
     ChatUsageQuota,

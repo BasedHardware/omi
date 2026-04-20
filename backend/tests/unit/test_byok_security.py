@@ -21,6 +21,7 @@ os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 sys.modules.setdefault('database._client', MagicMock())
 sys.modules.setdefault('database.redis_db', MagicMock())
@@ -28,6 +29,7 @@ sys.modules.setdefault('database.users', MagicMock())
 sys.modules.setdefault('database.user_usage', MagicMock())
 sys.modules.setdefault('database.llm_usage', MagicMock())
 sys.modules.setdefault('database.announcements', MagicMock())
+sys.modules.setdefault('utils.other.storage', MagicMock())
 
 import warnings
 
@@ -455,15 +457,7 @@ class TestBoundedCache:
 
 
 class TestBYOKActivationValidation:
-    """Test the validation logic used by activate_byok_endpoint.
-
-    The endpoint module (routers.users) triggers GCS storage.Client() on import,
-    which requires GCP credentials. Instead of mocking the entire import chain,
-    we test the validation functions directly: the regex, the provider set, and
-    the boundary cases are the same constants the endpoint uses.
-    """
-
-    _REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+    """Test the actual activate_byok_endpoint and its production constants."""
 
     def _valid_fingerprints(self) -> Dict[str, str]:
         return {
@@ -473,58 +467,95 @@ class TestBYOKActivationValidation:
             'deepgram': hashlib.sha256(b'sk-deepgram').hexdigest(),
         }
 
-    def _validate(self, fingerprints: Dict[str, str]) -> str | None:
-        """Replicate the validation logic from activate_byok_endpoint."""
-        missing = self._REQUIRED_PROVIDERS - set(fingerprints.keys())
-        if missing:
-            return f"Missing fingerprints for providers: {sorted(missing)}"
-        for provider, fp in fingerprints.items():
-            if provider not in self._REQUIRED_PROVIDERS:
-                return f"Unknown provider: {provider}"
-            if not _SHA256_HEX_RE.match(fp):
-                return f"Invalid fingerprint for {provider}"
-        return None
+    @patch('routers.users.users_db')
+    def test_valid_activation_persists_fingerprints(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
 
-    def test_valid_fingerprints_pass(self):
-        assert self._validate(self._valid_fingerprints()) is None
+        fps = self._valid_fingerprints()
+        data = BYOKActivateRequest(fingerprints=fps)
+        result = activate_byok_endpoint(data, uid='test-uid')
+        assert result == {"active": True}
+        mock_users_db.set_byok_active.assert_called_once_with('test-uid', fps)
 
     def test_missing_provider_rejects(self):
+        from fastapi import HTTPException
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
         fps = self._valid_fingerprints()
         del fps['deepgram']
-        err = self._validate(fps)
-        assert err is not None
-        assert 'deepgram' in err
+        data = BYOKActivateRequest(fingerprints=fps)
+        with pytest.raises(HTTPException) as exc_info:
+            activate_byok_endpoint(data, uid='test-uid')
+        assert exc_info.value.status_code == 400
+        assert 'deepgram' in str(exc_info.value.detail)
 
     def test_unknown_provider_rejects(self):
+        from fastapi import HTTPException
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
         fps = self._valid_fingerprints()
         fps['unknown_provider'] = hashlib.sha256(b'x').hexdigest()
-        err = self._validate(fps)
-        assert err is not None
-        assert 'Unknown provider' in err
+        data = BYOKActivateRequest(fingerprints=fps)
+        with pytest.raises(HTTPException) as exc_info:
+            activate_byok_endpoint(data, uid='test-uid')
+        assert exc_info.value.status_code == 400
+        assert 'Unknown provider' in str(exc_info.value.detail)
 
     def test_63_char_fingerprint_rejects(self):
+        from fastapi import HTTPException
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
         fps = self._valid_fingerprints()
         fps['openai'] = 'a' * 63
-        err = self._validate(fps)
-        assert err is not None
-        assert 'Invalid fingerprint' in err
+        data = BYOKActivateRequest(fingerprints=fps)
+        with pytest.raises(HTTPException) as exc_info:
+            activate_byok_endpoint(data, uid='test-uid')
+        assert exc_info.value.status_code == 400
 
-    def test_64_char_valid_hex_passes(self):
+    @patch('routers.users.users_db')
+    def test_64_char_valid_hex_passes(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
         fps = self._valid_fingerprints()
-        fps['openai'] = 'a' * 64  # valid: 64 hex chars
-        assert self._validate(fps) is None
+        fps['openai'] = 'a' * 64
+        data = BYOKActivateRequest(fingerprints=fps)
+        result = activate_byok_endpoint(data, uid='test-uid')
+        assert result == {"active": True}
 
     def test_65_char_fingerprint_rejects(self):
+        from fastapi import HTTPException
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
         fps = self._valid_fingerprints()
         fps['openai'] = 'a' * 65
-        err = self._validate(fps)
-        assert err is not None
-        assert 'Invalid fingerprint' in err
+        data = BYOKActivateRequest(fingerprints=fps)
+        with pytest.raises(HTTPException) as exc_info:
+            activate_byok_endpoint(data, uid='test-uid')
+        assert exc_info.value.status_code == 400
 
     def test_empty_fingerprints_rejects(self):
-        err = self._validate({})
-        assert err is not None
-        assert 'Missing fingerprints' in err
+        from fastapi import HTTPException
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
+        data = BYOKActivateRequest(fingerprints={})
+        with pytest.raises(HTTPException) as exc_info:
+            activate_byok_endpoint(data, uid='test-uid')
+        assert exc_info.value.status_code == 400
+
+    @patch('routers.users.users_db')
+    def test_deactivation_calls_clear(self, mock_users_db):
+        from routers.users import deactivate_byok_endpoint
+
+        result = deactivate_byok_endpoint(uid='test-uid')
+        assert result == {"active": False}
+        mock_users_db.clear_byok_active.assert_called_once_with('test-uid')
+
+    def test_production_constants_match(self):
+        """Verify the test regex matches the production regex."""
+        from routers.users import _SHA256_HEX_RE as prod_re, _BYOK_REQUIRED_PROVIDERS as prod_providers
+
+        assert prod_re.pattern == _SHA256_HEX_RE.pattern
+        assert prod_providers == {'openai', 'anthropic', 'gemini', 'deepgram'}
 
 
 # ---------------------------------------------------------------------------
