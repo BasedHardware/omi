@@ -47,6 +47,17 @@ class ChatQuotaUnit(str, Enum):
     cost_usd = 'cost_usd'
 
 
+class ChatUsageQuota(BaseModel):
+    plan: str  # display name: "Free", "Plus", "Architect"
+    plan_type: str  # internal id: "basic" | "unlimited" | "architect"
+    unit: ChatQuotaUnit
+    used: float
+    limit: Optional[float] = None  # None = unlimited (fallback)
+    percent: float = 0.0
+    allowed: bool = True
+    reset_at: Optional[int] = None  # unix seconds — start of next month UTC
+
+
 class Subscription(BaseModel):
     plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
