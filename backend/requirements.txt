@@ -224,3 +224,6 @@ google-cloud-translate==3.20.2
 langdetect==1.0.9
 lc3py==1.1.3
 twilio==9.5.0
+# NER speaker identification (MIT license, fast CPU inference)
+spacy>=3.7.0
+# Download model: python -m spacy download en_core_web_sm
