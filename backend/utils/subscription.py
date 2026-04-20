@@ -341,24 +341,52 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
     return get_basic_plan_limits()
 
 
-def get_plan_features(plan: PlanType) -> List[str]:
-    """Returns the list of feature strings for the given plan."""
+def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
+    """Returns the list of feature strings for the given plan.
+
+    Args:
+        plan: The plan type.
+        simplified: If True, returns only plan-differentiating features (for mobile),
+                    omitting items already shown in the top-level highlights section.
+                    If False, returns the full feature list (for desktop).
+    """
     if plan == PlanType.architect:
+        if simplified:
+            return [
+                "Automations and vibe coding",
+                "Priority desktop AI features",
+                f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
+            ]
         return [
             "Automations and vibe coding",
+            "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
             f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
         ]
 
     if plan == PlanType.operator:
+        if simplified:
+            return [
+                f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+                "Shared with mobile and web",
+            ]
         return [
             f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
             "Shared with mobile and web",
         ]
 
     if plan == PlanType.unlimited:
+        if simplified:
+            return [
+                f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+                "Shared with mobile and web",
+            ]
         return [
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited listening and transcription",
+            "Unlimited memories and insights",
             "Shared with mobile and web",
         ]
 

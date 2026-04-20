@@ -813,7 +813,8 @@ def get_user_subscription_endpoint(
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
-    subscription.features = get_plan_features(subscription.plan)
+    is_mobile = x_app_platform in ('ios', 'android')
+    subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
     new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
 
@@ -904,7 +905,7 @@ def get_user_subscription_endpoint(
 
         if plan_prices:
             features = (
-                get_plan_features(definition["plan_type"])
+                get_plan_features(definition["plan_type"], simplified=is_mobile)
                 if new_plans_enabled
                 else legacy_plan_features(definition["plan_type"])
             )
