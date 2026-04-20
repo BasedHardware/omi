@@ -215,14 +215,13 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             chipValue: provider.connectedDevice == null
                 ? context.l10n.offline
                 : provider.havingNewFirmware
-                ? context.l10n.available
-                : null,
+                    ? context.l10n.available
+                    : null,
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
                     final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
-                    final isOpenGlass =
-                        provider.connectedDevice?.type == DeviceType.openglass ||
+                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');
@@ -290,9 +289,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page = context.read<DeviceProvider>().supportsMultiFileSync
-                    ? const AutoSyncPage()
-                    : const SyncPage();
+                final page =
+                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),
@@ -353,6 +351,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               // Clear stored device
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
               SharedPreferencesUtil().deviceName = '';
+              SharedPreferencesUtil().deviceNameDeviceId = '';
 
               // Fully tear down connection, transport, and native service
               if (deviceId.isNotEmpty) {
@@ -410,6 +409,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
                       SharedPreferencesUtil().deviceName = '';
+                      SharedPreferencesUtil().deviceNameDeviceId = '';
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
@@ -465,8 +465,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
     final deviceId = provider.pairedDevice?.id ?? context.l10n.unknown;
-    final serialNumber =
-        provider.pairedDevice?.serialNumber ??
+    final serialNumber = provider.pairedDevice?.serialNumber ??
         provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ??
         context.l10n.unknown;
 
