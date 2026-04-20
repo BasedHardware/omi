@@ -39,6 +39,20 @@ def get_generic_cache(path: str):
 
 
 @try_catch_decorator
+def mark_event_processed_once(namespace: str, event_id: str, ttl_seconds: int = 7 * 86400) -> bool:
+    """Atomically record that we've processed `event_id` under `namespace`.
+
+    Returns True on the first call (caller should process the event),
+    False on every subsequent call (caller should no-op).
+
+    Used to deduplicate webhook events (Stripe, etc.) — a replayed payload
+    with a valid signature would otherwise re-credit the user or re-fire
+    side effects. TTL is long enough to cover webhook retry windows.
+    """
+    # SET NX EX — single round-trip, race-free idempotency check.
+    return bool(r.set(f'processed:{namespace}:{event_id}', '1', ex=ttl_seconds, nx=True))
+
+
 def set_generic_cache(path: str, data: Union[dict, list], ttl: int = None):
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
@@ -114,7 +128,7 @@ def get_app_usage_count_cache(app_id: str) -> int | None:
     count = r.get(f'apps:{app_id}:usage_count')
     if not count:
         return None
-    return eval(count)
+    return int(count)
 
 
 def set_app_money_made_amount_cache(app_id: str, amount: float):
@@ -125,7 +139,7 @@ def get_app_money_made_amount_cache(app_id: str) -> float | None:
     amount = r.get(f'apps:{app_id}:money_made')
     if not amount:
         return None
-    return eval(amount)
+    return float(amount)
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[dict]):
@@ -161,16 +175,16 @@ def set_app_review_cache(app_id: str, uid: str, data: dict):
     if not reviews:
         reviews = {}
     else:
-        reviews = eval(reviews)
+        reviews = json.loads(reviews)
     reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', str(reviews))
+    r.set(f'plugins:{app_id}:reviews', json.dumps(reviews, default=str))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         return {}
-    reviews = eval(reviews)
+    reviews = json.loads(reviews)
     return reviews.get(uid, {})
 
 
@@ -221,7 +235,7 @@ def get_app_reviews(app_id: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         return {}
-    return eval(reviews)
+    return json.loads(reviews)
 
 
 def get_apps_reviews(app_ids: list) -> dict:
@@ -232,7 +246,7 @@ def get_apps_reviews(app_ids: list) -> dict:
     reviews = r.mget(keys)
     if reviews is None:
         return {}
-    return {app_id: eval(review) if review else {} for app_id, review in zip(app_ids, reviews)}
+    return {app_id: json.loads(review) if review else {} for app_id, review in zip(app_ids, reviews)}
 
 
 def set_app_installs_count(app_id: str, count: int):
@@ -276,7 +290,7 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 
 def cache_user_geolocation(uid: str, geolocation: dict):
-    r.set(f'users:{uid}:geolocation', str(geolocation))
+    r.set(f'users:{uid}:geolocation', json.dumps(geolocation, default=str))
     r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
@@ -284,7 +298,7 @@ def get_cached_user_geolocation(uid: str):
     geolocation = r.get(f'users:{uid}:geolocation')
     if not geolocation:
         return None
-    return eval(geolocation)
+    return json.loads(geolocation)
 
 
 # VISIIBILTIY OF CONVERSATIONS

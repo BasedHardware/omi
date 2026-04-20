@@ -1,3 +1,4 @@
+import hmac
 import os
 import hashlib
 from datetime import datetime, timedelta
@@ -83,7 +84,7 @@ def save_token(
 
 @router.post('/v1/notification')
 def send_notification_to_user(data: dict, secret_key: str = Header(...)):
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')

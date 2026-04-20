@@ -238,11 +238,17 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
         raise HTTPException(status_code=500, detail="Essential release information (download URL) missing")
 
     ota_steps = kv.get('ota_update_steps', [])
-    is_legacy_dfu_str = kv.get('is_legacy_secure_dfu', 'True')
-    try:
-        is_legacy_dfu = ast.literal_eval(is_legacy_dfu_str.capitalize())
-    except (ValueError, SyntaxError):
+    # Parse is_legacy_secure_dfu explicitly — it comes from a GitHub release
+    # body (attacker-influenced if a maintainer token leaks). Previous code
+    # used ast.literal_eval which accepts any Python literal (tuples, sets,
+    # etc.) and is easy to get wrong. Accept only canonical "true"/"false".
+    is_legacy_dfu_str = str(kv.get('is_legacy_secure_dfu', 'true')).strip().lower()
+    if is_legacy_dfu_str in ('true', '1', 'yes'):
         is_legacy_dfu = True
+    elif is_legacy_dfu_str in ('false', '0', 'no'):
+        is_legacy_dfu = False
+    else:
+        is_legacy_dfu = True  # fail-safe: require legacy DFU if unparseable
 
     return {
         "version": kv.get("release_firmware_version"),

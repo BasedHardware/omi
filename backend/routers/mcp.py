@@ -49,6 +49,8 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
+    if not memory.content or len(memory.content) > 10_000:
+        raise HTTPException(status_code=413, detail="Content must be 1..10000 characters")
     # Auto-categorize memories from external sources
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -66,15 +68,27 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
     return memory
 
 
+_MCP_MAX_MEMORY_CONTENT = 10_000  # 10 KB per memory — stops bloat attacks
+
+
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def delete_memory(
+    memory_id: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:delete")),
+):
     _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def edit_memory(
+    memory_id: str,
+    value: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:edit")),
+):
+    if len(value) > _MCP_MAX_MEMORY_CONTENT:
+        raise HTTPException(status_code=413, detail=f"Content exceeds {_MCP_MAX_MEMORY_CONTENT} characters")
     _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     return {"status": "ok"}
@@ -88,11 +102,16 @@ class CleanerMemory(BaseModel):
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:read")),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
 ):
+    # Cap limit to prevent cost-DoS via giant fetches
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be non-negative")
     category_list = []
     if categories:
         try:
@@ -151,8 +170,12 @@ def get_conversations(
     categories: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "mcp:conversations_read")),
 ):
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 500")
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset must be non-negative")
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
@@ -179,7 +202,10 @@ def get_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_conversation_by_id(
+    conversation_id: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "mcp:conversations_read")),
+):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:

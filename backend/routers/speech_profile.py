@@ -48,7 +48,9 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 @router.post('/v3/upload-audio', tags=['v3'])
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
+    # Strip directory components from client-supplied filename (path traversal).
+    safe_name = os.path.basename(file.filename or 'upload.wav') or 'upload.wav'
+    file_path = os.path.join(f'_temp/{uid}', safe_name)
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 

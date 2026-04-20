@@ -10,6 +10,7 @@ from database.apps import get_app_by_id_db
 from utils.http_client import get_auth_client
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
+from utils.other.ssrf_guard import SSRFError, safe_get_json
 from models.app import App as AppModel, ActionType
 
 router = APIRouter(
@@ -141,13 +142,22 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         if app.works_externally() and app.external_integration.setup_completed_url:
             try:
                 client = get_auth_client()
-                res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                res = await safe_get_json(
+                    client,
+                    app.external_integration.setup_completed_url,
+                    params={'uid': uid},
+                )
                 res.raise_for_status()
                 if not res.json().get('is_setup_completed', False):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',
                     )
+            except SSRFError:
+                raise HTTPException(
+                    status_code=400,
+                    detail='App setup URL is not allowed. Please contact the app developer.',
+                )
             except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise HTTPException(
                     status_code=503,

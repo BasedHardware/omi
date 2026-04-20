@@ -500,7 +500,12 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
     os.makedirs(directory, exist_ok=True)
     paths = []
     for file in files:
-        filename = file.filename
+        # Strip any directory components from the client-supplied filename so
+        # a value like "../../etc/passwd_1700000000.bin" lands inside the
+        # per-uid syncing dir instead of escaping it.
+        filename = os.path.basename(file.filename or '')
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing filename")
         # Validate the file is .bin and contains a _$timestamp.bin, if not, 400 bad request
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
@@ -1277,7 +1282,10 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     os.makedirs(directory, exist_ok=True)
     paths = []
     for file in files:
-        filename = file.filename
+        # Basename strip: prevent '../../escape.bin' from writing outside the job dir
+        filename = os.path.basename(file.filename or '')
+        if not filename:
+            raise HTTPException(status_code=400, detail="Missing filename")
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:

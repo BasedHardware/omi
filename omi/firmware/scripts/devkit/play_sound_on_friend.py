@@ -17,8 +17,8 @@ remaining_bytes = 0
 remaining_bytes_b = bytearray()
 packet_size = 400
 total_offset = 0
-device_id = "3CE1CE0A-A629-2E92-D708-E49E71045D07" #Please enter the id of your device (that is, the device id used to connect to your BT device here)
-deepgram_api_id="f2e9ebf2f223ae423c88bf601ce1a157699d3005" #enter your deepgram id here
+device_id = os.getenv("DEVICE_ID", "YOUR_DEVICE_ID_HERE")  # Set via DEVICE_ID env var or edit this
+deepgram_api_id = os.getenv("DEEPGRAM_API_KEY", "")  # Set via DEEPGRAM_API_KEY env var
 audio_write_characteristic_uuid = "19B10003-E8F2-537E-4F6C-D104768A1214" #dont change this
 MAX_ALLOWED_SAMPLES = 50000
 

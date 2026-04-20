@@ -29,7 +29,7 @@ try:
         # This path is for Modal environment
         service_account_info = os.environ["SERVICE_ACCOUNT_JSON"]
         cred = credentials.Certificate(
-            eval(service_account_info) if service_account_info.startswith('{') else service_account_info
+            json.loads(service_account_info) if service_account_info.startswith('{') else service_account_info
         )
     else:
         # This path is for local development, GOOGLE_APPLICATION_CREDENTIALS should be set

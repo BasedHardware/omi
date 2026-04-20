@@ -65,7 +65,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// Add a separate function to handle JSON-LD
+// Add a separate function to handle JSON-LD. JSON.stringify does NOT escape
+// '<', '>', or '&', so a user-supplied plugin field containing '</script>'
+// would terminate the <script type="application/ld+json"> block and execute
+// attacker JS. The .replace chain at the end of the return neutralizes that.
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
@@ -135,7 +138,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
           },
         ],
       },
-    ]),
+    ]).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'),
   };
 }
 

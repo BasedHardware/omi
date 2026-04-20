@@ -71,7 +71,8 @@
     </div>
     <script>
         setTimeout(function() {
-            window.location.href = '{{ redirect_url }}';
+            // Using tojson filter to prevent XSS via redirect_url
+            window.location.href = {{ redirect_url | tojson }};
         }, 1000);
     </script>
 </body>

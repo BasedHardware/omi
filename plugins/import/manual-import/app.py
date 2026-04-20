@@ -13,9 +13,13 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# API configuration from fact.py
+# API configuration — APP_ID is public; API_KEY must be supplied by env.
+# Previous value ("get_this_api_key_in_omi_app") was a placeholder that left
+# devs one copy-paste away from committing a real key in a fork.
 APP_ID = "01JPP8Y2PA2YWQPTMDAFHXWX8E"
-API_KEY = "get_this_api_key_in_omi_app"
+API_KEY = os.getenv("OMI_APP_API_KEY")
+if not API_KEY:
+    raise RuntimeError("Set OMI_APP_API_KEY in the environment (see Omi app settings).")
 # USER_ID is now extracted dynamically from requests rather than being hardcoded
 API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
 

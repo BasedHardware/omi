@@ -228,6 +228,29 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
         # Open and scan the ZIP file
         with ZipFile(zip_path, 'r') as zf:
+            # Zip-bomb guard: reject absurdly large uncompressed payloads or
+            # excessive entry counts BEFORE iterating. A <1MB compressed zip
+            # can decompress to many GB and OOM the worker; capping here is
+            # much cheaper than a per-file try/except.
+            _MAX_TOTAL_UNCOMPRESSED = 2 * 1024 * 1024 * 1024  # 2 GiB
+            _MAX_ENTRY_COUNT = 50_000
+            _MAX_SINGLE_FILE_UNCOMPRESSED = 50 * 1024 * 1024  # 50 MiB
+            infos = zf.infolist()
+            if len(infos) > _MAX_ENTRY_COUNT:
+                raise ValueError(f"ZIP has too many entries ({len(infos)} > {_MAX_ENTRY_COUNT})")
+            total_uncompressed = 0
+            for info in infos:
+                if info.file_size > _MAX_SINGLE_FILE_UNCOMPRESSED:
+                    raise ValueError(
+                        f"ZIP entry {info.filename!r} uncompressed size {info.file_size} exceeds per-file cap"
+                    )
+                total_uncompressed += info.file_size
+                if total_uncompressed > _MAX_TOTAL_UNCOMPRESSED:
+                    raise ValueError("ZIP total uncompressed size exceeds cap")
+                # Zip-slip guard: namelist should not contain traversal.
+                if info.filename.startswith('/') or '..' in info.filename.split('/'):
+                    raise ValueError(f"ZIP entry path traversal rejected: {info.filename!r}")
+
             all_files = zf.namelist()
             logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
             logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")

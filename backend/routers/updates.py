@@ -1,3 +1,4 @@
+import hmac
 import os
 import re
 from typing import Optional, List, Dict
@@ -466,7 +467,7 @@ async def clear_desktop_cache(secret_key: str = Header(...)):
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     """
-    if secret_key != os.getenv('ADMIN_KEY'):
+    if not os.getenv('ADMIN_KEY') or not hmac.compare_digest(str(secret_key or ''), os.getenv('ADMIN_KEY')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
     return {"success": True, "message": "Desktop releases cache cleared successfully"}

@@ -7,9 +7,11 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
+
+from utils.other.endpoints import get_current_user_uid_ws_listen as auth_ws
 
 import database.conversations as conversations_db
 from database import users as users_db
@@ -625,7 +627,7 @@ async def _websocket_util_trigger(
 @router.websocket("/v1/trigger/listen")
 async def websocket_endpoint_trigger(
     websocket: WebSocket,
-    uid: str,
+    uid: str = Depends(auth_ws),
     sample_rate: int = 8000,
 ):
     await _websocket_util_trigger(websocket, uid, sample_rate)
