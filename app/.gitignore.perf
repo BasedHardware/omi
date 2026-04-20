@@ -1,0 +1,6 @@
+# Performance test outputs (don't commit raw traces)
+perf_reports/*.json
+perf_reports/*.csv
+perf_reports/*.log
+perf_reports/*.txt
+!perf_reports/.gitkeep
