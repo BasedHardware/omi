@@ -769,10 +769,18 @@ async def refresh_account_link_endpoint(
     request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)
 ):
     """
-    Generate a fresh account link if the previous one expired
+    Generate a fresh account link if the previous one expired.
+
+    Only the authenticated user's own connected account may be refreshed.
     """
+    expected_account_id = get_stripe_connect_account_id(uid)
+    if not expected_account_id:
+        raise HTTPException(status_code=404, detail="Connect account not found")
+    if account_id != expected_account_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to refresh this account")
+
     try:
-        account = refresh_connect_account_link(account_id)
+        account = refresh_connect_account_link(expected_account_id)
         return account
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
