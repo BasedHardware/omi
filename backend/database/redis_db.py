@@ -287,6 +287,22 @@ def get_cached_user_geolocation(uid: str):
     return eval(geolocation)
 
 
+# DAILY SUMMARY UID LOOKUP
+def store_daily_summary_to_uid(summary_id: str, uid: str):
+    r.set(f'daily-summary:{summary_id}', uid)
+
+
+def get_daily_summary_uid(summary_id: str) -> str:
+    uid = r.get(f'daily-summary:{summary_id}')
+    if not uid:
+        return ''
+    return uid.decode()
+
+
+def remove_daily_summary_to_uid(summary_id: str):
+    r.delete(f'daily-summary:{summary_id}')
+
+
 # VISIIBILTIY OF CONVERSATIONS
 def store_conversation_to_uid(conversation_id: str, uid: str):
     r.set(f'memories-visibility:{conversation_id}', uid)

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/users.dart';
@@ -83,9 +84,18 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-          ? _buildNotFound()
-          : _buildContent(),
+              ? _buildNotFound()
+              : _buildContent(),
     );
+  }
+
+  Future<void> _shareSummary() async {
+    final summary = _summary;
+    if (summary == null) return;
+
+    MixpanelManager().dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
+    final url = 'https://h.omi.me/recaps/${widget.summaryId}';
+    await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
   }
 
   Future<void> _openConversation(String? conversationId) async {
@@ -189,6 +199,21 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ),
         onPressed: () => Navigator.pop(context),
       ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: _shareSummary,
+            child: Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
+              child: const Icon(Icons.share_outlined, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: const BoxDecoration(
@@ -412,9 +437,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit: singleLocation
-                        ? null
-                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit:
+                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -668,8 +692,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-              ? '$startFormatted - $endFormatted'
-              : startFormatted)
+            ? '$startFormatted - $endFormatted'
+            : startFormatted)
         : '';
 
     return GestureDetector(
