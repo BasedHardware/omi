@@ -38,12 +38,8 @@ Future<String> getAuthHeader() async {
     hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
 
-  if (!hasAuthToken) {
-    if (AuthService.instance.isSignedIn()) {
-      // should only throw if the user is signed in but the token is not found
-      // if the user is not signed in, the token will always be empty
-      throw Exception('No auth token found');
-    }
+  if (!hasAuthToken && AuthService.instance.isSignedIn()) {
+    Logger.handle(Exception('No auth token found'), StackTrace.current, message: 'No auth token found');
   }
   return 'Bearer ${SharedPreferencesUtil().authToken}';
 }
