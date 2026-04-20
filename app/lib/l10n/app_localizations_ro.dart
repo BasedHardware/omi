@@ -8920,6 +8920,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionUnavailable => 'Transcriere indisponibilă';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Ieșire audio';
 
   @override

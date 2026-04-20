@@ -8901,6 +8901,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionUnavailable => 'Transkripsi tidak tersedia';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Output audio';
 
   @override

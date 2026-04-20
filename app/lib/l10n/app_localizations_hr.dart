@@ -8902,6 +8902,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get transcriptionUnavailable => 'Prenos nije dostupan';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Izlaz audio-a';
 
   @override

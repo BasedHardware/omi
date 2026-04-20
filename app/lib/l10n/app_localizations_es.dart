@@ -8896,6 +8896,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get transcriptionUnavailable => 'Transcripción no disponible';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Salida de audio';
 
   @override

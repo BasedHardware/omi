@@ -8887,6 +8887,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcriptionUnavailable => 'نقل دستیاب نہیں';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'آڈیو آؤٹ پٹ';
 
   @override

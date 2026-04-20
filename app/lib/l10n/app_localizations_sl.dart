@@ -8896,6 +8896,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcriptionUnavailable => 'Prepisovanje ni na voljo';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Avdio izhod';
 
   @override

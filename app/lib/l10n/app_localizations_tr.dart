@@ -8890,6 +8890,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionUnavailable => 'Transkripsiyon kullanılamıyor';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Ses çıkışı';
 
   @override

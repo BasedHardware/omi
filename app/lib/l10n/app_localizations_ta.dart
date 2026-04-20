@@ -8938,6 +8938,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transcriptionUnavailable => 'மொழிபெயர்ப்பு கிடைக்கக்கூடியது அல்ல';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'ஆடியோ வெளியீடு';
 
   @override

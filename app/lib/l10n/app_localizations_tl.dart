@@ -8952,6 +8952,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionUnavailable => 'Transcription unavailable';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Audio Output';
 
   @override

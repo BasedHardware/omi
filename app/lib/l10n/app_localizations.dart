@@ -16599,6 +16599,12 @@ abstract class AppLocalizations {
   /// **'Transcription unavailable'**
   String get transcriptionUnavailable;
 
+  /// Call-to-action text shown under map cards to open the location in Maps
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to open in Maps'**
+  String get tapToOpenInMaps;
+
   /// Title for audio route picker bottom sheet
   ///
   /// In en, this message translates to:

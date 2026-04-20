@@ -10615,6 +10615,10 @@
     "@transcriptionUnavailable": {
         "description": "Status when transcription WebSocket failed after max retries"
     },
+    "tapToOpenInMaps": "Tap to open in Maps",
+    "@tapToOpenInMaps": {
+        "description": "Call-to-action text shown under map cards to open the location in Maps"
+    },
     "audioOutput": "Audio Output",
     "@audioOutput": {
         "description": "Title for audio route picker bottom sheet"

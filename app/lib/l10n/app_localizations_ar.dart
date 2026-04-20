@@ -8816,6 +8816,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcriptionUnavailable => 'النسخ غير متاح';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'مخرج الصوت';
 
   @override

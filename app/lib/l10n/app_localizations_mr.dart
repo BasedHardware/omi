@@ -8883,6 +8883,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transcriptionUnavailable => 'ट्रांसक्रिप्शन उपलब्ध नाही';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'ऑडिओ आउटपुट';
 
   @override

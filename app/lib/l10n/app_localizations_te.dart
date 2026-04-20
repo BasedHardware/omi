@@ -8923,6 +8923,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcriptionUnavailable => 'ట్రాన్‌స్క్రిప్షన్ అందుబాటులో లేదు';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'ఆడియో నిర్గమం';
 
   @override

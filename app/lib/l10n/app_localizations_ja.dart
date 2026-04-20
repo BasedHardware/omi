@@ -8728,6 +8728,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionUnavailable => '文字起こしは利用できません';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'オーディオ出力';
 
   @override

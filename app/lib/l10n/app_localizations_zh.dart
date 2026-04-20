@@ -8716,6 +8716,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailable => '转录不可用';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => '音频输出';
 
   @override

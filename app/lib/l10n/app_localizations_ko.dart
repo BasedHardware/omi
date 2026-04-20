@@ -8730,6 +8730,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionUnavailable => '전사를 사용할 수 없습니다';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => '오디오 출력';
 
   @override

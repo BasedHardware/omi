@@ -8876,6 +8876,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcriptionUnavailable => 'Litterointi ei ole käytettävissä';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Äänilähtö';
 
   @override
