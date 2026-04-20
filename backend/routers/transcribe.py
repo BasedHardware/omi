@@ -36,7 +36,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
-from utils.byok import get_byok_keys
+from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
@@ -235,6 +235,13 @@ async def _stream_handler(
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
+
+    # BaseHTTPMiddleware skips WebSocket scope, so extract BYOK headers manually.
+    # This ensures Deepgram streaming and pusher-forwarded LLM calls use the
+    # user's own keys when set.
+    byok_ws_keys = extract_byok_from_websocket(websocket)
+    if byok_ws_keys:
+        set_byok_keys(byok_ws_keys)
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
     is_multi_channel = channels >= 2

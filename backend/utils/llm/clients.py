@@ -1,9 +1,11 @@
+import hashlib
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
 import anthropic
 import httpx
+from cachetools import TTLCache
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
@@ -140,12 +142,20 @@ class _OpenAIEmbeddingsProxy:
         return getattr(self._resolve(), name)
 
 
-_openai_cache: Dict[str, ChatOpenAI] = {}
-_anthropic_cache: Dict[str, anthropic.AsyncAnthropic] = {}
+_BYOK_CACHE_MAX_SIZE = 256
+_BYOK_CACHE_TTL_SECONDS = 3600  # 1 hour
+
+_openai_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
+_anthropic_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
+
+
+def _hash_key(api_key: str) -> str:
+    """Derive a safe cache key from an API key. Never store raw keys in memory."""
+    return hashlib.sha256(api_key.encode()).hexdigest()
 
 
 def _cached_openai_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]) -> ChatOpenAI:
-    cache_key = f"{model}:{hash(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
+    cache_key = f"{model}:{_hash_key(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
     inst = _openai_cache.get(cache_key)
     if inst is None:
         inst = ChatOpenAI(model=model, api_key=api_key, **ctor_kwargs)
@@ -154,10 +164,11 @@ def _cached_openai_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]) -
 
 
 def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
-    inst = _anthropic_cache.get(api_key)
+    cache_key = _hash_key(api_key)
+    inst = _anthropic_cache.get(cache_key)
     if inst is None:
         inst = anthropic.AsyncAnthropic(api_key=api_key)
-        _anthropic_cache[api_key] = inst
+        _anthropic_cache[cache_key] = inst
     return inst
 
 
@@ -581,18 +592,56 @@ llm_persona_mini_stream = _OpenRouterGeminiProxy(
     direct_model="gemini-flash-1.5-8b",
     ctor_kwargs=_persona_mini_kwargs,
 )
-# Anthropic-via-OpenRouter stays on OpenRouter for now; direct-Anthropic via
-# langchain would need the langchain-anthropic dep. BYOK Anthropic users still
-# pay Omi for this specific persona model — flag for follow-up.
-llm_persona_medium_stream = ChatOpenAI(
+# Anthropic-via-OpenRouter. BYOK Anthropic users route to Anthropic's
+# OpenAI-compat endpoint directly, avoiding Omi's OpenRouter bill.
+_ANTHROPIC_OPENAI_BASE_URL = "https://api.anthropic.com/v1/"
+_persona_medium_kwargs = dict(
     temperature=0.8,
+    streaming=True,
+    stream_options={"include_usage": True},
+    callbacks=[_usage_callback],
+)
+_persona_medium_default = ChatOpenAI(
     model="anthropic/claude-3.5-sonnet",
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Chat"},
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
+    **_persona_medium_kwargs,
+)
+
+
+class _AnthropicViaOpenAIProxy:
+    """Route to Anthropic's OpenAI-compat endpoint when BYOK Anthropic key is set."""
+
+    __slots__ = ('_default', '_ctor_kwargs')
+
+    def __init__(self, default: ChatOpenAI, ctor_kwargs: Dict[str, Any]):
+        object.__setattr__(self, '_default', default)
+        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _resolve(self) -> ChatOpenAI:
+        byok = get_byok_key('anthropic')
+        if byok:
+            return _cached_openai_chat(
+                'claude-3-5-sonnet-20241022',
+                byok,
+                {**self._ctor_kwargs, 'base_url': _ANTHROPIC_OPENAI_BASE_URL},
+            )
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    def __or__(self, other):
+        return self._resolve() | other
+
+    def __ror__(self, other):
+        return other | self._resolve()
+
+
+llm_persona_medium_stream = _AnthropicViaOpenAIProxy(
+    default=_persona_medium_default,
+    ctor_kwargs=_persona_medium_kwargs,
 )
 
 # Gemini models for large context analysis
@@ -647,12 +696,13 @@ def gemini_embed_query(text: str) -> List[float]:
     env key so non-BYOK callers behave exactly as before.
     """
     api_key = get_byok_key('gemini') or os.environ.get('GEMINI_API_KEY', '')
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key={api_key}'
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent'
     payload = {
         'model': 'models/embedding-001',
         'content': {'parts': [{'text': text}]},
         'taskType': 'RETRIEVAL_QUERY',
     }
-    resp = httpx.post(url, json=payload, timeout=10)
+    headers = {'x-goog-api-key': api_key, 'Content-Type': 'application/json'}
+    resp = httpx.post(url, json=payload, headers=headers, timeout=10)
     resp.raise_for_status()
     return resp.json()['embedding']['values']

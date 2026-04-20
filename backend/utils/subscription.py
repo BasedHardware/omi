@@ -282,6 +282,10 @@ def enforce_chat_quota(uid: str) -> None:
     if not CHAT_CAP_ENFORCEMENT_ENABLED:
         return
 
+    # BYOK users pay their own LLM provider — no Omi-side cost to cap.
+    if users_db.is_byok_active(uid):
+        return
+
     snapshot = get_chat_quota_snapshot(uid)
     if snapshot['allowed']:
         return

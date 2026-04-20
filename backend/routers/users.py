@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -758,6 +759,10 @@ def get_user_usage_stats_endpoint(
     return stats
 
 
+_SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
+_BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+
+
 class BYOKActivateRequest(BaseModel):
     fingerprints: Dict[str, str]
 
@@ -770,13 +775,19 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     detect rotation without ever seeing the keys. The live keys themselves
     travel on every request as headers; they are never persisted.
     """
-    required = {'openai', 'anthropic', 'gemini', 'deepgram'}
-    missing = required - set(data.fingerprints.keys())
+    missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
     if missing:
         raise HTTPException(
             status_code=400,
             detail=f"Missing fingerprints for providers: {sorted(missing)}",
         )
+    for provider, fp in data.fingerprints.items():
+        if provider not in _BYOK_REQUIRED_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        if not _SHA256_HEX_RE.match(fp):
+            raise HTTPException(
+                status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
+            )
     users_db.set_byok_active(uid, data.fingerprints)
     return {"active": True}
 
