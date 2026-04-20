@@ -88,7 +88,34 @@ class TestPremiumFlagship:
 
 
 # ---------------------------------------------------------------------------
-# Premium profile — gpt-4.1-nano features (cheap tier)
+# Premium profile — gpt-4.1-mini features (quality-sensitive tier)
+# ---------------------------------------------------------------------------
+class TestPremiumMini:
+    """Test gpt-4.1-mini features in premium profile respond to real prompts."""
+
+    MINI_FEATURES = [
+        'external_structure',
+        'memories',
+        'memory_conflict',
+        'knowledge_graph',
+        'chat_extraction',
+        'chat_graph',
+        'goals',
+        'proactive_notification',
+    ]
+
+    @pytest.mark.parametrize("feature", MINI_FEATURES)
+    def test_mini_feature_responds(self, feature):
+        model = get_model(feature)
+        assert model == 'gpt-4.1-mini', f"{feature} should be gpt-4.1-mini in premium, got {model}"
+        llm = get_llm(feature)
+        response = llm.invoke(SIMPLE_PROMPT)
+        assert response.content.strip(), f"{feature} ({model}) returned empty response"
+        print(f"  {feature} ({model}): {response.content.strip()[:60]}")
+
+
+# ---------------------------------------------------------------------------
+# Premium profile — gpt-4.1-nano features (simple tasks tier)
 # ---------------------------------------------------------------------------
 class TestPremiumNano:
     """Test gpt-4.1-nano features in premium profile respond to real prompts."""
@@ -98,16 +125,8 @@ class TestPremiumNano:
         'conv_folder',
         'conv_discard',
         'daily_summary_simple',
-        'external_structure',
-        'memories',
-        'memory_conflict',
         'memory_category',
-        'knowledge_graph',
-        'chat_extraction',
-        'chat_graph',
         'session_titles',
-        'goals',
-        'proactive_notification',
         'followup',
         'smart_glasses',
         'onboarding',
@@ -195,7 +214,7 @@ class TestProfileRouting:
 
     def test_premium_profile_has_expected_variant_count(self):
         distinct = set(MODEL_QOS_PROFILES['premium'].values())
-        assert len(distinct) == 5, f"Expected 5 variants in premium, got {len(distinct)}: {distinct}"
+        assert len(distinct) == 6, f"Expected 6 variants in premium, got {len(distinct)}: {distinct}"
 
     def test_max_profile_has_expected_variant_count(self):
         distinct = set(MODEL_QOS_PROFILES['max'].values())
