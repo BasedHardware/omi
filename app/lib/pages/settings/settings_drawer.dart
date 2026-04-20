@@ -489,10 +489,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.signOut,
                   icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    final navigator = Navigator.of(context);
-
-                    navigator.pop(); // Close the settings drawer
-
                     await showDialog(
                       context: context,
                       builder: (ctx) {
@@ -500,7 +496,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ctx,
                           () => Navigator.of(ctx).pop(),
                           () async {
-                            Navigator.of(ctx).pop();
+                            Navigator.of(ctx).pop(); // close dialog
+                            Navigator.of(context).pop(); // close drawer
                             await SharedPreferencesUtil().clear();
                             await AuthService.instance.signOut();
                             if (context.mounted) {
