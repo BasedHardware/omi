@@ -1,0 +1,25 @@
+# shared/launch_app.yaml
+# Launches the Omi app and waits for it to be ready.
+# Used by most flows as a prerequisite via runFlow.
+#
+# After launch, the app will be on one of:
+#   - The "Get Started" / auth screen (if not signed in)
+#   - The home screen (if already signed in)
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+    clearState: false
+    clearKeychain: false
+
+# Wait for the app to finish loading — either auth screen or home screen
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Get Started"
+        - "Ask Omi"
+        - "Sign in"
+        - "Conversations"
+    timeout: 15000

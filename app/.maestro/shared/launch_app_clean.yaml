@@ -1,0 +1,19 @@
+# shared/launch_app_clean.yaml
+# Launches the Omi app with a CLEAN state (cleared data).
+# Use this when you need the app to start fresh (e.g., onboarding, auth tests).
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+    clearState: true
+    clearKeychain: true
+
+# Wait for the auth/get-started screen to appear
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Get Started"
+        - "Sign in"
+    timeout: 15000

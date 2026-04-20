@@ -1,0 +1,41 @@
+# Maestro E2E Test Configuration for Omi Flutter App
+# https://maestro.dev/docs/configuration
+#
+# This config is automatically loaded when running `maestro test` from app/.maestro/
+#
+# App IDs:
+#   Android dev:  com.friend.ios.dev
+#   Android prod: com.friend.ios
+#   iOS dev:      com.friend-app-with-wearable.ios12.development
+#   iOS prod:     com.friend-app-with-wearable.ios12
+
+appId: com.friend.ios.dev
+
+# Tags for organizing test suites
+tags:
+  - smoke
+  - regression
+  - onboarding
+  - conversations
+  - memories
+  - chat
+  - apps
+  - settings
+  - auth
+
+# Default retry & timeout settings
+onFlowStart:
+  - clearState          # start each flow from a clean app state
+
+# Environment variables that flows can reference via ${VAR_NAME}
+# Override at runtime: maestro test --env KEY=VALUE
+env:
+  # Test user credentials (override with real values for authenticated tests)
+  TEST_USER_NAME: "Test User"
+  TEST_MEMORY_TITLE: "Maestro Test Memory"
+  TEST_CHAT_QUESTION: "What did I talk about today?"
+  # Platform detection (set by run_all.sh)
+  PLATFORM: "android"
+  # App package IDs
+  ANDROID_APP_ID: "com.friend.ios.dev"
+  IOS_APP_ID: "com.friend-app-with-wearable.ios12.development"
