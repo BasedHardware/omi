@@ -160,7 +160,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
-                    Text(context.l10n.multiLanguageDetectionDesc,
+                    Text(context.l10n.detectLanguages,
                         style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
@@ -198,27 +198,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 padding: const EdgeInsets.only(left: 54),
                 child: Row(
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration:
-                          BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(8)),
-                      child: Center(
-                          child: FaIcon(FontAwesomeIcons.earthAmericas, color: Colors.grey.shade500, size: 13)),
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.automaticTranslation,
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w400),
-                          ),
-                          const SizedBox(height: 1),
-                          Text(context.l10n.detectLanguages,
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-                        ],
+                      child: Text(
+                        context.l10n.automaticTranslation,
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w400),
                       ),
                     ),
                     const SizedBox(width: 8),
