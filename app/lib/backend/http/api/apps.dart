@@ -608,10 +608,10 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<bool> migrateAppOwnerId(String oldId) async {
+Future<bool> migrateAppOwnerId(String oldId, String oldAuthToken) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
-    headers: {},
+    headers: {'X-Old-Authorization': 'Bearer $oldAuthToken'},
     body: '',
     method: 'POST',
   );
