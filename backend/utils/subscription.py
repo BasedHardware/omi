@@ -368,26 +368,24 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
         if simplified:
             return [
                 f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-                "Shared with mobile and web",
             ]
         return [
             f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Shared with mobile and web",
+            "Available on Mac, mobile, and web",
         ]
 
     if plan == PlanType.unlimited:
         if simplified:
             return [
                 f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-                "Shared with mobile and web",
             ]
         return [
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Shared with mobile and web",
+            "Available on Mac, mobile, and web",
         ]
 
     # Basic plan
