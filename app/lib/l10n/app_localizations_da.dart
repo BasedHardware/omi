@@ -9007,4 +9007,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du er på en betalt plan.';
+
+  @override
+  String get multiLanguageDetection => 'Flersproget registrering';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Registrer flere talte sprog';
 }

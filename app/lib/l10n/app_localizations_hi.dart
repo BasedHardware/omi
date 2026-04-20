@@ -9001,4 +9001,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'आप एक सशुल्क प्लान पर हैं।';
+
+  @override
+  String get multiLanguageDetection => 'बहुभाषी पहचान';
+
+  @override
+  String get multiLanguageDetectionDesc => 'कई बोली जाने वाली भाषाओं का पता लगाएं';
 }

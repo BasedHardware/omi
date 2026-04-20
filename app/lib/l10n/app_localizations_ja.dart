@@ -8419,7 +8419,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -8867,4 +8872,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get multiLanguageDetection => '多言語検出';
+
+  @override
+  String get multiLanguageDetectionDesc => '複数の話し言葉を検出';
 }

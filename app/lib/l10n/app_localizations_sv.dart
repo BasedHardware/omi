@@ -1708,7 +1708,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ENHETER',
+      one: 'ENHET',
+    );
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -9020,4 +9025,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Du har en betald plan.';
+
+  @override
+  String get multiLanguageDetection => 'Flerspråkig igenkänning';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Identifiera flera talade språk';
 }

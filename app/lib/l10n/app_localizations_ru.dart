@@ -9050,4 +9050,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вы на платном плане.';
+
+  @override
+  String get multiLanguageDetection => 'Многоязычное распознавание';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Распознавание нескольких языков';
 }

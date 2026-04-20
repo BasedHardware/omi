@@ -1710,7 +1710,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'УСТРОЙСТВА',
+      one: 'УСТРОЙСТВО',
+    );
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -9051,4 +9056,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Вие сте на платен план.';
+
+  @override
+  String get multiLanguageDetection => 'Многоезично разпознаване';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Разпознаване на няколко говорими езика';
 }

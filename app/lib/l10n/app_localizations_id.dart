@@ -1711,7 +1711,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANGKAT',
+      one: 'PERANGKAT',
+    );
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -9026,4 +9031,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Anda menggunakan paket berbayar.';
+
+  @override
+  String get multiLanguageDetection => 'Deteksi multibahasa';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Deteksi beberapa bahasa lisan';
 }

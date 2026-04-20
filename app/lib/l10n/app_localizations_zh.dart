@@ -8407,7 +8407,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -8852,4 +8857,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '你正在使用付费计划。';
+
+  @override
+  String get multiLanguageDetection => '多语言检测';
+
+  @override
+  String get multiLanguageDetectionDesc => '检测多种口语';
 }

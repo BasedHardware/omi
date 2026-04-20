@@ -9041,4 +9041,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Masz płatny plan.';
+
+  @override
+  String get multiLanguageDetection => 'Wykrywanie wielu języków';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Wykrywaj wiele języków mówionych';
 }

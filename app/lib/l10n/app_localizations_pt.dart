@@ -9025,4 +9025,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Você está em um plano pago.';
+
+  @override
+  String get multiLanguageDetection => 'Deteção multilíngue';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detetar vários idiomas falados';
 }

@@ -1711,7 +1711,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -9016,4 +9021,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Bạn đang sử dụng gói trả phí.';
+
+  @override
+  String get multiLanguageDetection => 'Phát hiện đa ngôn ngữ';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Phát hiện nhiều ngôn ngữ nói';
 }

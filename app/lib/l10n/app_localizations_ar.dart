@@ -1693,7 +1693,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -8955,4 +8960,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'أنت على خطة مدفوعة.';
+
+  @override
+  String get multiLanguageDetection => 'كشف اللغات المتعددة';
+
+  @override
+  String get multiLanguageDetectionDesc => 'كشف عدة لغات منطوقة';
 }

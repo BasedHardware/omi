@@ -8421,7 +8421,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 생성됨',
+      one: '대화 1개 생성됨',
+    );
     return '$_temp0';
   }
 
@@ -8868,4 +8873,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
+
+  @override
+  String get multiLanguageDetection => '다국어 감지';
+
+  @override
+  String get multiLanguageDetectionDesc => '여러 음성 언어 감지';
 }
