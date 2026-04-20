@@ -10874,7 +10874,7 @@
         }
     },
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting.",
+    "chatQuotaExceededReply": "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
     "@chatQuotaExceededReply": {
         "description": "AI reply message shown when user exceeds chat quota"
     }

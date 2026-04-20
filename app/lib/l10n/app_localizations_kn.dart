@@ -9158,5 +9158,5 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಚಾಟ್ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ಚಾಟ್ ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಪ್ಲಾನ್ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+      'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿರ್ಬಂಧಗಳಿಲ್ಲದೆ Omi ಜೊತೆ ಚಾಟ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
 }

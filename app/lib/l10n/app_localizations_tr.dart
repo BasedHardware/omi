@@ -9139,5 +9139,5 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'Aylık sohbet limitinize ulaştınız. Sohbete devam etmek için planınızı yükseltin.';
+      'Aylık limitinize ulaştınız. Kısıtlama olmadan Omi ile sohbete devam etmek için yükseltin.';
 }

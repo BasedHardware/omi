@@ -9136,5 +9136,5 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'Anda telah mencapai batas chat bulanan. Upgrade paket Anda untuk melanjutkan chat.';
+      'Anda telah mencapai batas bulanan. Upgrade untuk terus mengobrol dengan Omi tanpa batasan.';
 }

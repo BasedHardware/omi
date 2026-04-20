@@ -9143,5 +9143,5 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply =>
-      'آپ اپنی ماہانہ چیٹ حد تک پہنچ گئے ہیں۔ چیٹ جاری رکھنے کے لیے اپنا پلان اپ گریڈ کریں۔';
+      'آپ اپنی ماہانہ حد تک پہنچ گئے ہیں۔ بغیر کسی پابندی کے Omi کے ساتھ چیٹ جاری رکھنے کے لیے اپ گریڈ کریں۔';
 }

@@ -17028,7 +17028,7 @@ abstract class AppLocalizations {
   /// AI reply message shown when user exceeds chat quota
   ///
   /// In en, this message translates to:
-  /// **'You\'ve hit your monthly chat limit. Upgrade your plan to keep chatting.'**
+  /// **'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.'**
   String get chatQuotaExceededReply;
 }
 

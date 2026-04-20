@@ -2978,5 +2978,5 @@
     "chatUsageMessages": "Sembang: {used} / {limit} mesej bulan ini",
     "chatUsageMessagesNoLimit": "Sembang: {used} mesej bulan ini",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "Anda telah mencapai had sembang bulanan. Naik taraf pelan anda untuk terus bersembang."
+    "chatQuotaExceededReply": "Anda telah mencapai had bulanan. Naik taraf untuk terus bersembang dengan Omi tanpa sekatan."
 }

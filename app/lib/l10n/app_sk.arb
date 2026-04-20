@@ -2983,5 +2983,5 @@
     "chatUsageMessages": "Chat: {used} / {limit} správ tento mesiac",
     "chatUsageMessagesNoLimit": "Chat: {used} správ tento mesiac",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Dosiahli ste svoj mesačný limit. Inovujte, aby ste mohli pokračovať v chate s Omi bez obmedzení."
 }

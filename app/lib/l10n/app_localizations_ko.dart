@@ -8977,5 +8977,5 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 
   @override
-  String get chatQuotaExceededReply => '월간 채팅 한도에 도달했습니다. 채팅을 계속하려면 플랜을 업그레이드하세요.';
+  String get chatQuotaExceededReply => '월간 한도에 도달했습니다. 제한 없이 Omi와 계속 채팅하려면 업그레이드하세요.';
 }

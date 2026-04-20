@@ -10701,5 +10701,5 @@
     "chatUsageMessages": "அரட்டை: {used} / {limit} செய்திகள் இந்த மாதம்",
     "chatUsageMessagesNoLimit": "அரட்டை: {used} செய்திகள் இந்த மாதம்",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "நீங்கள் உங்கள் மாதாந்திர அரட்டை வரம்பை அடைந்துவிட்டீர்கள். அரட்டையைத் தொடர உங்கள் திட்டத்தை மேம்படுத்தவும்."
+    "chatQuotaExceededReply": "நீங்கள் உங்கள் மாதாந்திர வரம்பை அடைந்துவிட்டீர்கள். கட்டுப்பாடுகள் இல்லாமல் Omi உடன் அரட்டையைத் தொடர மேம்படுத்தவும்."
 }

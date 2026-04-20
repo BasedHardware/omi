@@ -10701,5 +10701,5 @@
     "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
     "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Dosegli ste svojo mesečno omejitev. Nadgradite, da nadaljujete pogovor z Omi brez omejitev."
 }

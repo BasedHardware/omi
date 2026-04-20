@@ -2978,5 +2978,5 @@
     "chatUsageMessages": "Pokalbis: {used} / {limit} žinučių šį mėnesį",
     "chatUsageMessagesNoLimit": "Pokalbis: {used} žinučių šį mėnesį",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
-    "chatQuotaExceededReply": "You've hit your monthly chat limit. Upgrade your plan to keep chatting."
+    "chatQuotaExceededReply": "Pasiekėte savo mėnesinį limitą. Atnaujinkite, kad galėtumėte toliau bendrauti su Omi be apribojimų."
 }
