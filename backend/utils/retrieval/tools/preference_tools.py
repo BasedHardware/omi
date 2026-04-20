@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 import logging
+from models.memories import MemoryDB, MemoryCategory
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,21 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
 
     now = datetime.now(timezone.utc)
     memory_id = str(uuid.uuid4())
+
+    # Use MemoryDB.calculate_score so scoring always matches Firestore-created memories
+    # system category → cat_boost = 999 - CATEGORY_BOOSTS['system'] = 999 - 0 = 999
+    scoring = MemoryDB.calculate_score(
+        MemoryDB(
+            id=memory_id,
+            uid=uid,
+            content=preference,
+            category=MemoryCategory.system,
+            created_at=now,
+            updated_at=now,
+            manually_added=False,
+        )
+    )
+
     memory_data = {
         'id': memory_id,
         'content': preference,
@@ -79,12 +95,24 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         'reviewed': False,
         'visibility': 'private',
         'tags': ['agent-learned'],
+        'scoring': scoring,            # Bug 2 fix: was missing
     }
 
     try:
         memory_db.create_memory(uid, memory_data)
-        logger.info(f"Saved user preference: {preference[:80]}")
-        return f"Preference saved: {preference}"
+        logger.info(f"Saved user preference to Firestore: {preference[:80]}")
     except Exception as e:
-        logger.error(f"Failed to save preference: {e}")
+        logger.error(f"Failed to save preference to Firestore: {e}")
         return f"Error saving preference: {str(e)}"
+
+    # Bug 1 fix: this call was completely missing before
+    # Without it the memory exists in Firestore but is invisible to
+    # search_memories_tool (vector search) and hidden in get_memories listings.
+    try:
+        vector_db.upsert_memory_vector(uid, memory_id, preference, 'system')
+        logger.info(f"Upserted memory vector for: {preference[:80]}")
+    except Exception as e:
+        # Non-fatal: memory is persisted; search won't find it until re-embedding
+        logger.error(f"Failed to upsert memory vector (memory saved, search delayed): {e}")
+
+    return f"Preference saved: {preference}"
