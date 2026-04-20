@@ -1,0 +1,76 @@
+# One-Click Omi Backend Deployment
+#
+# Usage:
+#   1. Copy .env.docker to .env and fill in your API keys
+#   2. docker compose up -d
+#   3. Visit http://localhost:8080/docs
+#
+# Services:
+#   - backend: Omi API server (FastAPI/Uvicorn)
+#   - redis: In-memory cache and session store
+#   - typesense: Search engine for conversations/memories
+#
+# Note: Firestore (Google Cloud) is the primary datastore.
+#       You must provide your own GCP service account credentials.
+#       See .env.docker for required environment variables.
+
+services:
+  backend:
+    build:
+      context: ..  # Repo root — Dockerfile uses COPY backend/ .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_HOST_PORT=8108
+    depends_on:
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  typesense:
+    image: typesense/typesense:27.1
+    ports:
+      - "8108:8108"
+    environment:
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-omi_typesense_dev_key}
+      - TYPESENSE_DATA_DIR=/data
+    volumes:
+      - typesense_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:
+  typesense_data:
