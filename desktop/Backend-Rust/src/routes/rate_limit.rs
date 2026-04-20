@@ -23,11 +23,8 @@ use tokio::sync::Mutex;
 
 use crate::services::RedisService;
 
-/// Daily soft limit — at or above this, Pro requests are degraded to Flash.
-const DAILY_SOFT_LIMIT: u32 = 300;
-
-/// Daily hard limit — at or above this, all requests are rejected with 429.
-const DAILY_HARD_LIMIT: u32 = 1500;
+// Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
+use crate::llm::model_qos;
 
 /// Burst cap — max requests per rolling 60-second window.
 const BURST_PER_MINUTE: usize = 30;
@@ -60,9 +57,9 @@ impl RateSnapshot {
     fn to_decision(&self) -> RateDecision {
         if self.burst_count > BURST_PER_MINUTE {
             RateDecision::Reject
-        } else if self.daily_count >= DAILY_HARD_LIMIT {
+        } else if self.daily_count >= model_qos::daily_hard_limit() {
             RateDecision::Reject
-        } else if self.daily_count >= DAILY_SOFT_LIMIT {
+        } else if self.daily_count >= model_qos::daily_soft_limit() {
             RateDecision::DegradeToFlash
         } else {
             RateDecision::Allow
@@ -197,7 +194,7 @@ pub fn maybe_rewrite_model_path(path: &str, decision: &RateDecision, action: &st
         return path.to_string();
     }
     if let Some(rest) = path.strip_prefix("models/gemini-pro-latest:") {
-        return format!("models/gemini-3-flash-preview:{}", rest);
+        return format!("models/{}:{}", crate::llm::model_qos::gemini_degrade_target(), rest);
     }
     path.to_string()
 }
@@ -218,23 +215,25 @@ pub fn rate_limit_error_json(message: &str) -> String {
 mod tests {
     use super::*;
 
-    // --- Decision from snapshot ---
+    // --- Decision from snapshot (uses QoS tier — Premium in test env: soft=30, hard=1500) ---
 
     #[test]
     fn snapshot_allow() {
-        let s = RateSnapshot { daily_count: 100, burst_count: 5 };
+        let s = RateSnapshot { daily_count: 10, burst_count: 5 };
         assert_eq!(s.to_decision(), RateDecision::Allow);
     }
 
     #[test]
     fn snapshot_degrade_at_soft_limit() {
-        let s = RateSnapshot { daily_count: 300, burst_count: 5 };
+        let soft = model_qos::daily_soft_limit();
+        let s = RateSnapshot { daily_count: soft, burst_count: 5 };
         assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
     }
 
     #[test]
     fn snapshot_reject_at_hard_limit() {
-        let s = RateSnapshot { daily_count: 1500, burst_count: 5 };
+        let hard = model_qos::daily_hard_limit();
+        let s = RateSnapshot { daily_count: hard, burst_count: 5 };
         assert_eq!(s.to_decision(), RateDecision::Reject);
     }
 
@@ -249,6 +248,22 @@ mod tests {
         // burst_count == BURST_PER_MINUTE is not over (it's the count AFTER add)
         let s = RateSnapshot { daily_count: 10, burst_count: 30 };
         assert_eq!(s.to_decision(), RateDecision::Allow);
+    }
+
+    // --- Boundary: just below thresholds ---
+
+    #[test]
+    fn snapshot_allow_just_below_soft_limit() {
+        let soft = model_qos::daily_soft_limit();
+        let s = RateSnapshot { daily_count: soft - 1, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::Allow);
+    }
+
+    #[test]
+    fn snapshot_degrade_just_below_hard_limit() {
+        let hard = model_qos::daily_hard_limit();
+        let s = RateSnapshot { daily_count: hard - 1, burst_count: 5 };
+        assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
     }
 
     // --- No Redis → unmetered (cache bypassed entirely) ---

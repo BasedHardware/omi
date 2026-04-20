@@ -211,17 +211,16 @@ struct GeminiPartResponse {
 }
 
 impl LlmClient {
-    /// Create a new Gemini client
+    /// Create a new Gemini client with the QoS-configured default model.
     pub fn new(api_key: String) -> Self {
         Self {
             client: Client::new(),
             api_key,
-            model: "gemini-3-flash-preview".to_string(),
+            model: super::model_qos::gemini_default().to_string(),
         }
     }
 
     /// Set the model to use
-    #[allow(dead_code)]
     pub fn with_model(mut self, model: &str) -> Self {
         self.model = model.to_string();
         self
@@ -1160,5 +1159,31 @@ Return relationships as source -> relationship -> target triples."#,
         let result: ExtractedKnowledge = parse_or_repair_json(&response, "knowledge graph extraction")?;
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_uses_qos_default_model() {
+        let client = LlmClient::new("test-key".to_string());
+        assert_eq!(client.model, super::super::model_qos::gemini_default());
+    }
+
+    #[test]
+    fn with_model_overrides_default() {
+        let client = LlmClient::new("test-key".to_string())
+            .with_model("gemini-pro-latest");
+        assert_eq!(client.model, "gemini-pro-latest");
+    }
+
+    #[test]
+    fn with_model_extraction_uses_extraction_accessor() {
+        let client = LlmClient::new("test-key".to_string())
+            .with_model(super::super::model_qos::gemini_extraction());
+        // In test env (premium tier), extraction == default == flash
+        assert_eq!(client.model, "gemini-3-flash-preview");
     }
 }

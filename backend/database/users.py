@@ -159,6 +159,62 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
     )
 
 
+# BYOK (Bring Your Own Keys) — free-plan flag.
+# We never store keys themselves; only SHA-256 fingerprints so we can detect
+# rotation. `active` is the subscription-bypass gate.
+
+BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
+
+
+def get_byok_state(uid: str) -> dict:
+    user_ref = db.collection('users').document(uid)
+    data = user_ref.get().to_dict() or {}
+    return data.get('byok', {})
+
+
+def is_byok_active(uid: str) -> bool:
+    """True if user has a live BYOK activation (heartbeat within TTL)."""
+    state = get_byok_state(uid)
+    if not state.get('active'):
+        return False
+    last_seen = state.get('last_seen_at')
+    if not last_seen:
+        return False
+    if isinstance(last_seen, datetime):
+        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    else:
+        return False
+    return age <= BYOK_HEARTBEAT_TTL_SECONDS
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'byok': {
+                'active': True,
+                'fingerprints': fingerprints,
+                'last_seen_at': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
+def clear_byok_active(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'byok': {
+                'active': False,
+                'fingerprints': {},
+                'last_seen_at': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
     db.collection('account_deletions').document(uid).set(

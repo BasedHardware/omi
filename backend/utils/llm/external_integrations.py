@@ -1,7 +1,11 @@
+import json
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
+import database.action_items as action_items_db
 import database.users as users_db
 from models.conversation import Conversation
 from models.structured import Structured
@@ -137,10 +141,6 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
-    import json
-    import uuid
-    import database.action_items as action_items_db
-
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -152,7 +152,7 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    user_language = users_db.get_user_language_preference(uid)
+    output_language = user_profile.get('language', '') or 'en'
 
     all_person_ids = []
     for m in conversations:
@@ -195,11 +195,12 @@ def generate_comprehensive_daily_summary(
                 }
             )
 
-    # Fetch actual action items from the database for this date range
+    # Fetch action items for the specific conversations being summarised.
+    # Querying by conversation_id (not date range) prevents pulling in items whose
+    # async processing happened to land on the same UTC day as an unrelated conversation.
     actual_action_items = []
-    if start_date_utc and end_date_utc:
-        db_action_items = action_items_db.get_action_items(uid, start_date=start_date_utc, end_date=end_date_utc)
-        for item in db_action_items:
+    for c in non_discarded:
+        for item in action_items_db.get_action_items(uid, conversation_id=c.id):
             actual_action_items.append(
                 {
                     "description": item.get("description", ""),
@@ -213,6 +214,7 @@ def generate_comprehensive_daily_summary(
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
+OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
 
 Today's date: {date_str}
 Conversations: {total_conversations}
@@ -264,7 +266,7 @@ RULES:
 - conversation_number: Reference which conversation (1-{total_conversations}) it came from.
 - SKIP sections entirely if no quality content.
 - Be snappy. No fluff. No corporate speak. Only include sections that are genuinely useful and relevant.
-{f'- IMPORTANT: You MUST write the ENTIRE summary in {user_language}. All text including headline, overview, highlights, questions, decisions, and knowledge nuggets MUST be in {user_language}. Do NOT write in English.' if user_language and user_language != 'en' else ''}
+- OUTPUT LANGUAGE: Every word — headline, overview, highlights, questions, decisions, knowledge nuggets — MUST be in {output_language}. Do not use any other language.
 
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
@@ -280,8 +282,6 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         response = response.strip()
 
         # Try to repair common JSON issues from LLM
-        import re
-
         response = re.sub(r':\s*\\"([^"]*)\\"', r': "\1"', response)
         response = response.replace('\\"', '"')
 

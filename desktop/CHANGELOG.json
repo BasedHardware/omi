@@ -2,6 +2,57 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.343",
+      "date": "2026-04-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.341",
+      "date": "2026-04-20",
+      "changes": [
+        "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription",
+        "Fixed screen recording showing as disabled (red) even when granted in System Settings"
+      ]
+    },
+    {
+      "version": "0.11.340",
+      "date": "2026-04-19",
+      "changes": [
+        "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription"
+      ]
+    },
+    {
+      "version": "0.11.339",
+      "date": "2026-04-19",
+      "changes": [
+        "Added a Skip button to the onboarding goal step and made it resilient to transient 429 errors",
+        "Added a Skip button to the onboarding exports step (Put your memories where you work)"
+      ]
+    },
+    {
+      "version": "0.11.337",
+      "date": "2026-04-19",
+      "changes": [
+        "Right-click the floating bar to snooze it (and notifications) for 2 hours"
+      ]
+    },
+    {
+      "version": "0.11.336",
+      "date": "2026-04-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.335",
+      "date": "2026-04-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.334",
       "date": "2026-04-18",
       "changes": [

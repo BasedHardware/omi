@@ -7,7 +7,7 @@ actor EmbeddingService {
 
   /// Gemini embedding-001 outputs 3072 dimensions by default
   static let embeddingDimension = 3072
-  static let modelName = "gemini-embedding-001"
+  static var modelName: String { ModelQoS.Gemini.embedding }
 
   /// In-memory index: action_item.id -> normalized embedding
   private var index: [Int64: [Float]] = [:]

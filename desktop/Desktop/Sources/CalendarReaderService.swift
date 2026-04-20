@@ -191,7 +191,7 @@ actor CalendarReaderService {
         prompt: synthesisPrompt,
         systemPrompt:
           "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

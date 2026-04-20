@@ -103,13 +103,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQueryFromVoice: Bool = false
 
     // Model selection
-    @Published var selectedModel: String = "claude-sonnet-4-6"
+    @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
 
-    /// Available models for the floating bar picker
-    static let availableModels: [(id: String, label: String)] = [
-        ("claude-sonnet-4-6", "Sonnet"),
-        ("claude-opus-4-6", "Opus"),
-    ]
+    /// Available models for the floating bar picker (driven by QoS tier)
+    static var availableModels: [(id: String, label: String)] { ModelQoS.Claude.availableModels }
 
     var isShowingNotification: Bool {
         currentNotification != nil

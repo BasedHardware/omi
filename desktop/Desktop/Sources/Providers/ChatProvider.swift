@@ -772,11 +772,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
             let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
+                ? ModelQoS.Claude.defaultSelection
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
-                .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt),
+                .init(key: "main", model: ModelQoS.Claude.chat, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
@@ -1619,7 +1619,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 prompt: question,
                 systemPrompt: systemPrompt,
                 sessionKey: sessionKey,
-                model: "claude-sonnet-4-20250514",
+                model: ModelQoS.Claude.chatLabQuery,
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
