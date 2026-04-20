@@ -41,23 +41,23 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         'conv_discard': 'gpt-4.1-nano',
         'daily_summary': 'gpt-5.4-mini',
         'daily_summary_simple': 'gpt-4.1-nano',
-        'external_structure': 'gpt-4.1-nano',
+        'external_structure': 'gpt-4.1-mini',  # quality-sensitive: structuring external data
         # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-nano',
+        'memories': 'gpt-4.1-mini',  # quality-sensitive: memory extraction
         'learnings': 'gpt-5.4-mini',
-        'memory_conflict': 'gpt-4.1-nano',
+        'memory_conflict': 'gpt-4.1-mini',  # quality-sensitive: conflict detection
         'memory_category': 'gpt-4.1-nano',
-        'knowledge_graph': 'gpt-4.1-nano',
+        'knowledge_graph': 'gpt-4.1-mini',  # quality-sensitive: entity/relationship extraction
         # OpenAI — chat
         'chat_responses': 'gpt-5.4-mini',
-        'chat_extraction': 'gpt-4.1-nano',
-        'chat_graph': 'gpt-4.1-nano',
+        'chat_extraction': 'gpt-4.1-mini',  # quality-sensitive: structured data extraction
+        'chat_graph': 'gpt-4.1-mini',  # quality-sensitive: graph queries
         'session_titles': 'gpt-4.1-nano',
         # OpenAI — features
-        'goals': 'gpt-4.1-nano',
+        'goals': 'gpt-4.1-mini',  # quality-sensitive: goal analysis
         'goals_advice': 'gpt-5.4-mini',
         'notifications': 'gpt-5.4-mini',
-        'proactive_notification': 'gpt-4.1-nano',
+        'proactive_notification': 'gpt-4.1-mini',  # quality-sensitive: notification decisions
         'followup': 'gpt-4.1-nano',
         'smart_glasses': 'gpt-4.1-nano',
         'onboarding': 'gpt-4.1-nano',
