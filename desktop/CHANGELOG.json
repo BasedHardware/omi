@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription",
-    "Fixed screen recording showing as disabled (red) even when granted in System Settings"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.341",
+      "date": "2026-04-20",
+      "changes": [
+        "Added Bring-Your-Own-Keys free plan: paste OpenAI, Anthropic, Gemini, and Deepgram keys to use Omi with no subscription",
+        "Fixed screen recording showing as disabled (red) even when granted in System Settings"
+      ]
+    },
     {
       "version": "0.11.340",
       "date": "2026-04-19",
