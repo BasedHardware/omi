@@ -15,6 +15,29 @@ export type SalesRoleplayScenario = {
   successSignals: string[];
 };
 
+export type RoleplayTranscriptMessage = {
+  sender: 'user' | 'omi';
+  text: string;
+};
+
+export type RoleplayGoalCoverage = {
+  goal: string;
+  status: 'hit' | 'partial' | 'missed';
+  evidence: string;
+};
+
+export type RoleplayScorecard = {
+  overallScore: number;
+  outcome: string;
+  summary: string;
+  strengths: string[];
+  missedOpportunities: string[];
+  buyerSignals: string[];
+  nextStepAdvice: string;
+  recommendedNextLine: string;
+  goalCoverage: RoleplayGoalCoverage[];
+};
+
 export const ROLEPLAY_DIFFICULTIES: Array<{
   id: RoleplayDifficulty;
   label: string;
@@ -193,4 +216,72 @@ Response rules:
 - Avoid exaggerated theatrics. Sound commercially realistic.
 
 If the user asks to begin, open with a concise first line that fits the scenario and gives the rep something real to respond to.`;
+}
+
+export function buildRoleplayScorecardPrompt(options: {
+  scenario: SalesRoleplayScenario;
+  difficulty: RoleplayDifficulty;
+  repObjective?: string;
+  conversationHistory: RoleplayTranscriptMessage[];
+}) {
+  const { scenario, difficulty, repObjective, conversationHistory } = options;
+
+  const transcript = conversationHistory
+    .map((message, index) => {
+      const speaker = message.sender === 'user' ? 'Rep' : scenario.buyerName;
+      return `${index + 1}. ${speaker}: ${message.text}`;
+    })
+    .join('\n');
+
+  return `You are an expert B2B sales coach reviewing a completed role-play transcript.
+
+Scenario:
+- Buyer: ${scenario.buyerName}, ${scenario.buyerRole} at ${scenario.company}
+- Deal stage: ${scenario.dealStage}
+- Context: ${scenario.companyContext}
+- Difficulty: ${difficulty}
+- Session summary: ${scenario.summary}
+- Buyer traits: ${scenario.buyerTraits.join(', ')}
+- Likely objections: ${scenario.objections.join('; ')}
+- Success signals: ${scenario.successSignals.join('; ')}
+
+Rep focus:
+${repObjective ? repObjective : 'General sales discovery, objection handling, and securing a next step.'}
+
+Training goals:
+${scenario.goals.map((goal) => `- ${goal}`).join('\n')}
+
+Transcript:
+${transcript || 'No transcript provided.'}
+
+Return valid JSON only. Do not wrap it in markdown fences.
+
+Use this exact schema:
+{
+  "overallScore": number,
+  "outcome": string,
+  "summary": string,
+  "strengths": string[],
+  "missedOpportunities": string[],
+  "buyerSignals": string[],
+  "nextStepAdvice": string,
+  "recommendedNextLine": string,
+  "goalCoverage": [
+    {
+      "goal": string,
+      "status": "hit" | "partial" | "missed",
+      "evidence": string
+    }
+  ]
+}
+
+Scoring rules:
+- overallScore must be an integer from 1 to 100.
+- outcome should be a short label such as "Strong discovery", "At risk", or "Needs sharper next step".
+- summary should be 2 to 4 sentences and directly reference what the rep did well or poorly.
+- strengths and missedOpportunities should each contain 2 to 4 concise bullets as strings.
+- buyerSignals should describe the concrete buying signals or warning signs present in the call.
+- nextStepAdvice should state the highest-value improvement for the next attempt.
+- recommendedNextLine should be a single sentence the rep could say next if this conversation were continuing.
+- goalCoverage must include every training goal exactly once.`;
 }
