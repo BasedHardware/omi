@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import List, Optional
 
+import openai
 from utils.executors import critical_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -49,13 +50,24 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
     return memory
 
 
+_BYOK_EMBEDDING_ERROR = (
+    "Your OpenAI API key does not have access to the 'text-embedding-3-large' model. "
+    "Grant embedding model access in your OpenAI project settings, or use a key from "
+    "a project with this access enabled."
+)
+
+
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
     memory.category = MemoryCategory.manual
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
 
-    upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+    try:
+        upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+    except openai.PermissionDeniedError:
+        logger.warning('BYOK embedding permission denied uid=%s', uid)
+        raise HTTPException(status_code=422, detail=_BYOK_EMBEDDING_ERROR)
 
     if memory.visibility == 'public':
         critical_executor.submit(update_personas_async, uid)
@@ -112,7 +124,11 @@ async def create_memories_batch(
             ],
         )
 
-    await asyncio.to_thread(_persist)
+    try:
+        await asyncio.to_thread(_persist)
+    except openai.PermissionDeniedError:
+        logger.warning('BYOK embedding permission denied uid=%s', uid)
+        raise HTTPException(status_code=422, detail=_BYOK_EMBEDDING_ERROR)
 
     if has_public:
         loop = asyncio.get_running_loop()
