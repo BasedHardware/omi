@@ -94,7 +94,7 @@ def _get_structured(
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
-        ):
+        ) and isinstance(conversation, ExternalIntegrationCreateConversation):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
                 structured = get_transcript_structure(
                     conversation.text,

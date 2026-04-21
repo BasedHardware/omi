@@ -938,7 +938,7 @@ def create_conversation_from_segments(
     language_code = request.language or 'en'
 
     # Source defaults
-    source = request.source or ConversationSource.external_integration
+    source = request.source or ConversationSource.omi
 
     # Create conversation object with transcript segments
     create_conversation_obj = CreateConversation(
