@@ -66,7 +66,8 @@ def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid))
     try:
         upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
     except openai.PermissionDeniedError:
-        logger.warning('BYOK embedding permission denied uid=%s', uid)
+        memories_db.delete_memory(uid, memory_db.id)
+        logger.warning('BYOK embedding permission denied uid=%s, rolled back memory %s', uid, memory_db.id)
         raise HTTPException(status_code=422, detail=_BYOK_EMBEDDING_ERROR)
 
     if memory.visibility == 'public':
@@ -112,22 +113,27 @@ async def create_memories_batch(
     # slow embeddings/Pinecone call can't starve the FastAPI sync threadpool.
     def _persist():
         memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
-        upsert_memory_vectors_batch(
-            uid,
-            [
-                {
-                    "memory_id": m.id,
-                    "content": m.content,
-                    "category": m.category.value,
-                }
-                for m in memory_dbs
-            ],
-        )
+        try:
+            upsert_memory_vectors_batch(
+                uid,
+                [
+                    {
+                        "memory_id": m.id,
+                        "content": m.content,
+                        "category": m.category.value,
+                    }
+                    for m in memory_dbs
+                ],
+            )
+        except openai.PermissionDeniedError:
+            for m in memory_dbs:
+                memories_db.delete_memory(uid, m.id)
+            raise
 
     try:
         await asyncio.to_thread(_persist)
     except openai.PermissionDeniedError:
-        logger.warning('BYOK embedding permission denied uid=%s', uid)
+        logger.warning('BYOK embedding permission denied uid=%s, rolled back %d memories', uid, len(memory_dbs))
         raise HTTPException(status_code=422, detail=_BYOK_EMBEDDING_ERROR)
 
     if has_public:
