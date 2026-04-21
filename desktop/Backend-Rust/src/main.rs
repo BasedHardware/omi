@@ -101,7 +101,7 @@ async fn main() {
     // needs FIREBASE_AUTH_PROJECT_ID=based-hardware while keeping Firestore on dev.
     let auth_project_id = config.firebase_auth_project_id.clone()
         .or_else(|| config.firebase_project_id.clone())
-        .expect("FIREBASE_AUTH_PROJECT_ID or FIREBASE_PROJECT_ID must be set");
+        .unwrap_or_else(|| "placeholder".to_string());
     let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id));
 
     // Refresh Firebase keys with retry (transient network failures at startup)
@@ -133,7 +133,7 @@ async fn main() {
 
     // Initialize Firestore
     let firestore_project_id = config.firebase_project_id.clone()
-        .expect("FIREBASE_PROJECT_ID must be set for Firestore");
+        .unwrap_or_else(|| "placeholder".to_string());
     let firestore = match FirestoreService::new(
         firestore_project_id.clone(),
         config.encryption_secret.clone(),
@@ -141,7 +141,7 @@ async fn main() {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            Arc::new(FirestoreService::new(firestore_project_id, config.encryption_secret.clone()).await.unwrap())
+            Arc::new(FirestoreService::new_placeholder(config.encryption_secret.clone()))
         }
     };
 
