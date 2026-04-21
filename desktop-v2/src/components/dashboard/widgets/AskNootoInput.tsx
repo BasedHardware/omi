@@ -1,84 +1,102 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUp, Sparkles } from "lucide-react";
+import type { ChatStatus } from "ai";
 import { useChatStore } from "@/stores/chatStore";
+import {
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionAddScreenshot,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+  type PromptInputMessage,
+} from "@/components/ai-elements/prompt-input";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 
 const SUGGESTIONS = [
   "What did I work on today?",
   "Summarize my screen time",
   "What's next on my plate?",
+  "Draft a reply to my last email",
+  "Help me plan tomorrow",
 ];
 
 /**
- * Compact "Ask Nooto anything" input shown on the dashboard. Mirrors the
- * upstream change in v0.11.276 that replaced the dashboard Conversations list
- * with an embedded chat entry point. Submitting fires a message via the
- * chatStore and then navigates to `/chat` so the user lands on the streaming
- * response.
+ * Dashboard's "Ask Nooto" composer. Uses the same ai-elements primitives
+ * as the full Chat page so the two surfaces feel identical. On submit,
+ * the message is enqueued in chatStore and the user is routed to /chat
+ * to land on the streaming response.
  */
 export function AskNootoInput() {
   const navigate = useNavigate();
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const newSession = useChatStore((s) => s.newSession);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const [text, setText] = useState("");
 
-  const submit = (payload: string) => {
+  const chatStatus: ChatStatus = isStreaming ? "streaming" : "ready";
+
+  const fire = (payload: string) => {
     const trimmed = payload.trim();
     if (!trimmed || isStreaming) return;
     setText("");
-    // Fire-and-forget: chatStore persists the message + streams the response,
-    // so by the time /chat mounts it picks up the in-flight exchange.
+    // Always start a fresh session — the dashboard composer is the
+    // "new conversation" entry point. Appending to the last chat would
+    // mix unrelated questions into a single thread.
+    newSession();
     void sendMessage(trimmed);
     navigate("/chat");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit(text);
-    }
-  };
+  const handleSubmit = useCallback(
+    (message: PromptInputMessage) => fire(message.text),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isStreaming, sendMessage, newSession, navigate],
+  );
+
+  const handleSuggestion = useCallback(
+    (suggestion: string) => fire(suggestion),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isStreaming, sendMessage, newSession, navigate],
+  );
 
   return (
-    <section className="dashboard-ask">
-      <div className="dashboard-ask-label">
-        <Sparkles size={13} />
-        <span>Ask Nooto anything</span>
-      </div>
-      <div className="dashboard-ask-input-wrap">
-        <textarea
-          className="dashboard-ask-input"
-          placeholder="What's on your mind? Press Enter to send"
-          value={text}
-          rows={1}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={isStreaming}
-        />
-        <button
-          type="button"
-          className="dashboard-ask-submit"
-          onClick={() => submit(text)}
-          disabled={!text.trim() || isStreaming}
-          aria-label="Send message"
-          title="Send (Enter)"
-        >
-          <ArrowUp size={14} />
-        </button>
-      </div>
-      <div className="dashboard-ask-suggestions">
+    <section className="flex flex-col gap-3">
+      <Suggestions>
         {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            className="dashboard-ask-chip"
-            onClick={() => submit(s)}
-            disabled={isStreaming}
-          >
-            {s}
-          </button>
+          <Suggestion key={s} suggestion={s} onClick={handleSuggestion} />
         ))}
-      </div>
+      </Suggestions>
+
+      <PromptInput onSubmit={handleSubmit} className="w-full">
+        <PromptInputBody>
+          <PromptInputTextarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="What would you like to know?"
+          />
+        </PromptInputBody>
+        <PromptInputFooter>
+          <PromptInputTools>
+            <PromptInputActionMenu>
+              <PromptInputActionMenuTrigger />
+              <PromptInputActionMenuContent>
+                <PromptInputActionAddAttachments />
+                <PromptInputActionAddScreenshot />
+              </PromptInputActionMenuContent>
+            </PromptInputActionMenu>
+          </PromptInputTools>
+          <PromptInputSubmit
+            status={chatStatus}
+            disabled={chatStatus === "ready" && !text.trim()}
+          />
+        </PromptInputFooter>
+      </PromptInput>
     </section>
   );
 }

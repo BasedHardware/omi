@@ -1,5 +1,5 @@
-import { useState, type ComponentType } from "react";
-import { BarChart3, EyeOff, Monitor, Trash2 } from "lucide-react";
+import { type ComponentType } from "react";
+import { EyeOff, Trash2 } from "lucide-react";
 import type { StoredInsight } from "@/stores/insightStore";
 import { formatRelative } from "./formatRelative";
 
@@ -11,6 +11,10 @@ interface Props {
   onDelete: () => void;
 }
 
+/**
+ * Card-style insight renderer — same shape as MemoryCard so the Insights
+ * page feels like a sibling of the Memories page.
+ */
 export function InsightCard({
   insight,
   categoryIcon: Icon,
@@ -18,76 +22,62 @@ export function InsightCard({
   onDismiss,
   onDelete,
 }: Props) {
-  const [hovering, setHovering] = useState(false);
-
-  const confidencePct = Math.round(insight.confidence * 100);
+  const stop =
+    (fn: () => void) =>
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      fn();
+    };
 
   return (
     <button
       type="button"
       className={[
-        "insight-card",
+        "memory-card",
+        "insight-card-surface",
         insight.isDismissed ? "insight-card-dismissed" : "",
-        hovering ? "insight-card-hover" : "",
       ]
         .filter(Boolean)
         .join(" ")}
       onClick={onOpen}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
     >
-      <span className="insight-card-icon">
-        <Icon size={16} />
-      </span>
-
-      <div className="insight-card-body">
-        <div className="insight-card-headline">
+      <div className="memory-card-header">
+        <span className="memory-card-title">
           {!insight.isRead && <span className="insight-card-unread-dot" />}
-          <span className="insight-card-text">{insight.content}</span>
-        </div>
-        <div className="insight-card-meta">
-          <span className="insight-card-meta-item">
-            <Monitor size={11} />
-            <span>{insight.sourceApp}</span>
+          <Icon size={13} className="insight-card-title-icon" />
+          <span className="insight-card-title-text">
+            {insight.headline || insight.sourceApp}
           </span>
-          <span className="insight-card-meta-item">
-            <BarChart3 size={11} />
-            <span>{confidencePct}%</span>
-          </span>
-          <span className="insight-card-meta-spacer" />
-          <span className="insight-card-meta-date">
-            {formatRelative(insight.createdAt)}
-          </span>
-        </div>
+        </span>
       </div>
-
-      {hovering && (
-        <div
-          className="insight-card-actions"
-          onClick={(e) => e.stopPropagation()}
-        >
+      <p className="memory-card-content">{insight.content}</p>
+      <div className="memory-card-actions">
+        <span className="memory-card-date">
+          {formatRelative(insight.createdAt)}
+        </span>
+        <div className="insight-card-hover-actions">
           {!insight.isDismissed && (
             <button
               type="button"
-              className="insight-card-action"
-              onClick={onDismiss}
+              className="memory-delete-button"
+              onClick={stop(onDismiss)}
               aria-label="Dismiss"
               title="Dismiss"
             >
-              <EyeOff size={14} />
+              <EyeOff size={13} />
             </button>
           )}
           <button
             type="button"
-            className="insight-card-action"
-            onClick={onDelete}
+            className="memory-delete-button"
+            onClick={stop(onDelete)}
             aria-label="Delete"
             title="Delete"
           >
-            <Trash2 size={14} />
+            <Trash2 size={13} />
           </button>
         </div>
-      )}
+      </div>
     </button>
   );
 }

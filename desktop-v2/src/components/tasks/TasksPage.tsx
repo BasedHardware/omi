@@ -1,99 +1,58 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { useTaskStore } from "../../stores/taskStore";
 import type { Task } from "../../stores/taskStore";
+import { BUCKET_META, bucketFor, type DueBucket } from "./taskDates";
+import { TaskRow } from "./TaskRow";
+import { TaskSection } from "./TaskSection";
+import { TasksHeader, type FilterKey } from "./TasksHeader";
 
-function TaskItem({
-  task,
-  onToggle,
-  onDelete,
-}: {
-  task: Task;
-  onToggle: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="task-item">
-      <button
-        className={`task-checkbox${task.completed ? " task-checkbox-checked" : ""}`}
-        onClick={onToggle}
-        aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
-      >
-        {task.completed && (
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path
-              d="M2 6L5 9L10 3"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-      </button>
-      <span
-        className={`task-description${task.completed ? " task-description-done" : ""}`}
-      >
-        {task.description}
-      </span>
-      <button
-        className="task-delete-button"
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        aria-label="Delete task"
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      </button>
-    </div>
-  );
-}
+const VALID_FILTERS: FilterKey[] = [
+  "all",
+  "overdue",
+  "today",
+  "nodate",
+  "done",
+];
 
-function TaskGroup({
-  title,
-  tasks,
-  onToggle,
-  onDelete,
-}: {
-  title: string;
-  tasks: Task[];
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  if (tasks.length === 0) return null;
-
-  return (
-    <div className="task-group">
-      <h3 className="task-group-title">
-        {title}
-        <span className="task-group-count">{tasks.length}</span>
-      </h3>
-      <div className="task-group-list">
-        {tasks.map((task) => (
-          <TaskItem
-            key={task.id}
-            task={task}
-            onToggle={() => onToggle(task.id)}
-            onDelete={() => onDelete(task.id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+const BUCKET_ORDER: DueBucket[] = [
+  "overdue",
+  "today",
+  "tomorrow",
+  "thisWeek",
+  "later",
+  "noDate",
+];
 
 export function TasksPage() {
-  const { tasks, isLoading, loadTasks, toggleTask, createTask, deleteTask } = useTaskStore();
+  const {
+    tasks,
+    isLoading,
+    loadTasks,
+    toggleTask,
+    createTask,
+    deleteTask,
+  } = useTaskStore();
   const [newTaskText, setNewTaskText] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paramFilter = searchParams.get("filter") as FilterKey | null;
+  const filter: FilterKey =
+    paramFilter && VALID_FILTERS.includes(paramFilter) ? paramFilter : "all";
+
+  const setFilter = (next: FilterKey) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "all") {
+      params.delete("filter");
+    } else {
+      params.set("filter", next);
+    }
+    setSearchParams(params, { replace: true });
+  };
 
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
-
-  const grouped = useMemo(() => {
-    const pending = tasks.filter((t) => !t.completed);
-    const done = tasks.filter((t) => t.completed);
-    return { pending, done };
-  }, [tasks]);
 
   const handleCreate = async () => {
     const text = newTaskText.trim();
@@ -109,37 +68,119 @@ export function TasksPage() {
     }
   };
 
+  const filtered = useMemo(() => {
+    if (filter === "done") return tasks.filter((t) => t.completed);
+    const open = tasks.filter((t) => !t.completed);
+    if (filter === "all") return open;
+    return open.filter((t) => {
+      const b = bucketFor(t);
+      if (filter === "overdue") return b === "overdue";
+      if (filter === "today") return b === "today";
+      if (filter === "nodate") return b === "noDate";
+      return true;
+    });
+  }, [tasks, filter]);
+
+  const buckets = useMemo(() => {
+    const map: Record<DueBucket, Task[]> = {
+      overdue: [],
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      later: [],
+      noDate: [],
+    };
+    for (const t of filtered) {
+      map[bucketFor(t)].push(t);
+    }
+    return map;
+  }, [filtered]);
+
+  const empty = !isLoading && tasks.length === 0;
+
   return (
     <div className="tasks-page">
-      <div className="page-header">
-        <h2>Tasks</h2>
-      </div>
-      <div className="task-create-bar">
-        <input
-          type="text"
-          className="task-create-input"
-          placeholder="Add a new task..."
-          value={newTaskText}
-          onChange={(e) => setNewTaskText(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <button
-          className="task-create-button"
-          onClick={handleCreate}
-          disabled={!newTaskText.trim()}
-        >
-          Add
-        </button>
-      </div>
+      <TasksHeader
+        tasks={tasks}
+        stagedCount={0}
+        filter={filter}
+        onFilter={setFilter}
+      />
+
       <div className="tasks-content">
+        <div className="tasks-create-bar">
+          <Plus size={14} className="tasks-create-icon" />
+          <input
+            type="text"
+            className="tasks-create-input"
+            placeholder="Add a task..."
+            value={newTaskText}
+            onChange={(e) => setNewTaskText(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <button
+            className="tasks-create-submit"
+            onClick={handleCreate}
+            disabled={!newTaskText.trim()}
+          >
+            Add
+          </button>
+        </div>
+
         {isLoading && tasks.length === 0 && (
           <div className="page-empty">Loading tasks...</div>
         )}
-        {!isLoading && tasks.length === 0 && (
-          <div className="page-empty">No tasks yet. Tasks from your meetings will appear here.</div>
+
+        {empty && (
+          <div className="page-empty">
+            No tasks yet. Add one above, or Nooto will extract them from your
+            meetings.
+          </div>
         )}
-        <TaskGroup title="Pending" tasks={grouped.pending} onToggle={toggleTask} onDelete={deleteTask} />
-        <TaskGroup title="Done" tasks={grouped.done} onToggle={toggleTask} onDelete={deleteTask} />
+
+        {filter === "done" ? (
+          filtered.length === 0 ? (
+            <div className="page-empty">No completed tasks.</div>
+          ) : (
+            <div className="task-list">
+              {filtered.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  onToggle={() => toggleTask(task.id)}
+                  onUpdate={() => {}}
+                  onDelete={() => deleteTask(task.id)}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          BUCKET_ORDER.map((bucket) => {
+            const items = buckets[bucket];
+            if (items.length === 0) return null;
+            const meta = BUCKET_META[bucket];
+            return (
+              <TaskSection
+                key={bucket}
+                bucket={bucket}
+                label={meta.label}
+                hint={meta.hint}
+                count={items.length}
+                defaultOpen={bucket === "overdue" || bucket === "today" || items.length <= 5}
+              >
+                {items.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    onToggle={() => toggleTask(task.id)}
+                    onUpdate={() => {}}
+                    onDelete={() => deleteTask(task.id)}
+                  />
+                ))}
+              </TaskSection>
+            );
+          })
+        )}
       </div>
     </div>
   );

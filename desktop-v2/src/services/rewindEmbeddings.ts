@@ -13,7 +13,7 @@
  *   2. Once on app mount via `backfillScreenshotEmbeddings()` to catch up.
  */
 
-import { embedText } from "@/services/embeddingService";
+import { embedText, isEmbeddingUnavailable } from "@/services/embeddingService";
 import {
   saveScreenshotEmbedding,
   screenshotsMissingEmbeddings,
@@ -53,8 +53,14 @@ export async function embedAndSaveScreenshot(
 ): Promise<void> {
   if (!ocrText || ocrText.length < MIN_OCR_CHARS) return;
   const formatted = formatScreenshotForEmbedding(ocrText, appName, windowTitle);
-  const vec = await embedText(formatted, "RETRIEVAL_DOCUMENT");
-  await saveScreenshotEmbedding(dbId, vec);
+  try {
+    const vec = await embedText(formatted, "RETRIEVAL_DOCUMENT");
+    await saveScreenshotEmbedding(dbId, vec);
+  } catch (err) {
+    // Circuit open or transient failure — the backfill loop will retry later.
+    // Don't spam the console on the per-capture hot path.
+    if (!isEmbeddingUnavailable(err)) throw err;
+  }
 }
 
 /**
@@ -75,6 +81,12 @@ export async function backfillScreenshotEmbeddings(maxItems = 200): Promise<numb
       done++;
       await new Promise((r) => setTimeout(r, BACKFILL_DELAY_MS));
     } catch (err) {
+      if (isEmbeddingUnavailable(err)) {
+        // Proxy is down — stop trying, the circuit breaker will reopen
+        // later and the next backfill run will resume from here.
+        console.warn("[Rewind] embedding proxy unavailable, stopping backfill");
+        break;
+      }
       console.warn("[Rewind] embed backfill failed for", it.id, err);
     }
   }

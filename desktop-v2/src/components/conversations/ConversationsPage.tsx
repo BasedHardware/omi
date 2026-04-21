@@ -37,6 +37,14 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 import { AppInsightsEmpty, AppResultsFull } from "./AppResultsSection";
 import { useAppStore } from "../../stores/appStore";
+import { SpeakerBubbles } from "../transcript/SpeakerBubbles";
+import { Waveform } from "../transcript/Waveform";
+import { AudioSourceSelector } from "../transcript/AudioSourceSelector";
+import { LiveNameSpeakerSheet } from "../transcript/LiveNameSpeakerSheet";
+import {
+  useSpeakerStore,
+  formatSpeakerDisplayName,
+} from "../../stores/speakerStore";
 
 function audioStateToPersona(args: {
   audioEnabled: boolean;
@@ -772,10 +780,13 @@ function formatSpeakerLabel(speaker: string, isUser: boolean): string {
 function SpeakersSidebar({
   segments,
   partialBySpeaker,
+  onSpeakerTapped,
 }: {
   segments: LiveSegment[];
   partialBySpeaker: Record<string, string>;
+  onSpeakerTapped?: (segment: LiveSegment) => void;
 }) {
+  const names = useSpeakerStore((s) => s.names);
   const stats = useMemo(() => {
     const map = new Map<
       string,
@@ -828,12 +839,25 @@ function SpeakersSidebar({
         <div className="flex flex-col">
           {stats.map((s) => {
             const isActive = Boolean(partialBySpeaker[s.speaker]);
+            const display = formatSpeakerDisplayName(s.speaker, s.isUser, names);
+            const hasName = !s.isUser && !!names[s.speaker];
+            const canIdentify = !s.isUser && !hasName && !!onSpeakerTapped;
             return (
-              <div
+              <button
                 key={s.speaker}
+                type="button"
+                onClick={() => {
+                  if (!canIdentify) return;
+                  const anchor = segments.find(
+                    (seg) => seg.speaker === s.speaker,
+                  );
+                  if (anchor) onSpeakerTapped?.(anchor);
+                }}
+                disabled={!canIdentify}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors",
+                  "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors",
                   isActive ? "bg-red-500/5" : "hover:bg-secondary/40",
+                  !canIdentify && "cursor-default",
                 )}
               >
                 <div
@@ -842,21 +866,26 @@ function SpeakersSidebar({
                     getSpeakerColor(s.speaker, speakers),
                   )}
                 >
-                  {formatSpeakerLabel(s.speaker, s.isUser).charAt(0)}
+                  {display.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col leading-tight">
                   <span
                     className={cn(
                       "truncate text-xs font-medium",
-                      isActive ? "text-foreground" : "text-foreground/80",
+                      hasName
+                        ? "text-primary"
+                        : isActive
+                          ? "text-foreground"
+                          : "text-foreground/80",
                     )}
                   >
-                    {formatSpeakerLabel(s.speaker, s.isUser)}
+                    {display}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {s.count === 0
                       ? "speaking"
                       : `${s.count} turn${s.count === 1 ? "" : "s"}`}
+                    {canIdentify && " · tap to name"}
                   </span>
                 </div>
                 {isActive && (
@@ -865,7 +894,7 @@ function SpeakersSidebar({
                     <span className="relative inline-flex size-1.5 rounded-full bg-red-500" />
                   </span>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -877,47 +906,17 @@ function SpeakersSidebar({
 function LiveTranscriptView({
   segments,
   partialBySpeaker,
+  onSpeakerTapped,
 }: {
   segments: LiveSegment[];
   partialBySpeaker: Record<string, string>;
+  onSpeakerTapped?: (segment: LiveSegment) => void;
 }) {
-  const speakers = useMemo(() => {
-    const seen: string[] = [];
-    for (const seg of segments) {
-      if (!seen.includes(seg.speaker)) seen.push(seg.speaker);
-    }
-    for (const sp of Object.keys(partialBySpeaker)) {
-      if (!seen.includes(sp)) seen.push(sp);
-    }
-    return seen;
-  }, [segments, partialBySpeaker]);
+  const hasContent =
+    segments.length > 0 ||
+    Object.values(partialBySpeaker).some((t) => t && t.trim().length > 0);
 
-  const grouped = useMemo(() => {
-    const groups: {
-      speaker: string;
-      isUser: boolean;
-      texts: string[];
-      start: number;
-    }[] = [];
-    for (const seg of segments) {
-      const last = groups[groups.length - 1];
-      if (last && last.speaker === seg.speaker) {
-        last.texts.push(seg.text);
-      } else {
-        groups.push({
-          speaker: seg.speaker,
-          isUser: seg.isUser,
-          texts: [seg.text],
-          start: seg.start,
-        });
-      }
-    }
-    return groups;
-  }, [segments]);
-
-  const partials = Object.entries(partialBySpeaker).filter(([, text]) => text);
-
-  if (grouped.length === 0 && partials.length === 0) {
+  if (!hasContent) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
         <span className="relative flex size-3">
@@ -933,42 +932,12 @@ function LiveTranscriptView({
 
   return (
     <LiveConversation className="min-h-0">
-      <LiveConversationContent className="gap-4 px-4 py-4 pb-20">
-        {grouped.map((group, i) => (
-          <Message key={i} from={group.isUser ? "user" : "assistant"}>
-            <span
-              className={cn(
-                "text-xs font-semibold",
-                group.isUser ? "self-end" : "self-start",
-                getSpeakerColor(group.speaker, speakers),
-              )}
-            >
-              {formatSpeakerLabel(group.speaker, group.isUser)}
-            </span>
-            <MessageContent className="leading-relaxed">
-              {group.texts.join(" ")}
-            </MessageContent>
-          </Message>
-        ))}
-        {partials.map(([speaker, text]) => {
-          const isUser = segments.find((s) => s.speaker === speaker)?.isUser ?? false;
-          return (
-            <Message key={`partial-${speaker}`} from={isUser ? "user" : "assistant"} className="opacity-70">
-              <span
-                className={cn(
-                  "text-xs font-semibold",
-                  isUser ? "self-end" : "self-start",
-                  getSpeakerColor(speaker, speakers),
-                )}
-              >
-                {formatSpeakerLabel(speaker, isUser)}
-              </span>
-              <MessageContent className="italic leading-relaxed">
-                {text}
-              </MessageContent>
-            </Message>
-          );
-        })}
+      <LiveConversationContent className="px-0 py-0 pb-20">
+        <SpeakerBubbles
+          segments={segments}
+          partialBySpeaker={partialBySpeaker}
+          onSpeakerTapped={onSpeakerTapped}
+        />
       </LiveConversationContent>
       <LiveConversationScrollButton />
     </LiveConversation>
@@ -987,6 +956,21 @@ function LiveMeetingDetail() {
   const vadMode = useAudioStore((s) => s.vadMode);
   const setVadMode = useAudioStore((s) => s.setVadMode);
   const [, forceTick] = useState(0);
+  const [identifyingSpeaker, setIdentifyingSpeaker] = useState<
+    { speaker: string; speakerId: number; sampleText: string } | null
+  >(null);
+
+  const handleSpeakerTapped = (segment: LiveSegment) => {
+    const latest = [...liveSegments]
+      .reverse()
+      .find((s) => s.speaker === segment.speaker);
+    const partial = livePartial[segment.speaker];
+    setIdentifyingSpeaker({
+      speaker: segment.speaker,
+      speakerId: segment.speakerId,
+      sampleText: latest?.text || partial || segment.text,
+    });
+  };
 
   useEffect(() => {
     if (!isRecording) return;
@@ -1005,7 +989,9 @@ function LiveMeetingDetail() {
     <div className="flex h-full min-h-0">
       {/* Main content */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b border-border/50 px-5 py-3">
+        {/* Row 1 — status + Stop button. Stop is always visible and never
+            gets pushed off-screen by the settings row below. */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-border/50 px-5 py-2.5">
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {isRecording ? (
               <span className="relative flex size-2 shrink-0">
@@ -1021,102 +1007,135 @@ function LiveMeetingDetail() {
             <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
               {isRecording ? elapsed : "15–30s…"}
             </span>
+            {isRecording && (
+              <div
+                className="live-waveform ml-1 hidden sm:block"
+                data-active={isRecording}
+              >
+                <Waveform barCount={10} height={20} />
+              </div>
+            )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          {isRecording && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
+              onClick={() => void stopAudio()}
+            >
+              <Square className="size-3 fill-current" />
+              Stop
+            </Button>
+          )}
+        </div>
+
+        {/* Row 2 — compact settings strip. Wraps instead of overflowing
+            so nothing clips the speakers column on narrow widths. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/50 px-5 py-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              Source
+            </span>
+            <AudioSourceSelector disabled={isRecording} compact />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              Lang
+            </span>
             <Tabs
               value={language}
               onValueChange={(v) => void setLanguage(v as typeof language)}
               aria-label="Transcription language"
             >
-              <TabsList className="h-7">
-                {TRANSCRIPTION_LANGUAGES.map((l) => (
+              <TabsList className="h-6">
+                {TRANSCRIPTION_LANGUAGES.map((l: { code: string; label: string }) => (
                   <TabsTrigger
                     key={l.code}
                     value={l.code}
                     title={l.label}
-                    className="px-2 text-[11px] font-medium uppercase tracking-wide"
+                    className="px-1.5 text-[10px] font-medium uppercase tracking-wide"
                   >
                     {l.code === "pt-BR" ? "PT" : "EN"}
                   </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
-                  title="Choose how the microphone picks up speech"
-                  aria-label="Microphone sensitivity"
-                >
-                  Mic: {vadMode === "off" ? "Always on" : vadMode === "sensitive" ? "High" : vadMode === "balanced" ? "Medium" : "Low"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className="w-72 border-0 bg-card p-1.5 shadow-xl ring-1 ring-white/10"
-              >
-                <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-foreground">
-                  Microphone sensitivity
-                </div>
-                <div className="px-2 pb-2 text-[11px] leading-snug text-muted-foreground">
-                  How much of what you say should be picked up.
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  {([
-                    {
-                      value: "off",
-                      label: "Always on",
-                      hint: "Send everything — the clearest transcripts, recommended for meetings.",
-                    },
-                    {
-                      value: "sensitive",
-                      label: "High",
-                      hint: "Catches quiet voices and quick whispers.",
-                    },
-                    {
-                      value: "balanced",
-                      label: "Medium",
-                      hint: "A good mix of quality and data savings.",
-                    },
-                    {
-                      value: "aggressive",
-                      label: "Low",
-                      hint: "Only captures loud, clear speech. Uses the least data.",
-                    },
-                  ] as const).map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => void setVadMode(opt.value)}
-                      className={cn(
-                        "flex flex-col items-start gap-0.5 rounded-md px-2 py-2 text-left transition-colors",
-                        vadMode === opt.value
-                          ? "bg-accent text-accent-foreground"
-                          : "hover:bg-accent/50",
-                      )}
-                    >
-                      <span className="text-sm font-medium">{opt.label}</span>
-                      <span className="text-[11px] leading-snug text-muted-foreground">
-                        {opt.hint}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            {isRecording && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-7 gap-1.5 px-2.5 text-xs"
-                onClick={() => void stopAudio()}
-              >
-                <Square className="size-3 fill-current" />
-                Stop
-              </Button>
-            )}
           </div>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="h-6 gap-1.5 px-2 text-[11px] font-normal text-muted-foreground hover:text-foreground"
+                title="Choose how the microphone picks up speech"
+                aria-label="Microphone sensitivity"
+              >
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  Mic
+                </span>
+                {vadMode === "off"
+                  ? "Always on"
+                  : vadMode === "sensitive"
+                    ? "High"
+                    : vadMode === "balanced"
+                      ? "Medium"
+                      : "Low"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              className="w-72 border-0 bg-card p-1.5 shadow-xl ring-1 ring-white/10"
+            >
+              <div className="px-2 pb-1.5 pt-1 text-xs font-medium text-foreground">
+                Microphone sensitivity
+              </div>
+              <div className="px-2 pb-2 text-[11px] leading-snug text-muted-foreground">
+                How much of what you say should be picked up.
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {([
+                  {
+                    value: "off",
+                    label: "Always on",
+                    hint: "Send everything — the clearest transcripts, recommended for meetings.",
+                  },
+                  {
+                    value: "sensitive",
+                    label: "High",
+                    hint: "Catches quiet voices and quick whispers.",
+                  },
+                  {
+                    value: "balanced",
+                    label: "Medium",
+                    hint: "A good mix of quality and data savings.",
+                  },
+                  {
+                    value: "aggressive",
+                    label: "Low",
+                    hint: "Only captures loud, clear speech. Uses the least data.",
+                  },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => void setVadMode(opt.value)}
+                    className={cn(
+                      "flex flex-col items-start gap-0.5 rounded-md px-2 py-2 text-left transition-colors",
+                      vadMode === opt.value
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-accent/50",
+                    )}
+                  >
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    <span className="text-[11px] leading-snug text-muted-foreground">
+                      {opt.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         {isProcessing && liveSegments.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
@@ -1129,6 +1148,7 @@ function LiveMeetingDetail() {
           <LiveTranscriptView
             segments={liveSegments}
             partialBySpeaker={livePartial}
+            onSpeakerTapped={handleSpeakerTapped}
           />
         )}
       </div>
@@ -1137,8 +1157,13 @@ function LiveMeetingDetail() {
         <SpeakersSidebar
           segments={liveSegments}
           partialBySpeaker={livePartial}
+          onSpeakerTapped={handleSpeakerTapped}
         />
       </div>
+      <LiveNameSpeakerSheet
+        speaker={identifyingSpeaker}
+        onClose={() => setIdentifyingSpeaker(null)}
+      />
     </div>
   );
 }

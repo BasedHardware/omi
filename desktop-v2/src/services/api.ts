@@ -7,8 +7,77 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import type Anthropic from "@anthropic-ai/sdk";
+
+import { CHAT_TOOLS, executeToolCall } from "@/services/chat";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+// ---------------------------------------------------------------------------
+// Gemini tool schema conversion
+// ---------------------------------------------------------------------------
+
+interface GeminiSchema {
+  type: string;
+  properties?: Record<string, GeminiSchema>;
+  required?: string[];
+  description?: string;
+  enum?: string[];
+}
+
+interface GeminiFunctionDeclaration {
+  name: string;
+  description?: string;
+  parameters?: GeminiSchema;
+}
+
+/** Anthropic input_schema → Gemini parameters. The two formats are compatible
+ *  for our simple shapes; we just strip `additionalProperties` (Gemini errors
+ *  on it) and recurse. */
+function anthropicSchemaToGemini(schema: Anthropic.Tool["input_schema"]): GeminiSchema {
+  const out: GeminiSchema = { type: schema.type ?? "object" };
+  if (schema.properties) {
+    out.properties = {};
+    for (const [k, v] of Object.entries(schema.properties as Record<string, GeminiSchema>)) {
+      out.properties[k] = {
+        type: v.type ?? "string",
+        ...(v.description ? { description: v.description } : {}),
+        ...(v.enum ? { enum: v.enum } : {}),
+      };
+    }
+  }
+  if ((schema as { required?: string[] }).required) {
+    out.required = (schema as { required?: string[] }).required;
+  }
+  return out;
+}
+
+let geminiFunctionDeclarationsCache: GeminiFunctionDeclaration[] | null = null;
+
+function geminiFunctionDeclarations(): GeminiFunctionDeclaration[] {
+  if (!geminiFunctionDeclarationsCache) {
+    geminiFunctionDeclarationsCache = CHAT_TOOLS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: anthropicSchemaToGemini(t.input_schema),
+    }));
+  }
+  return geminiFunctionDeclarationsCache;
+}
+
+// ---------------------------------------------------------------------------
+// Gemini wire types (subset we use)
+// ---------------------------------------------------------------------------
+
+type GeminiPart =
+  | { text: string }
+  | { functionCall: { name: string; args?: Record<string, unknown> } }
+  | { functionResponse: { name: string; response: { content: string } } };
+
+interface GeminiContent {
+  role: "user" | "model";
+  parts: GeminiPart[];
+}
 
 // ---------------------------------------------------------------------------
 // API key management
@@ -49,35 +118,29 @@ export interface ServerMessage {
 // Chat via Gemini streaming (direct, no backend proxy)
 // ---------------------------------------------------------------------------
 
-async function sendChatViaGemini(
-  text: string,
-  onDelta: (text: string) => void,
-  conversationHistory?: { role: "user" | "assistant"; content: string }[],
-): Promise<string> {
-  const apiKey = await getGeminiApiKey();
-  const url = `${GEMINI_BASE}/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`;
+interface GeminiCallbacks {
+  onDelta: (text: string) => void;
+  onToolCall?: (id: string, name: string, input: unknown) => void;
+  onToolResult?: (id: string, name: string, output: string) => void;
+}
 
-  const systemPrompt = `You are Nooto, an AI assistant integrated into the user's desktop app. You help with questions about their day, notes, screen activity, and tasks. Be concise and helpful.`;
+const MAX_GEMINI_TOOL_ITERATIONS = 6;
 
-  const contents: { role: string; parts: { text: string }[] }[] = [];
-
-  if (conversationHistory) {
-    for (const msg of conversationHistory) {
-      contents.push({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      });
-    }
-  }
-
-  contents.push({
-    role: "user",
-    parts: [{ text }],
-  });
-
+/** One non-streaming Gemini turn. Returns the candidate's parts so the caller
+ *  can either emit text or dispatch tool calls. We use non-streaming because
+ *  Gemini's streaming endpoint mixes function-call parts and text deltas in a
+ *  way that's tedious to incrementally render — short-circuit by collecting
+ *  the full message, then synthesizing onDelta with the text part(s). */
+async function geminiGenerate(
+  apiKey: string,
+  systemPrompt: string,
+  contents: GeminiContent[],
+): Promise<GeminiPart[]> {
+  const url = `${GEMINI_BASE}/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
     contents,
+    tools: [{ functionDeclarations: geminiFunctionDeclarations() }],
     generationConfig: { maxOutputTokens: 4096 },
   };
 
@@ -92,53 +155,84 @@ async function sendChatViaGemini(
     throw new Error(`Chat error: ${response.status} ${errorText}`);
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body");
+  const data = (await response.json()) as {
+    candidates?: { content?: { parts?: GeminiPart[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts ?? [];
+}
 
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let fullText = "";
+async function sendChatViaGemini(
+  text: string,
+  onDelta: ((text: string) => void) | GeminiCallbacks,
+  conversationHistory?: { role: "user" | "assistant"; content: string }[],
+  systemPrompt?: string,
+): Promise<string> {
+  const apiKey = await getGeminiApiKey();
+  const callbacks: GeminiCallbacks =
+    typeof onDelta === "function" ? { onDelta } : onDelta;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const effectiveSystemPrompt =
+    systemPrompt ??
+    `You are Nooto, an AI assistant integrated into the user's desktop app. You help with questions about their day, notes, screen activity, and tasks. Be concise and helpful.`;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+  const contents: GeminiContent[] = [];
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const jsonStr = line.slice(6).trim();
-      if (!jsonStr || jsonStr === "[DONE]") continue;
-
-      try {
-        const parsed = JSON.parse(jsonStr);
-        const delta = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (delta) {
-          fullText += delta;
-          onDelta(delta);
-        }
-      } catch {
-        // skip malformed JSON
-      }
+  if (conversationHistory) {
+    for (const msg of conversationHistory) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      });
     }
   }
 
-  if (buffer.trim() && buffer.startsWith("data: ")) {
-    const jsonStr = buffer.slice(6).trim();
-    if (jsonStr && jsonStr !== "[DONE]") {
-      try {
-        const parsed = JSON.parse(jsonStr);
-        const delta = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (delta) {
-          fullText += delta;
-          onDelta(delta);
-        }
-      } catch {
-        // skip
+  contents.push({ role: "user", parts: [{ text }] });
+
+  let fullText = "";
+
+  for (let iter = 0; iter < MAX_GEMINI_TOOL_ITERATIONS; iter++) {
+    const parts = await geminiGenerate(apiKey, effectiveSystemPrompt, contents);
+
+    const functionCalls = parts.filter(
+      (p): p is { functionCall: { name: string; args?: Record<string, unknown> } } =>
+        "functionCall" in p,
+    );
+    const textParts = parts.filter((p): p is { text: string } => "text" in p);
+
+    // Emit any text the model produced this turn.
+    for (const tp of textParts) {
+      if (tp.text) {
+        fullText += tp.text;
+        callbacks.onDelta(tp.text);
       }
     }
+
+    if (functionCalls.length === 0) {
+      break;
+    }
+
+    // Append the model's full turn (text + function calls) to history.
+    contents.push({ role: "model", parts });
+
+    // Execute each function call and append its response.
+    const responseParts: GeminiPart[] = [];
+    for (let i = 0; i < functionCalls.length; i++) {
+      const fc = functionCalls[i].functionCall;
+      // Gemini doesn't return ids for function calls — synthesize one so the
+      // UI can address the resulting card.
+      const callId = `gemini-tool-${iter}-${i}-${Date.now()}`;
+      callbacks.onToolCall?.(callId, fc.name, fc.args ?? {});
+      const output = await executeToolCall(fc.name, fc.args ?? {});
+      callbacks.onToolResult?.(callId, fc.name, output);
+
+      responseParts.push({
+        functionResponse: {
+          name: fc.name,
+          response: { content: output },
+        },
+      });
+    }
+    contents.push({ role: "user", parts: responseParts });
   }
 
   return fullText;

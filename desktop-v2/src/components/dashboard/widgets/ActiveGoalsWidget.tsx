@@ -4,11 +4,18 @@ import { ArrowRight, Target } from "lucide-react";
 import { useGoalStore } from "@/stores/goalStore";
 import type { Goal } from "@/stores/goalStore";
 import { getEmojiForTitle } from "@/components/goals/emoji";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const MAX_GOALS = 3;
 
-/** Same ramp as GoalRow.colorForProgress — kept local to avoid a cross-import
- *  from a scoped-out directory. */
 function colorForProgress(progress: number): string {
   if (progress >= 1) return "#22C55E";
   if (progress >= 0.8) return "#4ADE80";
@@ -21,7 +28,10 @@ function colorForProgress(progress: number): string {
 function fractionFor(goal: Goal): number {
   const span = goal.target_value - goal.min_value;
   if (span <= 0) return 0;
-  return Math.max(0, Math.min(1, (goal.current_value - goal.min_value) / span));
+  return Math.max(
+    0,
+    Math.min(1, (goal.current_value - goal.min_value) / span),
+  );
 }
 
 function GoalLine({ goal }: { goal: Goal }) {
@@ -32,93 +42,105 @@ function GoalLine({ goal }: { goal: Goal }) {
   const targetLabel = `${Math.round(goal.target_value)}${goal.unit ? ` ${goal.unit}` : ""}`;
 
   return (
-    <div className="dashboard-goal-row">
-      <div className="dashboard-goal-emoji" aria-hidden="true">
+    <div className="flex items-center gap-3 rounded-md px-2 py-1.5 -mx-2 transition-colors hover:bg-accent/50">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-base">
         {getEmojiForTitle(goal.title)}
       </div>
-      <div className="dashboard-goal-body">
-        <div className="dashboard-goal-head">
-          <span className="dashboard-goal-title">{goal.title}</span>
-          <span className="dashboard-goal-percent" style={{ color }}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-medium text-foreground">
+            {goal.title}
+          </span>
+          <span
+            className="shrink-0 text-xs font-semibold tabular-nums"
+            style={{ color }}
+          >
             {percent}%
           </span>
         </div>
-        <div className="dashboard-goal-bar">
+        <div className="relative h-1 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className="dashboard-goal-bar-fill"
+            className="h-full rounded-full transition-all duration-500 ease-out"
             style={{
               width: `${fraction * 100}%`,
               background: `linear-gradient(90deg, ${color}B3, ${color})`,
             }}
           />
         </div>
-        <div className="dashboard-goal-numbers tabular-nums">
-          {currentLabel} <span className="dashboard-goal-numbers-sep">/</span>{" "}
-          {targetLabel}
+        <div className="text-[11px] tabular-nums text-muted-foreground">
+          {currentLabel}{" "}
+          <span className="opacity-50">/</span> {targetLabel}
         </div>
       </div>
     </div>
   );
 }
 
-/**
- * Top-3 active goals with inline progress bars. Read-only surface; click
- * "View all" to manage goals on `/goals`.
- */
 export function ActiveGoalsWidget() {
   const navigate = useNavigate();
   const goals = useGoalStore((s) => s.goals);
   const loadGoals = useGoalStore((s) => s.loadGoals);
 
   useEffect(() => {
-    void loadGoals();
+    void loadGoals(true);
   }, [loadGoals]);
 
   const { visible, activeCount } = useMemo(() => {
-    const active = goals.filter((g) => g.is_active && !g.deleted);
+    // The store's `goals` list is already filtered to active + non-deleted
+    // by the Rust `list_active` query, so just paginate here.
     return {
-      visible: active.slice(0, MAX_GOALS),
-      activeCount: active.length,
+      visible: goals.slice(0, MAX_GOALS),
+      activeCount: goals.length,
     };
   }, [goals]);
 
   return (
-    <section className="dashboard-card dashboard-goals-card">
-      <div className="dashboard-card-head">
-        <div className="dashboard-card-head-icon">
+    <Card className="h-full gap-3 border-border/50 bg-card/40 py-5 shadow-none">
+      <CardHeader className="px-5">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Target size={14} />
-        </div>
-        <h2 className="dashboard-card-title">Active Goals</h2>
-        <span className="dashboard-card-badge">{activeCount}</span>
-        <button
-          type="button"
-          className="dashboard-card-link"
-          onClick={() => navigate("/goals")}
-          aria-label="View all goals"
-        >
-          View all <ArrowRight size={12} />
-        </button>
-      </div>
-
-      {visible.length === 0 ? (
-        <div className="dashboard-card-empty dashboard-card-empty-pos">
-          <Target size={22} className="dashboard-card-empty-icon" />
-          <span>No active goals.</span>
-          <button
-            type="button"
-            className="dashboard-card-empty-cta"
+          Active Goals
+          {activeCount > 0 && (
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+              {activeCount}
+            </Badge>
+          )}
+        </CardTitle>
+        <CardAction>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate("/goals")}
+            className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            Set a goal
-          </button>
-        </div>
-      ) : (
-        <div className="dashboard-goals-list">
-          {visible.map((goal) => (
-            <GoalLine key={goal.id} goal={goal} />
-          ))}
-        </div>
-      )}
-    </section>
+            View all
+            <ArrowRight size={12} />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col px-5">
+        {visible.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+              <Target size={18} className="opacity-60" />
+            </div>
+            <span>No active goals yet.</span>
+            <button
+              type="button"
+              onClick={() => navigate("/goals")}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Set your first goal
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {visible.map((goal) => (
+              <GoalLine key={goal.id} goal={goal} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

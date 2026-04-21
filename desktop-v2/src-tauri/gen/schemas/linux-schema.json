@@ -3189,10 +3189,10 @@
           "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`",
+          "description": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`",
           "type": "string",
           "const": "screen-capture:default",
-          "markdownDescription": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`"
+          "markdownDescription": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`"
         },
         {
           "description": "Allows deleting all screenshots from the database",
@@ -3249,10 +3249,28 @@
           "markdownDescription": "Allows saving a screenshot (with metadata) to the Rewind database"
         },
         {
+          "description": "Allows persisting an embedding vector against a screenshot row",
+          "type": "string",
+          "const": "screen-capture:allow-save-screenshot-embedding",
+          "markdownDescription": "Allows persisting an embedding vector against a screenshot row"
+        },
+        {
+          "description": "Allows listing screenshots that still need embeddings (for backfill)",
+          "type": "string",
+          "const": "screen-capture:allow-screenshots-missing-embeddings",
+          "markdownDescription": "Allows listing screenshots that still need embeddings (for backfill)"
+        },
+        {
           "description": "Allows full-text search over persisted screenshots",
           "type": "string",
           "const": "screen-capture:allow-search-screenshots",
           "markdownDescription": "Allows full-text search over persisted screenshots"
+        },
+        {
+          "description": "Allows cosine-similarity search over stored screenshot embeddings",
+          "type": "string",
+          "const": "screen-capture:allow-search-screenshots-semantic",
+          "markdownDescription": "Allows cosine-similarity search over stored screenshot embeddings"
         },
         {
           "description": "Allows starting continuous screen capture",
@@ -3333,10 +3351,28 @@
           "markdownDescription": "Denies the save_screenshot command without any pre-configured scope."
         },
         {
+          "description": "Denies the save_screenshot_embedding command without any pre-configured scope.",
+          "type": "string",
+          "const": "screen-capture:deny-save-screenshot-embedding",
+          "markdownDescription": "Denies the save_screenshot_embedding command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the screenshots_missing_embeddings command without any pre-configured scope.",
+          "type": "string",
+          "const": "screen-capture:deny-screenshots-missing-embeddings",
+          "markdownDescription": "Denies the screenshots_missing_embeddings command without any pre-configured scope."
+        },
+        {
           "description": "Denies the search_screenshots command without any pre-configured scope.",
           "type": "string",
           "const": "screen-capture:deny-search-screenshots",
           "markdownDescription": "Denies the search_screenshots command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the search_screenshots_semantic command without any pre-configured scope.",
+          "type": "string",
+          "const": "screen-capture:deny-search-screenshots-semantic",
+          "markdownDescription": "Denies the search_screenshots_semantic command without any pre-configured scope."
         },
         {
           "description": "Denies the start_screen_capture command without any pre-configured scope.",

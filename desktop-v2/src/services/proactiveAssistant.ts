@@ -52,11 +52,11 @@ export type ContextChangeHandler = (appName: string, windowTitle: string) => voi
 // Constants (matching Swift app)
 // ---------------------------------------------------------------------------
 
-/** Capture interval in ms (~1 second). */
-const CAPTURE_INTERVAL_MS = 1_000;
+/** Capture interval in ms (matches Swift RewindModels default: 3s). */
+const CAPTURE_INTERVAL_MS = 3_000;
 
-/** Analysis delay after context change (seconds). */
-const ANALYSIS_DELAY_S = 3;
+/** Analysis delay after context change (matches Swift AssistantSettings.defaultAnalysisDelay: 60s). */
+const ANALYSIS_DELAY_S = 60;
 
 /** Fallback distribution interval if no context change (seconds). */
 const FALLBACK_INTERVAL_S = 60;

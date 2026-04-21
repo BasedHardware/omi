@@ -1,20 +1,23 @@
 import { useEffect } from "react";
-import { CheckCircle2, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { useScoreStore } from "@/stores/scoreStore";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-/** 0-100 → hex color ramp, mirrors Swift `ScoreWidget.scoreColor`. */
 function colorForScore(score: number, hasTasks: boolean): string {
-  if (!hasTasks) return "#6B7280"; // muted grey
-  if (score >= 80) return "#22C55E"; // green
-  if (score >= 60) return "#CCCC00"; // lime/yellow
-  if (score >= 40) return "#F97316"; // orange
-  return "#EF4444"; // red
+  if (!hasTasks) return "var(--muted-foreground)";
+  if (score >= 80) return "#22C55E";
+  if (score >= 60) return "#CCCC00";
+  if (score >= 40) return "#F97316";
+  return "#EF4444";
 }
 
-/** SVG half-ring gauge — no external chart lib. */
 function Gauge({ value, color }: { value: number; color: string }) {
   const clamped = Math.max(0, Math.min(100, value));
-  // Arc path from (10,70) to (170,70), radius 80.
   const radius = 70;
   const cx = 90;
   const cy = 80;
@@ -26,13 +29,13 @@ function Gauge({ value, color }: { value: number; color: string }) {
   return (
     <svg
       viewBox="0 0 180 100"
-      className="dashboard-score-gauge"
+      className="h-full w-full"
       role="img"
       aria-label={`Score ${Math.round(clamped)} percent`}
     >
       <path
         d={`M ${startX} ${cy} A ${radius} ${radius} 0 0 1 ${endX} ${cy}`}
-        stroke="var(--app-border)"
+        stroke="var(--border)"
         strokeWidth={10}
         strokeLinecap="round"
         fill="none"
@@ -53,12 +56,6 @@ function Gauge({ value, color }: { value: number; color: string }) {
   );
 }
 
-/**
- * Weekly productivity score gauge — pulls from `/v1/scores`.
- *
- * Matches Swift `ScoreWidget` which reads `scoreResponse?.weekly` (last 7 days
- * of task completion).
- */
 export function DailyScoreWidget() {
   const { scores, loadScores } = useScoreStore();
 
@@ -78,34 +75,33 @@ export function DailyScoreWidget() {
   const color = colorForScore(score, hasTasks);
 
   return (
-    <section className="dashboard-card dashboard-score-card">
-      <div className="dashboard-card-head">
-        <div className="dashboard-card-head-icon">
+    <Card className="h-full gap-3 border-border/50 bg-card/40 py-5 shadow-none">
+      <CardHeader className="px-5">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <TrendingUp size={14} />
+          Weekly Score
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-2 px-5">
+        <div className="relative flex h-[100px] w-full max-w-[200px] items-end justify-center">
+          <Gauge value={hasTasks ? weekly.score : 0} color={color} />
+          <div
+            className="absolute bottom-1 left-1/2 -translate-x-1/2 text-3xl font-semibold tabular-nums tracking-tight"
+            style={{ color }}
+          >
+            {hasTasks ? `${score}%` : "—"}
+          </div>
         </div>
-        <h2 className="dashboard-card-title">Weekly Score</h2>
-      </div>
-
-      <div className="dashboard-score-gauge-wrap">
-        <Gauge value={hasTasks ? weekly.score : 0} color={color} />
-        <div className="dashboard-score-value" style={{ color }}>
-          {hasTasks ? `${score}%` : "—"}
-        </div>
-      </div>
-
-      <div className="dashboard-score-meta">
-        {hasTasks ? (
-          <>
-            <CheckCircle2 size={13} style={{ color }} />
+        <div className="text-center text-xs text-muted-foreground">
+          {hasTasks ? (
             <span className="tabular-nums">
-              {weekly.completed_tasks} of {weekly.total_tasks} tasks completed
+              {weekly.completed_tasks} of {weekly.total_tasks} tasks · last 7 days
             </span>
-          </>
-        ) : (
-          <span>No tasks this week</span>
-        )}
-      </div>
-      <p className="dashboard-score-sub">Last 7 days</p>
-    </section>
+          ) : (
+            <span>No tasks this week</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

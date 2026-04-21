@@ -23,9 +23,11 @@ interface DevState {
   developerMode: boolean;
   memoryIndicatorEnabled: boolean;
   bypassCommercialHours: boolean;
+  liveTranscriptWindowEnabled: boolean;
   toggleDeveloperMode: () => void;
   toggleMemoryIndicator: () => void;
   toggleBypassCommercialHours: () => void;
+  toggleLiveTranscriptWindow: () => void;
 }
 
 export const useDevStore = create<DevState>()(
@@ -34,12 +36,19 @@ export const useDevStore = create<DevState>()(
       developerMode: false,
       memoryIndicatorEnabled: false,
       bypassCommercialHours: false,
+      liveTranscriptWindowEnabled: false,
 
       toggleDeveloperMode: () => {
         const next = !get().developerMode;
         set({
           developerMode: next,
+          // Turning dev mode off should also disable any dev-only surface
+          // so users don't end up with orphan floating windows they can't
+          // control from a UI they can't see.
           memoryIndicatorEnabled: next ? get().memoryIndicatorEnabled : false,
+          liveTranscriptWindowEnabled: next
+            ? get().liveTranscriptWindowEnabled
+            : false,
         });
       },
 
@@ -49,6 +58,12 @@ export const useDevStore = create<DevState>()(
 
       toggleBypassCommercialHours: () => {
         set({ bypassCommercialHours: !get().bypassCommercialHours });
+      },
+
+      toggleLiveTranscriptWindow: () => {
+        set({
+          liveTranscriptWindowEnabled: !get().liveTranscriptWindowEnabled,
+        });
       },
     }),
     {

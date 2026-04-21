@@ -1,17 +1,18 @@
 /**
- * Score store — fetches the user's productivity score from `/v1/scores`.
+ * Score store — computes daily / weekly / overall productivity scores from
+ * `/v1/action-items`.
  *
- * Swift source of truth: `APIClient.getScores()` (used by DashboardViewModel).
- * Backend shape (see `backend/database/action_items.py::get_scores`):
+ * The old local Rust backend exposed `/v1/scores`, but the remote Nooto API
+ * does not have that endpoint. We compute the same buckets client-side by
+ * querying action items filtered by `due_start_date` / `due_end_date`.
  *
- *   {
- *     daily:   { score, completed_tasks, total_tasks },
- *     weekly:  { score, completed_tasks, total_tasks },
- *     overall: { score, completed_tasks, total_tasks },
- *   }
+ * Score formula (matches Swift `ScoreWidget` / old Rust `get_scores`):
+ *   score = total > 0 ? (completed / total) * 100 : 0
  *
- * The dashboard's DailyScoreWidget displays the *weekly* score (matches the
- * Swift `ScoreWidget` which pulls from `scoreResponse?.weekly`).
+ * Buckets:
+ *   - daily:   due between 00:00 and 23:59 today
+ *   - weekly:  due in the last 7 days (today inclusive)
+ *   - overall: all action items ever (no date filter)
  */
 
 import { create } from "zustand";
@@ -30,9 +31,43 @@ export interface ScoreResponse {
   overall: ScoreBucket;
 }
 
-const EMPTY_BUCKET: ScoreBucket = { score: 0, completed_tasks: 0, total_tasks: 0 };
+interface MinimalActionItem {
+  completed?: boolean;
+}
 
+interface ActionItemsResponse {
+  action_items?: MinimalActionItem[];
+  has_more?: boolean;
+}
+
+const EMPTY_BUCKET: ScoreBucket = { score: 0, completed_tasks: 0, total_tasks: 0 };
 const STALE_MS = 60_000;
+const MAX_PAGE_LIMIT = 500;
+
+function bucketFromItems(items: MinimalActionItem[]): ScoreBucket {
+  const total = items.length;
+  const completed = items.reduce((acc, item) => acc + (item.completed ? 1 : 0), 0);
+  const score = total > 0 ? (completed / total) * 100 : 0;
+  return { score, completed_tasks: completed, total_tasks: total };
+}
+
+async function fetchActionItems(params: Record<string, string>): Promise<MinimalActionItem[]> {
+  const all: MinimalActionItem[] = [];
+  let offset = 0;
+  while (true) {
+    const qs = new URLSearchParams({
+      ...params,
+      limit: String(MAX_PAGE_LIMIT),
+      offset: String(offset),
+    }).toString();
+    const data = await api.get<ActionItemsResponse>(`/v1/action-items?${qs}`);
+    const items = data?.action_items ?? [];
+    all.push(...items);
+    if (!data?.has_more || items.length === 0) break;
+    offset += items.length;
+  }
+  return all;
+}
 
 interface ScoreState {
   scores: ScoreResponse | null;
@@ -61,20 +96,46 @@ export const useScoreStore = create<ScoreState>((set, get) => ({
 
     set({ isLoading: true });
     try {
-      const data = await api.get<Partial<ScoreResponse>>("/v1/scores");
-      const normalized: ScoreResponse = {
-        daily: data?.daily ?? EMPTY_BUCKET,
-        weekly: data?.weekly ?? EMPTY_BUCKET,
-        overall: data?.overall ?? EMPTY_BUCKET,
-      };
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+      const weekStart = new Date(todayStart);
+      weekStart.setDate(weekStart.getDate() - 6);
+
+      const [dailyItems, weeklyItems, overallItems] = await Promise.all([
+        fetchActionItems({
+          due_start_date: todayStart.toISOString(),
+          due_end_date: todayEnd.toISOString(),
+        }),
+        fetchActionItems({
+          due_start_date: weekStart.toISOString(),
+          due_end_date: todayEnd.toISOString(),
+        }),
+        fetchActionItems({}),
+      ]);
+
       set({
-        scores: normalized,
+        scores: {
+          daily: bucketFromItems(dailyItems),
+          weekly: bucketFromItems(weeklyItems),
+          overall: bucketFromItems(overallItems),
+        },
         isLoading: false,
         lastFetchedAt: Date.now(),
       });
     } catch (err) {
       console.warn("[ScoreStore] loadScores failed:", err);
-      set({ isLoading: false, lastFetchedAt: Date.now() });
+      set({
+        scores: {
+          daily: EMPTY_BUCKET,
+          weekly: EMPTY_BUCKET,
+          overall: EMPTY_BUCKET,
+        },
+        isLoading: false,
+        lastFetchedAt: Date.now(),
+      });
     }
   },
 }));

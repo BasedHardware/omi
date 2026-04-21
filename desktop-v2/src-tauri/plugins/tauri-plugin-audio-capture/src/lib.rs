@@ -62,6 +62,11 @@ fn mono_to_stereo_bytes(mono: &[i16]) -> Vec<u8> {
 struct TranscriptEvent {
     text: String,
     is_final: bool,
+    speaker: String,
+    speaker_id: i64,
+    is_user: bool,
+    start: f64,
+    end: f64,
 }
 
 async fn run_transcription_consumer<R: Runtime>(
@@ -70,6 +75,7 @@ async fn run_transcription_consumer<R: Runtime>(
     cancel: CancellationToken,
     id_token: String,
     device_name: Option<String>,
+    language: String,
 ) {
     tracing::info!("[audio-capture] consumer task started");
     let started_at = Utc::now();
@@ -87,23 +93,44 @@ async fn run_transcription_consumer<R: Runtime>(
         let slot = stream_slot.clone();
         let app_for_cb = app.clone();
         let on_transcript: transcription::TranscriptCallback =
-            Arc::new(move |text: String, is_final: bool| {
+            Arc::new(move |live: transcription::LiveTranscript| {
                 tracing::info!(
-                    "[audio-capture] emitting transcript:partial (final={}, len={}): {}",
-                    is_final,
-                    text.len(),
-                    &text.chars().take(60).collect::<String>()
+                    "[audio-capture] emitting transcript:partial (final={}, speaker={}, len={}): {}",
+                    live.is_final,
+                    live.speaker,
+                    live.text.len(),
+                    &live.text.chars().take(60).collect::<String>()
                 );
                 if let Err(e) = app_for_cb.emit(
                     "transcript:partial",
-                    TranscriptEvent { text, is_final },
+                    TranscriptEvent {
+                        text: live.text,
+                        is_final: live.is_final,
+                        speaker: live.speaker,
+                        speaker_id: live.speaker_id,
+                        is_user: live.is_user,
+                        start: live.start,
+                        end: live.end,
+                    },
                 ) {
                     tracing::warn!("[audio-capture] emit failed: {}", e);
                 }
             });
+        let language_for_ws = language.clone();
         tokio::spawn(async move {
-            tracing::info!("[audio-capture] opening WS to {}", backend);
-            match TranscriptionStream::connect(&backend, &token, Some(on_transcript)).await {
+            tracing::info!(
+                "[audio-capture] opening WS to {} (language={})",
+                backend,
+                language_for_ws
+            );
+            match TranscriptionStream::connect(
+                &backend,
+                &token,
+                &language_for_ws,
+                Some(on_transcript),
+            )
+            .await
+            {
                 Ok(s) => {
                     tracing::info!("[audio-capture] WS connected");
                     *slot.write().await = Some(s);
@@ -210,6 +237,7 @@ async fn start_recording<R: Runtime>(
     }
 
     let config = config.unwrap_or_default();
+    let language = config.language.clone();
     let (tx, rx) = mpsc::unbounded_channel::<Vec<i16>>();
 
     let handle = capture::start_capture(config, tx)?;
@@ -233,6 +261,7 @@ async fn start_recording<R: Runtime>(
         cancel.clone(),
         id_token,
         device_name,
+        language,
     ));
 
     tracing::info!(

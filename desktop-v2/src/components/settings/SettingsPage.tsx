@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { useAuthStore } from "../../stores/authStore";
 import { useDevStore } from "../../stores/devStore";
+import { useOnboardingStore } from "../../stores/onboardingStore";
+import { useOnboardingCompanionStore } from "../../stores/onboardingCompanionStore";
 import { Switch } from "../ui/switch";
+import { PttDebugPanel } from "./PttDebugPanel";
 
 function SettingsSection({
   title,
@@ -24,9 +27,11 @@ export function SettingsPage() {
     developerMode,
     memoryIndicatorEnabled,
     bypassCommercialHours,
+    liveTranscriptWindowEnabled,
     toggleDeveloperMode,
     toggleMemoryIndicator,
     toggleBypassCommercialHours,
+    toggleLiveTranscriptWindow,
   } = useDevStore();
 
   return (
@@ -49,6 +54,23 @@ export function SettingsPage() {
           <div className="settings-row">
             <button onClick={signOut} className="settings-button-danger">
               Sign Out
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="flex flex-col gap-0.5">
+              <span className="settings-label">Replay onboarding</span>
+              <span className="text-[11px] text-muted-foreground/70">
+                Clear local onboarding state and return to step 1.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                useOnboardingStore.getState().resetOnboarding();
+                useOnboardingCompanionStore.getState().reset();
+              }}
+              className="settings-button-danger"
+            >
+              Reset
             </button>
           </div>
         </SettingsSection>
@@ -121,6 +143,22 @@ export function SettingsPage() {
               />
             </div>
           )}
+          {developerMode && (
+            <div className="settings-row">
+              <div className="flex flex-col gap-0.5">
+                <span className="settings-label">Live transcript window</span>
+                <span className="text-[11px] text-muted-foreground/70">
+                  Show the floating live-transcript overlay during meetings.
+                </span>
+              </div>
+              <Switch
+                checked={liveTranscriptWindowEnabled}
+                onCheckedChange={toggleLiveTranscriptWindow}
+                aria-label="Live transcript window"
+              />
+            </div>
+          )}
+          {developerMode && <PttDebugPanel />}
         </SettingsSection>
 
         <SettingsSection title="About">

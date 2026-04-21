@@ -16,8 +16,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nanoid } from "nanoid";
 import { api } from "@/services/api";
-import { getRecentScreenshots } from "@/services/rewind";
-import type { ScreenshotRow } from "@/services/rewind";
+import {
+  buildChatSystemPrompt,
+  buildClaudeChatSystemPrompt,
+  getContextSnapshotCounts,
+  invalidateChatContext,
+} from "@/services/chatContext";
+import { createClient, sendMessageStreaming } from "@/services/chat";
+import { useClaudeStore } from "@/stores/claudeStore";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +42,26 @@ export interface Citation {
   createdAt?: string;
 }
 
+export type ToolPartStatus = "running" | "completed" | "error";
+
+export interface ToolPartInput {
+  summary: string;
+  details?: string;
+}
+
+export type ChatMessagePart =
+  | { type: "text"; id: string; text: string }
+  | {
+      type: "tool";
+      id: string;
+      name: string;
+      status: ToolPartStatus;
+      input?: ToolPartInput;
+      output?: string;
+      errorMessage?: string;
+    }
+  | { type: "reasoning"; id: string; text: string; isStreaming?: boolean };
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -46,6 +72,12 @@ export interface ChatMessage {
   citations?: Citation[];
   /** Session this message belongs to. Legacy messages may be undefined. */
   sessionId?: string;
+  /**
+   * Structured parts (tool calls, reasoning, text). When present, renderers
+   * should walk `parts` in order; `content` is kept as a concatenation of
+   * text parts for markdown/persistence/search.
+   */
+  parts?: ChatMessagePart[];
 }
 
 export interface ChatSession {
@@ -80,48 +112,44 @@ const tauriStorage = createJSONStorage(() => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Screen context helpers
+// Parts helpers
 // ---------------------------------------------------------------------------
 
-function formatScreenRows(rows: ScreenshotRow[]): string {
-  if (rows.length === 0) return "";
-  return rows
-    .map((r) => {
-      const ts = new Date(r.timestamp).toLocaleString();
-      const ocr = r.ocr_text ? ` | Text: ${r.ocr_text.slice(0, 200)}` : "";
-      return `[${ts}] ${r.app_name} — ${r.window_title}${ocr}`;
-    })
-    .join("\n");
+function withMessage(
+  messages: ChatMessage[],
+  id: string,
+  updater: (m: ChatMessage) => ChatMessage,
+): ChatMessage[] {
+  return messages.map((m) => (m.id === id ? updater(m) : m));
 }
 
-const SCREEN_KEYWORDS = [
-  "screen", "activity", "working on", "work on", "apps", "app usage",
-  "screen time", "recent", "today", "doing", "been using", "browsing",
-  "visited", "open", "window", "tab",
-];
-
-function isScreenQuery(text: string): boolean {
-  const lower = text.toLowerCase();
-  return SCREEN_KEYWORDS.some((kw) => lower.includes(kw));
+function appendPart(msg: ChatMessage, part: ChatMessagePart): ChatMessage {
+  return { ...msg, parts: [...(msg.parts ?? []), part] };
 }
 
-async function buildScreenContext(userText: string): Promise<string> {
-  if (!isScreenQuery(userText)) return "";
+function mutatePart(
+  msg: ChatMessage,
+  partId: string,
+  updater: (p: ChatMessagePart) => ChatMessagePart,
+): ChatMessage {
+  if (!msg.parts) return msg;
+  return { ...msg, parts: msg.parts.map((p) => (p.id === partId ? updater(p) : p)) };
+}
 
-  try {
-    const recent = await getRecentScreenshots(30, 0);
-    if (recent.length === 0) return "";
-
-    const formatted = formatScreenRows(recent);
-    return [
-      "[The user has a desktop screen capture tool running. Here is their recent screen activity from the local database:]",
-      formatted,
-      "[End of screen activity. Use this data to answer the user's question. Summarize by app and provide time estimates based on timestamps.]",
-      "\n",
-    ].join("\n");
-  } catch {
-    return "";
+function appendTextDelta(msg: ChatMessage, delta: string): ChatMessage {
+  const parts = msg.parts ?? [];
+  const last = parts[parts.length - 1];
+  if (last && last.type === "text") {
+    const next = [...parts];
+    next[next.length - 1] = { ...last, text: last.text + delta };
+    return { ...msg, parts: next, content: msg.content + delta };
   }
+  const textPart: ChatMessagePart = {
+    type: "text",
+    id: nanoid(),
+    text: delta,
+  };
+  return { ...msg, parts: [...parts, textPart], content: msg.content + delta };
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +178,12 @@ function makeSession(initialMessageText?: string): ChatSession {
 // State shape
 // ---------------------------------------------------------------------------
 
+/** Which LLM the chat should route through.
+ *  - "auto": use Claude when a token is available, else fall back to Gemini.
+ *  - "claude": always use Claude (tool-use enabled). If no token, sendMessage surfaces an error.
+ *  - "gemini": always use Gemini (no tools). */
+export type ChatModelPreference = "auto" | "claude" | "gemini";
+
 interface ChatState {
   /** Only the messages for the currently selected session. */
   messages: ChatMessage[];
@@ -160,6 +194,10 @@ interface ChatState {
   /** Keyed index: sessionId -> its messages. Kept alongside `messages` so we
    *  can swap sessions without re-fetching anything. */
   sessionMessages: Record<string, ChatMessage[]>;
+
+  /** User-selected model preference (persisted). */
+  model: ChatModelPreference;
+  setModel: (model: ChatModelPreference) => void;
 
   sendMessage: (content: string) => Promise<void>;
   stopStreaming: () => void;
@@ -179,6 +217,10 @@ interface ChatState {
 
 let abortController: AbortController | null = null;
 
+/** Sessions that have already shown the "Loaded context" preamble card.
+ *  Module-level so it resets on app reload (mirrors the chatContext cache). */
+const contextCardShown = new Set<string>();
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
@@ -187,6 +229,9 @@ export const useChatStore = create<ChatState>()(
       sessions: [],
       currentSessionId: null,
       sessionMessages: {},
+      model: "auto",
+
+      setModel: (model: ChatModelPreference) => set({ model }),
 
       // -----------------------------------------------------------------------
       // sendMessage
@@ -248,10 +293,64 @@ export const useChatStore = create<ChatState>()(
 
         abortController = new AbortController();
 
+        const claudeToken = useClaudeStore.getState().accessToken;
+        const modelPref = get().model;
+        const useClaude =
+          modelPref === "claude"
+            ? Boolean(claudeToken)
+            : modelPref === "gemini"
+              ? false
+              : Boolean(claudeToken); // "auto"
+
         try {
-          // Inject local screen context if the query is about activity
-          const screenContext = await buildScreenContext(content);
-          const textToSend = screenContext ? screenContext + content : content;
+          if (modelPref === "claude" && !claudeToken) {
+            throw new Error(
+              "Claude is selected but not connected. Open the model picker and connect your Claude account.",
+            );
+          }
+
+          // Once per session, surface a "Loaded context" card so the user
+          // can see the goals/tasks/memories snapshot the model received.
+          // The data is in the system prompt (not a real tool call), but
+          // the user shouldn't have to know that distinction.
+          if (!contextCardShown.has(sessionId)) {
+            try {
+              const counts = await getContextSnapshotCounts(sessionId);
+              const total = counts.memories + counts.goals + counts.tasks;
+              if (total > 0) {
+                const parts: string[] = [];
+                if (counts.goals) parts.push(`${counts.goals} goal${counts.goals === 1 ? "" : "s"}`);
+                if (counts.tasks) parts.push(`${counts.tasks} task${counts.tasks === 1 ? "" : "s"}`);
+                if (counts.memories)
+                  parts.push(`${counts.memories} memor${counts.memories === 1 ? "y" : "ies"}`);
+                const summary = parts.join(", ");
+                const cardId = nanoid();
+                set((state) => {
+                  const updated = withMessage(state.messages, assistantId, (m) =>
+                    appendPart(m, {
+                      type: "tool",
+                      id: cardId,
+                      name: "loaded_context",
+                      status: "completed",
+                      input: { summary },
+                      output: summary,
+                    }),
+                  );
+                  return {
+                    messages: updated,
+                    sessionMessages: sessionId
+                      ? { ...state.sessionMessages, [sessionId]: updated }
+                      : state.sessionMessages,
+                  };
+                });
+              }
+              contextCardShown.add(sessionId);
+            } catch (e) {
+              console.warn("[chatStore] context card prelude failed", e);
+            }
+          }
+
+          const textToSend = content;
 
           // Build conversation history for context (last 20 messages from current session)
           const history = get()
@@ -259,25 +358,95 @@ export const useChatStore = create<ChatState>()(
             .slice(-20)
             .map((m) => ({ role: m.role, content: m.content }));
 
-          await api.sendChatViaGemini(
-            textToSend,
-            (delta) => {
-              set((state) => {
-                const updated = state.messages.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, content: m.content + delta }
-                    : m,
-                );
-                return {
-                  messages: updated,
-                  sessionMessages: sessionId
-                    ? { ...state.sessionMessages, [sessionId]: updated }
-                    : state.sessionMessages,
-                };
-              });
-            },
-            history,
-          );
+          const appendDelta = (delta: string) => {
+            set((state) => {
+              const updated = withMessage(state.messages, assistantId, (m) =>
+                appendTextDelta(m, delta),
+              );
+              return {
+                messages: updated,
+                sessionMessages: sessionId
+                  ? { ...state.sessionMessages, [sessionId]: updated }
+                  : state.sessionMessages,
+              };
+            });
+          };
+
+          const onToolCall = (toolUseId: string, name: string, input: unknown) => {
+            const summary = (() => {
+              try {
+                return JSON.stringify(input).slice(0, 200);
+              } catch {
+                return "";
+              }
+            })();
+            set((state) => {
+              const updated = withMessage(state.messages, assistantId, (m) =>
+                appendPart(m, {
+                  type: "tool",
+                  id: toolUseId,
+                  name,
+                  status: "running",
+                  input: { summary },
+                }),
+              );
+              return {
+                messages: updated,
+                sessionMessages: sessionId
+                  ? { ...state.sessionMessages, [sessionId]: updated }
+                  : state.sessionMessages,
+              };
+            });
+          };
+
+          const onToolResult = (toolUseId: string, _name: string, output: string) => {
+            set((state) => {
+              const updated = withMessage(state.messages, assistantId, (m) =>
+                mutatePart(m, toolUseId, (p) =>
+                  p.type === "tool"
+                    ? { ...p, status: "completed", output: output.slice(0, 1500) }
+                    : p,
+                ),
+              );
+              return {
+                messages: updated,
+                sessionMessages: sessionId
+                  ? { ...state.sessionMessages, [sessionId]: updated }
+                  : state.sessionMessages,
+              };
+            });
+          };
+
+          if (useClaude && claudeToken) {
+            // ----- Claude path: tool-use enabled -----
+            const systemPrompt = await buildClaudeChatSystemPrompt(sessionId);
+            const client = createClient(claudeToken);
+            const claudeMessages = [
+              ...history.map((h) => ({
+                role: h.role as "user" | "assistant",
+                content: h.content,
+              })),
+              { role: "user" as const, content: textToSend },
+            ];
+
+            await sendMessageStreaming(
+              client,
+              claudeMessages,
+              systemPrompt,
+              appendDelta,
+              onToolCall,
+              onToolResult,
+            );
+          } else {
+            // ----- Gemini path: tool-use enabled (function calling) -----
+            const systemPrompt = await buildChatSystemPrompt(sessionId);
+            await api.sendChatViaGemini(
+              textToSend,
+              { onDelta: appendDelta, onToolCall, onToolResult },
+              history,
+              systemPrompt,
+            );
+          }
 
           set((state) => {
             const updated = state.messages.map((m) =>
@@ -327,9 +496,15 @@ export const useChatStore = create<ChatState>()(
           abortController = null;
         }
         set((state) => {
-          const updated = state.messages.map((m) =>
-            m.isStreaming ? { ...m, isStreaming: false } : m,
-          );
+          const updated = state.messages.map((m) => {
+            if (!m.isStreaming) return m;
+            const parts = m.parts?.map((p) =>
+              p.type === "tool" && p.status === "running"
+                ? { ...p, status: "error" as const, errorMessage: "Cancelled" }
+                : p,
+            );
+            return { ...m, isStreaming: false, ...(parts ? { parts } : {}) };
+          });
           return {
             messages: updated,
             sessionMessages: state.currentSessionId
@@ -344,6 +519,11 @@ export const useChatStore = create<ChatState>()(
       // clearMessages — clears the current session's messages
       // -----------------------------------------------------------------------
       clearMessages: () => {
+        const sid = get().currentSessionId;
+        if (sid) {
+          invalidateChatContext(sid);
+          contextCardShown.delete(sid);
+        }
         set((state) => {
           const sid = state.currentSessionId;
           const nextSessions = sid
@@ -380,6 +560,8 @@ export const useChatStore = create<ChatState>()(
 
       newSession: () => {
         const session = makeSession();
+        invalidateChatContext(session.id);
+        contextCardShown.delete(session.id);
         set((state) => ({
           sessions: [session, ...state.sessions],
           sessionMessages: { ...state.sessionMessages, [session.id]: [] },
@@ -390,6 +572,8 @@ export const useChatStore = create<ChatState>()(
       },
 
       deleteSession: (id: string) => {
+        invalidateChatContext(id);
+        contextCardShown.delete(id);
         set((state) => {
           const nextSessions = state.sessions.filter((s) => s.id !== id);
           const { [id]: _, ...rest } = state.sessionMessages;
@@ -435,6 +619,7 @@ export const useChatStore = create<ChatState>()(
             (msgs as ChatMessage[]).filter((m) => !m.isStreaming),
           ]),
         ),
+        model: state.model,
       }),
       migrate: (persisted: unknown, version: number) => {
         // v1 only persisted a flat `messages` array. Wrap those into a

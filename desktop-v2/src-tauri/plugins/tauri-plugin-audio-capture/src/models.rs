@@ -13,23 +13,91 @@ pub struct AudioDevice {
     pub is_input: bool,
 }
 
+/// VAD sensitivity preset. Serialized lowercase (`off`, `sensitive`, …) to
+/// match the TS `VadMode` type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VadMode {
+    Off,
+    Sensitive,
+    Balanced,
+    Aggressive,
+}
+
+impl Default for VadMode {
+    fn default() -> Self {
+        VadMode::Off
+    }
+}
+
+/// High-level capture mode. Kept as a plain string on the wire to mirror
+/// `CaptureMode` in TS without committing to an exhaustive enum yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CaptureMode {
+    Conversation,
+    Ptt,
+}
+
+impl Default for CaptureMode {
+    fn default() -> Self {
+        CaptureMode::Conversation
+    }
+}
+
+fn default_sample_rate() -> u32 {
+    16000
+}
+
+fn default_channels() -> u16 {
+    1
+}
+
+fn default_language() -> String {
+    "en".to_string()
+}
+
 /// Configuration for starting a capture session.
+///
+/// Every field is `#[serde(default)]` so a minimal JSON payload (or an
+/// extended one with future fields) deserializes cleanly — protects the
+/// plugin from TS-side schema drift.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CaptureConfig {
     /// Target sample rate in Hz (default: 16000).
+    #[serde(default = "default_sample_rate")]
     pub sample_rate: u32,
     /// Number of output channels (default: 1 — mono).
+    #[serde(default = "default_channels")]
     pub channels: u16,
     /// If `None`, the system default input device is used.
+    #[serde(default)]
     pub device_id: Option<String>,
+    /// Transcription language hint (BCP-47 or Deepgram language code).
+    #[serde(default = "default_language")]
+    pub language: String,
+    /// High-level capture mode. Kept for parity with TS; currently advisory.
+    #[serde(default)]
+    pub mode: CaptureMode,
+    /// Whether to also capture system audio alongside the mic.
+    #[serde(default)]
+    pub capture_system_audio: bool,
+    /// VAD sensitivity preset.
+    #[serde(default)]
+    pub vad_mode: VadMode,
 }
 
 impl Default for CaptureConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 16000,
-            channels: 1,
+            sample_rate: default_sample_rate(),
+            channels: default_channels(),
             device_id: None,
+            language: default_language(),
+            mode: CaptureMode::default(),
+            capture_system_audio: false,
+            vad_mode: VadMode::default(),
         }
     }
 }

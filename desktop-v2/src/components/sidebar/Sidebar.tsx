@@ -1,4 +1,4 @@
-import { memo, useEffect } from "react";
+import { memo, useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, animate } from "motion/react";
 import {
@@ -8,6 +8,7 @@ import {
   ListTodo,
   Brain,
   Lightbulb,
+  AudioWaveform,
   Mic,
   MicOff,
   Rewind,
@@ -26,7 +27,9 @@ import { useFocusStore } from "../../stores/focusStore";
 import { useRewindStore } from "../../stores/rewindStore";
 import { useAudioStore } from "../../stores/audioStore";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Switch } from "../ui/switch";
+import { TRANSCRIPTION_LANGUAGES } from "../../stores/audioStore";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +53,7 @@ const navItems = [
   { to: "/goals", label: "Goals", icon: Target },
   { to: "/memories", label: "Memories", icon: Brain },
   { to: "/insights", label: "Insights", icon: Lightbulb },
+  { to: "/whispr", label: "Whispr", icon: AudioWaveform },
   { to: "/apps", label: "Apps", icon: LayoutGrid },
   { to: "/devices", label: "Devices", icon: Bluetooth },
   { to: "/rewind", label: "Rewind", icon: Rewind },
@@ -62,6 +66,9 @@ const ICON_PL = 10;
 export function Sidebar() {
   const { userEmail, signOut } = useAuthStore();
   const { isCollapsed, toggle } = useSidebarStore();
+  // Pulled with a narrow selector so only this component re-renders when
+  // recording starts / stops — the whole sidebar doesn't churn.
+  const isRecordingForNav = useAudioStore((s) => s.isRecording);
 
   // Single motion value drives everything — 0 = collapsed, 1 = expanded.
   // Width animation pushes the main content; reflows are scoped by
@@ -118,6 +125,7 @@ export function Sidebar() {
             {...item}
             isCollapsed={isCollapsed}
             textOpacity={textOpacity}
+            indicator={item.to === "/meetings" && isRecordingForNav ? "recording" : null}
           />
         ))}
       </nav>
@@ -177,12 +185,14 @@ const NavItem = memo(function NavItem({
   icon: Icon,
   isCollapsed,
   textOpacity,
+  indicator,
 }: {
   to: string;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
+  indicator?: "recording" | null;
 }) {
   const location = useLocation();
   // "/dashboard" is the canonical home, but the router also accepts "/" as an
@@ -215,11 +225,21 @@ const NavItem = memo(function NavItem({
       )}
       <Icon size={16} className="flex-shrink-0" />
       <motion.span
-        className="whitespace-nowrap text-[13px] font-medium"
+        className="flex-1 whitespace-nowrap text-[13px] font-medium"
         style={{ opacity: textOpacity }}
       >
         {label}
       </motion.span>
+      {indicator === "recording" && (
+        <span
+          className="relative flex size-2 shrink-0"
+          aria-label="Recording in progress"
+          title="Recording in progress"
+        >
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500/60" />
+          <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+        </span>
+      )}
     </NavLink>
   );
 
@@ -376,28 +396,56 @@ function AudioToggle({
   isCollapsed: boolean;
   textOpacity: ReturnType<typeof useTransform<number, number>>;
 }) {
-  const { audioEnabled, isRecording, inCommercialHours, recordingStartedAt, toggleAudio } =
-    useAudioStore();
+  const {
+    audioEnabled,
+    isRecording,
+    inCommercialHours,
+    recordingStartedAt,
+    language,
+    setLanguage,
+    startAudio,
+    stopAudio,
+  } = useAudioStore();
   const elapsed = useElapsed(recordingStartedAt);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [pendingLang, setPendingLang] = useState(language);
 
   const isActive = audioEnabled || isRecording;
+  const isRunning = isActive; // "running" == recording or armed
   const Icon = isActive ? MicOff : Mic;
-  const label = isRecording
-    ? "Stop meeting"
-    : audioEnabled
-      ? "Stop meeting"
-      : "Start a meeting";
+  const label = isRunning ? "Stop meeting" : "Start a meeting";
   const tooltip = isRecording
     ? `Recording${elapsed ? ` — ${elapsed}` : ""} • click to stop`
     : audioEnabled
       ? !inCommercialHours
         ? "Paused — only captures Mon-Fri 9am-5pm • click to stop"
         : "Audio recording armed • click to stop"
-      : "Start a meeting";
+      : "Pick a language and start a meeting";
+
+  // Click: if running, stop immediately (no popover). If stopped, open the
+  // popover so the user can confirm language before recording starts.
+  const handleClick = () => {
+    if (isRunning) {
+      void stopAudio();
+      useAudioStore.setState({ audioEnabled: false });
+    } else {
+      setPendingLang(language);
+      setPopoverOpen(true);
+    }
+  };
+
+  const confirmStart = async () => {
+    if (pendingLang !== language) {
+      await setLanguage(pendingLang);
+    }
+    setPopoverOpen(false);
+    useAudioStore.setState({ audioEnabled: true });
+    await startAudio();
+  };
 
   const button = (
     <button
-      onClick={toggleAudio}
+      onClick={handleClick}
       aria-label={label}
       title={tooltip}
       className={[
@@ -436,18 +484,82 @@ function AudioToggle({
     </button>
   );
 
-  if (isCollapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-    );
+  const popoverBody = (
+    <PopoverContent
+      side="right"
+      align="start"
+      sideOffset={8}
+      className="w-60 p-3"
+      onOpenAutoFocus={(e) => e.preventDefault()}
+    >
+      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        Language
+      </div>
+      <div className="flex flex-col gap-1">
+        {TRANSCRIPTION_LANGUAGES.map((lang) => {
+          const selected = pendingLang === lang.code;
+          return (
+            <button
+              key={lang.code}
+              type="button"
+              onClick={() => setPendingLang(lang.code)}
+              className={[
+                "flex items-center justify-between rounded-md px-2.5 py-1.5 text-[13px] transition-colors text-left",
+                selected
+                  ? "bg-primary/10 text-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              ].join(" ")}
+            >
+              <span>{lang.label}</span>
+              {selected && (
+                <span className="ml-2 size-1.5 rounded-full bg-primary" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setPopoverOpen(false)}
+          className="rounded-md px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void confirmStart()}
+          className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Start
+        </button>
+      </div>
+    </PopoverContent>
+  );
+
+  // Only wrap in Popover when we actually need it (not recording). This
+  // avoids stacking two `asChild` wrappers (Tooltip + Popover) on the same
+  // button, which makes ref forwarding brittle.
+  if (isRunning) {
+    if (isCollapsed) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={8}>
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return button;
   }
 
-  return button;
+  return (
+    <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+      <PopoverTrigger asChild>{button}</PopoverTrigger>
+      {popoverBody}
+    </Popover>
+  );
 }
 
 function initialsFrom(email: string): string {

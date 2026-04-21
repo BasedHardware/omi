@@ -23,9 +23,10 @@ tokio = { version = "1", features = ["full"] }
 axum = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "json"] }
 uuid = { version = "1", features = ["v4"] }
 urlencoding = "2"
+regex = "1"
 base64 = "0.22"
 sha2 = "0.10"
 url = "2"
@@ -42,6 +43,10 @@ nooto-desktop-backend = { path = "../../desktop/Backend-Rust" }
 tauri-plugin-audio-capture = { path = "plugins/tauri-plugin-audio-capture" }
 tauri-plugin-screen-capture = { path = "plugins/tauri-plugin-screen-capture" }
 tauri-plugin-http = "2.5.8"
+chrono = { version = "0.4.44", features = ["serde"] }
+rdev = "0.5"
+arboard = "3"
+enigo = "0.2"
 
 [features]
 default = ["custom-protocol"]

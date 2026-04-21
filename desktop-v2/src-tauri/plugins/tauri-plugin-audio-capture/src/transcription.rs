@@ -94,15 +94,34 @@ pub struct TranscriptionStream {
     segments: Arc<Mutex<Vec<TranscriptSegmentRequest>>>,
 }
 
+/// Live transcript event payload delivered to the renderer for every
+/// Deepgram result (interim + final). The UI groups by `speaker` and uses
+/// `is_user` to side the bubbles.
+#[derive(Debug, Clone)]
+pub struct LiveTranscript {
+    pub text: String,
+    pub is_final: bool,
+    pub speaker: String,
+    pub speaker_id: i64,
+    pub is_user: bool,
+    pub start: f64,
+    pub end: f64,
+}
+
 /// Live transcript callback — called for every Deepgram message with the
-/// best-effort transcript text and whether the result is final.
-pub type TranscriptCallback = Arc<dyn Fn(String, bool) + Send + Sync>;
+/// structured event needed to render speaker-attributed bubbles.
+pub type TranscriptCallback = Arc<dyn Fn(LiveTranscript) + Send + Sync>;
 
 impl TranscriptionStream {
     /// Open a WebSocket to the backend Deepgram proxy and start forwarding.
+    ///
+    /// `language` is a BCP-47 / Deepgram language code (e.g. "en", "pt-BR").
+    /// Deepgram's `nova-3` model only supports English; for any other language
+    /// we fall back to `nova-2`, which is multilingual.
     pub async fn connect(
         backend_url: &str,
         id_token: &str,
+        language: &str,
         on_transcript: Option<TranscriptCallback>,
     ) -> Result<Self, String> {
         let ws_base = backend_url
@@ -110,13 +129,20 @@ impl TranscriptionStream {
             .replacen("http://", "ws://", 1);
         let ws_base = ws_base.trim_end_matches('/').to_string();
 
+        let lang = if language.trim().is_empty() { "en" } else { language };
+        let model = if lang.eq_ignore_ascii_case("en") {
+            "nova-3"
+        } else {
+            "nova-2"
+        };
+
         let url = format!(
-            "{}/v1/proxy/deepgram/ws/v1/listen?model=nova-3&language=en\
+            "{}/v1/proxy/deepgram/ws/v1/listen?model={}&language={}\
              &smart_format=true&punctuate=true&no_delay=true&diarize=true\
              &interim_results=true&endpointing=300&utterance_end_ms=1000\
              &vad_events=true&encoding=linear16&sample_rate=16000\
              &channels=2&multichannel=true",
-            ws_base
+            ws_base, model, lang
         );
 
         tracing::info!("[transcription] connecting: {}", url);
@@ -307,15 +333,6 @@ fn handle_dg_text(
 
     let is_final = matches!(parsed.is_final, Some(true));
 
-    // Live transcript: emit on every result so the UI can show partials.
-    if let Some(cb) = on_transcript {
-        cb(trimmed.to_string(), is_final);
-    }
-
-    if !is_final {
-        return;
-    }
-
     // Channel index 0 = mic (user), 1 = system audio (others).
     let channel_index = parsed
         .channel_index
@@ -336,9 +353,29 @@ fn handle_dg_text(
         _ => (0.0, 0.0),
     };
 
+    let speaker = format!("SPEAKER_{}", speaker_id);
+
+    // Live transcript: emit on every result (interim + final) with full
+    // speaker attribution so the UI can render bubbles immediately.
+    if let Some(cb) = on_transcript {
+        cb(LiveTranscript {
+            text: trimmed.to_string(),
+            is_final,
+            speaker: speaker.clone(),
+            speaker_id,
+            is_user,
+            start,
+            end,
+        });
+    }
+
+    if !is_final {
+        return;
+    }
+
     let seg = TranscriptSegmentRequest {
         text: alt.transcript,
-        speaker: format!("SPEAKER_{}", speaker_id),
+        speaker,
         speaker_id,
         is_user,
         person_id: None,

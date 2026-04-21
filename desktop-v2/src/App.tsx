@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useAuthStore } from "./stores/authStore";
 import { useOnboardingStore } from "./stores/onboardingStore";
@@ -15,6 +15,7 @@ import { GoalsHistoryPage } from "./components/goals/GoalsHistoryPage";
 import { GoalCelebrationOverlay } from "./components/goals/GoalCelebrationOverlay";
 import { MemoriesPage } from "./components/memories/MemoriesPage";
 import { InsightsPage } from "./components/insights/InsightsPage";
+import { WhisprPage } from "./components/whispr/WhisprPage";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { AuraPage } from "./components/aura/AuraPage";
 import { AppsPage } from "./components/apps/AppsPage";
@@ -25,24 +26,21 @@ import {
   stopTaskDeduplication,
 } from "./services/taskDeduplicationService";
 import { useTraySync } from "./hooks/useTraySync";
+import { usePttSession } from "./hooks/usePttSession";
 import { useGoalStore } from "./stores/goalStore";
 
 function App() {
   const { isSignedIn, isLoading, restoreSession } = useAuthStore();
-  const hasCompletedOnboarding = useOnboardingStore(
-    (s) => s.hasCompletedOnboarding,
-  );
-  const [onboardingDone, setOnboardingDone] = useState(hasCompletedOnboarding);
+  // Bind directly to the store so resets re-render immediately. Holding this
+  // in local state caused stale reads after `resetOnboarding()`.
+  const onboardingDone = useOnboardingStore((s) => s.hasCompletedOnboarding);
 
   useTraySync();
+  usePttSession();
 
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
-
-  useEffect(() => {
-    setOnboardingDone(hasCompletedOnboarding);
-  }, [hasCompletedOnboarding]);
 
   useEffect(() => {
     if (!isSignedIn) return;
@@ -66,7 +64,9 @@ function App() {
   }
 
   if (!onboardingDone) {
-    return <OnboardingShell onComplete={() => setOnboardingDone(true)} />;
+    // markCompleted() in the shell flips the store; the binding above
+    // re-renders us into the dashboard. No callback needed.
+    return <OnboardingShell onComplete={() => {}} />;
   }
 
   return (
@@ -102,6 +102,7 @@ function KeepAliveRoutes() {
       <KeepAlivePane active={match("/goals/history")}><GoalsHistoryPage /></KeepAlivePane>
       <KeepAlivePane active={match("/memories")}><MemoriesPage /></KeepAlivePane>
       <KeepAlivePane active={match("/insights")}><InsightsPage /></KeepAlivePane>
+      <KeepAlivePane active={match("/whispr")}><WhisprPage /></KeepAlivePane>
       <KeepAlivePane active={match("/apps")}><AppsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/devices")}><DeviceSettingsPage /></KeepAlivePane>
       <KeepAlivePane active={auraActive}><AuraPage /></KeepAlivePane>

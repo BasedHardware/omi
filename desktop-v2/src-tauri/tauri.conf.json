@@ -13,6 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "Nooto",
         "width": 1200,
         "height": 800,
@@ -22,6 +23,70 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": false
+      },
+      {
+        "label": "floating",
+        "title": "Ask Nooto",
+        "url": "index.html?window=floating",
+        "width": 500,
+        "height": 120,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false
+      },
+      {
+        "label": "notifications",
+        "title": "Nooto Notifications",
+        "url": "index.html?window=notifications",
+        "width": 380,
+        "height": 96,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false
+      },
+      {
+        "label": "whispr",
+        "title": "Whispr",
+        "url": "index.html?window=whispr",
+        "width": 120,
+        "height": 80,
+        "minWidth": 120,
+        "minHeight": 80,
+        "maxWidth": 120,
+        "maxHeight": 80,
+        "resizable": false,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false
+      },
+      {
+        "label": "live-transcript",
+        "title": "Live Transcript",
+        "url": "index.html?window=live-transcript",
+        "width": 420,
+        "height": 240,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false
       }
     ],
     "security": {

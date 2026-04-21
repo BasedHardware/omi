@@ -24,13 +24,14 @@ import {
   MessageActions,
   MessageAction,
   MessageContent,
-  MessageResponse,
 } from "../ai-elements/message";
+import { ContextUsage } from "../ai-elements/context";
+import { MessageParts } from "./MessageParts";
+import { ModelSelector } from "./ModelSelector";
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
-  PromptInputHeader,
   PromptInputFooter,
   PromptInputTools,
   PromptInputSubmit,
@@ -112,9 +113,7 @@ function ChatMessageItem({
     <>
       <Message from={message.role}>
         <MessageContent>
-          <MessageResponse isAnimating={message.isStreaming}>
-            {message.content}
-          </MessageResponse>
+          <MessageParts message={message} />
           {message.role === "assistant" &&
             message.citations &&
             message.citations.length > 0 && (
@@ -171,6 +170,14 @@ const SUGGESTIONS = [
   "What apps have I been using?",
   "Help me write a summary",
 ];
+
+/**
+ * Rough soft cap for session context display — ~200k tokens worth of chars
+ * (Gemini 2.5 Flash supports ~1M tokens). This is an indicator, not a hard
+ * limit; the actual window is determined by the model + history-slicing in
+ * `chatStore.ts`.
+ */
+const CONTEXT_SOFT_CAP = 800_000;
 
 // ---------------------------------------------------------------------------
 // ChatPage
@@ -236,15 +243,23 @@ export function ChatPage() {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
           <h2 className="text-base font-semibold text-foreground">Chat</h2>
-          {messages.length > 0 && (
-            <button
-              onClick={clearMessages}
-              className="flex items-center justify-center h-7 w-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-              title="Clear chat"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {messages.length > 0 && (
+              <ContextUsage
+                used={messages.reduce((n, m) => n + m.content.length, 0)}
+                max={CONTEXT_SOFT_CAP}
+              />
+            )}
+            {messages.length > 0 && (
+              <button
+                onClick={clearMessages}
+                className="flex items-center justify-center h-7 w-7 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                title="Clear chat"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
@@ -268,16 +283,6 @@ export function ChatPage() {
                 onCitationSelect={handleCitationSelect}
               />
             ))}
-            {isStreaming && messages.at(-1)?.role === "user" && (
-              <Message from="assistant">
-                <MessageContent>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    <span className="text-sm">Thinking...</span>
-                  </div>
-                </MessageContent>
-              </Message>
-            )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -301,10 +306,8 @@ export function ChatPage() {
             accept="image/*,application/pdf,text/*"
             multiple
           >
-            <PromptInputHeader>
-              <AttachmentsDisplay />
-            </PromptInputHeader>
             <PromptInputBody>
+              <AttachmentsDisplay />
               <PromptInputTextarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -321,6 +324,7 @@ export function ChatPage() {
                     <PromptInputActionAddScreenshot />
                   </PromptInputActionMenuContent>
                 </PromptInputActionMenu>
+                <ModelSelector />
               </PromptInputTools>
               <PromptInputSubmit
                 status={chatStatus}
