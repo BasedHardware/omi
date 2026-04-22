@@ -107,7 +107,7 @@ export function GoalEditModal({ open, goal, onOpenChange }: Props) {
 
         <div className="space-y-4 py-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 text-2xl">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-foreground/5 text-2xl">
               {effectiveEmoji}
             </div>
             <div className="grid grid-cols-10 gap-1">
@@ -116,8 +116,8 @@ export function GoalEditModal({ open, goal, onOpenChange }: Props) {
                   key={emo}
                   type="button"
                   onClick={() => setSelectedEmoji(emo)}
-                  className={`flex h-7 w-7 items-center justify-center rounded text-sm hover:bg-white/10 ${
-                    selectedEmoji === emo ? "bg-white/10" : ""
+                  className={`flex h-7 w-7 items-center justify-center rounded text-sm hover:bg-foreground/10 ${
+                    selectedEmoji === emo ? "bg-foreground/10" : ""
                   }`}
                   aria-label={`Pick ${emo}`}
                 >
