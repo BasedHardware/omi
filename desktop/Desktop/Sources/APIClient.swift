@@ -111,6 +111,14 @@ actor APIClient {
       headers[provider.headerName] = entry.key
     }
 
+    // EU Privacy Mode: when enabled, ask the backend to route every LLM call
+    // through regolo.ai (Italy-hosted, zero retention) instead of the active
+    // Claude/Gemini profile.  Header is only attached when the user opted in;
+    // the backend default (no header) keeps current routing.
+    if APIKeyService.isEUPrivacyModeEnabled {
+      headers["X-Privacy-Mode"] = "on"
+    }
+
     return headers
   }
 
