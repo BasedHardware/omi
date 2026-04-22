@@ -11,6 +11,31 @@
       rel="stylesheet"
     />
     <title>Nooto</title>
+    <script>
+      // Apply the user's theme preference before the bundle loads so the
+      // Tauri window doesn't flash white (or dark) while React boots. HUD
+      // windows (?window=floating|whispr|live-transcript) are always dark —
+      // they're designed against a dark backdrop regardless of app theme.
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var win = params.get("window");
+          var isHud =
+            win === "floating" || win === "whispr" || win === "live-transcript";
+          var mode = isHud
+            ? "dark"
+            : localStorage.getItem("nooto.theme.mode") || "system";
+          var dark =
+            mode === "dark" ||
+            (mode === "system" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
