@@ -257,6 +257,68 @@ class TestPrivacyProfile:
         assert MODEL_QOS_PROFILES['privacy']['web_search'].startswith('sonar')
 
 
+class TestPrivacyModeDispatch:
+    """The per-request X-Privacy-Mode header must override the active QoS
+    profile and route through the 'privacy' profile entries."""
+
+    def test_privacy_mode_off_uses_active_profile(self):
+        """Without the privacy flag set, get_model() returns the active
+        profile's entry — the existing behavior."""
+        from utils.byok import set_privacy_mode
+        from utils.llm.clients import get_model
+
+        def _run():
+            set_privacy_mode(False)
+            model = get_model('chat_responses')
+            assert 'gpt' in model.lower(), f'expected OpenAI model, got {model!r}'
+
+        copy_context().run(_run)
+
+    def test_privacy_mode_on_uses_privacy_profile(self):
+        """With the privacy flag set, get_model() returns the privacy
+        profile's entry — a regolo-hosted OSS model."""
+        from utils.byok import set_privacy_mode
+        from utils.llm.clients import _classify_provider, get_model
+
+        def _run():
+            set_privacy_mode(True)
+            model = get_model('chat_responses')
+            assert _classify_provider(model) == 'regolo', (
+                f'chat_responses with privacy mode on should route to regolo; got {model!r}'
+            )
+
+        copy_context().run(_run)
+
+    def test_privacy_mode_respects_env_override(self):
+        """Per-feature env overrides (MODEL_QOS_<FEATURE>) beat the privacy
+        profile — operators still need manual escape hatches."""
+        import os
+
+        from utils.byok import set_privacy_mode
+        from utils.llm.clients import get_model
+
+        def _run():
+            os.environ['MODEL_QOS_CHAT_RESPONSES'] = 'gpt-4.1-mini'
+            try:
+                set_privacy_mode(True)
+                assert get_model('chat_responses') == 'gpt-4.1-mini'
+            finally:
+                os.environ.pop('MODEL_QOS_CHAT_RESPONSES', None)
+
+        copy_context().run(_run)
+
+    def test_privacy_mode_header_truthy_parsing(self):
+        """A range of truthy spellings should all enable privacy mode;
+        falsy/absent values leave it off."""
+        from utils.byok import _parse_privacy_mode
+
+        for val in ('1', 'on', 'true', 'True', 'YES', 'enabled', 'Enabled'):
+            assert _parse_privacy_mode(val) is True, f'expected True for {val!r}'
+
+        for val in (None, '', '0', 'off', 'false', 'no', 'anything_else'):
+            assert _parse_privacy_mode(val) is False, f'expected False for {val!r}'
+
+
 class TestRegoloByokHeader:
     """The backend BYOK_HEADERS map must expose the regolo header name so the
     middleware routes X-BYOK-Regolo into the contextvar."""
