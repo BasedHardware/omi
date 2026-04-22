@@ -319,6 +319,62 @@ class TestPrivacyModeDispatch:
             assert _parse_privacy_mode(val) is False, f'expected False for {val!r}'
 
 
+class TestPrivacyFallbackSignalling:
+    """Fallback-reason contextvar + mark_privacy_fallback validator."""
+
+    def test_default_fallback_is_none(self):
+        from utils.byok import get_privacy_fallback_reason
+
+        def _run():
+            assert get_privacy_fallback_reason() is None
+
+        copy_context().run(_run)
+
+    def test_mark_and_read_valid_reason(self):
+        from utils.byok import (
+            PRIVACY_FALLBACK_VISION_UNSUPPORTED,
+            get_privacy_fallback_reason,
+            mark_privacy_fallback,
+        )
+
+        def _run():
+            mark_privacy_fallback(PRIVACY_FALLBACK_VISION_UNSUPPORTED)
+            assert get_privacy_fallback_reason() == PRIVACY_FALLBACK_VISION_UNSUPPORTED
+
+        copy_context().run(_run)
+
+    def test_unknown_reason_is_rejected(self):
+        """Prevent banner-noise: unknown reasons don't make it into the header."""
+        from utils.byok import get_privacy_fallback_reason, mark_privacy_fallback
+
+        def _run():
+            mark_privacy_fallback('definitely_not_a_valid_reason')
+            assert get_privacy_fallback_reason() is None, (
+                'mark_privacy_fallback should silently drop unknown reasons'
+            )
+
+        copy_context().run(_run)
+
+    def test_all_constant_reasons_are_valid(self):
+        """Every PRIVACY_FALLBACK_* constant must be in the accepted set —
+        otherwise downstream calls using the constants would be rejected."""
+        from utils.byok import (
+            PRIVACY_FALLBACK_NO_KEY,
+            PRIVACY_FALLBACK_REGOLO_OUTAGE,
+            PRIVACY_FALLBACK_REGOLO_RATE_LIMITED,
+            PRIVACY_FALLBACK_VISION_UNSUPPORTED,
+            _PRIVACY_FALLBACK_REASONS,
+        )
+
+        for reason in (
+            PRIVACY_FALLBACK_VISION_UNSUPPORTED,
+            PRIVACY_FALLBACK_REGOLO_OUTAGE,
+            PRIVACY_FALLBACK_REGOLO_RATE_LIMITED,
+            PRIVACY_FALLBACK_NO_KEY,
+        ):
+            assert reason in _PRIVACY_FALLBACK_REASONS
+
+
 class TestRegoloByokHeader:
     """The backend BYOK_HEADERS map must expose the regolo header name so the
     middleware routes X-BYOK-Regolo into the contextvar."""
