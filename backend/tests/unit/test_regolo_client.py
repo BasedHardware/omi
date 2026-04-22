@@ -19,6 +19,16 @@ import pytest
 # ---------------------------------------------------------------------------
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test-fake')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+# utils/llm/clients.py imports usage_tracker which reaches database.llm_usage
+# which pulls in google-cloud-firestore. Stub the chain so the import graph
+# stops at our proxy class.
+sys.modules.setdefault('database._client', MagicMock())
+sys.modules.setdefault('database.redis_db', MagicMock())
+sys.modules.setdefault('database.users', MagicMock())
+sys.modules.setdefault('database.user_usage', MagicMock())
+sys.modules.setdefault('database.llm_usage', MagicMock())
 
 
 def _reset_caches():
