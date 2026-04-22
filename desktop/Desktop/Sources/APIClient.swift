@@ -204,6 +204,8 @@ actor APIClient {
       throw APIError.invalidResponse
     }
 
+    await inspectPrivacyFallback(httpResponse)
+
     // Handle 401 - token might be expired
     if httpResponse.statusCode == 401 {
       // Try to refresh token and retry once
@@ -219,6 +221,8 @@ actor APIClient {
       guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
         throw APIError.invalidResponse
       }
+
+      await inspectPrivacyFallback(retryHttpResponse)
 
       if retryHttpResponse.statusCode == 401 {
         throw APIError.unauthorized
@@ -259,6 +263,22 @@ actor APIClient {
         logError("Decoding error", error: decodingError)
       }
       throw decodingError
+    }
+  }
+
+  /// Inspect the response for ``X-Privacy-Mode-Fallback`` and, when present,
+  /// hand the reason to ``PrivacyModeFallbackObserver`` so the banner can show.
+  /// No-op when the header isn't set or when the user doesn't have Privacy
+  /// Mode enabled (the observer itself also filters on that).
+  private func inspectPrivacyFallback(_ response: HTTPURLResponse) async {
+    guard
+      let rawReason = response.value(forHTTPHeaderField: "X-Privacy-Mode-Fallback"),
+      !rawReason.isEmpty
+    else {
+      return
+    }
+    await MainActor.run {
+      PrivacyModeFallbackObserver.shared.record(rawReason: rawReason)
     }
   }
 }
