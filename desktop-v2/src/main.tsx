@@ -3,22 +3,26 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { FloatingBar } from "./components/floating/FloatingBar";
-import { NotificationBar } from "./components/notifications/NotificationBar";
 import { WhisprLiveHUD } from "./components/whispr/WhisprLiveHUD";
 import { LiveTranscriptWindow } from "./components/live-transcript/LiveTranscriptWindow";
+import { initTheme } from "./stores/themeStore";
 import "./styles/globals.css";
+
+// Apply the user's theme preference before React mounts so we don't flash the
+// default palette on boot.
+initTheme();
 
 // The Tauri auxiliary windows are launched with `?window=<name>` in their URL.
 // We pick the root component based on that query param so the same Vite
-// bundle serves the main app, the floating composer, the notification bar,
-// the Whispr live-transcription HUD, and the live-transcript meeting overlay.
+// bundle serves the main app, the floating composer, the Whispr HUD, and the
+// live-transcript meeting overlay. (Notifications are now OS-native, handled
+// entirely in Rust — see `src-tauri/src/commands/notifications.rs`.)
 const windowParam = new URLSearchParams(window.location.search).get("window");
 const isFloating = windowParam === "floating";
-const isNotifications = windowParam === "notifications";
 const isWhispr = windowParam === "whispr";
 const isLiveTranscript = windowParam === "live-transcript";
 
-if (isFloating || isNotifications || isWhispr || isLiveTranscript) {
+if (isFloating || isWhispr || isLiveTranscript) {
   document.documentElement.classList.add("floating-window");
   document.body.classList.add("floating-window");
 }
@@ -29,7 +33,6 @@ if (isWhispr) {
 
 function Root() {
   if (isFloating) return <FloatingBar />;
-  if (isNotifications) return <NotificationBar />;
   if (isWhispr) return <WhisprLiveHUD />;
   if (isLiveTranscript) return <LiveTranscriptWindow />;
   return (
