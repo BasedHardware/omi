@@ -151,10 +151,21 @@ const CATEGORIES: readonly CategoryMeta[] = [
   {
     id: "notifications",
     label: "Notifications",
-    description: "Alerts, banners, focus",
+    description: "Alerts, proactive extraction",
     icon: Bell,
     iconTone: "from-emerald-500 to-teal-600",
-    keywords: ["notifications", "alerts", "banner", "focus", "push"],
+    keywords: [
+      "notifications",
+      "alerts",
+      "banner",
+      "focus",
+      "push",
+      "proactive",
+      "memory",
+      "memories",
+      "tasks",
+      "extraction",
+    ],
   },
   {
     id: "developer",
@@ -1324,6 +1335,18 @@ function NotificationsPane() {
     (s) => s.setNotificationsEnabled,
   );
 
+  // Master toggles for the proactive extraction pipelines. When off, the
+  // assistant's frame listener is torn down entirely (no Gemini calls, no
+  // screenshot analysis, no notifications) — matches the Swift app.
+  const memoryExtractionEnabled = useMemoryAssistantSettings((s) => s.enabled);
+  const setMemoryExtractionEnabled = useMemoryAssistantSettings(
+    (s) => s.setEnabled,
+  );
+  const taskExtractionEnabled = useTaskAssistantSettings((s) => s.enabled);
+  const setTaskExtractionEnabled = useTaskAssistantSettings(
+    (s) => s.setEnabled,
+  );
+
   const [testing, setTesting] = useState(false);
   const resetTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1344,7 +1367,42 @@ function NotificationsPane() {
 
   return (
     <>
-      <Group title="Assistants">
+      <Group
+        title="Proactive extraction"
+        description="Turn off to stop Nooto from analyzing screenshots in the background."
+      >
+        <IconRow
+          icon={ListTodo}
+          tone="from-indigo-500 to-blue-600"
+          label="Proactive tasks"
+          description="Extract to-dos from what's on your screen as context changes."
+          control={
+            <Switch
+              checked={taskExtractionEnabled}
+              onCheckedChange={setTaskExtractionEnabled}
+              aria-label="Proactive task extraction"
+            />
+          }
+        />
+        <IconRow
+          icon={Brain}
+          tone="from-fuchsia-500 to-purple-600"
+          label="Proactive memories"
+          description="Capture long-term facts and insights from what you read."
+          control={
+            <Switch
+              checked={memoryExtractionEnabled}
+              onCheckedChange={setMemoryExtractionEnabled}
+              aria-label="Proactive memory extraction"
+            />
+          }
+        />
+      </Group>
+
+      <Group
+        title="Notifications"
+        description="Banner alerts. The extraction pipelines above must be on for task and memory alerts to fire."
+      >
         <IconRow
           icon={Target}
           tone="from-rose-500 to-red-600"
@@ -1375,11 +1433,16 @@ function NotificationsPane() {
           icon={ListTodo}
           tone="from-indigo-500 to-blue-600"
           label="Tasks"
-          description="Tell me when a new task is extracted from a conversation."
+          description={
+            taskExtractionEnabled
+              ? "Tell me when a new task is extracted from a conversation."
+              : "Turn on proactive tasks above to receive these."
+          }
           control={
             <Switch
-              checked={tasksEnabled}
+              checked={tasksEnabled && taskExtractionEnabled}
               onCheckedChange={setTasksEnabled}
+              disabled={!taskExtractionEnabled}
               aria-label="Task notifications"
             />
           }
@@ -1388,11 +1451,16 @@ function NotificationsPane() {
           icon={Brain}
           tone="from-fuchsia-500 to-purple-600"
           label="Memories"
-          description="Ping me when a new long-term memory is captured."
+          description={
+            memoryExtractionEnabled
+              ? "Ping me when a new long-term memory is captured."
+              : "Turn on proactive memories above to receive these."
+          }
           control={
             <Switch
-              checked={memoriesEnabled}
+              checked={memoriesEnabled && memoryExtractionEnabled}
               onCheckedChange={setMemoriesEnabled}
+              disabled={!memoryExtractionEnabled}
               aria-label="Memory notifications"
             />
           }
