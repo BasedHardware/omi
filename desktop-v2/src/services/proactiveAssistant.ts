@@ -76,8 +76,14 @@ let isInDelayPeriod = false;
 let latestFrame: CapturedFrame | null = null;
 let isCapturing = false;
 
-/** Registered handler that receives frames for analysis. */
-let onFrame: FrameHandler | null = null;
+/**
+ * Ref count for capture-loop consumers. Focus, Memory, and Task each take a
+ * slot; the loop only stops when the last consumer releases.
+ */
+let monitoringRefCount = 0;
+
+/** Fan-out list of frame listeners. Swift parity: AssistantCoordinator. */
+const frameListeners = new Set<FrameHandler>();
 
 /** Registered handler for context changes. */
 let onContextChange: ContextChangeHandler | null = null;
@@ -90,14 +96,22 @@ let onDelayStateChange: ((delayEndTime: Date | null) => void) | null = null;
 // ---------------------------------------------------------------------------
 
 /**
- * Register the frame handler (called when a frame should be analyzed).
+ * Subscribe to the proactive frame stream. Returns an unsubscribe function.
+ *
+ * Multiple consumers (Focus, Memory, Task) can subscribe simultaneously —
+ * each frame is fanned out to every listener. Matches the Swift
+ * AssistantCoordinator pattern.
  */
-export function setFrameHandler(handler: FrameHandler): void {
-  onFrame = handler;
+export function addFrameListener(handler: FrameHandler): () => void {
+  frameListeners.add(handler);
+  return () => {
+    frameListeners.delete(handler);
+  };
 }
 
 /**
- * Register the context change handler.
+ * Register the context change handler. Single-slot (only the FocusStore
+ * currently uses this for UI state).
  */
 export function setContextChangeHandler(handler: ContextChangeHandler): void {
   onContextChange = handler;
@@ -111,9 +125,12 @@ export function setDelayStateHandler(handler: (delayEndTime: Date | null) => voi
 }
 
 /**
- * Start the proactive monitoring loop.
+ * Start the proactive monitoring loop. Ref-counted: callers must pair every
+ * `startMonitoring()` with a matching `stopMonitoring()`. The underlying
+ * capture timer starts on the first call and stops on the last release.
  */
 export function startMonitoring(): void {
+  monitoringRefCount++;
   if (captureTimerId !== null) return; // Already running
 
   isCapturing = true;
@@ -126,9 +143,14 @@ export function startMonitoring(): void {
 }
 
 /**
- * Stop the proactive monitoring loop.
+ * Release a capture-loop slot. The loop actually stops only when the ref
+ * count reaches 0, so turning off one assistant while another is active
+ * keeps the capture pipeline running.
  */
 export function stopMonitoring(): void {
+  if (monitoringRefCount > 0) monitoringRefCount--;
+  if (monitoringRefCount > 0) return;
+
   if (captureTimerId !== null) {
     clearInterval(captureTimerId);
     captureTimerId = null;
@@ -145,13 +167,6 @@ export function stopMonitoring(): void {
   onDelayStateChange?.(null);
 
   console.info("[ProactiveAssistant] Monitoring stopped");
-}
-
-/**
- * Check if monitoring is currently active.
- */
-export function isMonitoring(): boolean {
-  return isCapturing;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,5 +259,11 @@ function startAnalysisDelay(): void {
 
 function distributeFrame(frame: CapturedFrame): void {
   lastDistributeTime = Date.now();
-  onFrame?.(frame);
+  for (const listener of frameListeners) {
+    try {
+      listener(frame);
+    } catch (err) {
+      console.warn("[ProactiveAssistant] frame listener threw:", err);
+    }
+  }
 }
