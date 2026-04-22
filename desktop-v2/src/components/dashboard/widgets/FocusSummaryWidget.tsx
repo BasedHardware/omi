@@ -1,6 +1,11 @@
 import { Eye, Focus, Activity, AlertCircle, ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { useFocusStats, useFocusStore } from "@/stores/focusStore";
+import {
+  useFocusStats,
+  useFocusStore,
+  type TopDistraction,
+} from "@/stores/focusStore";
 import {
   Card,
   CardContent,
@@ -39,27 +44,116 @@ function rateColor(rate: number, hasData: boolean): string {
   return DISTRACTED_COLOR;
 }
 
-function Stat({
+function StatBody({
   value,
   label,
   color,
+  labelSuffix,
 }: {
   value: string | number;
   label: string;
   color?: string;
+  labelSuffix?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <>
       <span
         className="text-lg font-semibold tabular-nums tracking-tight text-foreground"
         style={color ? { color } : undefined}
       >
         {value}
       </span>
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
         {label}
+        {labelSuffix}
       </span>
+    </>
+  );
+}
+
+function Stat(props: {
+  value: string | number;
+  label: string;
+  color?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <StatBody {...props} />
     </div>
+  );
+}
+
+function DistractionsHoverCard({
+  children,
+  align,
+  distractions,
+  onViewAll,
+}: {
+  children: ReactNode;
+  align: "start" | "center" | "end";
+  distractions: TopDistraction[];
+  onViewAll: () => void;
+}) {
+  return (
+    <HoverCard openDelay={120} closeDelay={80}>
+      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
+      <HoverCardContent align={align} className="w-72 p-3">
+        <TopDistractionsContent
+          distractions={distractions}
+          onViewAll={onViewAll}
+        />
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function TopDistractionsContent({
+  distractions,
+  onViewAll,
+}: {
+  distractions: TopDistraction[];
+  onViewAll: () => void;
+}) {
+  return (
+    <>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold text-foreground">
+          Top distractions today
+        </span>
+        <span className="text-[10px] tabular-nums text-muted-foreground">
+          {distractions.length} {distractions.length === 1 ? "app" : "apps"}
+        </span>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {distractions.map((d) => (
+          <li
+            key={d.app}
+            className="flex items-center justify-between gap-2 text-xs"
+          >
+            <span
+              className="truncate font-medium text-foreground"
+              title={d.app}
+            >
+              {d.app}
+            </span>
+            <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+              <span style={{ color: DISTRACTED_COLOR }}>
+                {formatDuration(d.totalSeconds)}
+              </span>
+              <span className="text-muted-foreground/60">{d.count}×</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={onViewAll}
+        className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-border/60 bg-accent/30 px-2 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        View full focus history
+        <ChevronRight size={11} />
+      </button>
+    </>
   );
 }
 
@@ -90,6 +184,23 @@ export function FocusSummaryWidget() {
       : currentStatus === "distracted"
         ? DISTRACTED_COLOR
         : NEUTRAL_COLOR;
+
+  const focusBar = (
+    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border/50 transition-all duration-200 group-hover:h-2.5">
+      <div
+        className="h-full transition-all duration-500"
+        style={{ width: `${focusedPct}%`, backgroundColor: FOCUS_COLOR }}
+      />
+      <div
+        className="h-full transition-all duration-500"
+        style={{
+          width: `${distractedPct}%`,
+          backgroundColor: DISTRACTED_COLOR,
+          opacity: 0.85,
+        }}
+      />
+    </div>
+  );
 
   return (
     <Card className="h-full gap-3 border-border/50 bg-card/40 py-5 shadow-none">
@@ -131,83 +242,44 @@ export function FocusSummaryWidget() {
                   {formatMinutes(stats.focusMinutes + stats.distractedMinutes)} tracked
                 </span>
                 {topDistraction && (
-                  <HoverCard openDelay={120} closeDelay={80}>
-                    <HoverCardTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/focus")}
-                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground/80 transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:bg-accent/50 focus-visible:outline-none"
-                      >
-                        <AlertCircle size={10} style={{ color: DISTRACTED_COLOR }} />
-                        <span className="max-w-[140px] truncate">
-                          Top distraction: {topDistraction.app}
-                        </span>
-                        <ChevronRight size={10} className="opacity-60" />
-                      </button>
-                    </HoverCardTrigger>
-                    <HoverCardContent align="end" className="w-72 p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">
-                          Top distractions today
-                        </span>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
-                          {stats.topDistractions.length} apps
-                        </span>
-                      </div>
-                      <ul className="flex flex-col gap-1.5">
-                        {stats.topDistractions.map((d) => (
-                          <li
-                            key={d.app}
-                            className="flex items-center justify-between gap-2 text-xs"
-                          >
-                            <span
-                              className="truncate font-medium text-foreground"
-                              title={d.app}
-                            >
-                              {d.app}
-                            </span>
-                            <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
-                              <span style={{ color: DISTRACTED_COLOR }}>
-                                {formatDuration(d.totalSeconds)}
-                              </span>
-                              <span className="text-muted-foreground/60">
-                                {d.count}×
-                              </span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <button
-                        type="button"
-                        onClick={() => navigate("/focus")}
-                        className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-border/60 bg-accent/30 px-2 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
-                      >
-                        View full focus history
-                        <ChevronRight size={11} />
-                      </button>
-                    </HoverCardContent>
-                  </HoverCard>
+                  <DistractionsHoverCard
+                    align="end"
+                    distractions={stats.topDistractions}
+                    onViewAll={() => navigate("/focus")}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigate("/focus")}
+                      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground/80 transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:bg-accent/50 focus-visible:outline-none"
+                    >
+                      <AlertCircle size={10} style={{ color: DISTRACTED_COLOR }} />
+                      <span className="max-w-[140px] truncate">
+                        Top distraction: {topDistraction.app}
+                      </span>
+                      <ChevronRight size={10} className="opacity-60" />
+                    </button>
+                  </DistractionsHoverCard>
                 )}
               </div>
             </div>
 
-            <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border/50">
-              <div
-                className="h-full transition-all duration-500"
-                style={{
-                  width: `${focusedPct}%`,
-                  backgroundColor: FOCUS_COLOR,
-                }}
-              />
-              <div
-                className="h-full transition-all duration-500"
-                style={{
-                  width: `${distractedPct}%`,
-                  backgroundColor: DISTRACTED_COLOR,
-                  opacity: 0.85,
-                }}
-              />
-            </div>
+            {topDistraction ? (
+              <DistractionsHoverCard
+                align="center"
+                distractions={stats.topDistractions}
+                onViewAll={() => navigate("/focus")}
+              >
+                <button
+                  type="button"
+                  aria-label={`Focus breakdown: ${focusedPct}% focused, ${distractedPct}% distracted`}
+                  className="group -my-2 block w-full cursor-pointer bg-transparent py-2 focus-visible:outline-none"
+                >
+                  {focusBar}
+                </button>
+              </DistractionsHoverCard>
+            ) : (
+              focusBar
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <Stat
@@ -215,11 +287,38 @@ export function FocusSummaryWidget() {
                 label="Focused"
                 color={FOCUS_COLOR}
               />
-              <Stat
-                value={formatMinutes(stats.distractedMinutes)}
-                label="Distracted"
-                color={DISTRACTED_COLOR}
-              />
+              {topDistraction ? (
+                <DistractionsHoverCard
+                  align="center"
+                  distractions={stats.topDistractions}
+                  onViewAll={() => navigate("/focus")}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Distracted ${formatMinutes(stats.distractedMinutes)} — top distractions`}
+                    className="-mx-1.5 -my-1 flex flex-col items-start gap-0.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                  >
+                    <StatBody
+                      value={formatMinutes(stats.distractedMinutes)}
+                      label="Distracted"
+                      color={DISTRACTED_COLOR}
+                      labelSuffix={
+                        <AlertCircle
+                          size={9}
+                          className="opacity-60"
+                          style={{ color: DISTRACTED_COLOR }}
+                        />
+                      }
+                    />
+                  </button>
+                </DistractionsHoverCard>
+              ) : (
+                <Stat
+                  value={formatMinutes(stats.distractedMinutes)}
+                  label="Distracted"
+                  color={DISTRACTED_COLOR}
+                />
+              )}
               <Stat value={stats.sessionCount} label="Sessions" />
             </div>
           </div>
