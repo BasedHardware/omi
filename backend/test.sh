@@ -103,6 +103,7 @@ pytest tests/unit/test_async_http_infrastructure.py -v
 pytest tests/unit/test_clean_sweep_migrations.py -v
 pytest tests/unit/test_omi_qos_tiers.py -v
 pytest tests/unit/test_byok_security.py -v
+pytest tests/unit/test_regolo_client.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
