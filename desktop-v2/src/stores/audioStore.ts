@@ -46,6 +46,7 @@ export const TRANSCRIPTION_LANGUAGES: TranscriptionLanguage[] = [
 const LANGUAGE_STORAGE_KEY = "nooto.audio.language";
 const VAD_MODE_STORAGE_KEY = "nooto.audio.vadMode";
 const LEGACY_VAD_ENABLED_STORAGE_KEY = "nooto.audio.vadEnabled";
+const INPUT_DEVICE_STORAGE_KEY = "nooto.audio.inputDeviceId";
 
 const VAD_MODES: readonly VadMode[] = ["off", "sensitive", "balanced", "aggressive"];
 
@@ -62,6 +63,16 @@ function readStoredLanguage(): string {
     // ignore
   }
   return "pt-BR";
+}
+
+function readStoredInputId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.localStorage.getItem(INPUT_DEVICE_STORAGE_KEY);
+    return v && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 function readStoredVadMode(): VadMode {
@@ -101,6 +112,8 @@ interface AudioState {
   processingError: string | null;
   language: string;
   vadMode: VadMode;
+  /** User-selected input device id. `null` means "system default". */
+  selectedInputId: string | null;
 
   toggleAudio: () => Promise<void>;
   startAudio: () => Promise<void>;
@@ -108,6 +121,7 @@ interface AudioState {
   refreshState: () => Promise<void>;
   setLanguage: (code: string) => Promise<void>;
   setVadMode: (mode: VadMode) => Promise<void>;
+  setSelectedInputId: (id: string | null) => Promise<void>;
   dismissProcessingError: () => void;
 }
 
@@ -143,6 +157,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   processingError: null,
   language: readStoredLanguage(),
   vadMode: readStoredVadMode(),
+  selectedInputId: readStoredInputId(),
 
   toggleAudio: async () => {
     const { audioEnabled } = get();
@@ -172,6 +187,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         channels: 1,
         language: get().language,
         vad_mode: get().vadMode,
+        device_id: get().selectedInputId,
       });
       applyCaptureState(set, get, state);
     } catch (err) {
@@ -231,6 +247,21 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     set({ vadMode: mode });
     try {
       window.localStorage.setItem(VAD_MODE_STORAGE_KEY, mode);
+    } catch {
+      // ignore
+    }
+    if (get().isRecording) {
+      await get().stopAudio();
+      await get().startAudio();
+    }
+  },
+
+  setSelectedInputId: async (id: string | null) => {
+    if (get().selectedInputId === id) return;
+    set({ selectedInputId: id });
+    try {
+      if (id) window.localStorage.setItem(INPUT_DEVICE_STORAGE_KEY, id);
+      else window.localStorage.removeItem(INPUT_DEVICE_STORAGE_KEY);
     } catch {
       // ignore
     }
