@@ -139,7 +139,7 @@ function computeDurations(sessions: FocusSession[]): FocusSession[] {
 export const useFocusStore = create<FocusState>()(
   persist(
     (set, get) => ({
-      focusEnabled: false,
+      focusEnabled: true,
       currentStatus: null,
       lastAnalysis: null,
       detectedAppName: null,
@@ -330,7 +330,7 @@ export const useFocusStore = create<FocusState>()(
         if (!p) return current;
         return {
           ...current,
-          focusEnabled: false, // Always start stopped — user re-enables
+          focusEnabled: p.focusEnabled ?? true,
           notificationsEnabled: p.notificationsEnabled ?? current.notificationsEnabled,
           cooldownDurationS: p.cooldownDurationS ?? current.cooldownDurationS,
           sessions: (p.sessions ?? []).map((s) => ({
@@ -365,13 +365,19 @@ export function useAllSessions(): FocusSession[] {
   return computeDurations(sessions);
 }
 
+export type TopDistraction = {
+  app: string;
+  count: number;
+  totalSeconds: number;
+};
+
 /** Compute today's focus stats. */
 export function useFocusStats(): {
   focusMinutes: number;
   distractedMinutes: number;
   focusRate: number;
   sessionCount: number;
-  topDistractions: { app: string; count: number; totalSeconds: number }[];
+  topDistractions: TopDistraction[];
 } {
   const sessions = useTodaySessions();
 
