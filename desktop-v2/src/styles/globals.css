@@ -52,26 +52,89 @@
 }
 
 :root {
-  /* App custom variables */
+  /* Shared across themes. Brand blue works on both. */
+  --app-accent: #3b82f6;
+  --app-accent-hover: #2563eb;
+  --radius: 0.75rem;
+  --primary: oklch(0.585 0.19 265);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Light theme (default when .dark is not applied to <html>).
+     Surfaces are layered:  app bg (off-white) < sidebar (slightly lifted)
+     < card/popover (pure white). This gives cards a subtle elevation
+     against the canvas without needing heavy shadows. Muted / secondary /
+     accent sit on a three-step scale (0.965 / 0.955 / 0.94) so hover and
+     selected states remain visually distinct. */
+  --bg-primary: #fbfbfc;
+  --bg-secondary: #f4f5f7;
+  --bg-tertiary: #e8eaee;
+  --text-primary: #18181b;
+  --text-secondary: #71717a;
+  --app-border: rgba(0, 0, 0, 0.08);
+
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.955 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.42 0 0);
+  --accent: oklch(0.93 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.58 0.22 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.585 0.19 265);
+  --sidebar-background: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.585 0.19 265);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0.585 0.19 265);
+
+  /* Opacity-indexed theme-aware neutral overlays. In light mode they resolve to
+     translucent black; in dark, translucent white. The `--sn-NN` series
+     covers the opacity levels most commonly used across the legacy page
+     stylesheets (task rows, goal cards, devices, citations, etc.). Prefer
+     these over hardcoded rgba(255,255,255,…) for any generic surface
+     concern (tints, borders, dividers). Don't use these inside HUD
+     windows (.whispr-*, floating bar, live transcript) — those stay
+     literally white-on-dark regardless of theme. */
+  --sn-2: rgba(0, 0, 0, 0.02);
+  --sn-3: rgba(0, 0, 0, 0.03);
+  --sn-4: rgba(0, 0, 0, 0.04);
+  --sn-5: rgba(0, 0, 0, 0.05);
+  --sn-6: rgba(0, 0, 0, 0.06);
+  --sn-8: rgba(0, 0, 0, 0.08);
+  --sn-10: rgba(0, 0, 0, 0.1);
+  --sn-12: rgba(0, 0, 0, 0.12);
+  --sn-14: rgba(0, 0, 0, 0.14);
+  --sn-18: rgba(0, 0, 0, 0.18);
+  --sn-20: rgba(0, 0, 0, 0.2);
+  --sn-25: rgba(0, 0, 0, 0.25);
+  --sn-45: rgba(0, 0, 0, 0.45);
+}
+
+.dark {
   --bg-primary: #0a0a0a;
   --bg-secondary: #1a1a1a;
   --bg-tertiary: #2a2a2a;
   --text-primary: #ffffff;
   --text-secondary: #a0a0a0;
-  --app-accent: #3b82f6;
-  --app-accent-hover: #2563eb;
   --app-border: rgba(255, 255, 255, 0.1);
 
-  /* shadcn/ui design tokens (dark by default) */
-  --radius: 0.75rem;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.145 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.145 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.585 0.19 265);
-  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -91,6 +154,20 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.585 0.19 265);
+
+  --sn-2: rgba(255, 255, 255, 0.02);
+  --sn-3: rgba(255, 255, 255, 0.03);
+  --sn-4: rgba(255, 255, 255, 0.04);
+  --sn-5: rgba(255, 255, 255, 0.05);
+  --sn-6: rgba(255, 255, 255, 0.06);
+  --sn-8: rgba(255, 255, 255, 0.08);
+  --sn-10: rgba(255, 255, 255, 0.1);
+  --sn-12: rgba(255, 255, 255, 0.12);
+  --sn-14: rgba(255, 255, 255, 0.14);
+  --sn-18: rgba(255, 255, 255, 0.18);
+  --sn-20: rgba(255, 255, 255, 0.2);
+  --sn-25: rgba(255, 255, 255, 0.25);
+  --sn-45: rgba(255, 255, 255, 0.45);
 }
 
 @layer base {
@@ -451,7 +528,7 @@
 }
 
 .task-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--sn-3);
 }
 
 .task-row-done {
@@ -472,7 +549,7 @@
   min-width: 20px;
   margin-top: 2px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border: 1.5px solid var(--sn-25);
   background: transparent;
   color: transparent;
   cursor: pointer;
@@ -481,7 +558,7 @@
 }
 
 .task-check:hover {
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: var(--sn-45);
 }
 
 .task-check-on {
@@ -958,7 +1035,7 @@
 
 .identity-pill:hover {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--sn-18);
 }
 
 .identity-pill-active {
@@ -1018,7 +1095,7 @@
 }
 
 .memories-search-input:focus {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--sn-20);
 }
 
 .memories-search-input::placeholder {
@@ -1215,7 +1292,7 @@
 
 .kg-rebuild-button:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--sn-20);
 }
 
 .kg-rebuild-button:disabled {
@@ -1255,7 +1332,7 @@
 
 .kg-rebuild-inline:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--sn-20);
 }
 
 .kg-rebuild-inline:disabled {
@@ -1296,7 +1373,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--sn-3);
   border: 1px solid var(--app-border);
   border-radius: 8px;
   font-size: 12px;
@@ -1371,7 +1448,7 @@
 }
 
 .entity-row:hover {
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--sn-2);
 }
 
 .entity-row-name {
@@ -1446,7 +1523,7 @@
 }
 
 .memory-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--sn-2);
   border: 1px solid var(--app-border);
   border-radius: 10px;
   padding: 14px 16px;
@@ -1457,8 +1534,8 @@
 }
 
 .memory-card:hover {
-  background: rgba(255, 255, 255, 0.035);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--sn-4);
+  border-color: var(--sn-14);
 }
 
 .memory-card-header {
@@ -1719,10 +1796,10 @@
   border-radius: 14px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.015) 100%
+    var(--sn-4) 0%,
+    var(--sn-2) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--sn-6);
 }
 
 .goals-summary-item {
@@ -1756,7 +1833,7 @@
 .goals-summary-divider {
   width: 1px;
   height: 28px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sn-8);
 }
 
 .goals-summary-spacer {
@@ -1827,8 +1904,8 @@
   padding: 10px 14px;
   text-align: center;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(255, 255, 255, 0.06);
+  background: var(--sn-2);
+  border: 1px dashed var(--sn-6);
 }
 
 /* ---------- Goal card ---------- */
@@ -1839,14 +1916,14 @@
   gap: 14px;
   padding: 16px 18px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--sn-3);
+  border: 1px solid var(--sn-6);
   transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
 .goal-card:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--sn-4);
+  border-color: var(--sn-10);
 }
 
 .goal-card-complete {
@@ -1873,7 +1950,7 @@
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sn-6);
   font-size: 22px;
   flex-shrink: 0;
   cursor: pointer;
@@ -1883,7 +1960,7 @@
 }
 
 .goal-emoji:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sn-10);
   transform: scale(1.04);
 }
 
@@ -1929,7 +2006,7 @@
 .goal-card-title:hover {
   color: var(--text-primary);
   text-decoration: underline;
-  text-decoration-color: rgba(255, 255, 255, 0.2);
+  text-decoration-color: var(--sn-20);
   text-underline-offset: 3px;
 }
 
@@ -1973,7 +2050,7 @@
 }
 
 .goal-card-action:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sn-8);
   color: var(--text-primary);
 }
 
@@ -2056,12 +2133,12 @@
   position: absolute;
   inset: 5px 0;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sn-8);
   transition: inset 0.15s, background 0.15s;
 }
 
 .goal-track:hover::before {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sn-10);
 }
 
 .goal-track-dragging::before {
@@ -2122,16 +2199,16 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sn-8);
+  background: var(--sn-4);
   color: var(--text-primary);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .goal-step-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--sn-10);
+  border-color: var(--sn-14);
 }
 
 .goal-step-btn:active:not(:disabled) {
@@ -2151,8 +2228,8 @@
   gap: 10px;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--sn-2);
+  border: 1px solid var(--sn-5);
 }
 
 .goals-widget-header {
@@ -2259,8 +2336,8 @@
   gap: 8px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--sn-3);
+  border: 1px solid var(--sn-5);
   margin-top: 14px;
 }
 
@@ -2311,7 +2388,7 @@
   gap: 10px;
   padding-top: 14px;
   margin-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--sn-6);
   font-size: 11px;
   color: var(--text-secondary);
 }
@@ -2352,7 +2429,7 @@
   justify-content: center;
   padding: 2px 6px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--sn-2);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -2371,8 +2448,8 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--sn-5);
+  border: 1px solid var(--sn-8);
   line-height: 1;
 }
 
@@ -2383,8 +2460,8 @@
   gap: 10px;
   padding: 6px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--sn-3);
+  border: 1px solid var(--sn-6);
 }
 
 .live-listening-row .live-waveform {
@@ -2410,8 +2487,8 @@
 }
 
 .live-identify-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--sn-6);
+  border-color: var(--sn-8);
   color: var(--text-primary);
 }
 
@@ -2445,7 +2522,7 @@
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sn-6);
   border: 1px solid var(--app-border);
   color: var(--text-primary);
   font-size: 13px;
@@ -2456,8 +2533,8 @@
 }
 
 .devices-scan-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--sn-10);
+  border-color: var(--sn-18);
 }
 
 .devices-scan-icon {
@@ -2537,7 +2614,7 @@
   font-size: 13px;
   border-radius: 10px;
   border: 1px dashed var(--app-border);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--sn-2);
 }
 
 .device-row {
@@ -2546,14 +2623,14 @@
   gap: 14px;
   padding: 14px 16px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--sn-3);
   border: 1px solid var(--app-border);
   transition: background 0.12s, border-color 0.12s;
 }
 
 .device-row:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--sn-5);
+  border-color: var(--sn-14);
 }
 
 .device-row-connected {
@@ -2568,7 +2645,7 @@
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sn-5);
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -2646,7 +2723,7 @@
   height: 30px;
   padding: 0 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sn-8);
   border: 1px solid var(--app-border);
   color: var(--text-primary);
   font-size: 12px;
@@ -2658,8 +2735,8 @@
 }
 
 .device-row-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--sn-12);
+  border-color: var(--sn-20);
 }
 
 .device-row-action:disabled {
