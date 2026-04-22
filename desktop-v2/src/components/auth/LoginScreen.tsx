@@ -39,6 +39,9 @@ export function LoginScreen() {
     ? { opacity: 0 }
     : { opacity: 0, y: 14, filter: "blur(10px)" };
 
+  // Intentionally dark regardless of app theme — the hero image, drop
+  // shadows, and gradient-clipped text are designed against a dark
+  // backdrop. A light-mode login would be a separate design exercise.
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#08080a] text-white">
       {/* Hero background — matches web landing */}
