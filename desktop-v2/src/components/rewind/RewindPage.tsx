@@ -342,6 +342,8 @@ export function RewindPage() {
                     <button
                       onClick={() => deleteScreenshot(selectedScreenshot.id)}
                       className="flex items-center justify-center h-6 w-6 rounded hover:bg-white/20 transition-colors"
+                      // The delete button sits on the dark gradient overlay at the top
+                      // of the selected screenshot — bg-white/20 is correct in both themes.
                       title="Delete screenshot"
                     >
                       <Trash2 className="h-3.5 w-3.5 text-white/60 hover:text-red-400" />
@@ -535,8 +537,7 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
       {/* Bar container */}
       <div
         ref={barRef}
-        className="relative h-8 w-full cursor-pointer rounded overflow-hidden select-none"
-        style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+        className="relative h-8 w-full cursor-pointer rounded overflow-hidden select-none bg-foreground/10"
         onClick={handleBarClick}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
@@ -559,7 +560,7 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
         {/* Hover indicator */}
         {hoverPct !== null && hoverIndex !== selectedIndex && (
           <div
-            className="absolute top-0 h-full w-[2px] bg-white/50 pointer-events-none"
+            className="absolute top-0 h-full w-[2px] bg-foreground/50 pointer-events-none"
             style={{ left: `${hoverPct}%`, transform: "translateX(-50%)" }}
           />
         )}
@@ -569,16 +570,15 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
           <>
             {/* Glow */}
             <div
-              className="absolute top-[-2px] bottom-[-2px] w-2 rounded pointer-events-none"
+              className="absolute top-[-2px] bottom-[-2px] w-2 rounded pointer-events-none bg-foreground/15"
               style={{
                 left: `${playheadPct}%`,
                 transform: "translateX(-50%)",
-                backgroundColor: "rgba(255,255,255,0.15)",
               }}
             />
             {/* Playhead line */}
             <div
-              className="absolute top-[-4px] bottom-[-4px] w-1 rounded-sm bg-white pointer-events-none"
+              className="absolute top-[-4px] bottom-[-4px] w-1 rounded-sm bg-foreground pointer-events-none"
               style={{ left: `${playheadPct}%`, transform: "translateX(-50%)" }}
             />
             {/* Triangle cap */}
@@ -592,7 +592,7 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
                 height: 0,
                 borderLeft: "5px solid transparent",
                 borderRight: "5px solid transparent",
-                borderTop: "6px solid white",
+                borderTop: "6px solid var(--text-primary)",
               }}
             />
           </>
