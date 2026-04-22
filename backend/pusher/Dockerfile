@@ -43,7 +43,8 @@ RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && rm -rf /var
 
 # jemalloc eliminates glibc malloc fragmentation that causes RSS to grow linearly
 # under high-churn bytearray allocations from WebSocket audio streams (#6938)
-ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+# Use soname-only form so ld.so resolves via standard search paths (arch-portable)
+ENV LD_PRELOAD=libjemalloc.so.2
 
 # Copy compiled liblc3 library from builder staging dir
 COPY --from=builder /opt/liblc3/ /usr/local/lib/
