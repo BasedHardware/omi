@@ -458,6 +458,10 @@ struct DashboardPage: View {
     }
 
     private var expandedWidgets: some View {
+        // fixedSize(vertical:) constrains the Grid to its row's intrinsic
+        // height so Tasks/Goals stop competing with ChatMessagesView for
+        // vertical space; each cell still fills the row, so the two cards
+        // remain visually equal-height (matching the taller intrinsic).
         Grid(horizontalSpacing: 20, verticalSpacing: 20) {
             GridRow {
                 TasksWidget(
@@ -508,6 +512,7 @@ struct DashboardPage: View {
                 .frame(minWidth: 0, maxWidth: .infinity)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
 

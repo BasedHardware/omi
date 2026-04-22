@@ -47,6 +47,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ResizableChartGrid,
+  type ChartItem,
+} from "@/components/dashboard/resizable-chart-grid";
 
 // --- Types ---
 
@@ -233,6 +237,55 @@ interface MacosVersionStatsData {
   versionBreakdown: MacosVersionBreakdown[];
 }
 
+interface ProfitabilityPoint {
+  date: string;
+  desktop: number;
+  mobile: number;
+  total: number;
+}
+
+interface ProfitabilityData {
+  days: number;
+  users: ProfitabilityPoint[];
+  cumulativeUsers: ProfitabilityPoint[];
+  activeUsers?: ProfitabilityPoint[];
+  revenue: ProfitabilityPoint[];
+  cost: ProfitabilityPoint[];
+  costPerUser?: ProfitabilityPoint[];
+  conversion: ProfitabilityPoint[];
+  summary: {
+    mrr: number;
+    mrrDesktop: number;
+    mrrMobile: number;
+    mrrUnknown: number;
+    totalNewDesktop: number;
+    totalNewMobile: number;
+    totalUsersDesktop: number;
+    totalUsersMobile: number;
+    totalUsersUnknown: number;
+    totalCostUsd?: number;
+    avgCostPerUserDesktop?: number;
+    avgCostPerUserMobile?: number;
+    assumptions: {
+      desktopCostPerUser: number;
+      mobileCostPerUser: number;
+      overheadMonthlyUsd?: number;
+      costSource?: "real" | "estimated";
+    };
+    partial: boolean;
+    sources: {
+      firebaseAuth: boolean;
+      firestoreTokens: boolean;
+      posthogDesktop?: boolean;
+      mixpanelMobile?: boolean;
+      stripeActive: boolean;
+      stripeNewPaid: boolean;
+      infraCosts?: boolean;
+    };
+  };
+  generatedAt: number;
+}
+
 // --- Helpers ---
 
 const authFetcher = authenticatedFetcher;
@@ -323,6 +376,9 @@ export default function AnalyticsPage() {
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
   const [retentionView, setRetentionView] = useState<"average" | "cohorts">("average");
   const [cumulativeWindow, setCumulativeWindow] = useState<"7d" | "30d" | "all">("all");
+  const [profitDays, setProfitDays] = useState<30 | 60 | 90>(30);
+  const [desktopCostInput, setDesktopCostInput] = useState("1.20");
+  const [mobileCostInput, setMobileCostInput] = useState("0.30");
 
   const swrOpts = { revalidateOnFocus: false };
 
@@ -367,6 +423,39 @@ export default function AnalyticsPage() {
 
   const { data: crashRate, isLoading: crashRateLoading } =
     useSWR<CrashRateData>(token ? ["/api/omi/stats/crash-rate?days=30", token] : null, authFetcher, swrOpts);
+
+  const profitQuery = useMemo(() => {
+    const dc = parseFloat(desktopCostInput);
+    const mc = parseFloat(mobileCostInput);
+    const dcSafe = Number.isFinite(dc) && dc >= 0 ? dc : 1.2;
+    const mcSafe = Number.isFinite(mc) && mc >= 0 ? mc : 0.3;
+    return `days=${profitDays}&desktop_cost=${dcSafe}&mobile_cost=${mcSafe}`;
+  }, [profitDays, desktopCostInput, mobileCostInput]);
+
+  const { data: profitability, isLoading: profitLoading, error: profitError } =
+    useSWR<ProfitabilityData>(
+      token ? [`/api/omi/stats/profitability?${profitQuery}`, token] : null,
+      authFetcher,
+      swrOpts,
+    );
+
+  interface InfraCostsData {
+    breakdown: Array<{
+      service: string;
+      mtdUsd: number;
+      aprProjectionUsd: number;
+      desktopProjectionUsd: number;
+      mobileProjectionUsd: number;
+    }>;
+    summary: {
+      assumptions: { overheadMonthlyUsd: number; desktopShare: number; mobileShare: number };
+    };
+  }
+  const { data: infraCosts } = useSWR<InfraCostsData>(
+    token ? [`/api/omi/stats/infra-costs?days=${profitDays}`, token] : null,
+    authFetcher,
+    swrOpts,
+  );
 
   const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
 
@@ -502,6 +591,1071 @@ export default function AnalyticsPage() {
   const activationData = vm?.activation ?? [];
   const stickinessData = vm?.stickinessTrend ?? [];
 
+  const profitCharts = useMemo<ChartItem[]>(() => {
+    const summary = profitability?.summary;
+    const usersData = profitability?.users ?? [];
+    const revenueData = profitability?.revenue ?? [];
+    const costData = profitability?.cost ?? [];
+    const costPerUserData = (profitability as any)?.costPerUser ?? [];
+    const conversionData = profitability?.conversion ?? [];
+    const costSource = (summary?.assumptions as any)?.costSource as string | undefined;
+    const avgCostDesktop = (summary as any)?.avgCostPerUserDesktop as number | undefined;
+    const avgCostMobile = (summary as any)?.avgCostPerUserMobile as number | undefined;
+
+    return [
+      {
+        id: "profit-users",
+        title: "New users / day",
+        subtitle: summary
+          ? `Desktop ${summary.totalNewDesktop.toLocaleString()} · Mobile ${summary.totalNewMobile.toLocaleString()}`
+          : "Per-platform signups",
+        icon: <Users className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={usersData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} width={40} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="desktop" stackId="u" fill="#6366f1" name="Desktop" />
+              <Bar dataKey="mobile" stackId="u" fill="#22c55e" name="Mobile" />
+            </BarChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "profit-revenue",
+        title: "Revenue / day (est.)",
+        subtitle: "Daily MRR share by platform active-user ratio",
+        icon: <DollarSign className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={revenueData}>
+              <defs>
+                <linearGradient id="profitRevDesktop" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="profitRevMobile" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${formatCompact(v)}`} width={50} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v: number, name) => [formatCurrency(v), name]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="desktop" stackId="r" stroke="#6366f1" strokeWidth={2} fill="url(#profitRevDesktop)" name="Desktop" />
+              <Area type="monotone" dataKey="mobile" stackId="r" stroke="#22c55e" strokeWidth={2} fill="url(#profitRevMobile)" name="Mobile" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "profit-cost-per-user",
+        title: `Cost / user / day${costSource === "real" ? "" : " (est.)"}`,
+        subtitle: avgCostDesktop != null && avgCostMobile != null
+          ? `Avg: Desktop $${avgCostDesktop.toFixed(2)} · Mobile $${avgCostMobile.toFixed(2)}`
+          : "Daily infra spend ÷ active users, per platform",
+        icon: <Activity className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={costPerUserData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${Number(v).toFixed(2)}`} width={56} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v: number, name) => [`$${Number(v).toFixed(2)}`, name]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="desktop" stroke="#f59e0b" strokeWidth={2} dot={false} name="Desktop $/user" />
+              <Line type="monotone" dataKey="mobile" stroke="#ef4444" strokeWidth={2} dot={false} name="Mobile $/user" />
+            </LineChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "profit-cost",
+        title: `Total infra cost / day${costSource === "real" ? "" : " (est.)"}`,
+        subtitle: summary?.totalCostUsd != null
+          ? `Total last ${profitability?.days ?? 30}d: ${formatCurrency(summary.totalCostUsd)}`
+          : "Desktop + mobile daily burn",
+        icon: <DollarSign className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={costData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${formatCompact(v)}`} width={50} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v: number, name) => [formatCurrency(v), name]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="desktop" stackId="c" fill="#f59e0b" name="Desktop" />
+              <Bar dataKey="mobile" stackId="c" fill="#ef4444" name="Mobile" />
+            </BarChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "profit-conversion",
+        title: "Free → paid %",
+        subtitle: "New paid subs / new users",
+        icon: <Percent className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={conversionData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={30} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} width={40} />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(v: number, name) => [`${v}%`, name]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="desktop" stroke="#6366f1" strokeWidth={2} dot={false} name="Desktop" />
+              <Line type="monotone" dataKey="mobile" stroke="#22c55e" strokeWidth={2} dot={false} name="Mobile" />
+            </LineChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "profit-cost-breakdown",
+        title: "Infra cost by service — last 30 days",
+        subtitle: infraCosts?.summary?.assumptions
+          ? `Trailing-30-day actual spend, split by platform (Desktop ${Math.round((infraCosts.summary.assumptions.desktopShare ?? 0) * 100)}% · Mobile ${Math.round((infraCosts.summary.assumptions.mobileShare ?? 0) * 100)}%)`
+          : "Per-service actual spend from GCP bill + external LLMs, split by platform",
+        icon: <DollarSign className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 6 },
+        render: () => {
+          const rows = infraCosts?.breakdown ?? [];
+          if (!rows.length) {
+            return (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Loading cost breakdown…
+              </div>
+            );
+          }
+          const totalMtd = rows.reduce((s, r) => s + r.mtdUsd, 0);
+          const totalProj = rows.reduce((s, r) => s + r.aprProjectionUsd, 0);
+          const totalDesktopProj = rows.reduce((s, r) => s + r.desktopProjectionUsd, 0);
+          const totalMobileProj = rows.reduce((s, r) => s + r.mobileProjectionUsd, 0);
+          return (
+            <div className="h-full overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b text-xs uppercase text-muted-foreground">
+                    <th className="px-3 py-2 text-left font-medium">Service</th>
+                    <th className="px-3 py-2 text-right font-medium">Gross MTD</th>
+                    <th className="px-3 py-2 text-right font-medium">Last 30 days</th>
+                    <th className="px-3 py-2 text-right font-medium text-indigo-500">Desktop</th>
+                    <th className="px-3 py-2 text-right font-medium text-green-500">Mobile</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.service} className="border-b border-border/40 last:border-b-0">
+                      <td className="px-3 py-2 font-medium">{r.service}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.mtdUsd)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.aprProjectionUsd)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-indigo-500">{formatCurrency(r.desktopProjectionUsd)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-red-500">{formatCurrency(r.mobileProjectionUsd)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-border/60 font-semibold">
+                    <td className="px-3 py-2">Total</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(totalMtd)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(totalProj)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-indigo-500">{formatCurrency(totalDesktopProj)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-red-500">{formatCurrency(totalMobileProj)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          );
+        },
+      },
+    ];
+  }, [profitability, infraCosts]);
+
+  const revenueCharts = useMemo<ChartItem[]>(() => {
+    return [
+      {
+        id: "rev-cumulative",
+        title: "Cumulative users",
+        subtitle: "Total users across all platforms",
+        icon: <Users className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          cumulativeSeries.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumulativeSeries}>
+                <defs>
+                  <linearGradient id="cumulativeGradientRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} minTickGap={40} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={formatCompact} domain={cumulativeYDomain} allowDataOverflow={false} width={56} />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradientRev)" dot={false} activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">No data available</div>
+          )
+        ),
+      },
+      {
+        id: "rev-mrr",
+        title: "MRR over time",
+        subtitle: "Monthly recurring revenue from Stripe",
+        icon: <DollarSign className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={mrrData}>
+              <defs>
+                <linearGradient id="mrrGradientRev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={COLORS.area} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={COLORS.area} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${formatCompact(v)}`} />
+              <Tooltip formatter={(value: number) => [formatCurrency(value), "MRR"]} contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="mrr" stroke={COLORS.mrr} strokeWidth={2} fill="url(#mrrGradientRev)" dot={{ r: 3, fill: COLORS.mrr }} activeDot={{ r: 5 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ),
+      },
+      {
+        id: "rev-subs",
+        title: "New subscriptions",
+        subtitle: "Monthly vs annual subscriptions created each month",
+        icon: <TrendingUp className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={subData}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend />
+              <Bar dataKey="monthly" name="Monthly" fill={COLORS.monthly} radius={[2, 2, 0, 0]} stackId="a" />
+              <Bar dataKey="annual" name="Annual" fill={COLORS.annual} radius={[2, 2, 0, 0]} stackId="a" />
+            </BarChart>
+          </ResponsiveContainer>
+        ),
+      },
+    ];
+  }, [cumulativeSeries, cumulativeYDomain, mrrData, subData]);
+
+  const macosGrowthCharts = useMemo<ChartItem[]>(() => {
+    return [
+      {
+        id: "macos-active-versions",
+        title: "macOS Active Versions",
+        subtitle: `Active users for ${macosVersionStats?.date ?? "today"}, split by release channel and app version`,
+        icon: <Monitor className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 8 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            <div className="mb-3 flex items-center justify-end">
+              <div className="text-right">
+                <div className="text-2xl font-bold">{macosVersionStats?.activeUsers?.toLocaleString() ?? "--"}</div>
+                <p className="text-xs text-muted-foreground">active macOS users today</p>
+              </div>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">Beta vs Production</h3>
+                <div className="h-[280px]">
+                  {macosVersionStatsLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : macosChannelData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No active-user channel data yet
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={macosChannelData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={65}
+                          outerRadius={105}
+                          paddingAngle={3}
+                          dataKey="value"
+                          nameKey="label"
+                          label={({ label, percent }) => `${label} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {macosChannelData.map((entry) => (
+                            <Cell key={entry.label} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                            Number(value).toLocaleString(),
+                            entry?.payload?.label ?? "Users",
+                          ]}
+                          contentStyle={tooltipStyle}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">By Version</h3>
+                <div className="h-[280px]">
+                  {macosVersionStatsLoading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : macosVersionData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-muted-foreground">
+                      No active-user version data yet
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={macosVersionData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={65}
+                          outerRadius={105}
+                          paddingAngle={2}
+                          dataKey="value"
+                          nameKey="label"
+                        >
+                          {macosVersionData.map((entry) => (
+                            <Cell key={entry.label} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
+                            Number(value).toLocaleString(),
+                            entry?.payload?.label ?? "Version",
+                          ]}
+                          contentStyle={tooltipStyle}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] mt-4">
+              <div className="rounded-lg border p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Monitor className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-medium">Channel Counts</h3>
+                </div>
+                <div className="space-y-3">
+                  {macosChannelData.map((entry) => (
+                    <div key={entry.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <span className="text-sm">{entry.label}</span>
+                      </div>
+                      <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border p-4">
+                <h3 className="font-medium mb-3">Version Counts</h3>
+                <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                  {macosVersionData.map((entry) => (
+                    <div key={entry.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <span className="text-sm">{entry.label}</span>
+                      </div>
+                      <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "macos-fb-sessions-per-user",
+        title: "Floating Bar Sessions per User",
+        subtitle: "Times floating bar was opened and a question asked, per user per day (follow-ups don't count)",
+        icon: <Activity className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            {fbSummary && (
+              <div className="mb-2 text-right text-sm text-muted-foreground">
+                Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay ?? "—"}</span> sessions/user/day
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {fbUsageLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : fbUsageData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No usage data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={fbUsageData}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      }}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      labelFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                      }}
+                    />
+                    <Legend />
+                    <Line dataKey="avg_sessions_per_user" name="Sessions/User" stroke="#6366f1" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        ),
+      },
+    ];
+  }, [macosVersionStats, macosVersionStatsLoading, macosChannelData, macosVersionData, fbSummary, fbUsageLoading, fbUsageData]);
+
+  const notificationCharts = useMemo<ChartItem[]>(() => {
+    return [
+      {
+        id: "notif-daily-sent",
+        title: "Daily Notifications Sent",
+        initialLayout: { cols: 12, rows: 4 },
+        icon: <Send className="h-4 w-4" />,
+        render: () => (
+          notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={notificationDailyCombined}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar dataKey="mentorSent" name="Omi says (built-in)" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar dataKey="marketplaceMentorSent" name="Marketplace Mentor" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          )
+        ),
+      },
+      {
+        id: "notif-hourly-168h",
+        title: "Notifications Sent, Last 168 Hours",
+        subtitle: "Hourly volume, with dates marked at midnight UTC.",
+        icon: <Send className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={notificationHourlyData} barCategoryGap={0} barGap={0}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="hour" tickFormatter={formatHourTick} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} interval={0} minTickGap={40} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip labelFormatter={(value) => formatHourKey(value as string)} contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar dataKey="mentor" name="Omi Says" fill="#6366f1" stackId="a" />
+                <Bar dataKey="marketplace" name="Marketplace Mentor" fill="#f59e0b" stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          )
+        ),
+      },
+      {
+        id: "notif-fb-ctr",
+        title: "Floating Bar Notification CTR",
+        subtitle: floatingBarCtrSummary?.mode === "surface_tagged"
+          ? "Sent vs clicked proactive notifications in the desktop floating bar."
+          : "Surface-tagged floating-bar events are not populated yet, so this is currently using all desktop notification clicks as a fallback.",
+        icon: <MousePointerClick className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={floatingBarCtr?.dailyData ?? []}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} />
+                <Tooltip
+                  labelFormatter={fullDate}
+                  formatter={(value: number, name: string) => name === "CTR" ? [`${value}%`, name] : [value.toLocaleString(), name]}
+                  contentStyle={tooltipStyle}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="sent" name="Sent" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                <Bar yAxisId="left" dataKey="clicked" name="Clicked" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )
+        ),
+      },
+      {
+        id: "notif-weekly-reach",
+        title: "Weekly Notification Reach",
+        subtitle: "Volume and unique recipients in one view.",
+        icon: <Users className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          notificationStatsLoading ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={notificationWeeklyCombined}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" tickFormatter={formatWeek} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip labelFormatter={formatWeek} contentStyle={tooltipStyle} />
+                <Legend />
+                <Bar yAxisId="left" dataKey="mentorSent" name="Omi says sent" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
+                <Bar yAxisId="left" dataKey="marketplaceMentorSent" name="Marketplace sent" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
+                <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMarketplace" name="Marketplace unique users" stroke="#fbbf24" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )
+        ),
+      },
+      {
+        id: "notif-settings",
+        title: "Notification Settings",
+        subtitle: "Based on the desktop notifications_enabled toggle. Missing values default to enabled.",
+        icon: <Bell className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Enabled share</div>
+                  <div className="text-3xl font-semibold">
+                    {notificationEnabledDisabled ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%` : "--"}
+                  </div>
+                </div>
+                <div className="text-right text-sm text-muted-foreground">
+                  <div>{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"} enabled</div>
+                  <div>{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"} disabled</div>
+                </div>
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-green-500"
+                  style={{
+                    width: notificationEnabledDisabled
+                      ? `${(notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100}%`
+                      : "0%",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ),
+      },
+    ];
+  }, [
+    notificationStatsLoading,
+    notificationDailyCombined,
+    notificationHourlyData,
+    floatingBarCtr,
+    floatingBarCtrSummary,
+    notificationWeeklyCombined,
+    notificationEnabledDisabled,
+  ]);
+
+  const ratingsAndUsageCharts = useMemo<ChartItem[]>(() => {
+    return [
+      {
+        id: "ratings-weekly",
+        title: "Chat Response Ratings",
+        subtitle: "Weekly thumbs up/down from macOS floating bar. The overall positive rate is shown above.",
+        icon: <MessageSquare className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            <div className="mb-2 flex items-center justify-end gap-4 text-sm text-muted-foreground">
+              <span className="text-green-500 font-medium">{totalThumbsUp} up</span>
+              <span className="text-red-500 font-medium">{totalThumbsDown} down</span>
+              <span>{overallRatio}% positive</span>
+            </div>
+            <div className="min-h-0 flex-1">
+              {ratingsLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : weeklyRatingsData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No rating data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weeklyRatingsData}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="week"
+                      tickFormatter={formatWeek}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      labelFormatter={formatWeek}
+                      formatter={(value: number, name: string) => [value, name === "thumbs_up" ? "Thumbs Up" : "Thumbs Down"]}
+                    />
+                    <Legend />
+                    <Bar dataKey="thumbs_up" name="Thumbs Up" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="thumbs_down" name="Thumbs Down" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "fb-usage-text-voice",
+        title: "Floating Bar Usage",
+        subtitle: "Daily queries by input type — text vs voice (last 30 days)",
+        icon: <Activity className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            {fbSummary && (
+              <div className="mb-2 flex items-center justify-end gap-4 text-sm text-muted-foreground">
+                <span>{fbSummary.totalQueries} total</span>
+                <span className="text-blue-500 font-medium">{fbSummary.totalText} text</span>
+                <span className="text-orange-500 font-medium">{fbSummary.totalVoice} voice</span>
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {fbUsageLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : fbUsageData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No usage data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={fbUsageData}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      }}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      labelFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                      }}
+                    />
+                    <Legend />
+                    <Bar dataKey="text_queries" name="Text" stackId="queries" fill="#6366f1" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="voice_queries" name="Voice" stackId="queries" fill="#f97316" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "fb-avg-per-user",
+        title: "Avg Queries per User per Day",
+        subtitle: "Average floating bar queries per active user, daily (last 30 days)",
+        icon: <Activity className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            {fbSummary && (
+              <div className="mb-2 text-right text-sm text-muted-foreground">
+                Overall: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay}</span> queries/user/day
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {fbUsageLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : fbUsageData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  No usage data yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={fbUsageData}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      }}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis yAxisId="avg" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="users" orientation="right" tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      labelFormatter={(v) => {
+                        const d = new Date(v + "T00:00:00");
+                        return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+                      }}
+                      formatter={(value: number, name: string) => {
+                        if (name === "Avg/User") return [value, "Avg queries per user"];
+                        return [value, "Active users"];
+                      }}
+                    />
+                    <Legend />
+                    <Bar yAxisId="users" dataKey="unique_users" name="Active Users" fill="#e2e8f0" radius={[2, 2, 0, 0]} />
+                    <Line yAxisId="avg" dataKey="avg_per_user" name="Avg/User" stroke="#6366f1" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        ),
+      },
+    ];
+  }, [ratingsLoading, weeklyRatingsData, totalThumbsUp, totalThumbsDown, overallRatio, fbSummary, fbUsageLoading, fbUsageData]);
+
+  const viralCharts = useMemo<ChartItem[]>(() => {
+    return [
+      {
+        id: "viral-growth-accounting",
+        title: "Growth Accounting",
+        subtitle: "Weekly breakdown: where do active users come from? (Churned shown as negative)",
+        icon: <TrendingUp className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : ga.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={ga} stackOffset="sign">
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(value: number, name: string) => {
+                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  return [Math.abs(value), labels[name] || name];
+                }} />
+                <Legend formatter={(value) => {
+                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
+                  return labels[value] || value;
+                }} />
+                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
+                <Bar dataKey="newUsers" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="resurrected" stackId="a" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="retained" stackId="a" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="churned" stackId="a" fill="#ef4444" radius={[0, 0, 2, 2]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )
+        ),
+      },
+      {
+        id: "viral-dau",
+        title: "Daily Active Users",
+        subtitle: "Unique macOS users per day",
+        icon: <Activity className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          dauLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : dauData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dauData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip formatter={(value: number) => [value.toLocaleString(), "DAU"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
+                <Bar dataKey="dau" name="DAU" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )
+        ),
+      },
+      {
+        id: "viral-crash-rate",
+        title: "App Stability",
+        subtitle: "Daily crashes vs active users (last 30 days)",
+        icon: <AlertTriangle className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => {
+          const summaryLine = (() => {
+            if (!crashRate?.data) return null;
+            const recent = crashRate.data.slice(-7);
+            const totalCrashes = recent.reduce((s, d) => s + d.crashes, 0);
+            const totalUsers = recent.reduce((s, d) => s + d.users, 0);
+            const rate = totalUsers > 0 ? ((1 - totalCrashes / totalUsers) * 100).toFixed(1) : "100.0";
+            return `${rate}% crash-free (7d) · ${totalCrashes} crashes`;
+          })();
+          return (
+            <div className="flex h-full flex-col">
+              {summaryLine && (
+                <div className="mb-2 text-right text-sm text-muted-foreground">{summaryLine}</div>
+              )}
+              <div className="min-h-0 flex-1">
+                {crashRateLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (crashRate?.data?.length ?? 0) > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={crashRate!.data}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                      <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[90, 100]} />
+                      <Tooltip
+                        formatter={(value: number, name: string) => {
+                          if (name === "crashFreeRate") return [`${value}%`, "Crash-Free Rate"];
+                          if (name === "crashes") return [value.toLocaleString(), "Crashes"];
+                          return [value.toLocaleString(), "Active Users"];
+                        }}
+                        labelFormatter={fullDate}
+                        contentStyle={tooltipStyle}
+                      />
+                      <Legend />
+                      <Bar yAxisId="left" dataKey="crashes" name="Crashes" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                      <Bar yAxisId="left" dataKey="users" name="Active Users" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.3} />
+                      <Line yAxisId="right" type="monotone" dataKey="crashFreeRate" name="Crash-Free Rate" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No crash data yet — events will appear after v0.11.277+
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "viral-daily-new-users",
+        title: "Daily New Users",
+        subtitle: "First-time sign-ins with 7-day rolling average",
+        icon: <Users className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          <div className="flex h-full flex-col">
+            {dailyWithRollingAvg.length > 0 && (
+              <div className="mb-2 text-right text-sm text-muted-foreground">
+                {dailyWithRollingAvg.reduce((s, p) => s + p.users, 0).toLocaleString()} in last 30d
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              {dailyNewUsersLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : dailyWithRollingAvg.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={dailyWithRollingAvg}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                    <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [value.toLocaleString(), name === "rollingAvg" ? "7-Day Avg" : "New Users"]}
+                      labelFormatter={fullDate}
+                      contentStyle={tooltipStyle}
+                    />
+                    <Legend />
+                    <Bar dataKey="users" name="New Users" fill="#6366f1" radius={[2, 2, 0, 0]} />
+                    <Line type="monotone" dataKey="rollingAvg" name="7-Day Avg" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+              )}
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "viral-stickiness",
+        title: "Stickiness (DAU/WAU)",
+        subtitle: "How often weekly users come back daily (good: 30%+)",
+        icon: <Zap className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : stickinessData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stickinessData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, "auto"]} />
+                <Tooltip formatter={(value: number) => [`${value}%`, "DAU/WAU"]} labelFormatter={(l) => `Week of ${fullDate(l)}`} contentStyle={tooltipStyle} />
+                <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Good", fill: "#22c55e", fontSize: 11 }} />
+                <Line type="monotone" dataKey="dauWau" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: "#6366f1" }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )
+        ),
+      },
+      {
+        id: "viral-power-curve",
+        title: "Power User Curve",
+        subtitle: "Days active per user in last 30 days (right-skew = healthy)",
+        icon: <Zap className="h-4 w-4" />,
+        initialLayout: { cols: 6, rows: 4 },
+        render: () => (
+          viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : powerCurve.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={powerCurve}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="daysActive" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} label={{ value: "Days Active", position: "insideBottom", offset: -5, fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <Tooltip formatter={(value: number, _: string, entry: any) => [`${value} users (${entry.payload.pct}%)`, "Users"]} labelFormatter={(l) => `${l} days active`} contentStyle={tooltipStyle} />
+                <Bar dataKey="users" radius={[2, 2, 0, 0]}>
+                  {powerCurve.map((entry, index) => (
+                    <Cell key={index} fill={entry.daysActive >= 20 ? "#22c55e" : entry.daysActive >= 10 ? "#3b82f6" : "#6366f1"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )
+        ),
+      },
+      {
+        id: "viral-activation",
+        title: "Activation Rate",
+        subtitle: "% of new users who create a Memory within 7 days of signing up",
+        icon: <Target className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          viralLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : activationData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={activationData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
+                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={fullDate}
+                  formatter={(value: number, name: string) => {
+                    if (name === "rate") return [`${value}%`, "Activation Rate"];
+                    if (name === "activated") return [value, "Activated"];
+                    return [value, "Signups"];
+                  }}
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.5} />
+                <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
+          )
+        ),
+      },
+    ];
+  }, [viralLoading, ga, dauLoading, dauData, crashRate, crashRateLoading, dailyWithRollingAvg, dailyNewUsersLoading, stickinessData, powerCurve, activationData]);
+
+  const retentionCharts = useMemo<ChartItem[]>(() => {
+    if (retentionView !== "average") return [];
+    return [
+      {
+        id: "retention-avg-curve",
+        title: "Average Retention Curve",
+        subtitle: mixpanelRetention?.totalUsers != null
+          ? `${mixpanelRetention.totalCohorts} cohorts · ${mixpanelRetention.totalUsers.toLocaleString()} users`
+          : "Weighted average retention across all cohorts",
+        icon: <TrendingUp className="h-4 w-4" />,
+        initialLayout: { cols: 12, rows: 4 },
+        render: () => (
+          mixpanelRetention?.data && mixpanelRetention.data.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={mixpanelRetention.data}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="day" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `D${v}`} />
+                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+                <Tooltip formatter={(value: number) => [`${value}%`, "Retention"]} labelFormatter={(label) => `Day ${label}`} contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="retention" stroke="#f97316" strokeWidth={2} dot={{ r: 2, fill: "#f97316" }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">No retention data available</div>
+          )
+        ),
+      },
+    ];
+  }, [retentionView, mixpanelRetention]);
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -595,13 +1749,82 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Cumulative Total Users — headline chart, right after the revenue KPIs */}
-      <Card className="p-6">
-        <div className="flex items-start justify-between mb-1">
+      {/* Profitability by Platform — draggable & resizable */}
+      <div className="pt-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Cumulative Users</h2>
-            <p className="text-sm text-muted-foreground">Total users across all platforms</p>
+            <h2 className="text-2xl font-bold tracking-tight">Profitability by Platform</h2>
+            <p className="text-sm text-muted-foreground">
+              Daily users, revenue, cost and free→paid conversion — desktop (macOS) vs mobile (iOS/Android). Revenue and
+              cost per platform are estimates. Drag cards to reorder; drag the bottom-right corner to resize.
+            </p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex overflow-hidden rounded-md border border-input">
+              {([30, 60, 90] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setProfitDays(d)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    profitDays === d
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              Desktop $/user/day
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={desktopCostInput}
+                onChange={(e) => setDesktopCostInput(e.target.value)}
+                className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-muted-foreground">
+              Mobile $/user/day
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={mobileCostInput}
+                onChange={(e) => setMobileCostInput(e.target.value)}
+                className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+            </label>
+          </div>
+        </div>
+
+        {profitError ? (
+          <Card className="border-destructive/50 bg-destructive/5 p-4">
+            <p className="text-sm text-destructive">Failed to load profitability data.</p>
+          </Card>
+        ) : profitLoading && !profitability ? (
+          <Card className="flex h-[200px] items-center justify-center p-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </Card>
+        ) : (
+          <>
+            {profitability?.summary.partial && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Some profitability inputs failed. Numbers may be incomplete.</span>
+              </div>
+            )}
+            <ResizableChartGrid storageKey="admin:profitability:v1" items={profitCharts} />
+          </>
+        )}
+      </div>
+
+      {/* Revenue Overview — draggable & resizable */}
+      <div className="pt-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold tracking-tight">Revenue Overview</h2>
           <div className="flex rounded-md border border-input overflow-hidden">
             {(["7d", "30d", "all"] as const).map((w) => (
               <button
@@ -618,87 +1841,14 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </div>
-        <div className="h-[350px] mt-4">
-          {dailyNewUsersLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : cumulativeSeries.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={cumulativeSeries}>
-                <defs>
-                  <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="date"
-                  className="text-xs"
-                  tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={shortDate}
-                  minTickGap={40}
-                />
-                <YAxis
-                  className="text-xs"
-                  tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={formatCompact}
-                  domain={cumulativeYDomain}
-                  allowDataOverflow={false}
-                  width={56}
-                />
-                <Tooltip formatter={(value: number) => [value.toLocaleString(), "Total Users"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
-                <Area type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={2} fill="url(#cumulativeGradient)" dot={false} activeDot={{ r: 4 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-          )}
-        </div>
-      </Card>
-
-      {/* MRR Trend */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-1">MRR Over Time</h2>
-        <p className="text-sm text-muted-foreground mb-4">Monthly recurring revenue from Stripe</p>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={mrrData}>
-              <defs>
-                <linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLORS.area} stopOpacity={0.2} />
-                  <stop offset="95%" stopColor={COLORS.area} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `$${formatCompact(v)}`} />
-              <Tooltip formatter={(value: number) => [formatCurrency(value), "MRR"]} contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="mrr" stroke={COLORS.mrr} strokeWidth={2} fill="url(#mrrGradient)" dot={{ r: 3, fill: COLORS.mrr }} activeDot={{ r: 5 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      {/* Subscription Growth */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-1">New Subscriptions</h2>
-        <p className="text-sm text-muted-foreground mb-4">Monthly vs annual subscriptions created each month</p>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={subData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis dataKey="month" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-              <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Legend />
-              <Bar dataKey="monthly" name="Monthly" fill={COLORS.monthly} radius={[2, 2, 0, 0]} stackId="a" />
-              <Bar dataKey="annual" name="Annual" fill={COLORS.annual} radius={[2, 2, 0, 0]} stackId="a" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+        {dailyNewUsersLoading ? (
+          <Card className="flex h-[200px] items-center justify-center p-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </Card>
+        ) : (
+          <ResizableChartGrid storageKey="admin:revenue-overview:v1" items={revenueCharts} />
+        )}
+      </div>
 
       {/* ─────────────────────────────────────────────────── */}
       {/* macOS Growth Metrics */}
@@ -775,190 +1925,7 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Floating Bar Sessions per User */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <h2 className="text-lg font-semibold">macOS Active Versions</h2>
-            <p className="text-sm text-muted-foreground">
-              Active users for {macosVersionStats?.date ?? "today"}, split by release channel and app version
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold">{macosVersionStats?.activeUsers?.toLocaleString() ?? "--"}</div>
-            <p className="text-xs text-muted-foreground">active macOS users today</p>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">Beta vs Production</h3>
-            <div className="h-[280px]">
-              {macosVersionStatsLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : macosChannelData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  No active-user channel data yet
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={macosChannelData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={105}
-                      paddingAngle={3}
-                      dataKey="value"
-                      nameKey="label"
-                      label={({ label, percent }) => `${label} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {macosChannelData.map((entry) => (
-                        <Cell key={entry.label} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
-                        Number(value).toLocaleString(),
-                        entry?.payload?.label ?? "Users",
-                      ]}
-                      contentStyle={tooltipStyle}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">By Version</h3>
-            <div className="h-[280px]">
-              {macosVersionStatsLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : macosVersionData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  No active-user version data yet
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={macosVersionData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={105}
-                      paddingAngle={2}
-                      dataKey="value"
-                      nameKey="label"
-                    >
-                      {macosVersionData.map((entry) => (
-                        <Cell key={entry.label} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number, _name, entry: { payload?: MacosVersionBreakdown }) => [
-                        Number(value).toLocaleString(),
-                        entry?.payload?.label ?? "Version",
-                      ]}
-                      contentStyle={tooltipStyle}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] mt-4">
-          <div className="rounded-lg border p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Monitor className="h-4 w-4 text-muted-foreground" />
-              <h3 className="font-medium">Channel Counts</h3>
-            </div>
-            <div className="space-y-3">
-              {macosChannelData.map((entry) => (
-                <div key={entry.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-sm">{entry.label}</span>
-                  </div>
-                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border p-4">
-            <h3 className="font-medium mb-3">Version Counts</h3>
-            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
-              {macosVersionData.map((entry) => (
-                <div key={entry.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-sm">{entry.label}</span>
-                  </div>
-                  <span className="text-sm font-medium">{entry.value.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Floating Bar Sessions per User */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Floating Bar Sessions per User</h2>
-          {fbSummary && (
-            <span className="text-sm text-muted-foreground">
-              Avg: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay ?? "—"}</span> sessions/user/day
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Times floating bar was opened and a question asked, per user per day (follow-ups don&apos;t count)
-        </p>
-        <div className="h-[300px]">
-          {fbUsageLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : fbUsageData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              No usage data yet
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={fbUsageData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  labelFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-                  }}
-                />
-                <Legend />
-                <Line dataKey="avg_sessions_per_user" name="Sessions/User" stroke="#6366f1" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
+      <ResizableChartGrid storageKey="admin:macos-growth:v1" items={macosGrowthCharts} />
 
       <h2 className="text-2xl font-bold tracking-tight pt-4">Notification Analytics</h2>
 
@@ -1035,556 +2002,13 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Daily Notifications Sent</h2>
-        <div className="h-[350px]">
-          {notificationStatsLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={notificationDailyCombined}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <Tooltip labelFormatter={fullDate} contentStyle={tooltipStyle} />
-                <Legend />
-                <Bar dataKey="mentorSent" name="Omi says (built-in)" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
-                <Bar dataKey="marketplaceMentorSent" name="Marketplace Mentor" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
+      <ResizableChartGrid storageKey="admin:notifications:v1" items={notificationCharts} />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Notifications Sent, Last 168 Hours</h2>
-          <p className="text-sm text-muted-foreground mb-4">Hourly volume, with dates marked at midnight UTC.</p>
-          <div className="h-[320px]">
-            {notificationStatsLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={notificationHourlyData} barCategoryGap={0} barGap={0}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="hour" tickFormatter={formatHourTick} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} interval={0} minTickGap={40} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip labelFormatter={(value) => formatHourKey(value as string)} contentStyle={tooltipStyle} />
-                  <Legend />
-                  <Bar dataKey="mentor" name="Omi Says" fill="#6366f1" stackId="a" />
-                  <Bar dataKey="marketplace" name="Marketplace Mentor" fill="#f59e0b" stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
+      {/* Ratings + Floating Bar Usage — draggable & resizable */}
+      <ResizableChartGrid storageKey="admin:ratings-usage:v1" items={ratingsAndUsageCharts} />
 
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Floating Bar Notification CTR</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            {floatingBarCtrSummary?.mode === "surface_tagged"
-              ? "Sent vs clicked proactive notifications in the desktop floating bar."
-              : "Surface-tagged floating-bar events are not populated yet, so this is currently using all desktop notification clicks as a fallback."}
-          </p>
-          <div className="h-[320px]">
-            {notificationStatsLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={floatingBarCtr?.dailyData ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tickFormatter={shortDate} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} />
-                  <Tooltip
-                    labelFormatter={fullDate}
-                    formatter={(value: number, name: string) => name === "CTR" ? [`${value}%`, name] : [value.toLocaleString(), name]}
-                    contentStyle={tooltipStyle}
-                  />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="sent" name="Sent" fill="#6366f1" radius={[2, 2, 0, 0]} />
-                  <Bar yAxisId="left" dataKey="clicked" name="Clicked" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="ctr" name="CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Weekly Notification Reach</h2>
-          <p className="text-sm text-muted-foreground mb-4">Volume and unique recipients in one view.</p>
-          <div className="h-[320px]">
-            {notificationStatsLoading ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={notificationWeeklyCombined}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="week" tickFormatter={formatWeek} className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip labelFormatter={formatWeek} contentStyle={tooltipStyle} />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="mentorSent" name="Omi says sent" fill="#6366f1" radius={[2, 2, 0, 0]} stackId="a" />
-                  <Bar yAxisId="left" dataKey="marketplaceMentorSent" name="Marketplace sent" fill="#f59e0b" radius={[2, 2, 0, 0]} stackId="a" />
-                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMentor" name="Omi says unique users" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="uniqueUsersMarketplace" name="Marketplace unique users" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Notification Settings</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Based on the desktop <code className="text-xs">notifications_enabled</code> toggle. Missing values default to enabled.
-          </p>
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-4">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Enabled share</div>
-                  <div className="text-3xl font-semibold">
-                    {notificationEnabledDisabled ? `${((notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100).toFixed(1)}%` : "--"}
-                  </div>
-                </div>
-                <div className="text-right text-sm text-muted-foreground">
-                  <div>{notificationEnabledDisabled?.enabled?.toLocaleString() ?? "--"} enabled</div>
-                  <div>{notificationEnabledDisabled?.disabled?.toLocaleString() ?? "--"} disabled</div>
-                </div>
-              </div>
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-green-500"
-                  style={{
-                    width: notificationEnabledDisabled
-                      ? `${(notificationEnabledDisabled.enabled / notificationEnabledDisabled.total) * 100}%`
-                      : "0%",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Message Ratings — macOS Floating Bar */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Chat Response Ratings</h2>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="text-green-500 font-medium">{totalThumbsUp} up</span>
-            <span className="text-red-500 font-medium">{totalThumbsDown} down</span>
-            <span>{overallRatio}% positive</span>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Weekly thumbs up/down from macOS floating bar. The overall positive rate is shown above.
-        </p>
-        <div className="h-[300px]">
-          {ratingsLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : weeklyRatingsData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              No rating data yet
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyRatingsData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="week"
-                  tickFormatter={formatWeek}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  labelFormatter={formatWeek}
-                  formatter={(value: number, name: string) => [value, name === "thumbs_up" ? "Thumbs Up" : "Thumbs Down"]}
-                />
-                <Legend />
-                <Bar dataKey="thumbs_up" name="Thumbs Up" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="thumbs_down" name="Thumbs Down" fill="#ef4444" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
-
-      {/* Floating Bar Usage — Queries per Day (Voice vs Text) */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Floating Bar Usage</h2>
-          {fbSummary && (
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>{fbSummary.totalQueries} total</span>
-              <span className="text-blue-500 font-medium">{fbSummary.totalText} text</span>
-              <span className="text-orange-500 font-medium">{fbSummary.totalVoice} voice</span>
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Daily queries by input type — text vs voice (last 30 days)
-        </p>
-        <div className="h-[300px]">
-          {fbUsageLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : fbUsageData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              No usage data yet
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fbUsageData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  labelFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="text_queries" name="Text" stackId="queries" fill="#6366f1" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="voice_queries" name="Voice" stackId="queries" fill="#f97316" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
-
-      {/* Floating Bar — Avg Queries per User per Day */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Avg Queries per User per Day</h2>
-          {fbSummary && (
-            <span className="text-sm text-muted-foreground">
-              Overall: <span className="font-medium text-foreground">{fbSummary.overallAvgPerUserPerDay}</span> queries/user/day
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Average floating bar queries per active user, daily (last 30 days)
-        </p>
-        <div className="h-[300px]">
-          {fbUsageLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : fbUsageData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-muted-foreground">
-              No usage data yet
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={fbUsageData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                  }}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis yAxisId="avg" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="users" orientation="right" tick={{ fontSize: 11 }} />
-                <Tooltip
-                  labelFormatter={(v) => {
-                    const d = new Date(v + "T00:00:00");
-                    return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-                  }}
-                  formatter={(value: number, name: string) => {
-                    if (name === "Avg/User") return [value, "Avg queries per user"];
-                    return [value, "Active users"];
-                  }}
-                />
-                <Legend />
-                <Bar yAxisId="users" dataKey="unique_users" name="Active Users" fill="#e2e8f0" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="avg" dataKey="avg_per_user" name="Avg/User" stroke="#6366f1" strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </Card>
-
-      {/* Growth Accounting */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-1">Growth Accounting</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Weekly breakdown: where do active users come from? (Churned shown as negative)
-        </p>
-        <div className="h-[350px]">
-          {viralLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : ga.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ga} stackOffset="sign">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={fullDate} formatter={(value: number, name: string) => {
-                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
-                  return [Math.abs(value), labels[name] || name];
-                }} />
-                <Legend formatter={(value) => {
-                  const labels: Record<string, string> = { newUsers: "New", retained: "Retained", resurrected: "Resurrected", churned: "Churned" };
-                  return labels[value] || value;
-                }} />
-                <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" />
-                <Bar dataKey="newUsers" stackId="a" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="resurrected" stackId="a" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="retained" stackId="a" fill="#6366f1" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="churned" stackId="a" fill="#ef4444" radius={[0, 0, 2, 2]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-          )}
-        </div>
-      </Card>
-
-      {/* Daily Active Users */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-1">Daily Active Users</h2>
-        <p className="text-sm text-muted-foreground mb-4">Unique macOS users per day</p>
-        <div className="h-[300px]">
-          {dauLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : dauData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dauData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <Tooltip formatter={(value: number) => [value.toLocaleString(), "DAU"]} labelFormatter={fullDate} contentStyle={tooltipStyle} />
-                <Bar dataKey="dau" name="DAU" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-          )}
-        </div>
-      </Card>
-
-      {/* Crash Rate */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">App Stability</h2>
-          {crashRate?.data && (() => {
-            const recent = crashRate.data.slice(-7);
-            const totalCrashes = recent.reduce((s, d) => s + d.crashes, 0);
-            const totalUsers = recent.reduce((s, d) => s + d.users, 0);
-            const rate = totalUsers > 0 ? ((1 - totalCrashes / totalUsers) * 100).toFixed(1) : "100.0";
-            return (
-              <span className="text-sm text-muted-foreground">
-                {rate}% crash-free (7d) · {totalCrashes} crashes
-              </span>
-            );
-          })()}
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">Daily crashes vs active users (last 30 days)</p>
-        <div className="h-[300px]">
-          {crashRateLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (crashRate?.data?.length ?? 0) > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={crashRate!.data}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[90, 100]} />
-                <Tooltip
-                  formatter={(value: number, name: string) => {
-                    if (name === "crashFreeRate") return [`${value}%`, "Crash-Free Rate"];
-                    if (name === "crashes") return [value.toLocaleString(), "Crashes"];
-                    return [value.toLocaleString(), "Active Users"];
-                  }}
-                  labelFormatter={fullDate}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="crashes" name="Crashes" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                <Bar yAxisId="left" dataKey="users" name="Active Users" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.3} />
-                <Line yAxisId="right" type="monotone" dataKey="crashFreeRate" name="Crash-Free Rate" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              No crash data yet — events will appear after v0.11.277+
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Daily New Users + Rolling Avg */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-semibold">Daily New Users</h2>
-          {dailyWithRollingAvg.length > 0 && (
-            <span className="text-sm text-muted-foreground">
-              {dailyWithRollingAvg.reduce((s, p) => s + p.users, 0).toLocaleString()} in last 30d
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">First-time sign-ins with 7-day rolling average</p>
-        <div className="h-[350px]">
-          {dailyNewUsersLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : dailyWithRollingAvg.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={dailyWithRollingAvg}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <Tooltip
-                  formatter={(value: number, name: string) => [value.toLocaleString(), name === "rollingAvg" ? "7-Day Avg" : "New Users"]}
-                  labelFormatter={fullDate}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend />
-                <Bar dataKey="users" name="New Users" fill="#6366f1" radius={[2, 2, 0, 0]} />
-                <Line type="monotone" dataKey="rollingAvg" name="7-Day Avg" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-          )}
-        </div>
-      </Card>
-
-      {/* Two charts side by side: Stickiness + Power Users */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* DAU/WAU Stickiness Trend */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Stickiness (DAU/WAU)</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            How often weekly users come back daily (good: 30%+)
-          </p>
-          <div className="h-[300px]">
-            {viralLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : stickinessData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={stickinessData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="week" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, "auto"]} />
-                  <Tooltip formatter={(value: number) => [`${value}%`, "DAU/WAU"]} labelFormatter={(l) => `Week of ${fullDate(l)}`} contentStyle={tooltipStyle} />
-                  <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: "Good", fill: "#22c55e", fontSize: 11 }} />
-                  <Line type="monotone" dataKey="dauWau" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: "#6366f1" }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-            )}
-          </div>
-        </Card>
-
-        {/* Power User Curve */}
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-1">Power User Curve</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Days active per user in last 30 days (right-skew = healthy)
-          </p>
-          <div className="h-[300px]">
-            {viralLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : powerCurve.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={powerCurve}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="daysActive" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} label={{ value: "Days Active", position: "insideBottom", offset: -5, fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip formatter={(value: number, _: string, entry: any) => [`${value} users (${entry.payload.pct}%)`, "Users"]} labelFormatter={(l) => `${l} days active`} contentStyle={tooltipStyle} />
-                  <Bar dataKey="users" radius={[2, 2, 0, 0]}>
-                    {powerCurve.map((entry, index) => (
-                      <Cell key={index} fill={entry.daysActive >= 20 ? "#22c55e" : entry.daysActive >= 10 ? "#3b82f6" : "#6366f1"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Activation Rate */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold mb-1">Activation Rate</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          % of new users who create a Memory within 7 days of signing up
-        </p>
-        <div className="h-[350px]">
-          {viralLoading ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : activationData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={activationData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={shortDate} />
-                <YAxis yAxisId="left" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis yAxisId="right" orientation="right" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelFormatter={fullDate}
-                  formatter={(value: number, name: string) => {
-                    if (name === "rate") return [`${value}%`, "Activation Rate"];
-                    if (name === "activated") return [value, "Activated"];
-                    return [value, "Signups"];
-                  }}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#6366f1" radius={[2, 2, 0, 0]} opacity={0.5} />
-                <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">No data available</div>
-          )}
-        </div>
-      </Card>
+      {/* Viral metrics — draggable & resizable */}
+      <ResizableChartGrid storageKey="admin:viral-metrics:v1" items={viralCharts} />
 
       {/* ─────────────────────────────────────────────────── */}
       {/* Retention Section */}
@@ -1663,32 +2087,7 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       ) : retentionView === "average" ? (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-semibold">Average Retention Curve</h2>
-            {mixpanelRetention?.totalUsers != null && (
-              <span className="text-sm text-muted-foreground">
-                {mixpanelRetention.totalCohorts} cohorts &middot; {mixpanelRetention.totalUsers.toLocaleString()} users
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground mb-4">Weighted average retention across all cohorts</p>
-          <div className="h-[350px]">
-            {mixpanelRetention?.data && mixpanelRetention.data.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mixpanelRetention.data}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="day" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `D${v}`} />
-                  <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
-                  <Tooltip formatter={(value: number) => [`${value}%`, "Retention"]} labelFormatter={(label) => `Day ${label}`} contentStyle={tooltipStyle} />
-                  <Line type="monotone" dataKey="retention" stroke="#f97316" strokeWidth={2} dot={{ r: 2, fill: "#f97316" }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground">No retention data available</div>
-            )}
-          </div>
-        </Card>
+        <ResizableChartGrid storageKey="admin:retention-avg:v1" items={retentionCharts} />
       ) : (
         <Card className="p-0 overflow-hidden">
           <div className="overflow-x-auto">
@@ -1788,12 +2187,18 @@ function ChatRatingsChart({ token }: { token: string | null }) {
     }));
   }, [weekData, versionData, groupBy]);
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span>Chat Response Ratings</span>
+  const items = useMemo<ChartItem[]>(() => [
+    {
+      id: "chat-ratings",
+      title: "Chat Response Ratings",
+      subtitle:
+        stats.total > 0
+          ? `${stats.up} 👍 · ${stats.down} 👎 · ${stats.pct}% positive`
+          : undefined,
+      initialLayout: { cols: 12, rows: 5 },
+      render: () => (
+        <div className="flex h-full flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-md overflow-hidden border border-border text-xs font-medium">
               {(["all", "desktop", "mobile"] as const).map((p) => (
                 <button
@@ -1811,53 +2216,54 @@ function ChatRatingsChart({ token }: { token: string | null }) {
             </div>
             <div className="flex rounded-md overflow-hidden border border-border text-xs font-medium">
               {(["week", "version"] as const).map((g) => (
-                <button key={g} onClick={() => setGroupBy(g)}
-                  className={`px-3 py-1 transition-colors ${groupBy === g ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
-                >{g === "week" ? "By Week" : "By Version"}</button>
+                <button
+                  key={g}
+                  onClick={() => setGroupBy(g)}
+                  className={`px-3 py-1 transition-colors ${
+                    groupBy === g
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {g === "week" ? "By Week" : "By Version"}
+                </button>
               ))}
             </div>
           </div>
-          {stats.total > 0 && (
-            <div className="flex items-center gap-4 text-sm font-normal">
-              <span className="text-green-500">{stats.up} 👍</span>
-              <span className="text-red-500">{stats.down} 👎</span>
-              <span className={`font-bold ${stats.pct >= 60 ? "text-green-500" : stats.pct >= 40 ? "text-yellow-500" : "text-red-500"}`}>
-                {stats.pct}% positive
-              </span>
-            </div>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading ratings...
+          <div className="min-h-0 flex-1">
+            {isLoading ? (
+              <div className="flex h-full items-center justify-center text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading ratings...
+              </div>
+            ) : !chartData.length ? (
+              <div className="flex h-full items-center justify-center text-center text-muted-foreground py-8">
+                {groupBy === "version"
+                  ? "No version-tagged ratings yet."
+                  : "No chat ratings data available"}
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="count" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8 }}
+                    labelStyle={{ color: "#ccc" }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="count" dataKey="thumbs_up" name="👍 Likes" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="count" dataKey="thumbs_down" name="👎 Dislikes" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
           </div>
-        ) : !chartData.length ? (
-          <div className="text-center text-muted-foreground py-12">
-            {groupBy === "version"
-              ? "No version-tagged ratings yet. Ratings will be tagged with app version after the next desktop release."
-              : "No chat ratings data available"}
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={250}>
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="count" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#1a1a2e", border: "1px solid #333", borderRadius: 8 }}
-                labelStyle={{ color: "#ccc" }}
-              />
-              <Legend />
-              <Bar yAxisId="count" dataKey="thumbs_up" name="👍 Likes" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar yAxisId="count" dataKey="thumbs_down" name="👎 Dislikes" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              <Line yAxisId="pct" dataKey="satisfaction" name="Satisfaction %" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
-  );
+        </div>
+      ),
+    },
+  ], [platform, groupBy, isLoading, chartData, stats]);
+
+  return <ResizableChartGrid storageKey="admin:chat-ratings:v1" items={items} />;
 }

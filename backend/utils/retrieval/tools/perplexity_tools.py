@@ -7,6 +7,7 @@ import os
 import httpx
 from langchain_core.tools import tool
 from utils.http_client import get_webhook_client
+from utils.llm.clients import get_model
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -56,7 +57,7 @@ async def perplexity_web_search_tool(
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         payload = {
-            "model": "sonar-pro",
+            "model": get_model('web_search'),
             "messages": [{"role": "user", "content": query}],
             "temperature": 0.2,
             "max_tokens": 1000,

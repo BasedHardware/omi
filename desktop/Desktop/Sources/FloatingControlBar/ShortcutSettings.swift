@@ -324,11 +324,8 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "shortcut_selectedModel") }
     }
 
-    /// Available models for Ask Omi.
-    static let availableModels: [(id: String, label: String)] = [
-        ("claude-sonnet-4-6", "Sonnet"),
-        ("claude-opus-4-6", "Opus"),
-    ]
+    /// Available models for Ask Omi (driven by QoS tier).
+    static var availableModels: [(id: String, label: String)] { ModelQoS.Claude.availableModels }
 
     /// Push-to-talk transcription mode.
     enum PTTTranscriptionMode: String, CaseIterable {
@@ -471,7 +468,9 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-sonnet-4-6"
+        self.selectedModel = ModelQoS.Claude.sanitizedSelection(
+            UserDefaults.standard.string(forKey: "shortcut_selectedModel")
+        )
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode"),
            let mode = PTTTranscriptionMode(rawValue: saved) {
             self.pttTranscriptionMode = mode
@@ -488,6 +487,11 @@ class ShortcutSettings: ObservableObject {
             ? storedVoiceID
             : Self.defaultVoiceID
         self.selectedVoiceID = validVoiceID
+
+        NotificationCenter.default.addObserver(forName: .modelTierDidChange, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.selectedModel = ModelQoS.Claude.sanitizedSelection(self.selectedModel)
+        }
     }
 
     private func persistShortcut(_ shortcut: KeyboardShortcut, forKey key: String) {

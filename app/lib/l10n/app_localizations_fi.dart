@@ -4562,10 +4562,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get alreadyBestValuePlan => 'Sinulla on jo paras hinta-laatusuhteen tilaus. Muutoksia ei tarvita.';
 
   @override
-  String get unableToLoadPlans => 'Tilauksia ei voida ladata';
+  String get unableToLoadPlans => 'Suunnitelmia ei voitu ladata';
 
   @override
-  String get checkConnectionTryAgain => 'Tarkista yhteytesi ja yritä uudelleen';
+  String get checkConnectionTryAgain => 'Tarkista yhteys ja yritä uudelleen';
 
   @override
   String get useFreePlan => 'Käytä ilmaista tilausta';
@@ -5099,7 +5099,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Jatkamalla kaikki tämän sovelluksen kanssa jakamasi tiedot (mukaan lukien keskustelusi, tallenteet ja henkilökohtaiset tietosi) tallennetaan turvallisesti palvelimillemme tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
+      'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -8829,6 +8829,18 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Akku';
+
+  @override
+  String get noBatteryDataYet => 'Ei vielä akkutietoja';
+
+  @override
+  String get day => 'Päivä';
+
+  @override
+  String get week => 'Viikko';
+
+  @override
   String get rollbackToStableFirmware => 'Palaa vakaaseen laiteohjelmistoon';
 
   @override
@@ -9020,4 +9032,110 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Sinulla on maksullinen tilaus.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'viestiä';
+
+  @override
+  String get unlimitedChatThisMonth => 'Rajoittamattomasti chat-viestejä tässä kuussa';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit laskentabudjetista käytetty';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used / $limit viestiä käytetty tässä kuussa';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit käytetty';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Chat-raja saavutettu. Päivitä saadaksesi lisää viestejä.';
+
+  @override
+  String get chatLimitReachedTitle => 'Chat-raja saavutettu';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Olet käyttänyt $used / $limitDisplay $plan-suunnitelmassa.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Nollautuu $count päivän kuluttua';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Nollautuu $count tunnin kuluttua';
+  }
+
+  @override
+  String get resetsSoon => 'Nollautuu pian';
+
+  @override
+  String get upgradePlan => 'Päivitä suunnitelma';
+
+  @override
+  String get billingMonthly => 'Kuukausittain';
+
+  @override
+  String get billingYearly => 'Vuosittain';
+
+  @override
+  String get savePercent => 'Säästä ~17%';
+
+  @override
+  String get popular => 'Suosittu';
+
+  @override
+  String get currentPlan => 'Nykyinen';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count kysymystä kuukaudessa';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count kysymystä kuukaudessa';
+  }
+
+  @override
+  String get architectSubtitle => 'Tehokäyttäjän AI — tuhansia keskusteluja + agenttiautomatisointi';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit käytetty tässä kuussa';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used käytetty tässä kuussa';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit viestiä tässä kuussa';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used viestiä tässä kuussa';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Olet saavuttanut kuukausittaisen rajasi. Päivitä jatkaaksesi keskustelua Omin kanssa ilman rajoituksia.';
 }

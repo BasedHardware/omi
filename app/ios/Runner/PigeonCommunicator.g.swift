@@ -280,6 +280,37 @@ struct BleDisconnectEvent: Hashable {
   }
 }
 
+/// A single battery level reading persisted by the native BLE layer.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct BleBatteryPoint: Hashable {
+  var timestamp: Int64
+  var level: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> BleBatteryPoint? {
+    let timestamp = pigeonVar_list[0] as! Int64
+    let level = pigeonVar_list[1] as! Int64
+
+    return BleBatteryPoint(
+      timestamp: timestamp,
+      level: level
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      timestamp,
+      level,
+    ]
+  }
+  static func == (lhs: BleBatteryPoint, rhs: BleBatteryPoint) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
 /// Diagnostics data read from native preferences on demand.
 ///
 /// Generated class from Pigeon that represents data sent in messages.
@@ -331,6 +362,8 @@ private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
     case 131:
       return BleDisconnectEvent.fromList(self.readValue() as! [Any?])
     case 132:
+      return BleBatteryPoint.fromList(self.readValue() as! [Any?])
+    case 133:
       return BleDeviceDiagnostics.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -349,8 +382,11 @@ private class PigeonCommunicatorPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? BleDisconnectEvent {
       super.writeByte(131)
       super.writeValue(value.toList())
-    } else if let value = value as? BleDeviceDiagnostics {
+    } else if let value = value as? BleBatteryPoint {
       super.writeByte(132)
+      super.writeValue(value.toList())
+    } else if let value = value as? BleDeviceDiagnostics {
+      super.writeByte(133)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -786,6 +822,7 @@ protocol BleHostApi {
   func startRssiStreaming(uuid: String) throws
   func stopRssiStreaming(uuid: String) throws
   func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void)
+  func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void)
   /// (Android only) Check if any CompanionDeviceManager association exists.
   func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
@@ -1022,6 +1059,23 @@ class BleHostApiSetup {
       }
     } else {
       getDeviceDiagnosticsChannel.setMessageHandler(nil)
+    }
+    let getBatteryHistoryChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getBatteryHistoryChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        api.getBatteryHistory(uuid: uuidArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      getBatteryHistoryChannel.setMessageHandler(nil)
     }
     /// (Android only) Check if any CompanionDeviceManager association exists.
     let hasCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)

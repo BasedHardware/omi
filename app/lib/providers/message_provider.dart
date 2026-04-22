@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -52,6 +53,10 @@ class MessageProvider extends ChangeNotifier {
 
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
+
+  // Chat quota exceeded — set transiently when backend returns 402
+  bool _chatQuotaExceeded = false;
+  bool get isChatQuotaExceeded => _chatQuotaExceeded;
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -462,6 +467,7 @@ class MessageProvider extends ChangeNotifier {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
   }) async {
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -527,6 +533,14 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          if (_tryParseQuotaError(chunk.text)) {
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            notifyListeners();
+            setShowTypingIndicator(false);
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -541,6 +555,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
@@ -636,6 +651,14 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
+          if (_tryParseQuotaError(chunk.text)) {
+            // Keep the user's message visible; replace AI placeholder with quota message
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            notifyListeners();
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -653,6 +676,22 @@ class MessageProvider extends ChangeNotifier {
       setShowTypingIndicator(false);
       setSendingMessage(false);
     }
+  }
+
+  bool _tryParseQuotaError(String errorText) {
+    try {
+      var json = jsonDecode(errorText);
+      if (json is! Map) return false;
+      // FastAPI wraps HTTPException detail in {"detail": {...}}
+      var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['error'] == 'quota_exceeded') {
+        detail['allowed'] = false;
+        _chatQuotaExceeded = true;
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future _sendMessageViaAgent(String text, String? appId) async {

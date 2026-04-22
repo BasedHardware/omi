@@ -47,7 +47,7 @@ class AppListItem extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // App icon - Apple style square with rounded corners
+                // App icon
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
@@ -80,7 +80,7 @@ class AppListItem extends StatelessWidget {
 
                 const SizedBox(width: 16),
 
-                // App details - Apple style
+                // App details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,7 +119,7 @@ class AppListItem extends StatelessWidget {
 
                 const SizedBox(width: 12),
 
-                // Action button - Apple style
+                // Action button
                 state.isLoading
                     ? Container(
                         width: 72,
@@ -176,7 +176,7 @@ class AppListItem extends StatelessWidget {
                           ),
                           child: Center(
                             child: Text(
-                              state.enabled ? 'Open' : 'Get',
+                              state.enabled ? 'Open' : 'Add',
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                             ),
                           ),

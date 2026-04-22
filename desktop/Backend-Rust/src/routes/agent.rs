@@ -487,8 +487,8 @@ async fn create_gce_vm(
             "autoDelete": true,
             "initializeParams": {
                 "sourceImage": source_image,
-                "diskSizeGb": "50",
-                "diskType": format!("zones/{}/diskTypes/pd-ssd", zone)
+                "diskSizeGb": "30",
+                "diskType": format!("zones/{}/diskTypes/pd-balanced", zone)
             }
         }],
         "networkInterfaces": [{

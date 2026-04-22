@@ -4529,7 +4529,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unableToLoadPlans => 'לא ניתן לטעון תוכניות';
 
   @override
-  String get checkConnectionTryAgain => 'אנא בדוק את החיבור שלך ונסה שוב';
+  String get checkConnectionTryAgain => 'בדוק את החיבור ונסה שוב';
 
   @override
   String get useFreePlan => 'השתמש בתוכנית חינם';
@@ -5057,7 +5057,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'על ידי המשך, כל הנתונים שתשתף עם אפליקציה זו (כולל השיחות, ההקלטות והמידע האישי שלך) ישמרו בבטחה בשרתים שלנו כדי לספק לך תובנות מונעות בינה מלאכותית ולאפשר את כל תכונות האפליקציה.';
+      'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
 
   @override
   String get tasksEmptyStateMessage => 'משימות משיחותיך יופיעו כאן.\\nלחץ + כדי ליצור אחת ידנית.';
@@ -8758,6 +8758,18 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'סוללה';
+
+  @override
+  String get noBatteryDataYet => 'אין עדיין נתוני סוללה';
+
+  @override
+  String get day => 'יום';
+
+  @override
+  String get week => 'שבוע';
+
+  @override
   String get rollbackToStableFirmware => 'חזור ל-Firmware יציב';
 
   @override
@@ -8949,4 +8961,109 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'אתה על תוכנית בתשלום.';
+
+  @override
+  String get chatTitle => 'צ׳אט';
+
+  @override
+  String get chatMessages => 'הודעות';
+
+  @override
+  String get unlimitedChatThisMonth => 'הודעות צ׳אט ללא הגבלה החודש';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used מתוך $limit תקציב מחשוב נוצל';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used מתוך $limit הודעות נוצלו החודש';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit נוצל';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'הגעת למגבלת הצ׳אט. שדרג לעוד הודעות.';
+
+  @override
+  String get chatLimitReachedTitle => 'הגעת למגבלת הצ׳אט';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'השתמשת ב-$used מתוך $limitDisplay בתוכנית $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'מתאפס בעוד $count ימים';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'מתאפס בעוד $count שעות';
+  }
+
+  @override
+  String get resetsSoon => 'מתאפס בקרוב';
+
+  @override
+  String get upgradePlan => 'שדרג תוכנית';
+
+  @override
+  String get billingMonthly => 'חודשי';
+
+  @override
+  String get billingYearly => 'שנתי';
+
+  @override
+  String get savePercent => 'חסוך ~17%';
+
+  @override
+  String get popular => 'פופולרי';
+
+  @override
+  String get currentPlan => 'נוכחי';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count שאלות בחודש';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count שאלות בחודש';
+  }
+
+  @override
+  String get architectSubtitle => 'AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'צ\'אט: \$$used / \$$limit נוצל החודש';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'צ\'אט: \$$used נוצל החודש';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'צ\'אט: $used / $limit הודעות החודש';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'צ\'אט: $used הודעות החודש';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => 'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
 }

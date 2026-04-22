@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Можа позней",
+    "maybeLater": "Магчыма пазней",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не ўдалося загрузіць планы",
+    "unableToLoadPlans": "Немагчыма загрузіць планы",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Калі ласка, праверце вашае падлучэнне і спробуйце яшчэ раз",
+    "checkConnectionTryAgain": "Праверце падключэнне і паспрабуйце зноў",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Прыступаючы, усе дадзеныя, якія вы дзеліцеся з гэтым прыложэннем (уключаючы вашы разговоры, запісы і персанальную інфармацыю), будуць безбяспечна захаваны на нашых серверах, каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі прыложэння.",
+    "consentDataMessage": "Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "Вы на платным плане.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Чат",
+    "chatMessages": "паведамленняў",
+    "unlimitedChatThisMonth": "Неабмежаваныя паведамленні ў чаце гэты месяц",
+    "chatUsedOfLimitCompute": "{used} з {limit} бюджэту вылічэнняў выкарыстана",
+    "chatUsedOfLimitMessages": "{used} з {limit} паведамленняў выкарыстана гэты месяц",
+    "chatUsageProgress": "{used} / {limit} выкарыстана",
+    "chatLimitReachedUpgrade": "Ліміт чату дасягнуты. Абнавіце для большай колькасці паведамленняў.",
+    "chatLimitReachedTitle": "Ліміт чату дасягнуты",
+    "chatUsageDescription": "Вы выкарысталі {used} з {limitDisplay} на плане {plan}.",
+    "resetsInDays": "Скід праз {count} дзён",
+    "resetsInHours": "Скід праз {count} гадзін",
+    "resetsSoon": "Хутка скінецца",
+    "upgradePlan": "Абнавіць план",
+    "billingMonthly": "Штомесяц",
+    "billingYearly": "Штогод",
+    "savePercent": "Зэканомце ~17%",
+    "popular": "Папулярны",
+    "currentPlan": "Бягучы",
+    "neoSubtitle": "{count} пытанняў у месяц",
+    "operatorSubtitle": "{count} пытанняў у месяц",
+    "architectSubtitle": "AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя",
+    "chatUsageCost": "Чат: ${used} / ${limit} выкарыстана ў гэтым месяцы",
+    "chatUsageCostNoLimit": "Чат: ${used} выкарыстана ў гэтым месяцы",
+    "chatUsageMessages": "Чат: {used} / {limit} паведамленняў у гэтым месяцы",
+    "chatUsageMessagesNoLimit": "Чат: {used} паведамленняў у гэтым месяцы",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Вы дасягнулі свайго месячнага ліміту. Абнавіце, каб працягваць размаўляць з Omi без абмежаванняў.",
+    "batteryHistory": "Батарэя",
+    "day": "Дзень",
+    "noBatteryDataYet": "Даных пра батарэю яшчэ няма",
+    "week": "Тыдзень"
 }

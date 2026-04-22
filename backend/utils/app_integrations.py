@@ -465,7 +465,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     if 'user_chat' in filter_scopes:
         chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    from utils.llm.clients import llm_mini
+    from utils.llm.clients import get_llm
 
     # Build prompt with substitutions
     for param in filter_scopes:
@@ -481,7 +481,7 @@ def _process_proactive_notification(uid: str, app: App, data):
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = llm_mini.invoke(prompt).content
+    message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None

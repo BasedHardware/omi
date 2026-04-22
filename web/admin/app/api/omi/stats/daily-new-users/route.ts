@@ -1,124 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
-import { getJsonCache, setJsonCache } from "@/lib/redis";
+import { getUserGrowthSeries, sliceSeries } from "@/lib/services/user-growth";
 
 export const dynamic = "force-dynamic";
-
-// The Firestore `users` collection has a `created_at` field that was
-// backfilled for ~63K existing users on a single day in late 2024, so it
-// can't be used to derive signup history. Firebase Auth's
-// `metadata.creationTime` is set by the Auth service on account creation
-// and is the authoritative signup timestamp.
-//
-// Scanning every user via `listUsers()` pages 1000 at a time (112K ≈ 25s)
-// and keeping UserRecord objects live is enough to OOM a 512Mi Cloud Run
-// container. The fix is threefold:
-//   1. Persist the computed series to Redis so only one instance pays
-//      the scan cost per TTL window, even across cold starts.
-//   2. Keep an in-memory shadow of the Redis value so warm instances
-//      skip the round-trip.
-//   3. Iterate pages one at a time, only retaining the date bucket map
-//      (~700 string keys + ints) and dropping each UserRecord batch to
-//      GC as soon as the loop moves on.
-
-type DailyPoint = { date: string; users: number; cumulative: number };
-type CachedSeries = {
-  data: DailyPoint[];
-  totalUsers: number;
-  generatedAt: number;
-};
-
-const REDIS_KEY = "admin:stats:daily-new-users:v1";
-const REDIS_TTL_SECONDS = 30 * 60; // 30 min — matches the in-memory shadow
-const LOCAL_TTL_MS = 30 * 60 * 1000;
-
-let cachedSeries: CachedSeries | null = null;
-let pendingBuild: Promise<CachedSeries> | null = null;
-
-async function buildDailySeries(): Promise<CachedSeries> {
-  const auth = getAdminAuth();
-  const countsByDate: Record<string, number> = {};
-  let pageToken: string | undefined = undefined;
-  let total = 0;
-  let earliest: Date | null = null;
-  let latest: Date | null = null;
-
-  do {
-    const page = await auth.listUsers(1000, pageToken);
-    for (const user of page.users) {
-      const rawCt = user.metadata?.creationTime;
-      if (!rawCt) continue;
-      const ct = new Date(rawCt);
-      if (Number.isNaN(ct.getTime())) continue;
-      const key = ct.toISOString().slice(0, 10);
-      countsByDate[key] = (countsByDate[key] || 0) + 1;
-      if (!earliest || ct < earliest) earliest = ct;
-      if (!latest || ct > latest) latest = ct;
-      total++;
-    }
-    pageToken = page.pageToken || undefined;
-    // Yield to the event loop between pages so V8 can collect the
-    // previous page's UserRecord objects before we request the next.
-    await new Promise((r) => setImmediate(r));
-  } while (pageToken);
-
-  if (!earliest || !latest) {
-    return { data: [], totalUsers: 0, generatedAt: Date.now() };
-  }
-
-  // Fill every day from the earliest signup to today so the curve is
-  // continuous (no gaps) and ends on the current date.
-  const endDate = new Date();
-  endDate.setUTCHours(0, 0, 0, 0);
-  const startDate = new Date(
-    Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), earliest.getUTCDate()),
-  );
-
-  const data: DailyPoint[] = [];
-  let running = 0;
-  for (
-    const d = new Date(startDate);
-    d <= endDate;
-    d.setUTCDate(d.getUTCDate() + 1)
-  ) {
-    const key = d.toISOString().slice(0, 10);
-    const users = countsByDate[key] || 0;
-    running += users;
-    data.push({ date: key, users, cumulative: running });
-  }
-
-  return { data, totalUsers: total, generatedAt: Date.now() };
-}
-
-async function getSeries(): Promise<CachedSeries> {
-  const now = Date.now();
-
-  // 1. Warm in-memory shadow.
-  if (cachedSeries && now - cachedSeries.generatedAt < LOCAL_TTL_MS) {
-    return cachedSeries;
-  }
-
-  // 2. Shared Redis cache — survives cold starts and cross-instance.
-  const fromRedis = await getJsonCache<CachedSeries>(REDIS_KEY);
-  if (fromRedis && now - fromRedis.generatedAt < LOCAL_TTL_MS) {
-    cachedSeries = fromRedis;
-    return fromRedis;
-  }
-
-  // 3. De-duplicate concurrent rebuilds inside the same instance.
-  if (pendingBuild) return pendingBuild;
-  pendingBuild = buildDailySeries()
-    .then(async (series) => {
-      cachedSeries = series;
-      await setJsonCache(REDIS_KEY, series, REDIS_TTL_SECONDS);
-      return series;
-    })
-    .finally(() => {
-      pendingBuild = null;
-    });
-  return pendingBuild;
-}
 
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
@@ -126,27 +10,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const daysParam = searchParams.get("days");
-    const wantsAll =
-      !daysParam || daysParam === "all" || daysParam === "0";
-    const days = wantsAll ? null : Math.max(1, parseInt(daysParam!, 10));
-
-    const series = await getSeries();
-
-    let data = series.data;
-    if (days != null) {
-      const start = new Date();
-      start.setUTCDate(start.getUTCDate() - days);
-      const startKey = start.toISOString().slice(0, 10);
-      data = series.data.filter((p) => p.date >= startKey);
-    }
-
-    return NextResponse.json({
-      data,
-      totalUsers: series.totalUsers,
-      days: days ?? series.data.length,
-      generatedAt: series.generatedAt,
-    });
+    const series = await getUserGrowthSeries();
+    return NextResponse.json(sliceSeries(series, searchParams.get("days")));
   } catch (error: any) {
     console.error("Daily new users error:", error);
     return NextResponse.json(

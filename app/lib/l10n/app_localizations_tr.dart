@@ -1800,7 +1800,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get rateOnGooglePlay => 'Google Play\'de Değerlendir';
 
   @override
-  String get maybeLater => 'Belki Sonra';
+  String get maybeLater => 'Belki sonra';
 
   @override
   String get speechProfileIntro => 'Omi hedeflerinizi ve sesinizi öğrenmeli. Daha sonra değiştirebilirsiniz.';
@@ -4572,10 +4572,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get alreadyBestValuePlan => 'Zaten en iyi değerli plana sahipsiniz. Değişiklik gerekmiyor.';
 
   @override
-  String get unableToLoadPlans => 'Planlar yüklenemiyor';
+  String get unableToLoadPlans => 'Planlar yüklenemedi';
 
   @override
-  String get checkConnectionTryAgain => 'Lütfen bağlantınızı kontrol edin ve tekrar deneyin';
+  String get checkConnectionTryAgain => 'Bağlantınızı kontrol edin ve tekrar deneyin';
 
   @override
   String get useFreePlan => 'Ücretsiz Planı Kullan';
@@ -5109,7 +5109,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Devam ederek, bu uygulamayla paylaştığınız tüm veriler (konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz dahil) size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.';
+      'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -8843,6 +8843,18 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Pil';
+
+  @override
+  String get noBatteryDataYet => 'Henüz pil verisi yok';
+
+  @override
+  String get day => 'Gün';
+
+  @override
+  String get week => 'Hafta';
+
+  @override
   String get rollbackToStableFirmware => 'Kararlı yazılıma geri dön';
 
   @override
@@ -9034,4 +9046,110 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ücretli bir plandasınız.';
+
+  @override
+  String get chatTitle => 'Sohbet';
+
+  @override
+  String get chatMessages => 'mesaj';
+
+  @override
+  String get unlimitedChatThisMonth => 'Bu ay sınırsız sohbet mesajı';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit hesaplama bütçesi kullanıldı';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used / $limit mesaj bu ay kullanıldı';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit kullanıldı';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Sohbet limiti doldu. Daha fazla mesaj için yükseltin.';
+
+  @override
+  String get chatLimitReachedTitle => 'Sohbet limiti doldu';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan planında $limitDisplay üzerinden $used kullandınız.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count gün sonra sıfırlanır';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count saat sonra sıfırlanır';
+  }
+
+  @override
+  String get resetsSoon => 'Yakında sıfırlanır';
+
+  @override
+  String get upgradePlan => 'Planı yükselt';
+
+  @override
+  String get billingMonthly => 'Aylık';
+
+  @override
+  String get billingYearly => 'Yıllık';
+
+  @override
+  String get savePercent => '~%17 tasarruf';
+
+  @override
+  String get popular => 'Popüler';
+
+  @override
+  String get currentPlan => 'Mevcut';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'Ayda $count soru';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'Ayda $count soru';
+  }
+
+  @override
+  String get architectSubtitle => 'Güçlü AI — binlerce sohbet + ajans otomasyonu';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Sohbet: \$$used / \$$limit bu ay kullanıldı';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Sohbet: \$$used bu ay kullanıldı';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Sohbet: $used / $limit mesaj bu ay';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Sohbet: $used mesaj bu ay';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Aylık limitinize ulaştınız. Kısıtlama olmadan Omi ile sohbete devam etmek için yükseltin.';
 }

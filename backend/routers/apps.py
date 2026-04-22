@@ -1152,7 +1152,7 @@ async def generate_sample_prompts_endpoint(
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
-    from utils.llm.clients import llm_mini
+    from utils.llm.clients import get_llm
     import json
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
@@ -1173,7 +1173,7 @@ Be creative, fun, and varied. No generic ideas."""
 
     try:
         with track_usage(uid, Features.APP_GENERATOR):
-            response = await llm_mini.ainvoke(
+            response = await get_llm('app_integration').ainvoke(
                 [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "Generate 5 creative app ideas now"},

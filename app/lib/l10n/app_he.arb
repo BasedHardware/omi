@@ -5321,7 +5321,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "אנא בדוק את החיבור שלך ונסה שוב",
+    "checkConnectionTryAgain": "בדוק את החיבור ונסה שוב",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "על ידי המשך, כל הנתונים שתשתף עם אפליקציה זו (כולל השיחות, ההקלטות והמידע האישי שלך) ישמרו בבטחה בשרתים שלנו כדי לספק לך תובנות מונעות בינה מלאכותית ולאפשר את כל תכונות האפליקציה.",
+    "consentDataMessage": "בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "אתה על תוכנית בתשלום.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "צ׳אט",
+    "chatMessages": "הודעות",
+    "unlimitedChatThisMonth": "הודעות צ׳אט ללא הגבלה החודש",
+    "chatUsedOfLimitCompute": "{used} מתוך {limit} תקציב מחשוב נוצל",
+    "chatUsedOfLimitMessages": "{used} מתוך {limit} הודעות נוצלו החודש",
+    "chatUsageProgress": "{used} / {limit} נוצל",
+    "chatLimitReachedUpgrade": "הגעת למגבלת הצ׳אט. שדרג לעוד הודעות.",
+    "chatLimitReachedTitle": "הגעת למגבלת הצ׳אט",
+    "chatUsageDescription": "השתמשת ב-{used} מתוך {limitDisplay} בתוכנית {plan}.",
+    "resetsInDays": "מתאפס בעוד {count} ימים",
+    "resetsInHours": "מתאפס בעוד {count} שעות",
+    "resetsSoon": "מתאפס בקרוב",
+    "upgradePlan": "שדרג תוכנית",
+    "billingMonthly": "חודשי",
+    "billingYearly": "שנתי",
+    "savePercent": "חסוך ~17%",
+    "popular": "פופולרי",
+    "currentPlan": "נוכחי",
+    "neoSubtitle": "{count} שאלות בחודש",
+    "operatorSubtitle": "{count} שאלות בחודש",
+    "architectSubtitle": "AI למשתמשים מתקדמים — אלפי שיחות + אוטומציה חכמה",
+    "chatUsageCost": "צ'אט: ${used} / ${limit} נוצל החודש",
+    "chatUsageCostNoLimit": "צ'אט: ${used} נוצל החודש",
+    "chatUsageMessages": "צ'אט: {used} / {limit} הודעות החודש",
+    "chatUsageMessagesNoLimit": "צ'אט: {used} הודעות החודש",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.",
+    "batteryHistory": "סוללה",
+    "day": "יום",
+    "noBatteryDataYet": "אין עדיין נתוני סוללה",
+    "week": "שבוע"
 }

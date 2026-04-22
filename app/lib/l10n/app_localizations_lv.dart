@@ -4570,10 +4570,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get alreadyBestValuePlan => 'Jums jau ir vislabākās vērtības plāns. Nav nepieciešamas izmaiņas.';
 
   @override
-  String get unableToLoadPlans => 'Nevar ielādēt plānus';
+  String get unableToLoadPlans => 'Neizdevās ielādēt plānus';
 
   @override
-  String get checkConnectionTryAgain => 'Lūdzu, pārbaudiet savienojumu un mēģiniet vēlreiz';
+  String get checkConnectionTryAgain => 'Pārbaudiet savienojumu un mēģiniet vēlreiz';
 
   @override
   String get useFreePlan => 'Izmantot bezmaksas plānu';
@@ -5107,7 +5107,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Turpinot, visi dati, ko kopīgojat ar šo lietotni (tostarp jūsu sarunas, ierakstus un personisko informāciju), tiks droši glabāti mūsu serveros, lai sniegtu jums AI balstītas atziņas un iespējotu visas lietotnes funkcijas.';
+      'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -8847,6 +8847,18 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Akumulators';
+
+  @override
+  String get noBatteryDataYet => 'Pagaidām nav akumulatora datu';
+
+  @override
+  String get day => 'Diena';
+
+  @override
+  String get week => 'Nedēļa';
+
+  @override
   String get rollbackToStableFirmware => 'Atgriezties uz stabilo programmaparatūru';
 
   @override
@@ -9039,4 +9051,110 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Jums ir maksas plāns.';
+
+  @override
+  String get chatTitle => 'Tērzēšana';
+
+  @override
+  String get chatMessages => 'ziņas';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neierobežotas tērzēšanas ziņas šomēnes';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used no $limit skaitļošanas budžeta izmantots';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used no $limit ziņām izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit izmantots';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Tērzēšanas limits sasniegts. Jauniniet vairāk ziņām.';
+
+  @override
+  String get chatLimitReachedTitle => 'Tērzēšanas limits sasniegts';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Esat izmantojis $used no $limitDisplay plānā $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Atiestatīsies pēc $count dienām';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Atiestatīsies pēc $count stundām';
+  }
+
+  @override
+  String get resetsSoon => 'Drīz atiestatīsies';
+
+  @override
+  String get upgradePlan => 'Jaunināt plānu';
+
+  @override
+  String get billingMonthly => 'Mēnesī';
+
+  @override
+  String get billingYearly => 'Gadā';
+
+  @override
+  String get savePercent => 'Ietaupiet ~17%';
+
+  @override
+  String get popular => 'Populārs';
+
+  @override
+  String get currentPlan => 'Pašreizējais';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count jautājumi mēnesī';
+  }
+
+  @override
+  String get architectSubtitle => 'Jaudīgs AI — tūkstošiem sarunu + aģentu automatizācija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Tērzēšana: \$$used / \$$limit izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Tērzēšana: \$$used izmantots šomēnes';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Tērzēšana: $used / $limit ziņojumi šomēnes';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Tērzēšana: $used ziņojumi šomēnes';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Jūs esat sasniedzis savu mēneša limitu. Jauniniet, lai turpinātu tērzēt ar Omi bez ierobežojumiem.';
 }

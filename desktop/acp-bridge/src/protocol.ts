@@ -56,6 +56,12 @@ export interface WarmupMessage {
   sessions?: WarmupSessionConfig[];  // new: per-session config with system prompts
 }
 
+/** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
+export interface RefreshTokenMessage {
+  type: "refresh_token";
+  token: string;
+}
+
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
@@ -63,7 +69,8 @@ export type InboundMessage =
   | InterruptMessage
   | InvalidateSessionMessage
   | AuthenticateMessage
-  | WarmupMessage;
+  | WarmupMessage
+  | RefreshTokenMessage;
 
 // === Bridge → Swift (stdout) ===
 

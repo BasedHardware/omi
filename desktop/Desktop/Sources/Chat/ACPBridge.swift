@@ -62,6 +62,9 @@ actor ACPBridge {
   /// (Mode A: OMI's key). When false, the key is stripped so ACP uses OAuth.
   let passApiKey: Bool
 
+  /// Which harness to use: "acp" (default) or "piMono"
+  let harnessMode: String
+
   /// Persistent auth handler called whenever auth_required arrives (even outside query)
   var onAuthRequiredGlobal: AuthRequiredHandler?
   /// Persistent auth success handler called whenever auth_success arrives (even outside query)
@@ -75,8 +78,9 @@ actor ACPBridge {
     self.onAuthSuccessGlobal = onAuthSuccess
   }
 
-  init(passApiKey: Bool = false) {
+  init(passApiKey: Bool = false, harnessMode: String = "acp") {
     self.passApiKey = passApiKey
+    self.harnessMode = harnessMode
   }
 
   // MARK: - State
@@ -98,6 +102,8 @@ actor ACPBridge {
   private var lastExitWasOOM = false
   /// Set when interrupt() is called so query() can skip remaining tool calls
   private var isInterrupted = false
+  /// Timer for periodic Firebase token refresh (piMono mode)
+  private var tokenRefreshTask: Task<Void, Never>?
 
   /// Whether the bridge subprocess is alive and ready
   var isAlive: Bool { isRunning }
@@ -155,6 +161,44 @@ actor ACPBridge {
       env.removeValue(forKey: "ANTHROPIC_API_KEY")
     }
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+
+    // Pass harness mode to bridge (acp or piMono)
+    env["HARNESS_MODE"] = harnessMode
+
+    // For piMono mode, inject the Firebase ID token so the bridge can
+    // authenticate against POST /v2/chat/completions (which expects
+    // Authorization: Bearer <firebase-id-token>).
+    //
+    // SECURITY: if we can't get a Firebase token, refuse to start. The bridge
+    // must NEVER fall back to ANTHROPIC_API_KEY as the Omi backend credential.
+    if harnessMode == "piMono" {
+      let authService = await MainActor.run { AuthService.shared }
+      let token: String
+      do {
+        token = try await authService.getIdToken()
+      } catch {
+        log("ACPBridge: pi-mono start refused — auth error: \(error.localizedDescription)")
+        throw BridgeError.authMissing
+      }
+      guard !token.isEmpty else {
+        log("ACPBridge: pi-mono start refused — Firebase ID token is empty")
+        throw BridgeError.authMissing
+      }
+      env["OMI_AUTH_TOKEN"] = token
+      // Point pi-mono at the Rust desktop-backend's /v2/chat/completions proxy.
+      // Without this, pi-mono-extension falls back to https://api.omi.me/v2 which
+      // does NOT serve chat/completions — the shipped app would get 404 on every
+      // prompt. rustBackendURL is baked at build time from OMI_API_URL in .env.
+      let rustBase = await APIClient.shared.rustBackendURL
+      if !rustBase.isEmpty {
+        env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
+      } else {
+        log("ACPBridge: pi-mono start refused — OMI_API_URL (Rust backend) not configured")
+        throw BridgeError.bridgeScriptNotFound
+      }
+      // Never forward ANTHROPIC_API_KEY to pi-mono — it auths via Firebase only.
+      env.removeValue(forKey: "ANTHROPIC_API_KEY")
+    }
 
     // Ensure the directory containing node is in PATH
     let nodeDir = (nodePath as NSString).deletingLastPathComponent
@@ -224,6 +268,17 @@ actor ACPBridge {
     // Start reading stdout
     startReadingStdout()
 
+    // Start periodic token refresh for piMono mode (every 45 min)
+    if harnessMode == "piMono" {
+      tokenRefreshTask = Task { [weak self] in
+        while !Task.isCancelled {
+          try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
+          guard !Task.isCancelled else { break }
+          await self?.refreshAuthToken()
+        }
+      }
+    }
+
     // Wait for the initial "init" message indicating bridge is ready
     let initMsg = try await waitForMessage(timeout: 30.0)
     if case .`init`(let sessionId) = initMsg {
@@ -240,6 +295,8 @@ actor ACPBridge {
   /// Stop the bridge process
   func stop() {
     log("ACPBridge: stopping")
+    tokenRefreshTask?.cancel()
+    tokenRefreshTask = nil
     readTask?.cancel()
     readTask = nil
 
@@ -513,6 +570,29 @@ actor ACPBridge {
     guard isRunning else { return }
     isInterrupted = true
     sendLine("{\"type\":\"interrupt\"}")
+  }
+
+  /// Push a refreshed Firebase ID token to the bridge (piMono mode only).
+  /// Called periodically so long-running sessions don't expire.
+  func refreshAuthToken() async {
+    guard isRunning, harnessMode == "piMono" else { return }
+    let authService = await MainActor.run { AuthService.shared }
+    let token: String
+    do {
+      token = try await authService.getIdToken(forceRefresh: true)
+    } catch {
+      log("ACPBridge: refreshAuthToken failed — \(error.localizedDescription)")
+      return
+    }
+    guard !token.isEmpty else {
+      log("ACPBridge: refreshAuthToken got empty token; skipping push")
+      return
+    }
+    let msg: [String: Any] = ["type": "refresh_token", "token": token]
+    if let data = try? JSONSerialization.data(withJSONObject: msg),
+       let str = String(data: data, encoding: .utf8) {
+      sendLine(str)
+    }
   }
 
   // MARK: - Private
@@ -893,6 +973,7 @@ enum BridgeError: LocalizedError {
   /// plan label (e.g. "Free" / "Operator" / "Architect") and `resetAtUnix`
   /// is the Unix-seconds timestamp of the cap reset (start of next UTC month).
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
+  case authMissing
 
   var errorDescription: String? {
     switch self {
@@ -916,6 +997,8 @@ enum BridgeError: LocalizedError {
       return "Not enough memory for AI chat. Close some apps and try again."
     case .stopped:
       return "Response stopped."
+    case .authMissing:
+      return "Please sign in to use AI chat."
     case .agentError(let msg):
       let lower = msg.lowercased()
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")

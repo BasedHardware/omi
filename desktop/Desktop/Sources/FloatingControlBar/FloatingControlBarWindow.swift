@@ -827,7 +827,9 @@ class FloatingControlBarManager {
     static let shared = FloatingControlBarManager()
 
     private static let kAskOmiEnabled = "askOmiBarEnabled"
+    private static let kSnoozedUntil = "floatingBar_snoozedUntil"
     private static let recentNotificationReuseInterval: TimeInterval = 60
+    static let snoozeTwoHoursDuration: TimeInterval = 2 * 60 * 60
 
     private struct PendingFollowUpQuery {
         let text: String
@@ -846,6 +848,7 @@ class FloatingControlBarManager {
     }
 
     private var window: FloatingControlBarWindow?
+    private var snoozeTimer: Timer?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
@@ -874,6 +877,68 @@ class FloatingControlBarManager {
         set {
             UserDefaults.standard.set(newValue, forKey: Self.kAskOmiEnabled)
         }
+    }
+
+    /// Timestamp until which the bar and notifications are temporarily suppressed.
+    /// Independent from `isEnabled` — snoozing does not flip the persisted enable preference.
+    var snoozedUntil: Date? {
+        get {
+            let timestamp = UserDefaults.standard.double(forKey: Self.kSnoozedUntil)
+            guard timestamp > 0 else { return nil }
+            return Date(timeIntervalSince1970: timestamp)
+        }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue.timeIntervalSince1970, forKey: Self.kSnoozedUntil)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.kSnoozedUntil)
+            }
+        }
+    }
+
+    var isSnoozed: Bool {
+        guard let snoozedUntil else { return false }
+        return snoozedUntil > Date()
+    }
+
+    /// Hide the bar and suppress notifications for the given duration.
+    func snooze(for duration: TimeInterval) {
+        let until = Date().addingTimeInterval(duration)
+        snoozedUntil = until
+        notificationDismissWorkItem?.cancel()
+        notificationDismissWorkItem = nil
+        pendingNotifications.removeAll()
+        if let window, window.state.currentNotification != nil {
+            window.dismissNotification(animated: false)
+        }
+        window?.orderOut(nil)
+        scheduleSnoozeTimer()
+        AnalyticsManager.shared.floatingBarToggled(visible: false, source: "snooze")
+    }
+
+    /// Clear snooze state; the bar becomes visible again if the user preference is enabled.
+    func endSnooze() {
+        snoozedUntil = nil
+        snoozeTimer?.invalidate()
+        snoozeTimer = nil
+        if isEnabled {
+            window?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func scheduleSnoozeTimer() {
+        snoozeTimer?.invalidate()
+        snoozeTimer = nil
+        guard let snoozedUntil else { return }
+        let interval = snoozedUntil.timeIntervalSinceNow
+        guard interval > 0 else {
+            self.snoozedUntil = nil
+            return
+        }
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.endSnooze() }
+        }
+        snoozeTimer = timer
     }
 
     private init() {}
@@ -990,6 +1055,13 @@ class FloatingControlBarManager {
             }
 
         self.window = barWindow
+
+        // Re-apply any in-flight snooze that survived app relaunch.
+        if isSnoozed {
+            scheduleSnoozeTimer()
+        } else if snoozedUntil != nil {
+            snoozedUntil = nil
+        }
     }
 
     /// Whether the floating bar window is currently visible.
@@ -1001,6 +1073,10 @@ class FloatingControlBarManager {
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
         isEnabled = true
+        if isSnoozed {
+            log("FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
+            return
+        }
         window?.makeKeyAndOrderFront(nil)
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
@@ -1022,6 +1098,10 @@ class FloatingControlBarManager {
     /// Used when browser tools activate so the bar stays visible above Chrome.
     func showTemporarily() {
         guard window != nil else { return }
+        if isSnoozed {
+            log("FloatingControlBarManager: showTemporarily() suppressed because bar is snoozed")
+            return
+        }
         log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
         window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
@@ -1044,6 +1124,11 @@ class FloatingControlBarManager {
         )
         guard let window else {
             log("FloatingControlBarManager: dropping notification because window is not set up")
+            return
+        }
+
+        if isSnoozed {
+            log("FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")")
             return
         }
 
@@ -1549,7 +1634,7 @@ class FloatingControlBarManager {
             }
 
         let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? "claude-sonnet-4-6"
+            ? ModelQoS.Claude.defaultSelection
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         await provider.sendMessage(

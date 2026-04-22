@@ -125,21 +125,19 @@ def _read_chat_source() -> str:
     return (backend_dir / "utils" / "llm" / "chat.py").read_text()
 
 
-def test_llm_agent_has_prompt_cache_key():
-    """llm_agent and llm_agent_stream should have prompt_cache_key configured."""
+def test_qos_cache_key_in_clients():
+    """Omi QoS get_llm() should support cache_key parameter for prompt cache routing."""
     source = _read_clients_source()
-    assert "prompt_cache_key" in source, "clients.py should configure prompt_cache_key for agent models"
-    assert "omi-agent-v1" in source, "prompt_cache_key should be 'omi-agent-v1'"
+    assert "cache_key" in source, "clients.py get_llm() should accept cache_key parameter"
+    assert "_CACHE_KEY_MODELS" in source, "clients.py should define _CACHE_KEY_MODELS for model-safe cache key handling"
 
 
-def test_llm_agent_uses_extra_body_for_cache_retention():
-    """prompt_cache_retention must use extra_body (not model_kwargs) — SDK rejects it as a direct kwarg."""
+def test_qos_medium_tier_uses_extra_body_for_cache_retention():
+    """prompt_cache_retention must use extra_body (not model_kwargs) for gpt-5.1."""
     source = _read_clients_source()
-    assert 'extra_body={"prompt_cache_retention"' in source, "prompt_cache_retention should be set via extra_body"
-    # model_kwargs must NOT contain prompt_cache_retention (SDK rejects it there)
-    mk_blocks = re.findall(r'model_kwargs\s*=\s*\{[^}]*\}', source)
-    for block in mk_blocks:
-        assert "prompt_cache_retention" not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
+    assert (
+        'extra_body={"prompt_cache_retention"' in source or '"prompt_cache_retention": "24h"' in source
+    ), "prompt_cache_retention should be set via extra_body for gpt-5.1"
 
 
 def test_core_tools_constant_exists():

@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Možda Kasnije",
+    "maybeLater": "Možda kasnije",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5321,7 +5321,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Provjerite vašu vezu i pokušajte ponovno",
+    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Nastavkom, svi podaci koje dijelite s ovom aplikacijom (uključujući vaše razgovore, snimanja i osobne podatke) bit će sigurno pohranjeni na našim poslužiteljima kako bismo vam dali AI-powered insights i omogućili sve karakteristike aplikacije.",
+    "consentDataMessage": "Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "Na plaćenom ste planu.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "poruka",
+    "unlimitedChatThisMonth": "Neograničene poruke ovog mjeseca",
+    "chatUsedOfLimitCompute": "{used} od {limit} proračuna korišteno",
+    "chatUsedOfLimitMessages": "{used} od {limit} poruka korišteno ovog mjeseca",
+    "chatUsageProgress": "{used} / {limit} korišteno",
+    "chatLimitReachedUpgrade": "Dostignut limit chata. Nadogradite za više poruka.",
+    "chatLimitReachedTitle": "Dostignut limit chata",
+    "chatUsageDescription": "Koristili ste {used} od {limitDisplay} na planu {plan}.",
+    "resetsInDays": "Resetira se za {count} dana",
+    "resetsInHours": "Resetira se za {count} sati",
+    "resetsSoon": "Uskoro se resetira",
+    "upgradePlan": "Nadogradi plan",
+    "billingMonthly": "Mjesečno",
+    "billingYearly": "Godišnje",
+    "savePercent": "Uštedite ~17%",
+    "popular": "Popularno",
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} pitanja mjesečno",
+    "operatorSubtitle": "{count} pitanja mjesečno",
+    "architectSubtitle": "Napredni AI — tisuće razgovora + agentna automatizacija",
+    "chatUsageCost": "Chat: ${used} / ${limit} iskorišteno ovog mjeseca",
+    "chatUsageCostNoLimit": "Chat: ${used} iskorišteno ovog mjeseca",
+    "chatUsageMessages": "Chat: {used} / {limit} poruka ovog mjeseca",
+    "chatUsageMessagesNoLimit": "Chat: {used} poruka ovog mjeseca",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.",
+    "batteryHistory": "Baterija",
+    "day": "Dan",
+    "noBatteryDataYet": "Još nema podataka o bateriji",
+    "week": "Tjedan"
 }

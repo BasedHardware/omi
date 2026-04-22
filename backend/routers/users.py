@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -50,16 +51,19 @@ from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
 
 from models.users import (
-    WebhookType,
-    UserSubscriptionResponse,
-    SubscriptionPlan,
-    PlanType,
-    PricingOption,
     ChatUsageQuota,
     ChatQuotaUnit,
+    WebhookType,
+    UserSubscriptionResponse,
+    Subscription,
+    SubscriptionPlan,
+    SubscriptionStatus,
+    PlanType,
+    PricingOption,
 )
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    get_chat_quota_snapshot,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -87,6 +91,7 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from database.action_items import get_action_items as get_standalone_action_items
+from utils.byok import has_byok_keys, invalidate_byok_state_cache
 import logging
 
 logger = logging.getLogger(__name__)
@@ -758,13 +763,90 @@ def get_user_usage_stats_endpoint(
     return stats
 
 
+_SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
+_BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+
+
+class BYOKActivateRequest(BaseModel):
+    fingerprints: Dict[str, str]
+
+
+@router.post('/v1/users/me/byok-active', tags=['v1'])
+def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+    """Flip the user onto the BYOK free plan.
+
+    The client sends SHA-256 fingerprints of the 4 provider keys so we can
+    detect rotation without ever seeing the keys. The live keys themselves
+    travel on every request as headers; they are never persisted.
+    """
+    missing = _BYOK_REQUIRED_PROVIDERS - set(data.fingerprints.keys())
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing fingerprints for providers: {sorted(missing)}",
+        )
+    for provider, fp in data.fingerprints.items():
+        if provider not in _BYOK_REQUIRED_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+        if not _SHA256_HEX_RE.match(fp):
+            raise HTTPException(
+                status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
+            )
+    users_db.set_byok_active(uid, data.fingerprints)
+    invalidate_byok_state_cache(uid)
+    return {"active": True}
+
+
+@router.delete('/v1/users/me/byok-active', tags=['v1'])
+def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+    """Drop the user off the BYOK free plan (keys were cleared client-side)."""
+    users_db.clear_byok_active(uid)
+    invalidate_byok_state_cache(uid)
+    return {"active": False}
+
+
+def _byok_unlimited_subscription() -> Subscription:
+    """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
+    return Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        features=["byok"],
+        limits=PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+        ),
+    )
+
+
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
-    uid: str = Depends(auth.get_current_user_uid),
+    # Keep reachable even when BYOK fingerprints drift — broken-BYOK users
+    # must still see their plan so they can recover.
+    uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
     """Gets the user's subscription plan and usage."""
+    # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
+    # Only return unlimited when the request actually carries BYOK headers (desktop).
+    # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
+    if users_db.is_byok_active(uid) and has_byok_keys():
+        return UserSubscriptionResponse(
+            subscription=_byok_unlimited_subscription(),
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            memories_created_used=0,
+            memories_created_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+        )
+
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
     if uid in marketplace_reviewers:
         unlimited_sub = Subscription(
@@ -812,18 +894,10 @@ def get_user_subscription_endpoint(
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
-    subscription.features = get_plan_features(subscription.plan)
+    is_mobile = x_app_platform in ('ios', 'android')
+    subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
     new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
-
-    # Mark deprecated plans
-    if subscription.plan == PlanType.unlimited:
-        subscription.deprecated = True
-        subscription.deprecation_message = (
-            "Your Unlimited plan is being retired. Switch to the Operator plan "
-            "— same great features at $49/mo. Your current plan will continue "
-            "to work in the meantime."
-        )
 
     # Backward-compat: old clients without the `operator` enum value would crash
     # on deserialization. Only send the real plan type to clients that understand it.
@@ -851,7 +925,7 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan)
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -903,7 +977,7 @@ def get_user_subscription_endpoint(
 
         if plan_prices:
             features = (
-                get_plan_features(definition["plan_type"])
+                get_plan_features(definition["plan_type"], simplified=is_mobile)
                 if new_plans_enabled
                 else legacy_plan_features(definition["plan_type"])
             )
@@ -922,6 +996,13 @@ def get_user_subscription_endpoint(
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
 
+    # Chat quota — reuse the shared snapshot helper
+    chat_snapshot = get_chat_quota_snapshot(uid)
+    chat_percent = 0.0
+    if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
+        chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
+    chat_allowed = chat_snapshot['allowed']
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -934,52 +1015,58 @@ def get_user_subscription_endpoint(
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
+        chat_quota_used=round(chat_snapshot['used'], 4),
+        chat_quota_unit=chat_snapshot['unit'],
+        chat_quota_percent=chat_percent,
+        chat_quota_allowed=chat_allowed,
+        chat_quota_reset_at=chat_snapshot['reset_at'],
     )
-
-
-# **************************************
-# ****** Daily Summary Settings ********
-# **************************************
 
 
 @router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
 def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
     """Current-month chat usage for the user, plus their plan's cap.
 
-    - Free / Plus: counted in questions (user-initiated chat turns)
-    - Pro: counted in dollar spend on desktop chat
-    - Resets at the start of each UTC month
+    Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
-    subscription = get_user_valid_subscription(uid)
-    plan = subscription.plan if subscription else PlanType.basic
-    limits = get_plan_limits(plan)
-    usage = user_usage_db.get_monthly_chat_usage(uid)
+    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
+    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
+    # Mobile (no headers) should see real quota.
+    if users_db.is_byok_active(uid) and has_byok_keys():
+        return ChatUsageQuota(
+            plan='Free (BYOK)',
+            plan_type=PlanType.unlimited.value,
+            unit=ChatQuotaUnit.questions,
+            used=0.0,
+            limit=None,
+            percent=0.0,
+            allowed=True,
+            reset_at=None,
+        )
 
-    if limits.chat_cost_usd_per_month is not None:
-        unit = ChatQuotaUnit.cost_usd
-        used = float(usage['cost_usd'])
-        limit_value = float(limits.chat_cost_usd_per_month)
+    snapshot = get_chat_quota_snapshot(uid)
+    plan = snapshot['plan']
+
+    if snapshot['limit'] is not None and snapshot['limit'] > 0:
+        percent = min(100.0, round(100.0 * snapshot['used'] / snapshot['limit'], 2))
     else:
-        unit = ChatQuotaUnit.questions
-        used = float(usage['questions'])
-        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
-
-    percent = 0.0
-    allowed = True
-    if limit_value is not None and limit_value > 0:
-        percent = min(100.0, round(100.0 * used / limit_value, 2))
-        allowed = used < limit_value
+        percent = 0.0
 
     return ChatUsageQuota(
         plan=get_plan_display_name(plan),
         plan_type=plan.value,
-        unit=unit,
-        used=round(used, 4),
-        limit=limit_value,
+        unit=ChatQuotaUnit(snapshot['unit']),
+        used=round(snapshot['used'], 4),
+        limit=snapshot['limit'],
         percent=percent,
-        allowed=allowed,
-        reset_at=usage['reset_at'],
+        allowed=snapshot['allowed'],
+        reset_at=snapshot['reset_at'],
     )
+
+
+# **************************************
+# ****** Daily Summary Settings ********
+# **************************************
 
 
 class DailySummarySettingsResponse(BaseModel):
@@ -1401,12 +1488,18 @@ class MemoryAssistantSettings(BaseModel):
     excluded_apps: list[str] | None = None
 
 
+class FloatingBarSettings(BaseModel):
+    voice_answers_enabled: bool | None = None
+    elevenlabs_voice_id: str | None = Field(None, max_length=200)
+
+
 class UpdateAssistantSettingsRequest(BaseModel):
     shared: SharedAssistantSettings | None = None
     focus: FocusAssistantSettings | None = None
     task: TaskAssistantSettings | None = None
     advice: AdviceAssistantSettings | None = None
     memory: MemoryAssistantSettings | None = None
+    floating_bar: FloatingBarSettings | None = None
     update_channel: str | None = Field(None, max_length=50)
 
 

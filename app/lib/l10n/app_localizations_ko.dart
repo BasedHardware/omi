@@ -4481,10 +4481,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get alreadyBestValuePlan => '이미 가장 가성비 좋은 플랜을 사용 중입니다. 변경이 필요하지 않습니다.';
 
   @override
-  String get unableToLoadPlans => '플랜을 로드할 수 없습니다';
+  String get unableToLoadPlans => '플랜을 불러올 수 없습니다';
 
   @override
-  String get checkConnectionTryAgain => '연결을 확인하고 다시 시도해 주세요';
+  String get checkConnectionTryAgain => '연결을 확인하고 다시 시도하세요';
 
   @override
   String get useFreePlan => '무료 플랜 사용';
@@ -5003,7 +5003,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      '계속하면 이 앱과 공유하는 모든 데이터(대화, 녹음, 개인 정보 포함)가 당사 서버에 안전하게 저장되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
+      '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
   String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
@@ -8683,6 +8683,18 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => '배터리';
+
+  @override
+  String get noBatteryDataYet => '아직 배터리 데이터가 없습니다';
+
+  @override
+  String get day => '일';
+
+  @override
+  String get week => '주';
+
+  @override
   String get rollbackToStableFirmware => '안정 펌웨어로 롤백';
 
   @override
@@ -8873,4 +8885,109 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => '유료 플랜을 사용 중입니다.';
+
+  @override
+  String get chatTitle => '채팅';
+
+  @override
+  String get chatMessages => '메시지';
+
+  @override
+  String get unlimitedChatThisMonth => '이번 달 무제한 채팅 메시지';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit 컴퓨트 예산 사용됨';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '이번 달 $used / $limit 메시지 사용됨';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit 사용됨';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => '채팅 한도에 도달했습니다. 업그레이드하세요.';
+
+  @override
+  String get chatLimitReachedTitle => '채팅 한도 도달';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan 플랜에서 $limitDisplay 중 $used을 사용했습니다.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count일 후 초기화';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count시간 후 초기화';
+  }
+
+  @override
+  String get resetsSoon => '곧 초기화';
+
+  @override
+  String get upgradePlan => '플랜 업그레이드';
+
+  @override
+  String get billingMonthly => '월간';
+
+  @override
+  String get billingYearly => '연간';
+
+  @override
+  String get savePercent => '~17% 절약';
+
+  @override
+  String get popular => '인기';
+
+  @override
+  String get currentPlan => '현재';
+
+  @override
+  String neoSubtitle(int count) {
+    return '월 $count개 질문';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '월 $count개 질문';
+  }
+
+  @override
+  String get architectSubtitle => '파워유저 AI — 수천 건의 채팅 + 에이전트 자동화';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return '채팅: \$$used / \$$limit 이번 달 사용량';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return '채팅: \$$used 이번 달 사용량';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return '채팅: $used / $limit 이번 달 메시지';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return '채팅: $used 이번 달 메시지';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => '월간 한도에 도달했습니다. 제한 없이 Omi와 계속 채팅하려면 업그레이드하세요.';
 }

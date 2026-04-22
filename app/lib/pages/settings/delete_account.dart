@@ -56,15 +56,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
   ];
 
   String _label(String key) => switch (key) {
-        'privacy_concerns' => context.l10n.deleteReasonPrivacy,
-        'not_using_enough' => context.l10n.deleteReasonNotUsing,
-        'missing_features' => context.l10n.deleteReasonMissingFeatures,
-        'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
-        'found_alternative' => context.l10n.deleteReasonFoundAlternative,
-        'taking_break' => context.l10n.deleteReasonTakingBreak,
-        'other' => context.l10n.deleteReasonOther,
-        _ => key,
-      };
+    'privacy_concerns' => context.l10n.deleteReasonPrivacy,
+    'not_using_enough' => context.l10n.deleteReasonNotUsing,
+    'missing_features' => context.l10n.deleteReasonMissingFeatures,
+    'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
+    'found_alternative' => context.l10n.deleteReasonFoundAlternative,
+    'taking_break' => context.l10n.deleteReasonTakingBreak,
+    'other' => context.l10n.deleteReasonOther,
+    _ => key,
+  };
 
   void _next() {
     if (_page < 2) {
@@ -179,8 +179,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.l10n.deleteFlowReasonTitle,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+              Text(
+                context.l10n.deleteFlowReasonTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               Text(context.l10n.deleteFlowReasonSubtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 15)),
             ],
@@ -217,8 +219,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
-                child: Text(context.l10n.continueButton,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                child: Text(
+                  context.l10n.continueButton,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -253,8 +257,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(_label(reason.key),
-                  style: TextStyle(color: selected ? Colors.white : Colors.grey.shade400, fontSize: 15)),
+              child: Text(
+                _label(reason.key),
+                style: TextStyle(color: selected ? Colors.white : Colors.grey.shade400, fontSize: 15),
+              ),
             ),
             Icon(
               selected ? Icons.check_circle_rounded : Icons.circle_outlined,
@@ -278,11 +284,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.l10n.deleteFlowFeedbackTitle,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+              Text(
+                context.l10n.deleteFlowFeedbackTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
-              Text(context.l10n.deleteFlowFeedbackSubtitle,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 15)),
+              Text(
+                context.l10n.deleteFlowFeedbackSubtitle,
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
+              ),
             ],
           ),
         ),
@@ -300,11 +310,17 @@ class _DeleteAccountState extends State<DeleteAccount> {
               filled: true,
               fillColor: Colors.grey.shade900.withValues(alpha: 0.5),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade800)),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade800),
+              ),
               enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade800)),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade800),
+              ),
               focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade600)),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade600),
+              ),
               counterStyle: TextStyle(color: Colors.grey.shade700),
               contentPadding: const EdgeInsets.all(16),
             ),
@@ -328,8 +344,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text(context.l10n.continueButton,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      context.l10n.continueButton,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -362,8 +380,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.l10n.deleteFlowConfirmTitle,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+              Text(
+                context.l10n.deleteFlowConfirmTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               Text(context.l10n.deleteFlowConfirmSubtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 15)),
             ],
@@ -408,27 +428,39 @@ class _DeleteAccountState extends State<DeleteAccount> {
               _featureRow(FontAwesomeIcons.fileArrowDown, context.l10n.exportBeforeDelete),
               _featureRow(FontAwesomeIcons.ban, context.l10n.deleteConsequenceNoRecovery),
               const SizedBox(height: 16),
-              Text(context.l10n.deleteTypeToConfirm,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(
+                context.l10n.deleteTypeToConfirm,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 10),
               TextField(
                 controller: _confirmController,
                 enabled: !_isDeleting,
                 textCapitalization: TextCapitalization.characters,
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]'))],
-                style:
-                    const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 2),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 2,
+                ),
                 decoration: InputDecoration(
                   hintText: confirmWord,
                   hintStyle: TextStyle(color: Colors.grey.shade700, letterSpacing: 2),
                   filled: true,
                   fillColor: Colors.grey.shade900.withValues(alpha: 0.5),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade800)),
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade800),
+                  ),
                   enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade800)),
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.grey.shade800),
+                  ),
                   focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.red.shade600)),
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: Colors.red.shade600),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
               ),
@@ -457,8 +489,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: Text(context.l10n.keepMyAccount,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      context.l10n.keepMyAccount,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -506,11 +540,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: Colors.grey.shade800.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
+                color: Colors.grey.shade800.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Center(child: FaIcon(icon, size: 14, color: Colors.grey.shade500)),
             ),
             const SizedBox(width: 14),
-            Expanded(child: Text(text, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.3))),
+            Expanded(
+              child: Text(text, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.3)),
+            ),
           ],
         ),
       ),

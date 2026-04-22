@@ -1,15 +1,19 @@
+import asyncio
 import json
 import os
 import time
 
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
+from starlette.websockets import WebSocket
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database.users import record_user_platform
+from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
@@ -48,8 +52,19 @@ def verify_token(token: str) -> str:
         raise
 
 
-def get_current_user_uid(authorization: str = Header(None)):
-    """FastAPI dependency for HTTP endpoints with Authorization header."""
+def get_current_user_uid(
+    authorization: str = Header(None),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+):
+    """FastAPI dependency for HTTP endpoints with Authorization header.
+
+    Side-effect: records the signup/last-active platform for the user via
+    `record_user_platform`, which is throttled via Redis to one Firestore
+    write per (uid, platform) every 10 minutes. Failures here never fail the
+    request — it's telemetry, not auth.
+
+    Also validates BYOK headers against Firestore enrollment (if applicable).
+    """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -57,10 +72,53 @@ def get_current_user_uid(authorization: str = Header(None)):
 
     try:
         token = authorization.split(' ')[1]
-        return verify_token(token)
+        uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    try:
+        record_user_platform(uid, x_app_platform)
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    # Validate BYOK keys against Firestore enrollment for ALL authenticated
+    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
+    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
+    # headers are present.
+    validate_byok_request(uid)
+
+    return uid
+
+
+def get_current_user_uid_no_byok_validation(
+    authorization: str = Header(None),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+):
+    """Auth dependency that skips BYOK fingerprint validation.
+
+    Used ONLY by the BYOK activation/deactivation endpoints — those need to
+    update Firestore fingerprints, so validating the old fingerprints first
+    would deadlock key rotation.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header not found")
+    elif len(str(authorization).split(' ')) != 2:
+        raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    try:
+        token = authorization.split(' ')[1]
+        uid = verify_token(token)
+    except InvalidIdTokenError as e:
+        logger.error(e)
+        raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    try:
+        record_user_platform(uid, x_app_platform)
+    except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
+        logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
+
+    return uid
 
 
 def _verify_ws_auth(authorization: str) -> str:
@@ -85,13 +143,39 @@ def _verify_ws_auth(authorization: str) -> str:
         raise WebSocketException(code=1008, reason="Auth error")
 
 
-def get_current_user_uid_ws_listen(authorization: str = Header(None)):
+async def get_current_user_uid_ws_listen(
+    websocket: WebSocket = None,
+    authorization: str = Header(None),
+):
     """WebSocket auth for /v4/listen — NO rate limiting.
 
     Mobile apps reconnect legitimately on network switch / backgrounding,
     so the per-UID rate limiter must not block them.
+
+    Also extracts BYOK headers from the WS upgrade request and validates
+    them against Firestore enrollment (BaseHTTPMiddleware doesn't fire for
+    WebSocket scope, so this is the shared entry point for WS BYOK).
+
+    **Why async:** Starlette runs sync WS deps in a worker thread via
+    ``anyio.to_thread.run_sync``, which copies the context. ContextVar
+    mutations inside the sync dep (``set_byok_keys``) are discarded when
+    control returns to the async handler, so ``get_byok_key('deepgram')``
+    would return None downstream. Running the dep on the event loop keeps
+    the mutation in the handler's context; the blocking Firebase and
+    Firestore calls are offloaded via ``asyncio.to_thread``.
     """
-    return _verify_ws_auth(authorization)
+    uid = await asyncio.to_thread(_verify_ws_auth, authorization)
+
+    # Extract BYOK headers from the WS upgrade request and validate.
+    if websocket is not None:
+        byok_keys = extract_byok_from_websocket(websocket)
+        if byok_keys:
+            set_byok_keys(byok_keys)
+        error = await asyncio.to_thread(validate_byok_websocket, uid)
+        if error:
+            raise WebSocketException(code=4003, reason=error)
+
+    return uid
 
 
 def get_current_user_uid_ws(authorization: str = Header(None)):

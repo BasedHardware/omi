@@ -1795,7 +1795,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get rateOnGooglePlay => 'Ocenite v Google Play';
 
   @override
-  String get maybeLater => 'Morda kasneje';
+  String get maybeLater => 'Morda pozneje';
 
   @override
   String get speechProfileIntro => 'Omi mora spoznati vaše cilje in vaš glas. Pozneje ga boste lahko spremenili.';
@@ -4570,10 +4570,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get alreadyBestValuePlan => 'Že imate najboljši načrt z največjo vrednostjo. Nobenih sprememb ni potrebnih.';
 
   @override
-  String get unableToLoadPlans => 'Ni mogoče naložiti načrtov';
+  String get unableToLoadPlans => 'Načrtov ni mogoče naložiti';
 
   @override
-  String get checkConnectionTryAgain => 'Prosimo, preverite svojo povezavo in poskusite ponovno';
+  String get checkConnectionTryAgain => 'Preverite povezavo in poskusite znova';
 
   @override
   String get useFreePlan => 'Uporabite brezplačni načrt';
@@ -5110,7 +5110,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'S nadaljevanjem bodo vsi podatki, ki jih delite s to aplikacijo (vključno s pogovori, posnetki in osebnimi informacijami), varno shranjeni na naših strežnikih, da vam zagotovimo umetnostno inteligenco in omogočimo vse funkcije aplikacije.';
+      'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -8853,6 +8853,18 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Baterija';
+
+  @override
+  String get noBatteryDataYet => 'Še ni podatkov o bateriji';
+
+  @override
+  String get day => 'Dan';
+
+  @override
+  String get week => 'Teden';
+
+  @override
   String get rollbackToStableFirmware => 'Povrni na stabilno vdelano programsko opremo';
 
   @override
@@ -9045,4 +9057,110 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Imate plačljiv načrt.';
+
+  @override
+  String get chatTitle => 'Klepet';
+
+  @override
+  String get chatMessages => 'sporočil';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neomejeno število sporočil ta mesec';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used od $limit proračuna porabljeno';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used od $limit sporočil porabljenih ta mesec';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit porabljeno';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Dosežena omejitev klepeta. Nadgradite za več sporočil.';
+
+  @override
+  String get chatLimitReachedTitle => 'Dosežena omejitev klepeta';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Porabili ste $used od $limitDisplay na načrtu $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Ponastavitev čez $count dni';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Ponastavitev čez $count ur';
+  }
+
+  @override
+  String get resetsSoon => 'Kmalu se ponastavi';
+
+  @override
+  String get upgradePlan => 'Nadgradi načrt';
+
+  @override
+  String get billingMonthly => 'Mesečno';
+
+  @override
+  String get billingYearly => 'Letno';
+
+  @override
+  String get savePercent => 'Prihranite ~17%';
+
+  @override
+  String get popular => 'Priljubljeno';
+
+  @override
+  String get currentPlan => 'Trenutni';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count vprašanj na mesec';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count vprašanj na mesec';
+  }
+
+  @override
+  String get architectSubtitle => 'Napreden AI — tisoče pogovorov + agentna avtomatizacija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Klepet: \$$used / \$$limit porabljeno ta mesec';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Klepet: \$$used porabljeno ta mesec';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Klepet: $used / $limit sporočil ta mesec';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Klepet: $used sporočil ta mesec';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Dosegli ste svojo mesečno omejitev. Nadgradite, da nadaljujete pogovor z Omi brez omejitev.';
 }

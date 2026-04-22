@@ -245,6 +245,53 @@ class BleDisconnectEvent {
 ;
 }
 
+/// A single battery level reading persisted by the native BLE layer.
+class BleBatteryPoint {
+  BleBatteryPoint({
+    required this.timestamp,
+    required this.level,
+  });
+
+  int timestamp;
+
+  int level;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      timestamp,
+      level,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static BleBatteryPoint decode(Object result) {
+    result as List<Object?>;
+    return BleBatteryPoint(
+      timestamp: result[0]! as int,
+      level: result[1]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! BleBatteryPoint || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 /// Diagnostics data read from native preferences on demand.
 class BleDeviceDiagnostics {
   BleDeviceDiagnostics({
@@ -321,8 +368,11 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BleDisconnectEvent) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is BleDeviceDiagnostics) {
+    }    else if (value is BleBatteryPoint) {
       buffer.putUint8(132);
+      writeValue(buffer, value.encode());
+    }    else if (value is BleDeviceDiagnostics) {
+      buffer.putUint8(133);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -339,6 +389,8 @@ class _PigeonCodec extends StandardMessageCodec {
       case 131: 
         return BleDisconnectEvent.decode(readValue(buffer)!);
       case 132: 
+        return BleBatteryPoint.decode(readValue(buffer)!);
+      case 133: 
         return BleDeviceDiagnostics.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1327,6 +1379,34 @@ class BleHostApi {
       );
     } else {
       return (pigeonVar_replyList[0] as BleDeviceDiagnostics?)!;
+    }
+  }
+
+  Future<List<BleBatteryPoint>> getBatteryHistory(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<BleBatteryPoint>();
     }
   }
 

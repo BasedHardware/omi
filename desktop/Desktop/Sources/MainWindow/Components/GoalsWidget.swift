@@ -39,7 +39,7 @@ struct GoalsWidget: View {
             if goals.isEmpty {
                 // Empty state — header already has a + button, so just offer
                 // the AI generation action centered in the empty area.
-                VStack {
+                VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
                     Button(action: { triggerGoalGeneration() }) {
@@ -67,25 +67,34 @@ struct GoalsWidget: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Goals list
-                VStack(spacing: 14) {
-                    ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
-                        GoalRowView(
-                            goal: goal,
-                            index: index,
-                            onTap: { editingGoal = goal },
-                            onUpdateProgress: { value in onUpdateProgress(goal, value) },
-                            onDelete: { onDeleteGoal(goal) },
-                            onGetInsight: {
-                                selectedGoalForInsight = goal
-                            }
-                        )
+                // Goals list — centered vertically in remaining cell height
+                // so a shorter Goals list floats to the middle when the
+                // Tasks card determines the row's intrinsic height.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+
+                    VStack(spacing: 14) {
+                        ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
+                            GoalRowView(
+                                goal: goal,
+                                index: index,
+                                onTap: { editingGoal = goal },
+                                onUpdateProgress: { value in onUpdateProgress(goal, value) },
+                                onDelete: { onDeleteGoal(goal) },
+                                onGetInsight: {
+                                    selectedGoalForInsight = goal
+                                }
+                            )
+                        }
                     }
+
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .padding(22)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .omiPanel(fill: OmiColors.backgroundSecondary)
         .sheet(isPresented: $showingCreateSheet) {
             GoalEditSheet(

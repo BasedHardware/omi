@@ -1797,7 +1797,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get rateOnGooglePlay => 'Оцінити в Google Play';
 
   @override
-  String get maybeLater => 'Можливо, пізніше';
+  String get maybeLater => 'Можливо пізніше';
 
   @override
   String get speechProfileIntro => 'Omi потрібно вивчити ваші цілі та голос. Ви зможете змінити це пізніше.';
@@ -4567,10 +4567,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get alreadyBestValuePlan => 'У вас вже найвигідніший план. Зміни не потрібні.';
 
   @override
-  String get unableToLoadPlans => 'Не вдається завантажити плани';
+  String get unableToLoadPlans => 'Не вдалося завантажити плани';
 
   @override
-  String get checkConnectionTryAgain => 'Перевірте з\'єднання і спробуйте ще раз';
+  String get checkConnectionTryAgain => 'Перевірте підключення та спробуйте знову';
 
   @override
   String get useFreePlan => 'Використати безкоштовний план';
@@ -5105,7 +5105,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Продовжуючи, всі дані, якими ви ділитесь з цим додатком (включаючи ваші розмови, записи та особисту інформацію), будуть надійно зберігатися на наших серверах, щоб надавати вам аналітику на основі ШІ та увімкнути всі функції додатку.';
+      'Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.';
 
   @override
   String get tasksEmptyStateMessage => 'Завдання з ваших розмов з\'являться тут.\nНатисніть +, щоб створити вручну.';
@@ -8842,6 +8842,18 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Батарея';
+
+  @override
+  String get noBatteryDataYet => 'Даних про батарею ще немає';
+
+  @override
+  String get day => 'День';
+
+  @override
+  String get week => 'Тиждень';
+
+  @override
   String get rollbackToStableFirmware => 'Повернутися до стабільної прошивки';
 
   @override
@@ -9034,4 +9046,110 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ви на платному плані.';
+
+  @override
+  String get chatTitle => 'Чат';
+
+  @override
+  String get chatMessages => 'повідомлень';
+
+  @override
+  String get unlimitedChatThisMonth => 'Необмежені повідомлення в чаті цього місяця';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used з $limit обчислювального бюджету використано';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used з $limit повідомлень використано цього місяця';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit використано';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Ліміт чату досягнуто. Оновіть план для більше повідомлень.';
+
+  @override
+  String get chatLimitReachedTitle => 'Ліміт чату досягнуто';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Ви використали $used з $limitDisplay на плані $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Скидання через $count днів';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Скидання через $count годин';
+  }
+
+  @override
+  String get resetsSoon => 'Скоро скинеться';
+
+  @override
+  String get upgradePlan => 'Оновити план';
+
+  @override
+  String get billingMonthly => 'Щомісячно';
+
+  @override
+  String get billingYearly => 'Щорічно';
+
+  @override
+  String get savePercent => 'Заощаджуйте ~17%';
+
+  @override
+  String get popular => 'Популярний';
+
+  @override
+  String get currentPlan => 'Поточний';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count запитань на місяць';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count запитань на місяць';
+  }
+
+  @override
+  String get architectSubtitle => 'AI для просунутих — тисячі чатів + агентна автоматизація';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Чат: \$$used / \$$limit використано цього місяця';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Чат: \$$used використано цього місяця';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Чат: $used / $limit повідомлень цього місяця';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Чат: $used повідомлень цього місяця';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Ви досягли місячного ліміту. Оновіть, щоб продовжити спілкування з Omi без обмежень.';
 }

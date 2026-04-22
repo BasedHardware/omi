@@ -130,6 +130,14 @@ class BleDisconnectEvent {
   });
 }
 
+/// A single battery level reading persisted by the native BLE layer.
+class BleBatteryPoint {
+  final int timestamp;
+  final int level;
+
+  BleBatteryPoint({required this.timestamp, required this.level});
+}
+
 /// Diagnostics data read from native preferences on demand.
 class BleDeviceDiagnostics {
   final List<BleDisconnectEvent> disconnectHistory;
@@ -199,6 +207,10 @@ abstract class BleHostApi {
   @async
   @SwiftFunction('getDeviceDiagnostics(uuid:)')
   BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
+
+  @async
+  @SwiftFunction('getBatteryHistory(uuid:)')
+  List<BleBatteryPoint> getBatteryHistory(String uuid);
 
   /// (Android only) Check if any CompanionDeviceManager association exists.
   @SwiftFunction('hasCompanionDeviceAssociation()')

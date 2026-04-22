@@ -48,6 +48,12 @@ class UsageProvider with ChangeNotifier {
 
   bool _forceOutOfCredits = false;
 
+  // Chat quota derived from subscription response
+  double get chatQuotaUsed => _subscription?.chatQuotaUsed ?? 0.0;
+  String? get chatQuotaUnit => _subscription?.chatQuotaUnit;
+  double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
+  bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
+
   // Payment-related state
   Map<String, dynamic>? _availablePlans;
   Map<String, dynamic>? get availablePlans => _availablePlans;

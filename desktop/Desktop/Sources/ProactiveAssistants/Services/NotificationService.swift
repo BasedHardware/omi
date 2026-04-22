@@ -227,6 +227,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
         }
 
+        // Honor the floating-bar snooze for both the in-bar preview and the native
+        // macOS banner — the user opted into "no notifications for 2h".
+        if FloatingControlBarManager.shared.isSnoozed {
+            log("NotificationService: suppressing notification because floating bar is snoozed")
+            return
+        }
+
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,

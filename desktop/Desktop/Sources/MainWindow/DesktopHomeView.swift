@@ -115,6 +115,13 @@ struct DesktopHomeView: View {
                   },
                   onDismiss: {
                     appState.showUsageLimitPopup = false
+                  },
+                  onBringYourOwnKeys: {
+                    appState.showUsageLimitPopup = false
+                    selectedSettingsSection = .advanced
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                      selectedIndex = SidebarNavItem.settings.rawValue
+                    }
                   }
                 )
               }

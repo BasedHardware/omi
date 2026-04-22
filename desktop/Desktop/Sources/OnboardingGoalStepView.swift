@@ -7,6 +7,7 @@ struct OnboardingGoalStepView: View {
   let stepIndex: Int
   let totalSteps: Int
   let onContinue: () -> Void
+  let onSkip: () -> Void
   let onForceComplete: (() -> Void)?
 
   @State private var customGoalSelected = false
@@ -22,6 +23,8 @@ struct OnboardingGoalStepView: View {
       title: "Pick one goal.",
       description:
         "Selecting a correct and detailed goal is very important - Omi will optimize all advice to achieve that goal. Make sure your goal contains a number to measure progress.",
+      showsSkip: true,
+      onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 18) {

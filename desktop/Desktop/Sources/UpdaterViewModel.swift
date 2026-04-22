@@ -224,10 +224,24 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       return false
     }
 
+    if let lastSpeech = VADGateService.lastSpeechAt {
+      let secondsSinceSpeech = Date().timeIntervalSince(lastSpeech)
+      if secondsSinceSpeech < UpdaterDelegate.activeCallSilenceWindow {
+        logSync(
+          "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
+        )
+        return false
+      }
+    }
+
     logSync("Sparkle: Triggering immediate installation for v\(version)")
     installationBlock()
     return true
   }
+
+  /// Minimum seconds of VAD silence required before an auto-install is allowed.
+  /// Matches the typical pause threshold at which a real conversation has wound down.
+  fileprivate static let activeCallSilenceWindow: TimeInterval = 120
 }
 
 /// View model for managing Sparkle auto-updates

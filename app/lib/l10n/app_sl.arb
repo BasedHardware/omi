@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Morda kasneje",
+    "maybeLater": "Morda pozneje",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Ni mogoče naložiti načrtov",
+    "unableToLoadPlans": "Načrtov ni mogoče naložiti",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Prosimo, preverite svojo povezavo in poskusite ponovno",
+    "checkConnectionTryAgain": "Preverite povezavo in poskusite znova",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "S nadaljevanjem bodo vsi podatki, ki jih delite s to aplikacijo (vključno s pogovori, posnetki in osebnimi informacijami), varno shranjeni na naših strežnikih, da vam zagotovimo umetnostno inteligenco in omogočimo vse funkcije aplikacije.",
+    "consentDataMessage": "Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "Imate plačljiv načrt.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Klepet",
+    "chatMessages": "sporočil",
+    "unlimitedChatThisMonth": "Neomejeno število sporočil ta mesec",
+    "chatUsedOfLimitCompute": "{used} od {limit} proračuna porabljeno",
+    "chatUsedOfLimitMessages": "{used} od {limit} sporočil porabljenih ta mesec",
+    "chatUsageProgress": "{used} / {limit} porabljeno",
+    "chatLimitReachedUpgrade": "Dosežena omejitev klepeta. Nadgradite za več sporočil.",
+    "chatLimitReachedTitle": "Dosežena omejitev klepeta",
+    "chatUsageDescription": "Porabili ste {used} od {limitDisplay} na načrtu {plan}.",
+    "resetsInDays": "Ponastavitev čez {count} dni",
+    "resetsInHours": "Ponastavitev čez {count} ur",
+    "resetsSoon": "Kmalu se ponastavi",
+    "upgradePlan": "Nadgradi načrt",
+    "billingMonthly": "Mesečno",
+    "billingYearly": "Letno",
+    "savePercent": "Prihranite ~17%",
+    "popular": "Priljubljeno",
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} vprašanj na mesec",
+    "operatorSubtitle": "{count} vprašanj na mesec",
+    "architectSubtitle": "Napreden AI — tisoče pogovorov + agentna avtomatizacija",
+    "chatUsageCost": "Klepet: ${used} / ${limit} porabljeno ta mesec",
+    "chatUsageCostNoLimit": "Klepet: ${used} porabljeno ta mesec",
+    "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
+    "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Dosegli ste svojo mesečno omejitev. Nadgradite, da nadaljujete pogovor z Omi brez omejitev.",
+    "batteryHistory": "Baterija",
+    "day": "Dan",
+    "noBatteryDataYet": "Še ni podatkov o bateriji",
+    "week": "Teden"
 }

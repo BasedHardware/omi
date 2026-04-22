@@ -1802,7 +1802,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get rateOnGooglePlay => 'Mag-rate sa Google Play';
 
   @override
-  String get maybeLater => 'Siguro Mamaya';
+  String get maybeLater => 'Siguro mamaya';
 
   @override
   String get speechProfileIntro =>
@@ -4602,10 +4602,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get alreadyBestValuePlan => 'Mayroon ka na ng pinakamahusay na value plan. Walang pagbabago na kailangan.';
 
   @override
-  String get unableToLoadPlans => 'Hindi maaaring i-load ang mga plano';
+  String get unableToLoadPlans => 'Hindi ma-load ang mga plan';
 
   @override
-  String get checkConnectionTryAgain => 'Mangyaring suriin ang iyong koneksyon at subukan ulit';
+  String get checkConnectionTryAgain => 'Suriin ang koneksyon at subukan ulit';
 
   @override
   String get useFreePlan => 'Gamitin ang Free Plan';
@@ -5142,7 +5142,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Sa pamamagitan ng pagpatuloy, ang lahat ng data na ibinabahagi mo sa app na ito (kabilang ang iyong mga pag-uusap, mga recordings, at personal na impormasyon) ay magiging secure na naka-store sa aming mga servers upang magbigay sa iyo ng AI-powered insights at paganahin ang lahat ng app features.';
+      'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -8909,6 +8909,18 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Baterya';
+
+  @override
+  String get noBatteryDataYet => 'Wala pang datos ng baterya';
+
+  @override
+  String get day => 'Araw';
+
+  @override
+  String get week => 'Linggo';
+
+  @override
   String get rollbackToStableFirmware => 'Bumalik sa Stable Firmware';
 
   @override
@@ -9106,4 +9118,110 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get youAreOnAPaidPlan => 'Ikaw ay nasa bayad na plano.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'mensahe';
+
+  @override
+  String get unlimitedChatThisMonth => 'Walang limitasyon sa mensahe ngayong buwan';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used sa $limit compute budget nagamit';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used sa $limit mensahe nagamit ngayong buwan';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit nagamit';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Naabot na ang limitasyon ng chat. Mag-upgrade para sa mas maraming mensahe.';
+
+  @override
+  String get chatLimitReachedTitle => 'Naabot na ang limitasyon ng chat';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Ginamit mo na ang $used sa $limitDisplay sa $plan plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Magre-reset sa $count araw';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Magre-reset sa $count oras';
+  }
+
+  @override
+  String get resetsSoon => 'Magre-reset na';
+
+  @override
+  String get upgradePlan => 'I-upgrade ang plan';
+
+  @override
+  String get billingMonthly => 'Buwanan';
+
+  @override
+  String get billingYearly => 'Taunan';
+
+  @override
+  String get savePercent => 'Makatipid ~17%';
+
+  @override
+  String get popular => 'Sikat';
+
+  @override
+  String get currentPlan => 'Kasalukuyan';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count tanong bawat buwan';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count tanong bawat buwan';
+  }
+
+  @override
+  String get architectSubtitle => 'Power-user AI — libu-libong chat + agentic automation';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit nagamit ngayong buwan';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used nagamit ngayong buwan';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit mensahe ngayong buwan';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used mensahe ngayong buwan';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.';
 }

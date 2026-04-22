@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "బహుశా తరువాత",
+    "maybeLater": "బహుశా తర్వాత",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "ప్లాన్‌లను లోడ్ చేయలేకపోయాను",
+    "unableToLoadPlans": "ప్లాన్‌లు లోడ్ చేయలేకపోయాము",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "దయచేసి మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి",
+    "checkConnectionTryAgain": "కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "కొనసాగించడం ద్వారా, ఈ అనువర్తనకు మీరు భాగస్వామ్యం చేసిన అన్ని డేటా (మీ సంభాషణలు, రికార్డింగ్‌లు మరియు వ్యక్తిగత సమాచారం సహా) AI-శక్తిచేసిన సమాచారం అందించడానికి మరియు అన్ని అనువర్తన లక్షణాలను ప్రారంభించడానికి మా సర్వర్‌లలో సురక్షితంగా నిల్వ చేయబడుతుంది.",
+    "consentDataMessage": "కొనసాగించడం ద్వారా, మీ సంభాషణలు, రికార్డింగ్‌లు మరియు వ్యక్తిగత సమాచారం మా సర్వర్‌లలో సురక్షితంగా నిల్వ చేయబడతాయి. మీ ఆడియో రికార్డింగ్‌లు మరియు ట్రాన్‌స్క్రిప్ట్‌లు థర్డ్-పార్టీ AI సేవల ద్వారా ప్రాసెస్ చేయబడతాయి (ట్రాన్‌స్క్రిప్షన్ కోసం Deepgram మరియు విశ్లేషణ కోసం OpenAI సహా) AI-ఆధారిత అంతర్దృష్టులను అందించడానికి మరియు అన్ని యాప్ ఫీచర్‌లను ప్రారంభించడానికి.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "మీరు చెల్లింపు ప్లాన్‌లో ఉన్నారు.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "చాట్",
+    "chatMessages": "సందేశాలు",
+    "unlimitedChatThisMonth": "ఈ నెల అపరిమిత చాట్ సందేశాలు",
+    "chatUsedOfLimitCompute": "{used} / {limit} కంప్యూట్ బడ్జెట్ వాడారు",
+    "chatUsedOfLimitMessages": "ఈ నెల {used} / {limit} సందేశాలు వాడారు",
+    "chatUsageProgress": "{used} / {limit} వాడారు",
+    "chatLimitReachedUpgrade": "చాట్ పరిమితి చేరుకుంది. మరిన్ని సందేశాల కోసం అప్‌గ్రేడ్ చేయండి.",
+    "chatLimitReachedTitle": "చాట్ పరిమితి చేరుకుంది",
+    "chatUsageDescription": "{plan} ప్లాన్‌లో {limitDisplay} నుండి {used} వాడారు.",
+    "resetsInDays": "{count} రోజుల్లో రీసెట్ అవుతుంది",
+    "resetsInHours": "{count} గంటల్లో రీసెట్ అవుతుంది",
+    "resetsSoon": "త్వరలో రీసెట్ అవుతుంది",
+    "upgradePlan": "ప్లాన్ అప్‌గ్రేడ్",
+    "billingMonthly": "నెలవారీ",
+    "billingYearly": "సంవత్సరానికి",
+    "savePercent": "~17% ఆదా చేయండి",
+    "popular": "ప్రజాదరణ",
+    "currentPlan": "ప్రస్తుత",
+    "neoSubtitle": "నెలకు {count} ప్రశ్నలు",
+    "operatorSubtitle": "నెలకు {count} ప్రశ్నలు",
+    "architectSubtitle": "పవర్-యూజర్ AI — వేల చాట్‌లు + ఏజెంటిక్ ఆటోమేషన్",
+    "chatUsageCost": "చాట్: ${used} / ${limit} ఈ నెల ఉపయోగించబడింది",
+    "chatUsageCostNoLimit": "చాట్: ${used} ఈ నెల ఉపయోగించబడింది",
+    "chatUsageMessages": "చాట్: {used} / {limit} సందేశాలు ఈ నెల",
+    "chatUsageMessagesNoLimit": "చాట్: {used} సందేశాలు ఈ నెల",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "మీరు మీ నెలవారీ పరిమితిని చేరుకున్నారు. పరిమితులు లేకుండా Omi తో చాట్ కొనసాగించడానికి అప్‌గ్రేడ్ చేయండి.",
+    "batteryHistory": "బ్యాటరీ",
+    "day": "రోజు",
+    "noBatteryDataYet": "ఇంకా బ్యాటరీ డేటా లేదు",
+    "week": "వారం"
 }

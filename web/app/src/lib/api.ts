@@ -67,6 +67,7 @@ async function fetchWithAuth<T>(
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "X-App-Platform": "web",
         ...options.headers,
       },
     });
@@ -642,6 +643,7 @@ export async function sendMessageStream(
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      "X-App-Platform": "web",
     },
     body: JSON.stringify({
       text,
@@ -1130,6 +1132,7 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          "X-App-Platform": "web",
         },
       },
     );
@@ -1154,6 +1157,7 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "X-App-Platform": "web",
       },
     });
 

@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не могу да учитам планове",
+    "unableToLoadPlans": "Није могуће учитати планове",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Молим вас, проверите вашу везу и покушајте поново",
+    "checkConnectionTryAgain": "Проверите везу и покушајте поново",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Наставком, сви подаци које делиш са овом апликацијом (укључујући твоје разговоре, снимања и личне информације) биће безбедно чувани на нашим серверима да бисмо вам пружили утицаје који се могу унапредити и омогућили све функције апликације.",
+    "consentDataMessage": "Настављањем, ваши разговори, снимци и лични подаци биће безбедно ускладиштени на нашим серверима. Ваши аудио снимци и транскрипти се обрађују од стране AI сервиса трећих страна (укључујући Deepgram за транскрипцију и OpenAI за анализу) како би вам пружили увиде засноване на вештачкој интелигенцији и омогућили све функције апликације.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "На плаћеном сте плану.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Ћаскање",
+    "chatMessages": "порука",
+    "unlimitedChatThisMonth": "Неограничене поруке овог месеца",
+    "chatUsedOfLimitCompute": "{used} од {limit} буџета за рачунање искоришћено",
+    "chatUsedOfLimitMessages": "{used} од {limit} порука искоришћено овог месеца",
+    "chatUsageProgress": "{used} / {limit} искоришћено",
+    "chatLimitReachedUpgrade": "Лимит ћаскања достигнут. Надоградите за више порука.",
+    "chatLimitReachedTitle": "Лимит ћаскања достигнут",
+    "chatUsageDescription": "Искористили сте {used} од {limitDisplay} на плану {plan}.",
+    "resetsInDays": "Ресетује се за {count} дана",
+    "resetsInHours": "Ресетује се за {count} сати",
+    "resetsSoon": "Ускоро се ресетује",
+    "upgradePlan": "Надогради план",
+    "billingMonthly": "Месечно",
+    "billingYearly": "Годишње",
+    "savePercent": "Уштедите ~17%",
+    "popular": "Популарно",
+    "currentPlan": "Тренутни",
+    "neoSubtitle": "{count} питања месечно",
+    "operatorSubtitle": "{count} питања месечно",
+    "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација",
+    "chatUsageCost": "Ћаскање: ${used} / ${limit} искоришћено овог месеца",
+    "chatUsageCostNoLimit": "Ћаскање: ${used} искоришћено овог месеца",
+    "chatUsageMessages": "Ћаскање: {used} / {limit} порука овог месеца",
+    "chatUsageMessagesNoLimit": "Ћаскање: {used} порука овог месеца",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Достигли сте свој месечни лимит. Надоградите да наставите да разговарате са Omi без ограничења.",
+    "batteryHistory": "Батерија",
+    "day": "Дан",
+    "noBatteryDataYet": "Још нема података о батерији",
+    "week": "Недеља"
 }

@@ -115,7 +115,19 @@ struct FloatingControlBarView: View {
         .clipped()
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
+        .contextMenu {
+            barContextMenu
+        }
         .onHover(perform: handleBarHover)
+    }
+
+    @ViewBuilder
+    private var barContextMenu: some View {
+        Button("Disable for 2 hours") {
+            FloatingControlBarManager.shared.snooze(
+                for: FloatingControlBarManager.snoozeTwoHoursDuration
+            )
+        }
     }
 
     private var conversationView: some View {

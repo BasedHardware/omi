@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "পরিকল্পনা লোড করতে অক্ষম",
+    "unableToLoadPlans": "প্ল্যান লোড করা যায়নি",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "দয়া করে আপনার সংযোগ পরীক্ষা করুন এবং আবার চেষ্টা করুন",
+    "checkConnectionTryAgain": "সংযোগ পরীক্ষা করুন এবং আবার চেষ্টা করুন",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "চালিয়ে যাওয়ার মাধ্যমে, এই অ্যাপের সাথে আপনি যে সমস্ত ডেটা শেয়ার করেন (আপনার কথোপকথন, রেকর্ডিং এবং ব্যক্তিগত তথ্য সহ) আমাদের সার্ভারগুলিতে সুরক্ষিতভাবে সংরক্ষিত হবে যাতে আপনাকে AI-চালিত অন্তর্দৃষ্টি প্রদান করতে এবং সমস্ত অ্যাপ বৈশিষ্ট্য সক্ষম করতে পারে।",
+    "consentDataMessage": "চালিয়ে যাওয়ার মাধ্যমে, আপনার কথোপকথন, রেকর্ডিং এবং ব্যক্তিগত তথ্য আমাদের সার্ভারে নিরাপদে সংরক্ষণ করা হবে। আপনার অডিও রেকর্ডিং এবং ট্রান্সক্রিপ্ট তৃতীয় পক্ষের AI পরিষেবা দ্বারা প্রক্রিয়া করা হয় (ট্রান্সক্রিপশনের জন্য Deepgram এবং বিশ্লেষণের জন্য OpenAI সহ) যাতে আপনাকে AI-চালিত অন্তর্দৃষ্টি প্রদান করা যায় এবং সমস্ত অ্যাপ বৈশিষ্ট্য সক্ষম করা যায়।",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "আপনি একটি পেইড প্ল্যানে আছেন।",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "চ্যাট",
+    "chatMessages": "বার্তা",
+    "unlimitedChatThisMonth": "এই মাসে সীমাহীন চ্যাট বার্তা",
+    "chatUsedOfLimitCompute": "{used} / {limit} কম্পিউট বাজেট ব্যবহৃত",
+    "chatUsedOfLimitMessages": "এই মাসে {used} / {limit} বার্তা ব্যবহৃত",
+    "chatUsageProgress": "{used} / {limit} ব্যবহৃত",
+    "chatLimitReachedUpgrade": "চ্যাট সীমা পৌঁছেছে। আরও বার্তার জন্য আপগ্রেড করুন।",
+    "chatLimitReachedTitle": "চ্যাট সীমা পৌঁছেছে",
+    "chatUsageDescription": "{plan} প্ল্যানে আপনি {limitDisplay} এর মধ্যে {used} ব্যবহার করেছেন।",
+    "resetsInDays": "{count} দিনে রিসেট হবে",
+    "resetsInHours": "{count} ঘণ্টায় রিসেট হবে",
+    "resetsSoon": "শীঘ্রই রিসেট হবে",
+    "upgradePlan": "প্ল্যান আপগ্রেড করুন",
+    "billingMonthly": "মাসিক",
+    "billingYearly": "বার্ষিক",
+    "savePercent": "~17% সাশ্রয়",
+    "popular": "জনপ্রিয়",
+    "currentPlan": "বর্তমান",
+    "neoSubtitle": "মাসে {count}টি প্রশ্ন",
+    "operatorSubtitle": "মাসে {count}টি প্রশ্ন",
+    "architectSubtitle": "পাওয়ার-ইউজার AI — হাজার হাজার চ্যাট + এজেন্টিক অটোমেশন",
+    "chatUsageCost": "চ্যাট: ${used} / ${limit} এই মাসে ব্যবহৃত",
+    "chatUsageCostNoLimit": "চ্যাট: ${used} এই মাসে ব্যবহৃত",
+    "chatUsageMessages": "চ্যাট: {used} / {limit} বার্তা এই মাসে",
+    "chatUsageMessagesNoLimit": "চ্যাট: {used} বার্তা এই মাসে",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "আপনি আপনার মাসিক সীমায় পৌঁছেছেন। বিনা সীমাবদ্ধতায় Omi-এর সাথে চ্যাট চালিয়ে যেতে আপগ্রেড করুন।",
+    "batteryHistory": "ব্যাটারি",
+    "day": "দিন",
+    "noBatteryDataYet": "এখনও কোনো ব্যাটারি ডেটা নেই",
+    "week": "সপ্তাহ"
 }

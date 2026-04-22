@@ -242,6 +242,41 @@ data class BleDisconnectEvent (
 }
 
 /**
+ * A single battery level reading persisted by the native BLE layer.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class BleBatteryPoint (
+  val timestamp: Long,
+  val level: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BleBatteryPoint {
+      val timestamp = pigeonVar_list[0] as Long
+      val level = pigeonVar_list[1] as Long
+      return BleBatteryPoint(timestamp, level)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      timestamp,
+      level,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BleBatteryPoint) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
  * Diagnostics data read from native preferences on demand.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -305,6 +340,11 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          BleBatteryPoint.fromList(it)
+        }
+      }
+      133.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           BleDeviceDiagnostics.fromList(it)
         }
       }
@@ -325,8 +365,12 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.toList())
       }
-      is BleDeviceDiagnostics -> {
+      is BleBatteryPoint -> {
         stream.write(132)
+        writeValue(stream, value.toList())
+      }
+      is BleDeviceDiagnostics -> {
+        stream.write(133)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -769,6 +813,7 @@ interface BleHostApi {
   fun startRssiStreaming(uuid: String)
   fun stopRssiStreaming(uuid: String)
   fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit)
+  fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit)
   /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
   /** (Android only) Initiate CompanionDeviceManager association for a device. */
@@ -1034,6 +1079,26 @@ interface BleHostApi {
             val args = message as List<Any?>
             val uuidArg = args[0] as String
             api.getDeviceDiagnostics(uuidArg) { result: Result<BleDeviceDiagnostics> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            api.getBatteryHistory(uuidArg) { result: Result<List<BleBatteryPoint>> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))

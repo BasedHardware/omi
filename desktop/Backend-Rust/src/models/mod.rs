@@ -17,6 +17,7 @@ pub mod message;
 pub mod person;
 pub mod persona;
 pub mod request;
+pub mod chat_completions;
 pub mod screen_activity;
 pub mod user_settings;
 

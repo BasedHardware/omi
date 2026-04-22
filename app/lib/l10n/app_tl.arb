@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Siguro Mamaya",
+    "maybeLater": "Siguro mamaya",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -5317,11 +5317,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Hindi maaaring i-load ang mga plano",
+    "unableToLoadPlans": "Hindi ma-load ang mga plan",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Mangyaring suriin ang iyong koneksyon at subukan ulit",
+    "checkConnectionTryAgain": "Suriin ang koneksyon at subukan ulit",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6042,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Sa pamamagitan ng pagpatuloy, ang lahat ng data na ibinabahagi mo sa app na ito (kabilang ang iyong mga pag-uusap, mga recordings, at personal na impormasyon) ay magiging secure na naka-store sa aming mga servers upang magbigay sa iyo ng AI-powered insights at paganahin ang lahat ng app features.",
+    "consentDataMessage": "Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -10674,5 +10674,36 @@
     "youAreOnAPaidPlan": "Ikaw ay nasa bayad na plano.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "mensahe",
+    "unlimitedChatThisMonth": "Walang limitasyon sa mensahe ngayong buwan",
+    "chatUsedOfLimitCompute": "{used} sa {limit} compute budget nagamit",
+    "chatUsedOfLimitMessages": "{used} sa {limit} mensahe nagamit ngayong buwan",
+    "chatUsageProgress": "{used} / {limit} nagamit",
+    "chatLimitReachedUpgrade": "Naabot na ang limitasyon ng chat. Mag-upgrade para sa mas maraming mensahe.",
+    "chatLimitReachedTitle": "Naabot na ang limitasyon ng chat",
+    "chatUsageDescription": "Ginamit mo na ang {used} sa {limitDisplay} sa {plan} plan.",
+    "resetsInDays": "Magre-reset sa {count} araw",
+    "resetsInHours": "Magre-reset sa {count} oras",
+    "resetsSoon": "Magre-reset na",
+    "upgradePlan": "I-upgrade ang plan",
+    "billingMonthly": "Buwanan",
+    "billingYearly": "Taunan",
+    "savePercent": "Makatipid ~17%",
+    "popular": "Sikat",
+    "currentPlan": "Kasalukuyan",
+    "neoSubtitle": "{count} tanong bawat buwan",
+    "operatorSubtitle": "{count} tanong bawat buwan",
+    "architectSubtitle": "Power-user AI — libu-libong chat + agentic automation",
+    "chatUsageCost": "Chat: ${used} / ${limit} nagamit ngayong buwan",
+    "chatUsageCostNoLimit": "Chat: ${used} nagamit ngayong buwan",
+    "chatUsageMessages": "Chat: {used} / {limit} mensahe ngayong buwan",
+    "chatUsageMessagesNoLimit": "Chat: {used} mensahe ngayong buwan",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.",
+    "batteryHistory": "Baterya",
+    "day": "Araw",
+    "noBatteryDataYet": "Wala pang datos ng baterya",
+    "week": "Linggo"
 }
