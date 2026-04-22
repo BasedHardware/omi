@@ -62,8 +62,8 @@ export function GoalAdviceModal({ open, goal, onOpenChange }: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center gap-3 rounded-lg bg-white/5 p-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white/10 text-xl">
+        <div className="flex items-center gap-3 rounded-lg bg-foreground/5 p-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-foreground/10 text-xl">
             {getEmojiForTitle(goal.title)}
           </div>
           <div className="flex-1 min-w-0">
