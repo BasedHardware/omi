@@ -23,7 +23,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { api } from "@/services/api";
 import {
   CapturedFrame,
-  setFrameHandler,
+  addFrameListener,
+  startMonitoring,
+  stopMonitoring,
 } from "@/services/proactiveAssistant";
 import {
   isAppAllowed,
@@ -249,6 +251,7 @@ const previousInsights: ExtractedInsight[] = [];
 let lastAnalysisAt = 0;
 let inflight = false;
 let handlerInstalled = false;
+let insightUnsubscribe: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
 // Hydration (previous insights from local DB)
@@ -857,18 +860,19 @@ async function handleFrame(frame: CapturedFrame): Promise<void> {
 export function initInsightAssistant(): void {
   if (handlerInstalled) return;
   void hydratePreviousInsights();
-  setFrameHandler((frame) => {
+  insightUnsubscribe = addFrameListener((frame) => {
     void handleFrame(frame);
   });
+  startMonitoring();
   handlerInstalled = true;
   console.info("[InsightAssistant] started");
 }
 
 export function stopInsightAssistant(): void {
-  // proactiveAssistant only supports a single frame handler; replacing it with
-  // a no-op effectively detaches us until another caller registers a handler.
   if (handlerInstalled) {
-    setFrameHandler(() => {});
+    insightUnsubscribe?.();
+    insightUnsubscribe = null;
+    stopMonitoring();
     handlerInstalled = false;
   }
   lastAnalysisAt = 0;
