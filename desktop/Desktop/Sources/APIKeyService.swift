@@ -242,4 +242,16 @@ final class APIKeyService: ObservableObject {
         }
         return out
     }
+
+    // MARK: - EU Privacy Mode
+
+    /// UserDefaults key for the EU Privacy Mode toggle.  When true, APIClient
+    /// attaches the X-Privacy-Mode header so the backend routes LLM workloads
+    /// through regolo.ai (Italy-hosted) instead of Claude/Gemini.
+    nonisolated static let euPrivacyModeStorageKey = "eu_privacy_mode_enabled"
+
+    nonisolated static var isEUPrivacyModeEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: euPrivacyModeStorageKey) }
+        set { UserDefaults.standard.set(newValue, forKey: euPrivacyModeStorageKey) }
+    }
 }
