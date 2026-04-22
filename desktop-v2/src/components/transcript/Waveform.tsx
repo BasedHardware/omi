@@ -66,6 +66,18 @@ export function Waveform({
     const dpr = window.devicePixelRatio || 1;
     const width = barCount * BAR_WIDTH + (barCount - 1) * BAR_GAP;
 
+    // Cache the resolved foreground so the RAF loop doesn't pay a
+    // getComputedStyle + style-recalc cost on every bar. Refreshed when
+    // `<html>` flips the `.dark` class (MutationObserver below).
+    let foreground = getComputedStyle(canvas).color || "rgb(255, 255, 255)";
+    const themeObserver = new MutationObserver(() => {
+      foreground = getComputedStyle(canvas).color || foreground;
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
     const setSize = () => {
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
@@ -115,7 +127,7 @@ export function Waveform({
         } else if (boosted > 0.6) {
           ctx.fillStyle = "rgb(59, 130, 246)"; // brand blue
         } else if (boosted > 0.2) {
-          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.fillStyle = foreground;
         } else {
           ctx.fillStyle = "rgba(161, 161, 170, 0.7)";
         }
@@ -138,6 +150,7 @@ export function Waveform({
 
     return () => {
       cancelAnimationFrame(rafId);
+      themeObserver.disconnect();
     };
   }, [barCount, height, isActive]);
 
@@ -145,7 +158,7 @@ export function Waveform({
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className={cn("block shrink-0", className)}
+      className={cn("block shrink-0 text-foreground", className)}
     />
   );
 }
