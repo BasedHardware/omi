@@ -156,6 +156,107 @@ class TestRegoloBYOKRouting:
             copy_context().run(_run)
 
 
+class TestRegoloProviderClassification:
+    """Verify _classify_provider routes regolo-hosted model IDs to the 'regolo'
+    path and leaves OpenAI / Anthropic / OpenRouter / Perplexity models alone."""
+
+    @pytest.mark.parametrize(
+        'model',
+        [
+            'minimax-m2.5',
+            'Llama-3.3-70B-Instruct',
+            'qwen3.5-122b',
+            'qwen3.5-9b',
+            'qwen3-coder-next',
+            'Qwen3-Embedding-8B',
+            'mistral-small-4-119b',
+            'apertus-70b',
+            'gpt-oss-120b',
+            'gemma4-31b',
+        ],
+    )
+    def test_regolo_models_classify_as_regolo(self, model):
+        from utils.llm.clients import _classify_provider
+
+        assert _classify_provider(model) == 'regolo', (
+            f'{model!r} should classify as regolo; got {_classify_provider(model)!r}'
+        )
+
+    def test_openai_models_unaffected(self):
+        from utils.llm.clients import _classify_provider
+
+        for model in ('gpt-4.1-mini', 'gpt-5.4', 'gpt-5.1', 'o4-mini'):
+            assert _classify_provider(model) == 'openai'
+
+    def test_anthropic_unaffected(self):
+        from utils.llm.clients import _classify_provider
+
+        assert _classify_provider('claude-sonnet-4-6') == 'anthropic'
+
+    def test_openrouter_unaffected(self):
+        from utils.llm.clients import _classify_provider
+
+        assert _classify_provider('google/gemini-3-flash-preview') == 'openrouter'
+
+    def test_perplexity_unaffected(self):
+        from utils.llm.clients import _classify_provider
+
+        assert _classify_provider('sonar-pro') == 'perplexity'
+
+
+class TestPrivacyProfile:
+    """The 'privacy' QoS profile must map every routable feature to a regolo
+    model (or to provider-only features that stay on their pinned path)."""
+
+    def test_privacy_profile_exists(self):
+        from utils.llm.clients import MODEL_QOS_PROFILES
+
+        assert 'privacy' in MODEL_QOS_PROFILES, 'privacy profile not registered'
+
+    def test_privacy_profile_has_all_premium_features(self):
+        """Every feature present in the premium profile should be covered in
+        privacy, so MODEL_QOS=privacy doesn't fall back to 'gpt-4.1-mini'."""
+        from utils.llm.clients import MODEL_QOS_PROFILES
+
+        premium_features = set(MODEL_QOS_PROFILES['premium'].keys())
+        privacy_features = set(MODEL_QOS_PROFILES['privacy'].keys())
+        missing = premium_features - privacy_features
+        assert not missing, f'privacy profile missing features: {sorted(missing)}'
+
+    def test_privacy_chat_routes_through_regolo(self):
+        """chat_responses in the privacy profile must pick a regolo model."""
+        from utils.llm.clients import MODEL_QOS_PROFILES, _classify_provider
+
+        model = MODEL_QOS_PROFILES['privacy']['chat_responses']
+        assert _classify_provider(model) == 'regolo', (
+            f"chat_responses picked {model!r} which is not regolo-classified"
+        )
+
+    def test_privacy_synthesis_routes_through_regolo(self):
+        """Structured extraction features must use the tool-capable Llama model."""
+        from utils.llm.clients import MODEL_QOS_PROFILES
+
+        for feature in ('conv_action_items', 'memories', 'knowledge_graph'):
+            model = MODEL_QOS_PROFILES['privacy'][feature]
+            assert 'llama' in model.lower() or 'minimax' in model.lower(), (
+                f"{feature} should pick a regolo tool/synthesis model, got {model!r}"
+            )
+
+    def test_privacy_keeps_anthropic_for_chat_agent(self):
+        """chat_agent has no OSS equivalent good enough — keep it on Claude
+        even in privacy profile. The _ANTHROPIC_ONLY_FEATURES gate in get_llm()
+        enforces this routing regardless of profile."""
+        from utils.llm.clients import MODEL_QOS_PROFILES
+
+        assert MODEL_QOS_PROFILES['privacy']['chat_agent'].startswith('claude')
+
+    def test_privacy_keeps_perplexity_for_web_search(self):
+        """Regolo has no web-search equivalent — web_search must stay on sonar."""
+        from utils.llm.clients import MODEL_QOS_PROFILES
+
+        assert MODEL_QOS_PROFILES['privacy']['web_search'].startswith('sonar')
+
+
 class TestRegoloByokHeader:
     """The backend BYOK_HEADERS map must expose the regolo header name so the
     middleware routes X-BYOK-Regolo into the contextvar."""
