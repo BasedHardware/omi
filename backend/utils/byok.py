@@ -152,6 +152,63 @@ def extract_privacy_mode_from_websocket(websocket: WebSocket) -> bool:
     return _parse_privacy_mode(websocket.headers.get(PRIVACY_MODE_HEADER))
 
 
+# ---------------------------------------------------------------------------
+# Privacy Mode fallback signalling — response-side contract
+#
+# When Privacy Mode is on but a specific request could not actually be served
+# by regolo (vision unsupported, regolo outage, persistent 429), the response
+# must tell the client *which* fallback fired so the UI can surface a visible
+# red banner rather than silently leaking traffic to Claude/Gemini.
+#
+# Contract: set the X-Privacy-Mode-Fallback response header to a short reason
+# token.  Clients that sent X-Privacy-Mode but receive this header back should
+# show a per-request "⚠️ This request left the EU" banner with the reason.
+# ---------------------------------------------------------------------------
+PRIVACY_MODE_FALLBACK_HEADER = 'x-privacy-mode-fallback'
+
+PRIVACY_FALLBACK_VISION_UNSUPPORTED = 'vision_unsupported'
+PRIVACY_FALLBACK_REGOLO_OUTAGE = 'regolo_outage'
+PRIVACY_FALLBACK_REGOLO_RATE_LIMITED = 'regolo_rate_limited'
+PRIVACY_FALLBACK_NO_KEY = 'no_regolo_key'
+
+_PRIVACY_FALLBACK_REASONS = frozenset({
+    PRIVACY_FALLBACK_VISION_UNSUPPORTED,
+    PRIVACY_FALLBACK_REGOLO_OUTAGE,
+    PRIVACY_FALLBACK_REGOLO_RATE_LIMITED,
+    PRIVACY_FALLBACK_NO_KEY,
+})
+
+# The reason for the current request's fallback, if any.  Set by call sites
+# that actually route non-regolo traffic while privacy mode was requested.
+# Consumed by a response middleware that stamps the header before returning.
+_privacy_fallback_ctx: ContextVar[Optional[str]] = ContextVar(
+    'privacy_fallback_reason', default=None
+)
+
+
+def mark_privacy_fallback(reason: str) -> None:
+    """Record that the current request fell back out of Privacy Mode.
+
+    Call this from any code path that routes a privacy-mode request to
+    Claude/Gemini/OpenAI instead of regolo — e.g. the vision router when a
+    screenshot analysis can't run on regolo, or the retry loop when regolo
+    5xx's three times.  The response middleware adds the X-Privacy-Mode-Fallback
+    header based on this value so the client can show a banner.
+
+    Only accepts reasons from the PRIVACY_FALLBACK_* constant set — unknown
+    reasons would turn the client-side banner into noise.
+    """
+    if reason not in _PRIVACY_FALLBACK_REASONS:
+        logger.warning('mark_privacy_fallback called with unknown reason=%s', reason)
+        return
+    _privacy_fallback_ctx.set(reason)
+
+
+def get_privacy_fallback_reason() -> Optional[str]:
+    """Return the fallback reason recorded for the current request, or None."""
+    return _privacy_fallback_ctx.get()
+
+
 class BYOKMiddleware(BaseHTTPMiddleware):
     """Extract BYOK headers from each HTTP request into the contextvar.
 
@@ -169,9 +226,17 @@ class BYOKMiddleware(BaseHTTPMiddleware):
         privacy_mode = _parse_privacy_mode(request.headers.get(PRIVACY_MODE_HEADER))
         token = _byok_ctx.set(keys)
         privacy_token = _privacy_mode_ctx.set(privacy_mode)
+        fallback_token = _privacy_fallback_ctx.set(None)
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            # If a downstream code path called mark_privacy_fallback(), stamp
+            # the response header so the client can surface a visible banner.
+            fallback_reason = _privacy_fallback_ctx.get()
+            if fallback_reason is not None and privacy_mode:
+                response.headers[PRIVACY_MODE_FALLBACK_HEADER] = fallback_reason
+            return response
         finally:
+            _privacy_fallback_ctx.reset(fallback_token)
             _privacy_mode_ctx.reset(privacy_token)
             _byok_ctx.reset(token)
 
