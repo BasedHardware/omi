@@ -1,6 +1,6 @@
 {
   "unreleased": [
-    "Fixed crash on macOS 26 in OCR screen indexing — Vision TextRecognition no longer asserts on empty array when processing certain screen captures"
+    "Fixed crash on macOS 26 in OCR screen indexing — pinned Vision TextRecognition to Revision 2 to work around an Apple-internal EXC_BREAKPOINT regression in VNRecognizeTextRequestRevision3"
   ],
   "releases": [
     {

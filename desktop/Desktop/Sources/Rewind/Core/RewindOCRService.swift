@@ -221,6 +221,7 @@ actor RewindOCRService {
             // revision's Swift concurrency usage. Revision 2 avoids that code path while
             // retaining acceptable OCR quality on the macOS 14+ deployment target.
             // (Refs: issue #6944, crash queue com.apple.VNRecognizeTextRequestRevision3)
+            // TODO: Remove once Apple fixes Revision 3 on macOS 26.
             request.revision = VNRecognizeTextRequestRevision2
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
