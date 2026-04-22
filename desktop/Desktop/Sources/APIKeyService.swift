@@ -52,6 +52,17 @@ enum BYOKProvider: String, CaseIterable {
         case .regolo: return "Regolo (EU)"
         }
     }
+
+    /// True when this provider key is required for the BYOK free-plan subscription
+    /// bypass. Optional providers (regolo) can be configured without affecting the
+    /// gate — users enable them per-feature (e.g. EU Privacy Mode) without needing
+    /// to replace their existing Anthropic/Gemini/OpenAI/Deepgram keys.
+    var isRequiredForFreePlan: Bool {
+        switch self {
+        case .openai, .anthropic, .gemini, .deepgram: return true
+        case .regolo: return false
+        }
+    }
 }
 @MainActor
 final class APIKeyService: ObservableObject {
@@ -204,11 +215,14 @@ final class APIKeyService: ObservableObject {
         nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
     }
 
-    /// True when the user has supplied keys for all four BYOK providers.
-    /// The subscription-bypass gate: when this is true, the user is on the free
-    /// plan and we attach their keys to every backend request.
+    /// True when the user has supplied keys for all REQUIRED BYOK providers
+    /// (OpenAI, Anthropic, Gemini, Deepgram). Optional providers like regolo
+    /// don't gate free-plan eligibility — they enable opt-in features such as
+    /// EU Privacy Mode without affecting the subscription bypass.
     nonisolated static var isByokActive: Bool {
-        BYOKProvider.allCases.allSatisfy { byokKey($0) != nil }
+        BYOKProvider.allCases
+            .filter { $0.isRequiredForFreePlan }
+            .allSatisfy { byokKey($0) != nil }
     }
 
     /// SHA-256 fingerprint of a key, used by the backend to detect when the
