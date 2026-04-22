@@ -11,6 +11,7 @@ import { create } from "zustand";
 
 export type ThemeMode = "system" | "light" | "dark";
 
+// Keep this key in sync with the pre-bundle FOUC script in `index.html`.
 const STORAGE_KEY = "nooto.theme.mode";
 
 function readStored(): ThemeMode {
