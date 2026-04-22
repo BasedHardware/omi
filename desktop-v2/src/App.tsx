@@ -28,6 +28,20 @@ import {
 import { useTraySync } from "./hooks/useTraySync";
 import { usePttSession } from "./hooks/usePttSession";
 import { useGoalStore } from "./stores/goalStore";
+import {
+  initMemoryAssistant,
+  stopMemoryAssistant,
+} from "./services/memoryAssistant";
+import {
+  startTaskTrigger,
+  stopTaskTrigger,
+} from "./services/proactiveTaskTrigger";
+import { useMemoryAssistantSettings } from "./services/memoryAssistantSettings";
+import { useTaskAssistantSettings } from "./services/taskAssistantSettings";
+
+type ZustandSubscribe<S> = (
+  listener: (state: S, prevState: S) => void,
+) => () => void;
 
 function App() {
   const { isSignedIn, isLoading, restoreSession } = useAuthStore();
@@ -48,7 +62,43 @@ function App() {
     // Warm the goal store so FocusAssistant's context enrichment has data
     // before the first screenshot analysis.
     useGoalStore.getState().loadGoals(true);
-    return () => stopTaskDeduplication();
+
+    // Proactive memory + task extraction — matches Swift ProactiveAssistants.
+    // Each pipeline is gated by its settings `enabled` flag and reacts to
+    // runtime toggles from the Settings UI.
+    const syncAssistant = <S extends { enabled: boolean }>(
+      store: { getState: () => S; subscribe: ZustandSubscribe<S> },
+      start: () => void,
+      stop: () => void,
+    ) => {
+      if (store.getState().enabled) start();
+      const unsub = store.subscribe((s, prev) => {
+        if (s.enabled === prev.enabled) return;
+        if (s.enabled) start();
+        else stop();
+      });
+      return () => {
+        unsub();
+        stop();
+      };
+    };
+
+    const teardownMemory = syncAssistant(
+      useMemoryAssistantSettings,
+      initMemoryAssistant,
+      stopMemoryAssistant,
+    );
+    const teardownTask = syncAssistant(
+      useTaskAssistantSettings,
+      startTaskTrigger,
+      stopTaskTrigger,
+    );
+
+    return () => {
+      stopTaskDeduplication();
+      teardownMemory();
+      teardownTask();
+    };
   }, [isSignedIn]);
 
   if (isLoading) {
