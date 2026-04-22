@@ -213,14 +213,24 @@ actor RewindOCRService {
 
             request.recognitionLevel = recognitionLevel
             request.usesLanguageCorrection = false
-            request.recognitionLanguages = ["en-US"]
+            // Use automatic language detection instead of a fixed ["en-US"] list.
+            // On macOS 26, TextRecognition's internal Swift concurrency tasks access the
+            // recognitionLanguages array via ObjC bridge; when restricted to a single
+            // language and the image content triggers an empty-candidates path, the
+            // framework asserts on objectAtSubscript:0 of an empty __SwiftNativeNSArray
+            // (EXC_BREAKPOINT / _assertionFailure). Letting Vision auto-detect avoids
+            // that code path. (Refs: issue #6944, #5891)
+            request.automaticallyDetectsLanguage = true
 
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-
-            do {
-                try handler.perform([request])
-            } catch {
-                continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+            // autoreleasepool ensures Vision/TextRecognition ObjC objects are released
+            // promptly and don't outlive the handler's cooperative tasks on macOS 26.
+            autoreleasepool {
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
+                }
             }
         }
     }

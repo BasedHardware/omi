@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed crash on macOS 26 in OCR screen indexing — Vision TextRecognition no longer asserts on empty array when processing certain screen captures"
+  ],
   "releases": [
     {
       "version": "0.11.352",
