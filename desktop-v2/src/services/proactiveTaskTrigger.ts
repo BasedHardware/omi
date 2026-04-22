@@ -21,7 +21,9 @@
 
 import {
   CapturedFrame,
-  setFrameHandler,
+  addFrameListener,
+  startMonitoring,
+  stopMonitoring,
 } from "@/services/proactiveAssistant";
 import {
   shouldAnalyzeFrame,
@@ -29,6 +31,7 @@ import {
   persistExtractedTask,
 } from "@/services/taskAssistant";
 import { useTaskAssistantSettings } from "@/services/taskAssistantSettings";
+import { notify } from "@/services/notifications";
 
 let unsubscribeFrame: (() => void) | null = null;
 let fallbackTimerId: ReturnType<typeof setInterval> | null = null;
@@ -52,6 +55,10 @@ async function runExtraction(frame: CapturedFrame, reason: string): Promise<void
         `[TaskTrigger] extracted "${result.task.title}" (conf=${result.task.confidence.toFixed(2)})`,
       );
       await persistExtractedTask(frame, result);
+
+      if (useTaskAssistantSettings.getState().notificationsEnabled) {
+        void notify("New task", result.task.title);
+      }
     }
   } catch (err) {
     console.warn("[TaskTrigger] extraction failed:", err);
@@ -64,11 +71,15 @@ async function runExtraction(frame: CapturedFrame, reason: string): Promise<void
 export function startTaskTrigger(): void {
   if (unsubscribeFrame) return;
 
-  setFrameHandler((frame) => {
+  const off = addFrameListener((frame) => {
     latestFrame = frame;
     void runExtraction(frame, "context-switch");
   });
-  unsubscribeFrame = () => setFrameHandler(() => {});
+  startMonitoring();
+  unsubscribeFrame = () => {
+    off();
+    stopMonitoring();
+  };
 
   const intervalS = useTaskAssistantSettings.getState().extractionIntervalSeconds;
   fallbackTimerId = setInterval(() => {
