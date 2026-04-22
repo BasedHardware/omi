@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured import Structured
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, is_privacy_mode_active
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -470,6 +470,14 @@ def get_model(feature: str) -> str:
                 expected_provider,
             )
         return override
+    # EU Privacy Mode — per-request flag asks us to route via regolo.ai.
+    # Use the 'privacy' profile entry when set; falls back to the active profile
+    # for features missing from the privacy map (none expected day 1 — see
+    # test_privacy_profile_has_all_premium_features).
+    if is_privacy_mode_active():
+        privacy_model = MODEL_QOS_PROFILES['privacy'].get(feature)
+        if privacy_model is not None:
+            return privacy_model
     return _active_profile.get(feature, 'gpt-4.1-mini')
 
 
