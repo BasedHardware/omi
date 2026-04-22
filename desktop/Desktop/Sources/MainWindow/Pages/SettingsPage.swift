@@ -214,6 +214,11 @@ struct SettingsContentView: View {
   @State private var privateCloudSyncEnabled: Bool = true
   @State private var isTrackingExpanded: Bool = false
 
+  // EU Privacy Mode — local-only toggle, not synced to backend.  When on,
+  // APIClient attaches X-Privacy-Mode: on so the backend routes LLM work
+  // through regolo.ai (Italy, zero retention).
+  @State private var euPrivacyModeEnabled: Bool = APIKeyService.isEUPrivacyModeEnabled
+
   // Transcription settings (from backend)
   @State private var singleLanguageMode: Bool = false
   @State private var newVocabularyWord: String = ""
@@ -1598,6 +1603,41 @@ struct SettingsContentView: View {
               trackingItem("App open/close events")
             }
             .transition(.opacity)
+          }
+        }
+      }
+
+      // EU Privacy Mode — routes LLM work through regolo.ai (Italy, zero retention)
+      settingsCard(settingId: "privacy.eumode") {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "shield.lefthalf.filled")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.purplePrimary)
+              .frame(width: 20, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("EU Privacy Mode")
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Route all AI on regolo.ai (Italy, zero retention). Requires a Regolo BYOK key. Vision features stay on Gemini — you'll see a warning per request that leaves the EU."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle("", isOn: $euPrivacyModeEnabled)
+              .toggleStyle(.switch)
+              .labelsHidden()
+              .controlSize(.small)
+              .onChange(of: euPrivacyModeEnabled) { _, newValue in
+                APIKeyService.isEUPrivacyModeEnabled = newValue
+              }
           }
         }
       }
