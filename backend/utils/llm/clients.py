@@ -311,6 +311,66 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
         # Perplexity (unchanged)
         'web_search': 'sonar-pro',
     },
+    # 'privacy' profile — routes every supported feature through regolo.ai
+    # (Italy-hosted, zero retention). Activated when MODEL_QOS=privacy at the
+    # process level or when a per-request EU Privacy Mode flag is set on the
+    # user's account. Model picks are informed by live capability probing:
+    #   - minimax-m2.5 for chat + tool calling (strongest OSS agentic scores,
+    #     76.8% BFCL Multi-Turn; requires chat_template_kwargs.enable_thinking=false)
+    #   - Llama-3.3-70B-Instruct for extraction/synthesis workloads (clean
+    #     OpenAI-compat tool_calls, no thinking-token tax)
+    #   - qwen3.5-9b for cheap grading/classification (€0.07/€0.35 per 1M)
+    # Features unsupported by regolo (web_search, vision) stay on the
+    # existing Perplexity/Gemini paths — the router outside this profile
+    # handles the fallback.
+    'privacy': {
+        # Conversation processing → Llama-3.3-70B for structure + extraction
+        'conv_action_items': 'Llama-3.3-70B-Instruct',
+        'conv_structure': 'Llama-3.3-70B-Instruct',
+        'conv_app_result': 'Llama-3.3-70B-Instruct',
+        'conv_app_select': 'qwen3.5-9b',
+        'conv_folder': 'qwen3.5-9b',
+        'conv_discard': 'qwen3.5-9b',
+        'daily_summary': 'Llama-3.3-70B-Instruct',
+        'daily_summary_simple': 'qwen3.5-9b',
+        'external_structure': 'Llama-3.3-70B-Instruct',
+        # Memories & knowledge
+        'memories': 'Llama-3.3-70B-Instruct',
+        'learnings': 'Llama-3.3-70B-Instruct',
+        'memory_conflict': 'Llama-3.3-70B-Instruct',
+        'memory_category': 'qwen3.5-9b',
+        'knowledge_graph': 'Llama-3.3-70B-Instruct',
+        # Chat
+        'chat_responses': 'minimax-m2.5',
+        'chat_extraction': 'Llama-3.3-70B-Instruct',
+        'chat_graph': 'Llama-3.3-70B-Instruct',
+        'session_titles': 'qwen3.5-9b',
+        # Features
+        'goals': 'Llama-3.3-70B-Instruct',
+        'goals_advice': 'minimax-m2.5',
+        'notifications': 'minimax-m2.5',
+        'proactive_notification': 'Llama-3.3-70B-Instruct',
+        'followup': 'qwen3.5-9b',
+        'smart_glasses': 'qwen3.5-9b',
+        'onboarding': 'qwen3.5-9b',
+        'app_generator': 'minimax-m2.5',
+        'app_integration': 'qwen3.5-9b',
+        'persona_clone': 'minimax-m2.5',
+        'trends': 'qwen3.5-9b',
+        # Anthropic-only features stay on Claude — regolo has no equivalent
+        # computer-use/complex-agent model.  chat_agent falls through to
+        # _ANTHROPIC_ONLY_FEATURES checks in get_llm() and routes to Claude
+        # via anthropic_client regardless of profile.
+        'chat_agent': 'claude-sonnet-4-6',
+        # Persona chat — MiniMax at warmer temperature handles character voice
+        'persona_chat': 'minimax-m2.5',
+        'persona_chat_premium': 'minimax-m2.5',
+        # Large-context analysis → MiniMax (supports long contexts with thinking off)
+        'wrapped_analysis': 'minimax-m2.5',
+        # Web search has no OSS equivalent — stays on Perplexity.
+        # _PERPLEXITY_ONLY_FEATURES check in get_llm() routes this correctly.
+        'web_search': 'sonar-pro',
+    },
 }
 
 # Pinned features — model is fixed regardless of profile or env override.
@@ -331,6 +391,24 @@ _ANTHROPIC_ONLY_FEATURES = {'chat_agent'}  # always Anthropic, used via get_mode
 _PERPLEXITY_ONLY_FEATURES = {'web_search'}  # always Perplexity, used via get_model() + HTTP client
 
 
+# Model-ID prefixes served by regolo.ai's OpenAI-compat endpoint.  Matched
+# case-insensitively against the start of the model name.  Order doesn't
+# matter but keep the list narrow — anything OpenAI-named (gpt-*) still
+# routes to OpenAI even if regolo happens to host a same-named variant.
+_REGOLO_MODEL_PREFIXES = (
+    'minimax-',
+    'llama-3',
+    'qwen3',
+    'qwen-',
+    'mistral-small',
+    'apertus-',
+    'gpt-oss-',
+    'deepseek-ocr',
+    'faster-whisper',
+    'gemma',
+)
+
+
 def _classify_provider(model: str) -> str:
     """Classify provider from model name. Provider follows the model, not the feature."""
     if '/' in model:
@@ -339,6 +417,10 @@ def _classify_provider(model: str) -> str:
         return 'anthropic'
     if model.startswith('sonar'):
         return 'perplexity'
+    name_lower = model.lower()
+    for prefix in _REGOLO_MODEL_PREFIXES:
+        if name_lower.startswith(prefix):
+            return 'regolo'
     return 'openai'
 
 
@@ -413,6 +495,34 @@ def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> _Open
     return _llm_cache[key]
 
 
+def _get_or_create_regolo_llm(model_name: str, streaming: bool = False) -> _RegoloOpenAIProxy:
+    """Build a regolo-routed ChatOpenAI proxy for an OSS model hosted on regolo.ai.
+
+    The proxy's default (non-regolo) client falls back to OpenAI with the same
+    model name — which will 404 if the OpenAI account doesn't know that model ID.
+    That fallback is deliberate: when a user configures the 'privacy' QoS profile
+    but hasn't supplied a regolo BYOK key, the 404 surfaces loudly rather than
+    silently routing privacy-mode traffic elsewhere.
+    """
+    key = (model_name, streaming, 'regolo')
+    if key not in _llm_cache:
+        ctor_kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+        if streaming:
+            ctor_kwargs['streaming'] = True
+            ctor_kwargs['stream_options'] = {"include_usage": True}
+        # Default = a plain ChatOpenAI that WILL fail without a regolo key. The
+        # proxy only returns this when get_byok_key('regolo') is None; a loud
+        # failure is preferable to a silent fallback that leaks privacy-mode
+        # traffic to OpenAI.
+        default = ChatOpenAI(model=model_name, **ctor_kwargs)
+        _llm_cache[key] = _RegoloOpenAIProxy(
+            default=default,
+            regolo_model=model_name,
+            ctor_kwargs=ctor_kwargs,
+        )
+    return _llm_cache[key]
+
+
 def _get_or_create_openrouter_llm(
     model_name: str, streaming: bool = False, temperature: Optional[float] = None
 ) -> ChatOpenAI:
@@ -483,6 +593,13 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     if provider == 'openrouter':
         temp = _OPENROUTER_TEMPERATURES.get(feature)
         return _get_or_create_openrouter_llm(model, streaming, temp)
+
+    if provider == 'regolo':
+        # Privacy-profile features — build a BYOK-gated proxy that targets
+        # api.regolo.ai with enable_thinking=false injected for OSS thinking models.
+        # prompt_cache_key is a no-op on regolo (OSS models have no server-side
+        # cache) so we skip the .bind() step.
+        return _get_or_create_regolo_llm(model, streaming)
 
     llm = _get_or_create_openai_llm(model, streaming)
     if cache_key and model in _CACHE_KEY_MODELS:
