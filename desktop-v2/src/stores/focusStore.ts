@@ -18,8 +18,7 @@ import { focusAssistant } from "@/services/focusAssistant";
 import {
   startMonitoring,
   stopMonitoring,
-  isMonitoring,
-  setFrameHandler,
+  addFrameListener,
   setContextChangeHandler,
   setDelayStateHandler,
 } from "@/services/proactiveAssistant";
@@ -37,6 +36,12 @@ const MAX_SESSIONS = 200;
 
 /** Default cooldown duration in seconds (10 minutes). */
 const DEFAULT_COOLDOWN_S = 600;
+
+/**
+ * Frame-listener unsubscribe held outside the Zustand state (functions are
+ * not JSON-serializable and would break persistence).
+ */
+let frameUnsubscribe: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
 // Tauri persistence (same pattern as chatStore)
@@ -161,7 +166,7 @@ export const useFocusStore = create<FocusState>()(
       // startFocusMonitoring
       // -----------------------------------------------------------------------
       startFocusMonitoring: () => {
-        if (isMonitoring()) return;
+        if (frameUnsubscribe) return;
 
         // Configure the focus assistant
         focusAssistant.setCooldownDuration(get().cooldownDurationS);
@@ -228,7 +233,7 @@ export const useFocusStore = create<FocusState>()(
         });
 
         // Wire up proactive assistant handlers
-        setFrameHandler((frame) => {
+        frameUnsubscribe = addFrameListener((frame) => {
           set({ isAnalyzing: true });
           focusAssistant.analyze(frame);
         });
@@ -258,7 +263,11 @@ export const useFocusStore = create<FocusState>()(
       // stopFocusMonitoring
       // -----------------------------------------------------------------------
       stopFocusMonitoring: () => {
-        stopMonitoring();
+        if (frameUnsubscribe) {
+          frameUnsubscribe();
+          frameUnsubscribe = null;
+          stopMonitoring();
+        }
         focusAssistant.reset();
 
         set({
