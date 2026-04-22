@@ -43,6 +43,11 @@ enum BYOKValidator {
         url: URL(string: "https://api.deepgram.com/v1/projects")!,
         headers: ["Authorization": "Token \(trimmed)"]
       )
+    case .regolo:
+      return await ping(
+        url: URL(string: "https://api.regolo.ai/v1/models")!,
+        headers: ["Authorization": "Bearer \(trimmed)"]
+      )
     }
   }
 
