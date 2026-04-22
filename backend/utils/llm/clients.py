@@ -148,6 +148,17 @@ _BYOK_CACHE_TTL_SECONDS = 3600  # 1 hour
 _openai_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 _anthropic_cache: TTLCache = TTLCache(maxsize=_BYOK_CACHE_MAX_SIZE, ttl=_BYOK_CACHE_TTL_SECONDS)
 
+# Regolo.ai — OpenAI-compatible EU-hosted OSS inference (Italy, zero retention).
+# Used when the user has supplied a regolo BYOK key AND selected EU Privacy Mode.
+# Routes through ChatOpenAI with base_url override, same pattern as Anthropic-via-OpenAI.
+REGOLO_OPENAI_BASE_URL = "https://api.regolo.ai/v1"
+
+# Regolo OSS thinking-models (MiniMax M2.5, Qwen3.5-122B) default to reasoning-on and
+# will burn the max_tokens budget on internal thought, returning content=null with
+# finish_reason=length. This flag — passed via vLLM chat_template_kwargs in the
+# request body — disables that path for synthesis/chat workloads.
+REGOLO_DISABLE_THINKING_EXTRA_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
+
 
 def _hash_key(api_key: str) -> str:
     """Derive a safe cache key from an API key. Never store raw keys in memory."""
@@ -608,6 +619,51 @@ _persona_medium_default = ChatOpenAI(
     default_headers={"X-Title": "Omi Chat"},
     **_persona_medium_kwargs,
 )
+
+
+class _RegoloOpenAIProxy:
+    """Route to regolo.ai's OpenAI-compatible endpoint when the user has a regolo BYOK key.
+
+    Falls back to the provided non-regolo default (typically an OpenAI or Gemini
+    client) when no regolo key is set — so existing Claude/Gemini routing is
+    unaffected. When routing to regolo, injects ``chat_template_kwargs.enable_thinking=false``
+    via ``extra_body`` so OSS thinking models (MiniMax M2.5, Qwen3.5-122B) don't burn
+    the ``max_tokens`` budget on internal reasoning.
+
+    Note: provider-specific ``reasoning_content`` field that regolo sometimes returns
+    is dropped by langchain_openai's parser; we do not need to strip it ourselves.
+    """
+
+    __slots__ = ('_default', '_regolo_model', '_ctor_kwargs')
+
+    def __init__(self, default: ChatOpenAI, regolo_model: str, ctor_kwargs: Dict[str, Any]):
+        object.__setattr__(self, '_default', default)
+        object.__setattr__(self, '_regolo_model', regolo_model)
+        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _resolve(self) -> ChatOpenAI:
+        byok = get_byok_key('regolo')
+        if byok:
+            merged_extra_body = {
+                **self._ctor_kwargs.get('extra_body', {}),
+                **REGOLO_DISABLE_THINKING_EXTRA_BODY,
+            }
+            regolo_kwargs = {
+                **self._ctor_kwargs,
+                'base_url': REGOLO_OPENAI_BASE_URL,
+                'extra_body': merged_extra_body,
+            }
+            return _cached_openai_chat(self._regolo_model, byok, regolo_kwargs)
+        return self._default
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+    def __or__(self, other):
+        return self._resolve() | other
+
+    def __ror__(self, other):
+        return other | self._resolve()
 
 
 class _AnthropicViaOpenAIProxy:
