@@ -71,6 +71,36 @@ BYOK_HEADERS = {
     'regolo': 'x-byok-regolo',
 }
 
+# ---------------------------------------------------------------------------
+# EU Privacy Mode — per-request flag that asks the backend to route every
+# routable LLM workload through regolo.ai (Italy-hosted, zero retention)
+# instead of the active MODEL_QOS profile. Set via the X-Privacy-Mode HTTP
+# header with a truthy value; absence or a falsy value keeps the existing
+# routing. Orthogonal to BYOK — a user can have Privacy Mode on with or
+# without regolo key enrolment (though without the key the request will
+# fail loudly at the LLM call site by design).
+# ---------------------------------------------------------------------------
+PRIVACY_MODE_HEADER = 'x-privacy-mode'
+_PRIVACY_MODE_TRUTHY = frozenset({'1', 'on', 'true', 'yes', 'enabled'})
+
+_privacy_mode_ctx: ContextVar[bool] = ContextVar('privacy_mode', default=False)
+
+
+def _parse_privacy_mode(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in _PRIVACY_MODE_TRUTHY
+
+
+def is_privacy_mode_active() -> bool:
+    """True when the current request sent an X-Privacy-Mode truthy header."""
+    return _privacy_mode_ctx.get()
+
+
+def set_privacy_mode(enabled: bool) -> None:
+    """Used by the middleware; also by WS handlers that read headers manually."""
+    _privacy_mode_ctx.set(bool(enabled))
+
 # Keys for the current request, if the client supplied them.
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
@@ -113,6 +143,15 @@ def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
     return keys
 
 
+def extract_privacy_mode_from_websocket(websocket: WebSocket) -> bool:
+    """Read the X-Privacy-Mode header from a WebSocket's initial upgrade request.
+
+    Like ``extract_byok_from_websocket``, WebSocket handlers must call this
+    manually and then pass the result to ``set_privacy_mode``.
+    """
+    return _parse_privacy_mode(websocket.headers.get(PRIVACY_MODE_HEADER))
+
+
 class BYOKMiddleware(BaseHTTPMiddleware):
     """Extract BYOK headers from each HTTP request into the contextvar.
 
@@ -127,10 +166,13 @@ class BYOKMiddleware(BaseHTTPMiddleware):
             value = request.headers.get(header)
             if value:
                 keys[provider] = value
+        privacy_mode = _parse_privacy_mode(request.headers.get(PRIVACY_MODE_HEADER))
         token = _byok_ctx.set(keys)
+        privacy_token = _privacy_mode_ctx.set(privacy_mode)
         try:
             return await call_next(request)
         finally:
+            _privacy_mode_ctx.reset(privacy_token)
             _byok_ctx.reset(token)
 
 
