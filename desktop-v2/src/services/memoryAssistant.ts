@@ -12,9 +12,12 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { api } from "@/services/api";
+import { notify } from "@/services/notifications";
 import {
   CapturedFrame,
-  setFrameHandler,
+  addFrameListener,
+  startMonitoring,
+  stopMonitoring,
 } from "@/services/proactiveAssistant";
 import {
   isAppAllowed,
@@ -309,6 +312,11 @@ async function handleFrame(frame: CapturedFrame): Promise<void> {
     }
 
     await persistMemory(memory, frame, result);
+
+    if (settings.notificationsEnabled) {
+      const title = memory.category === "interesting" ? "Wisdom captured" : "Memory saved";
+      void notify(title, memory.content);
+    }
   } catch (err) {
     console.warn("[MemoryAssistant] handleFrame error:", err);
   } finally {
@@ -319,10 +327,14 @@ async function handleFrame(frame: CapturedFrame): Promise<void> {
 /** Start listening for proactive frames. Idempotent. */
 export function initMemoryAssistant(): void {
   if (unsubscribeFrame) return;
-  setFrameHandler((frame) => {
+  const off = addFrameListener((frame) => {
     void handleFrame(frame);
   });
-  unsubscribeFrame = () => setFrameHandler(() => {});
+  startMonitoring();
+  unsubscribeFrame = () => {
+    off();
+    stopMonitoring();
+  };
   console.info("[MemoryAssistant] started");
 }
 
