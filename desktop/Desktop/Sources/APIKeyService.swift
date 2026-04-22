@@ -21,6 +21,7 @@ enum BYOKProvider: String, CaseIterable {
     case anthropic
     case gemini
     case deepgram
+    case regolo
 
     var storageKey: String {
         switch self {
@@ -28,6 +29,7 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "dev_anthropic_api_key"
         case .gemini: return "dev_gemini_api_key"
         case .deepgram: return "dev_deepgram_api_key"
+        case .regolo: return "dev_regolo_api_key"
         }
     }
 
@@ -37,6 +39,7 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "X-BYOK-Anthropic"
         case .gemini: return "X-BYOK-Gemini"
         case .deepgram: return "X-BYOK-Deepgram"
+        case .regolo: return "X-BYOK-Regolo"
         }
     }
 
@@ -46,6 +49,7 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "Anthropic"
         case .gemini: return "Gemini"
         case .deepgram: return "Deepgram"
+        case .regolo: return "Regolo (EU)"
         }
     }
 }
