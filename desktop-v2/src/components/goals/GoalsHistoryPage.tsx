@@ -90,13 +90,13 @@ function CompletedGoalRow({ goal }: { goal: Goal }) {
                 <Check size={12} />
               </span>
             ) : (
-              <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
+              <span className="text-[11px] text-muted-foreground">
                 Removed
               </span>
             )}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
+        <div className="text-[11px] text-muted-foreground">
           {relativeDate(goal.completed_at ?? goal.updated_at)}
         </div>
       </div>
