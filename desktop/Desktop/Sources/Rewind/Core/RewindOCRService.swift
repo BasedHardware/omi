@@ -213,24 +213,21 @@ actor RewindOCRService {
 
             request.recognitionLevel = recognitionLevel
             request.usesLanguageCorrection = false
-            // Use automatic language detection instead of a fixed ["en-US"] list.
-            // On macOS 26, TextRecognition's internal Swift concurrency tasks access the
-            // recognitionLanguages array via ObjC bridge; when restricted to a single
-            // language and the image content triggers an empty-candidates path, the
-            // framework asserts on objectAtSubscript:0 of an empty __SwiftNativeNSArray
-            // (EXC_BREAKPOINT / _assertionFailure). Letting Vision auto-detect avoids
-            // that code path. (Refs: issue #6944, #5891)
-            request.automaticallyDetectsLanguage = true
+            request.recognitionLanguages = ["en-US"]
+            // Pin to Revision 2 to avoid an EXC_BREAKPOINT crash in TextRecognition
+            // Revision 3 on macOS 26. The crash happens in a cooperative thread spawned
+            // internally by VNRecognizeTextRequestRevision3 — no Omi code appears in the
+            // faulting thread's stack — confirming this is an Apple regression in that
+            // revision's Swift concurrency usage. Revision 2 avoids that code path while
+            // retaining acceptable OCR quality on the macOS 14+ deployment target.
+            // (Refs: issue #6944, crash queue com.apple.VNRecognizeTextRequestRevision3)
+            request.revision = VNRecognizeTextRequestRevision2
 
-            // autoreleasepool ensures Vision/TextRecognition ObjC objects are released
-            // promptly and don't outlive the handler's cooperative tasks on macOS 26.
-            autoreleasepool {
-                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-                do {
-                    try handler.perform([request])
-                } catch {
-                    continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
-                }
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: RewindError.ocrFailed(error.localizedDescription))
             }
         }
     }
