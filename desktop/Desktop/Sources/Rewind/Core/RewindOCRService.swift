@@ -215,13 +215,13 @@ actor RewindOCRService {
             request.usesLanguageCorrection = false
             request.recognitionLanguages = ["en-US"]
             // Pin to Revision 2 to avoid an EXC_BREAKPOINT crash in TextRecognition
-            // Revision 3 on macOS 26. The crash happens in a cooperative thread spawned
-            // internally by VNRecognizeTextRequestRevision3 — no Omi code appears in the
-            // faulting thread's stack — confirming this is an Apple regression in that
-            // revision's Swift concurrency usage. Revision 2 avoids that code path while
-            // retaining acceptable OCR quality on the macOS 14+ deployment target.
-            // (Refs: issue #6944, crash queue com.apple.VNRecognizeTextRequestRevision3)
-            // TODO: Remove once Apple fixes Revision 3 on macOS 26.
+            // Revision 3 (confirmed on macOS 15.4.1 and macOS 26). Revision 3 internally
+            // calls into a Swift array via ObjC bridge and hits an assertion failure in
+            // __EmptyArrayStorage._objectAt — no Omi code appears in the faulting thread,
+            // confirming this is an Apple regression in VNRecognizeTextRequestRevision3.
+            // Revision 2 avoids that code path with acceptable OCR quality on macOS 14+.
+            // (Refs: issue #6944, crash thread libswiftCore _assertionFailure)
+            // TODO: Remove once Apple fixes VNRecognizeTextRequestRevision3.
             request.revision = VNRecognizeTextRequestRevision2
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
