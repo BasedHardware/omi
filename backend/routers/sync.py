@@ -469,7 +469,8 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                     frame_count += 1
                 except Exception as e:
                     logger.error(f"Error decoding frame {frame_count}: {e}")
-                    break
+                    # Skip this frame instead of breaking the entire decode loop
+                    continue
 
         if frame_count > 0:
             logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")

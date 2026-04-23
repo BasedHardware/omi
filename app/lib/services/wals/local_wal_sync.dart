@@ -539,7 +539,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         break;
       }
       var right = i;
-      var left = right - steps;
+      var left = right - steps + 1;
       if (left < 0) {
         left = 0;
       }
