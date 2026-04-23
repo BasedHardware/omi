@@ -1098,6 +1098,10 @@ class FloatingControlBarManager {
     /// Used when browser tools activate so the bar stays visible above Chrome.
     func showTemporarily() {
         guard window != nil else { return }
+        guard isEnabled else {
+            log("FloatingControlBarManager: showTemporarily() suppressed because bar is disabled")
+            return
+        }
         if isSnoozed {
             log("FloatingControlBarManager: showTemporarily() suppressed because bar is snoozed")
             return
@@ -1115,6 +1119,10 @@ class FloatingControlBarManager {
         context: FloatingBarNotificationContext? = nil,
         screenshotData: Data? = nil
     ) {
+        guard isEnabled else {
+            log("FloatingControlBarManager: dropping notification because bar is disabled")
+            return
+        }
         let notification = FloatingBarNotification(
             title: title,
             message: message,

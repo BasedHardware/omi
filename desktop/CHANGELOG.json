@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed floating bar visibility preference so auto-reveal paths no longer resurface it after Show floating bar is turned off"
+  ],
   "releases": [
     {
       "version": "0.11.358",

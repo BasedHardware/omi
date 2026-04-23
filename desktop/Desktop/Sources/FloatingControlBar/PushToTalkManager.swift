@@ -138,7 +138,7 @@ class PushToTalkManager: ObservableObject {
     // to already be visible. This keeps onboarding step 3 quiet on entry while
     // still allowing the user to trigger the bar by pressing the key.
     if pttActive, !FloatingControlBarManager.shared.isVisible {
-      FloatingControlBarManager.shared.show()
+      FloatingControlBarManager.shared.showTemporarily()
     }
 
     guard FloatingControlBarManager.shared.isVisible else { return }
