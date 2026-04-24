@@ -126,8 +126,20 @@ typedef enum {
 #define MIC_CLK_PIN 42  // PDM Clock pin (GPIO42)
 #define MIC_DATA_PIN 41 // PDM Data pin (GPIO41)
 
-#define MIC_SAMPLE_RATE 16000          // 16kHz sample rate
-#define MIC_BUFFER_SAMPLES 1600        // 100ms buffer (16000 * 0.1)
+#ifndef CONFIG_AUDIO_DENOISE_RNNOISE
+#define CONFIG_AUDIO_DENOISE_RNNOISE 1
+#endif
+
+#define OPUS_SAMPLE_RATE 16000
+#define MIC_SAMPLE_RATE OPUS_SAMPLE_RATE
+
+#if CONFIG_AUDIO_DENOISE_RNNOISE
+#define MIC_CAPTURE_SAMPLE_RATE 48000
+#define MIC_BUFFER_SAMPLES 480
+#else
+#define MIC_CAPTURE_SAMPLE_RATE OPUS_SAMPLE_RATE
+#define MIC_BUFFER_SAMPLES 1600
+#endif
 #define MIC_GAIN 2                     // Microphone gain multiplier
 #define AUDIO_RING_BUFFER_SAMPLES 8000 // 500ms of audio data
 

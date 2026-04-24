@@ -1,0 +1,16 @@
+{
+  "name": "rnnoise",
+  "version": "0.1.0",
+  "build": {
+    "srcFilter": [
+      "-<*>",
+      "+<denoise.c>",
+      "+<rnn.c>",
+      "+<pitch.c>",
+      "+<kiss_fft.c>",
+      "+<celt_lpc.c>",
+      "+<rnn_data.c>"
+    ],
+    "includeDir": "include"
+  }
+}

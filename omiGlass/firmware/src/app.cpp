@@ -7,6 +7,7 @@
 #include <BLEUtils.h>
 
 #include "config.h" // Use config.h for all configurations
+#include "audio_preprocess.h"
 #include "esp_camera.h"
 #include "esp_sleep.h"
 #include "mic.h"
@@ -323,8 +324,17 @@ void shutdownDevice()
 // -------------------------------------------------------------------------
 void onMicData(int16_t *data, size_t samples)
 {
-    // Feed PCM data to Opus encoder
+#if MIC_CAPTURE_SAMPLE_RATE == OPUS_SAMPLE_RATE
     opus_receive_pcm(data, samples);
+#else
+    int16_t out_buf[MIC_BUFFER_SAMPLES / 3];
+    size_t out_samples = 0;
+    if (audio_preprocess_process(data, samples, batteryPercentage, out_buf, sizeof(out_buf) / sizeof(out_buf[0]), &out_samples)) {
+        if (out_samples > 0) {
+            opus_receive_pcm(out_buf, out_samples);
+        }
+    }
+#endif
 }
 
 void onOpusEncoded(uint8_t *data, size_t len)

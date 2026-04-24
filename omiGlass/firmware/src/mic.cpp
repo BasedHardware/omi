@@ -10,7 +10,8 @@
 // Static variables
 static volatile bool mic_running = false;
 static mic_data_handler audio_callback = nullptr;
-static int16_t *i2s_read_buffer = nullptr;
+static int16_t i2s_read_buffer_storage[MIC_BUFFER_SAMPLES];
+static int16_t *i2s_read_buffer = i2s_read_buffer_storage;
 
 bool mic_start()
 {
@@ -22,29 +23,12 @@ bool mic_start()
     Serial.println("Initializing I2S PDM microphone...");
     Serial.printf("  CLK Pin: GPIO%d\n", MIC_CLK_PIN);
     Serial.printf("  DATA Pin: GPIO%d\n", MIC_DATA_PIN);
-    Serial.printf("  Sample Rate: %d Hz\n", MIC_SAMPLE_RATE);
-
-    // Allocate buffer in PSRAM for better performance
-    if (i2s_read_buffer == nullptr) {
-        i2s_read_buffer = (int16_t *) ps_malloc(MIC_BUFFER_SAMPLES * sizeof(int16_t));
-        if (i2s_read_buffer == nullptr) {
-            Serial.println("Failed to allocate mic buffer in PSRAM!");
-            // Try regular malloc as fallback
-            i2s_read_buffer = (int16_t *) malloc(MIC_BUFFER_SAMPLES * sizeof(int16_t));
-            if (i2s_read_buffer == nullptr) {
-                Serial.println("Failed to allocate mic buffer!");
-                return false;
-            }
-            Serial.println("Using regular RAM for mic buffer");
-        } else {
-            Serial.println("Using PSRAM for mic buffer");
-        }
-    }
+    Serial.printf("  Sample Rate: %d Hz\n", MIC_CAPTURE_SAMPLE_RATE);
 
     // I2S configuration for PDM microphone
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM),
-        .sample_rate = MIC_SAMPLE_RATE,
+        .sample_rate = MIC_CAPTURE_SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
         .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
