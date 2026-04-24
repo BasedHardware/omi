@@ -99,9 +99,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     // Block if already on a call
     if (provider.callState != PhoneCallState.idle && provider.callState != PhoneCallState.ended) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.callAlreadyInProgress)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.callAlreadyInProgress)));
       return;
     }
 
@@ -166,9 +164,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage()),
-            ),
+            onPressed: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage())),
           ),
         ],
         bottom: TabBar(

@@ -51,10 +51,7 @@ Future<Uint8List?> synthesizeSpeech({
   }
 
   if (response.statusCode == 429 || response.statusCode == 503) {
-    throw TtsUnavailableException(
-      response.statusCode,
-      retryAfter: response.headers['retry-after'],
-    );
+    throw TtsUnavailableException(response.statusCode, retryAfter: response.headers['retry-after']);
   }
 
   if (response.statusCode != 200) {
