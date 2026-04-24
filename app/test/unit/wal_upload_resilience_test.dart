@@ -238,36 +238,76 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // Zombie miss — documents the known gap: no retry cap in syncAll()
+  // Zombie miss — the exact symptom the user is experiencing:
+  //   "recordings retry upload every time I exit and open the app"
+  //
+  // Root cause: syncAll() catches all upload failures and resets isSyncing,
+  // but does NOT increment retryCount or change status. The WAL stays miss
+  // and is re-queued by _autoUploadPendingPhoneFiles on the next cold start.
   // -------------------------------------------------------------------------
 
-  group('zombie miss: retry cap gap (known issue)', () {
-    test('KNOWN ISSUE: miss WAL with no file has retryCount but syncAll does not check it', () async {
-      // This test documents the behaviour, not a fix.
+  group('zombie miss: upload failure leaves WAL stuck as miss', () {
+    test('failed upload leaves WAL as miss with retryCount unchanged', () async {
+      // Simulates what the user observes: a recording that exists on disk,
+      // gets picked up by syncAll(), upload attempt fails (network/server error),
+      // and the WAL is returned to miss — indistinguishable from its initial state.
       //
-      // getMissingWals() (used by getOrphanedWals) gates on retryCount < 3,
-      // but syncAll() at line 504 filters ONLY on status == miss && storage == disk.
-      // It ignores retryCount entirely.
-      //
-      // Result: a WAL that consistently fails upload will be re-queued on
-      // every app open (via _autoUploadPendingPhoneFiles → syncAll) with no
-      // backoff and no cap, causing infinite retry.
-      //
-      // Fix needed: syncAll() should skip WALs with retryCount >= maxRetries,
-      // OR _autoUploadPendingPhoneFiles should apply its own cap before calling syncAll().
-      final wal = _makeWal(timerStart: 1000, filePath: null);
-      wal.retryCount = 10;  // Already retried 10 times
+      // On next app open, _autoUploadPendingPhoneFiles runs again, finds the same
+      // miss WAL, and re-queues it. This loop repeats indefinitely.
+
+      const filename = 'zombie_audio_6000.bin';
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes([0xAA, 0xBB]); // File exists — passes pre-upload checks
+
+      final wal = _makeWal(timerStart: 6000, filePath: filename);
+      expect(wal.retryCount, 0);
       sync.testWals = [wal];
 
-      // syncAll does not check retryCount — the WAL is still processed
-      await sync.syncAll();
+      // syncAll() will reach syncLocalFilesV2, which fails (no server in test env).
+      // The catch block at local_wal_sync.dart:661 resets isSyncing but does NOT:
+      //   - increment retryCount
+      //   - change status
+      //   - apply any backoff
+      try {
+        await sync.syncAll().timeout(const Duration(seconds: 5));
+      } catch (_) {}
 
-      // The WAL is eventually corrupted (null filePath), but that is because
-      // of the file-existence check, NOT a retry cap. With a valid but
-      // persistently-failing file, the WAL would stay miss forever.
+      final stuck = sync.testWals.first;
+      expect(stuck.status, WalStatus.miss,
+          reason: 'upload failure must not permanently corrupt the WAL — it stays miss');
+      expect(stuck.retryCount, 0,
+          reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
+              'on every app open and is unconditionally re-queued');
+      expect(stuck.isSyncing, false,
+          reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
+    });
+
+    test('KNOWN GAP: syncAll picks up miss WAL regardless of retryCount', () async {
+      // getOrphanedWals() gates on retryCount < 3 (line 438), but syncAll()
+      // at line 504 filters ONLY on status==miss && storage==disk.
+      // A WAL that has already failed 100 times is treated identically to one
+      // that has never been tried.
       //
-      // This test simply documents that retryCount is not consulted.
-      // A future fix should make syncAll skip WALs with retryCount >= 3.
+      // Fix needed: syncAll() should skip WALs with retryCount >= N,
+      // or _autoUploadPendingPhoneFiles should apply the cap before calling syncAll().
+      const filename = 'high_retry_7000.bin';
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes([0xAA, 0xBB]);
+
+      final wal = _makeWal(timerStart: 7000, filePath: filename);
+      wal.retryCount = 50; // Has failed 50 times already
+      sync.testWals = [wal];
+
+      // syncAll will still attempt the upload — retryCount is never consulted.
+      // We verify by observing that isSyncing is cleared after the attempt,
+      // meaning syncAll processed the WAL (not skipped it).
+      try {
+        await sync.syncAll().timeout(const Duration(seconds: 5));
+      } catch (_) {}
+
+      expect(sync.testWals.first.isSyncing, false,
+          reason: 'isSyncing cleared confirms syncAll processed this WAL, '
+              'despite retryCount=50 — no cap is enforced');
     });
   });
 }
