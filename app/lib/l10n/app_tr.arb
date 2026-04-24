@@ -732,6 +732,7 @@
     "slideToUpdate": "Güncellemek için kaydırın",
     "copiedToClipboard": "{title} panoya kopyalandı",
     "batteryLevel": "Pil Seviyesi",
+    "charging": "Şarj oluyor",
     "productUpdate": "Ürün Güncellemesi",
     "offline": "Çevrimdışı",
     "available": "Mevcut",
@@ -2686,6 +2687,8 @@
     "onTheCallEnterThisCode": "Arama sirasinda bu kodu girin",
     "phoneAllow": "Izin ver",
     "phoneCallSettingsTitle": "Arama ayarlari",
+    "showPhoneCallButtonTitle": "Arama Düğmesini Göster",
+    "showPhoneCallButtonDesc": "Ana ekranda telefon arama düğmesini göster",
     "phoneCallsSubtitle": "Gercek zamanli transkripsiyon ile arayin",
     "phoneCallsWithOmi": "Omi ile aramalar",
     "phoneContactsTab": "Kisiler",
@@ -3012,5 +3015,11 @@
     "batteryHistory": "Pil",
     "day": "Gün",
     "noBatteryDataYet": "Henüz pil verisi yok",
-    "week": "Hafta"
+    "week": "Hafta",
+    "voiceResponseAudio": "Omi yanıtını sesli oku",
+    "voiceResponseMode": "Sesli yanıt",
+    "voiceResponseModeTitle": "Yanıtlar ne zaman okunsun",
+    "voiceResponseOff": "Kapalı",
+    "voiceResponseHeadphonesOnly": "Sadece kulaklık",
+    "voiceResponseAlways": "Her zaman"
 }

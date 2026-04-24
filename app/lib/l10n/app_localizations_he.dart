@@ -2357,6 +2357,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryLevel => 'רמת הסוללה';
 
   @override
+  String get charging => 'טוען';
+
+  @override
   String get productUpdate => 'עדכון מוצר';
 
   @override
@@ -8220,6 +8223,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'הגדרות שיחות טלפון';
 
   @override
+  String get showPhoneCallButtonTitle => 'הצג כפתור שיחת טלפון';
+
+  @override
+  String get showPhoneCallButtonDesc => 'הצג כפתור שיחת טלפון במסך הבית';
+
+  @override
   String get yourVerifiedNumbers => 'המספרים המאומתים שלך';
 
   @override
@@ -9051,4 +9060,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => 'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
+
+  @override
+  String get voiceResponseAudio => 'קרא את תגובת Omi בקול';
+
+  @override
+  String get voiceResponseMode => 'תגובה קולית';
+
+  @override
+  String get voiceResponseModeTitle => 'מתי לקרוא תשובות';
+
+  @override
+  String get voiceResponseOff => 'כבוי';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'אוזניות בלבד';
+
+  @override
+  String get voiceResponseAlways => 'תמיד';
 }

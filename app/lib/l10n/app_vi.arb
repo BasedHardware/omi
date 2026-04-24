@@ -732,6 +732,7 @@
     "slideToUpdate": "Vuốt để cập nhật",
     "copiedToClipboard": "Đã sao chép {title} vào khay nhớ tạm",
     "batteryLevel": "Mức Pin",
+    "charging": "Đang sạc",
     "productUpdate": "Cập Nhật Sản Phẩm",
     "offline": "Ngoại tuyến",
     "available": "Có sẵn",
@@ -2656,6 +2657,8 @@
     "onTheCallEnterThisCode": "Trong cuộc gọi, nhập mã này",
     "phoneAllow": "Cho phép",
     "phoneCallSettingsTitle": "Cài đặt cuộc gọi",
+    "showPhoneCallButtonTitle": "Hiển thị nút gọi điện",
+    "showPhoneCallButtonDesc": "Hiển thị nút gọi điện trên màn hình chính",
     "phoneCallsSubtitle": "Gọi điện với phiên âm thời gian thực",
     "phoneCallsWithOmi": "Cuộc gọi với Omi",
     "phoneContactsTab": "Danh bạ",
@@ -2982,5 +2985,11 @@
     "batteryHistory": "Pin",
     "day": "Ngày",
     "noBatteryDataYet": "Chưa có dữ liệu pin",
-    "week": "Tuần"
+    "week": "Tuần",
+    "voiceResponseAudio": "Đọc to phản hồi của Omi",
+    "voiceResponseMode": "Phản hồi bằng giọng nói",
+    "voiceResponseModeTitle": "Khi nào đọc phản hồi",
+    "voiceResponseOff": "Tắt",
+    "voiceResponseHeadphonesOnly": "Chỉ tai nghe",
+    "voiceResponseAlways": "Luôn luôn"
 }

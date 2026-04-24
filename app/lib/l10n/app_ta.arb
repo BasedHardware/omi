@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "பேட்டரி நிலை",
+    "charging": "சார்ஜ் ஆகிறது",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "ஸ்பீக்கர்",
     "phoneEndCall": "முடி",
     "phoneCallSettingsTitle": "தொலைபேசி அழைப்பு அமைப்பாடுகள்",
+    "showPhoneCallButtonTitle": "ஃபோன் அழைப்பு பொத்தானை காட்டு",
+    "showPhoneCallButtonDesc": "முகப்பு திரையில் ஃபோன் அழைப்பு பொத்தானை காட்டு",
     "yourVerifiedNumbers": "உங்கள் சரிபார்க்கப்பட்ட எண்கள்",
     "verifiedNumbersDescription": "நீங்கள் யாரையாவது அழைக்கும்போது, அவர்கள் தங்கள் தொலைபேசிகளில் இந்த எண்ணைக் காண்பார்கள்",
     "noVerifiedNumbers": "சரிபார்க்கப்பட்ட எண்கள் இல்லை",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "பேட்டரி",
     "day": "நாள்",
     "noBatteryDataYet": "இன்னும் பேட்டரி தரவு இல்லை",
-    "week": "வாரம்"
+    "week": "வாரம்",
+    "voiceResponseAudio": "Omi பதிலை சத்தமாக படிக்கவும்",
+    "voiceResponseMode": "குரல் பதில்",
+    "voiceResponseModeTitle": "பதில்களை எப்போது பேசுவது",
+    "voiceResponseOff": "முடக்கம்",
+    "voiceResponseHeadphonesOnly": "ஹெட்ஃபோன் மட்டும்",
+    "voiceResponseAlways": "எப்போதும்"
 }

@@ -732,6 +732,7 @@
     "slideToUpdate": "Přejeďte pro aktualizaci",
     "copiedToClipboard": "{title} zkopírováno do schránky",
     "batteryLevel": "Stav baterie",
+    "charging": "Nabíjení",
     "productUpdate": "Aktualizace produktu",
     "offline": "Offline",
     "available": "K dispozici",
@@ -2620,6 +2621,8 @@
     "onTheCallEnterThisCode": "Behem hovoru zadejte tento kod",
     "phoneAllow": "Povolit",
     "phoneCallSettingsTitle": "Nastaveni hovoru",
+    "showPhoneCallButtonTitle": "Zobrazit tlačítko telefonního hovoru",
+    "showPhoneCallButtonDesc": "Zobrazit tlačítko telefonního hovoru na domovské obrazovce",
     "phoneCallsSubtitle": "Volejte s prepisem v realnem case",
     "phoneCallsWithOmi": "Hovory s Omi",
     "phoneContactsTab": "Kontakty",
@@ -2946,5 +2949,11 @@
     "batteryHistory": "Baterie",
     "day": "Den",
     "noBatteryDataYet": "Zatím žádná data o baterii",
-    "week": "Týden"
+    "week": "Týden",
+    "voiceResponseAudio": "Přečíst odpověď Omi nahlas",
+    "voiceResponseMode": "Hlasová odpověď",
+    "voiceResponseModeTitle": "Kdy vyslovit odpovědi",
+    "voiceResponseOff": "Vypnuto",
+    "voiceResponseHeadphonesOnly": "Pouze sluchátka",
+    "voiceResponseAlways": "Vždy"
 }

@@ -732,6 +732,7 @@
     "slideToUpdate": "اسحب للتحديث",
     "copiedToClipboard": "تم نسخ {title} إلى الحافظة",
     "batteryLevel": "مستوى البطارية",
+    "charging": "شحن",
     "productUpdate": "تحديث المنتج",
     "offline": "غير متصل",
     "available": "متاح",
@@ -2642,6 +2643,8 @@
     "phoneSpeaker": "مكبر الصوت",
     "phoneEndCall": "إنهاء",
     "phoneCallSettingsTitle": "إعدادات المكالمات الهاتفية",
+    "showPhoneCallButtonTitle": "إظهار زر المكالمة الهاتفية",
+    "showPhoneCallButtonDesc": "عرض زر المكالمة الهاتفية على الشاشة الرئيسية",
     "yourVerifiedNumbers": "أرقامك المتحقق منها",
     "verifiedNumbersDescription": "عند الاتصال بشخص ما، سيرى هذا الرقم على هاتفه",
     "noVerifiedNumbers": "لا توجد أرقام متحقق منها",
@@ -2944,5 +2947,11 @@
     "batteryHistory": "البطارية",
     "day": "يوم",
     "noBatteryDataYet": "لا توجد بيانات بطارية بعد",
-    "week": "أسبوع"
+    "week": "أسبوع",
+    "voiceResponseAudio": "قراءة رد Omi بصوت عالٍ",
+    "voiceResponseMode": "استجابة صوتية",
+    "voiceResponseModeTitle": "متى تُقرأ الردود",
+    "voiceResponseOff": "إيقاف",
+    "voiceResponseHeadphonesOnly": "السماعات فقط",
+    "voiceResponseAlways": "دائماً"
 }

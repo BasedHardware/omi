@@ -732,6 +732,7 @@
     "slideToUpdate": "업데이트하려면 밀기",
     "copiedToClipboard": "{title}이(가) 클립보드에 복사되었습니다",
     "batteryLevel": "배터리 수준",
+    "charging": "충전 중",
     "productUpdate": "제품 업데이트",
     "offline": "오프라인",
     "available": "사용 가능",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "통화 중 이 코드를 입력하세요",
     "phoneAllow": "허용",
     "phoneCallSettingsTitle": "통화 설정",
+    "showPhoneCallButtonTitle": "통화 버튼 표시",
+    "showPhoneCallButtonDesc": "홈 화면에 전화 통화 버튼 표시",
     "phoneCallsSubtitle": "실시간 전사와 함께 전화하기",
     "phoneCallsWithOmi": "Omi로 통화",
     "phoneContactsTab": "연락처",
@@ -2977,5 +2980,11 @@
     "batteryHistory": "배터리",
     "day": "일",
     "noBatteryDataYet": "아직 배터리 데이터가 없습니다",
-    "week": "주"
+    "week": "주",
+    "voiceResponseAudio": "Omi의 응답 소리 내어 읽기",
+    "voiceResponseMode": "음성 응답",
+    "voiceResponseModeTitle": "응답을 말할 시점",
+    "voiceResponseOff": "끄기",
+    "voiceResponseHeadphonesOnly": "헤드폰만",
+    "voiceResponseAlways": "항상"
 }

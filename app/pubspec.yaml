@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.533+828
+version: 1.0.533+831
 
 
 environment:
@@ -122,6 +122,8 @@ dependencies:
   webview_flutter: 4.13.0
   flutter_sound: 9.25.1
   just_audio: ^0.9.39
+  audio_session: ^0.1.21
+  flutter_tts: ^4.2.0
   video_player: ^2.8.2
   web_socket_channel: ^3.0.3
   image_picker: ^1.1.2

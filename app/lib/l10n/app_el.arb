@@ -732,6 +732,7 @@
     "slideToUpdate": "Σύρετε για ενημέρωση",
     "copiedToClipboard": "{title} αντιγράφηκε στο πρόχειρο",
     "batteryLevel": "Επίπεδο μπαταρίας",
+    "charging": "Φόρτιση",
     "productUpdate": "Ενημέρωση προϊόντος",
     "offline": "Εκτός σύνδεσης",
     "available": "Διαθέσιμο",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "Στην κλήση, εισάγετε αυτόν τον κωδικό",
     "phoneAllow": "Επιτρέπω",
     "phoneCallSettingsTitle": "Ρυθμίσεις κλήσεων",
+    "showPhoneCallButtonTitle": "Εμφάνιση κουμπιού κλήσης",
+    "showPhoneCallButtonDesc": "Εμφάνιση κουμπιού τηλεφωνικής κλήσης στην αρχική οθόνη",
     "phoneCallsSubtitle": "Κάντε κλήσεις με μεταγραφή σε πραγματικό χρόνο",
     "phoneCallsWithOmi": "Κλήσεις με Omi",
     "phoneContactsTab": "Επαφές",
@@ -2977,5 +2980,11 @@
     "batteryHistory": "Μπαταρία",
     "day": "Ημέρα",
     "noBatteryDataYet": "Δεν υπάρχουν δεδομένα μπαταρίας ακόμα",
-    "week": "Εβδομάδα"
+    "week": "Εβδομάδα",
+    "voiceResponseAudio": "Ανάγνωση απάντησης Omi φωναχτά",
+    "voiceResponseMode": "Φωνητική απάντηση",
+    "voiceResponseModeTitle": "Πότε να εκφωνούνται οι απαντήσεις",
+    "voiceResponseOff": "Απενεργ.",
+    "voiceResponseHeadphonesOnly": "Μόνο ακουστικά",
+    "voiceResponseAlways": "Πάντα"
 }

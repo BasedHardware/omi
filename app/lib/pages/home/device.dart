@@ -161,6 +161,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildBatterySection(DeviceProvider provider) {
+    final charging = provider.isCharging;
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -172,17 +173,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               height: 24,
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
-                child: FaIcon(
-                  _getBatteryIcon(provider.batteryLevel),
-                  color: _getBatteryColor(provider.batteryLevel),
-                  size: 20,
-                ),
+                child: charging
+                    ? const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 22)
+                    : FaIcon(
+                        _getBatteryIcon(provider.batteryLevel),
+                        color: _getBatteryColor(provider.batteryLevel),
+                        size: 20,
+                      ),
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                context.l10n.batteryLevel,
+                charging ? context.l10n.charging : context.l10n.batteryLevel,
                 style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
               ),
             ),

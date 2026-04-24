@@ -2377,6 +2377,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get batteryLevel => 'Nivo baterije';
 
   @override
+  String get charging => 'Punjenje';
+
+  @override
   String get productUpdate => 'Ažuriranje proizvoda';
 
   @override
@@ -8310,6 +8313,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Podešavanja telefonskih poziva';
 
   @override
+  String get showPhoneCallButtonTitle => 'Prikaži dugme za pozive';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Prikaži dugme za pozive na početnom ekranu';
+
+  @override
   String get yourVerifiedNumbers => 'Tvoji verifikovani brojevi';
 
   @override
@@ -9147,4 +9156,22 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.';
+
+  @override
+  String get voiceResponseAudio => 'Pročitaj Omi odgovor naglas';
+
+  @override
+  String get voiceResponseMode => 'Glasovni odgovor';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada izgovarati odgovore';
+
+  @override
+  String get voiceResponseOff => 'Isključeno';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Samo slušalice';
+
+  @override
+  String get voiceResponseAlways => 'Uvijek';
 }

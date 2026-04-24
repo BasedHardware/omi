@@ -733,6 +733,7 @@
     "slideToUpdate": "अपडेट के लिए स्लाइड करें",
     "copiedToClipboard": "{title} क्लिपबोर्ड में कॉपी किया गया",
     "batteryLevel": "बैटरी स्तर",
+    "charging": "चार्ज हो रहा है",
     "productUpdate": "उत्पाद अपडेट",
     "offline": "ऑफ़लाइन",
     "available": "उपलब्ध",
@@ -2652,6 +2653,8 @@
     "onTheCallEnterThisCode": "कॉल पर यह कोड दर्ज करें",
     "phoneAllow": "अनुमति दें",
     "phoneCallSettingsTitle": "कॉल सेटिंग्स",
+    "showPhoneCallButtonTitle": "फ़ोन कॉल बटन दिखाएं",
+    "showPhoneCallButtonDesc": "होम स्क्रीन पर फ़ोन कॉल बटन प्रदर्शित करें",
     "phoneCallsSubtitle": "रीयल-टाइम ट्रांसक्रिप्शन के साथ कॉल करें",
     "phoneCallsWithOmi": "Omi के साथ कॉल",
     "phoneContactsTab": "संपर्क",
@@ -2978,5 +2981,11 @@
     "batteryHistory": "बैटरी",
     "day": "दिन",
     "noBatteryDataYet": "अभी तक कोई बैटरी डेटा नहीं",
-    "week": "सप्ताह"
+    "week": "सप्ताह",
+    "voiceResponseAudio": "Omi का जवाब ज़ोर से पढ़ें",
+    "voiceResponseMode": "वॉइस प्रतिक्रिया",
+    "voiceResponseModeTitle": "उत्तर कब बोले जाएं",
+    "voiceResponseOff": "बंद",
+    "voiceResponseHeadphonesOnly": "केवल हेडफ़ोन",
+    "voiceResponseAlways": "हमेशा"
 }

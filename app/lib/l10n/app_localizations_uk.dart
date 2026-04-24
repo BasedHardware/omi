@@ -2373,6 +2373,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get batteryLevel => 'Рівень заряду';
 
   @override
+  String get charging => 'Заряджається';
+
+  @override
   String get productUpdate => 'Оновлення продукту';
 
   @override
@@ -8300,6 +8303,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Налаштування дзвінків';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показати кнопку дзвінка';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Відображати кнопку телефонного дзвінка на головному екрані';
+
+  @override
   String get yourVerifiedNumbers => 'Ваші підтверджені номери';
 
   @override
@@ -9137,4 +9146,22 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Ви досягли місячного ліміту. Оновіть, щоб продовжити спілкування з Omi без обмежень.';
+
+  @override
+  String get voiceResponseAudio => 'Читати відповідь Omi вголос';
+
+  @override
+  String get voiceResponseMode => 'Голосова відповідь';
+
+  @override
+  String get voiceResponseModeTitle => 'Коли озвучувати відповіді';
+
+  @override
+  String get voiceResponseOff => 'Вимк';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Лише навушники';
+
+  @override
+  String get voiceResponseAlways => 'Завжди';
 }

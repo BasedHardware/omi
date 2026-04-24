@@ -2350,6 +2350,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get batteryLevel => 'Batteriniveau';
 
   @override
+  String get charging => 'Oplader';
+
+  @override
   String get productUpdate => 'Produktopdatering';
 
   @override
@@ -8270,6 +8273,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Opkaldsindstillinger';
 
   @override
+  String get showPhoneCallButtonTitle => 'Vis telefonopkaldsknap';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Vis knap til telefonopkald på startskærmen';
+
+  @override
   String get yourVerifiedNumbers => 'Dine verificerede numre';
 
   @override
@@ -9109,4 +9118,22 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du har nået din månedlige grænse. Opgrader for at fortsætte med at chatte med Omi uden begrænsninger.';
+
+  @override
+  String get voiceResponseAudio => 'Læs Omis svar højt';
+
+  @override
+  String get voiceResponseMode => 'Stemmesvar';
+
+  @override
+  String get voiceResponseModeTitle => 'Hvornår svar skal læses';
+
+  @override
+  String get voiceResponseOff => 'Fra';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Kun hovedtelefoner';
+
+  @override
+  String get voiceResponseAlways => 'Altid';
 }

@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "ಬ್ಯಾಟರಿ ಸ್ತರ",
+    "charging": "ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "ಸ್ಪೀಕರ್",
     "phoneEndCall": "ಅವಸಾನ",
     "phoneCallSettingsTitle": "ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "showPhoneCallButtonTitle": "ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ",
+    "showPhoneCallButtonDesc": "ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ",
     "yourVerifiedNumbers": "ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು",
     "verifiedNumbersDescription": "ನೀವು ಯಾರನನ್ನೂ ಕರೆ ಮಾಡುವಾಗ, ಅವರು ತಮ್ಮ ಫೋನ ಉದ್ದಿಂದ ಈ ಸಂಖ್ಯೆ ನೋಡುತ್ತಾರೆ",
     "noVerifiedNumbers": "ಯಾವುದೇ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆ ಇಲ್ಲ",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "ಬ್ಯಾಟರಿ",
     "day": "ದಿನ",
     "noBatteryDataYet": "ಇನ್ನೂ ಬ್ಯಾಟರಿ ಡೇಟಾ ಇಲ್ಲ",
-    "week": "ವಾರ"
+    "week": "ವಾರ",
+    "voiceResponseAudio": "Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ",
+    "voiceResponseMode": "ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ",
+    "voiceResponseModeTitle": "ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ",
+    "voiceResponseOff": "ಆಫ್",
+    "voiceResponseHeadphonesOnly": "ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ",
+    "voiceResponseAlways": "ಯಾವಾಗಲೂ"
 }

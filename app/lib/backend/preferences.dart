@@ -162,6 +162,21 @@ class SharedPreferencesUtil {
 
   bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
 
+  // Phone call floating button on home screen - default is true
+  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
+
+  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
+
+  // Voice response playback mode for hardware-button replies.
+  //   0 = off (never speak)
+  //   1 = headphones only — AirPods / wired / USB / AirPlay (default)
+  //   2 = always, including the phone speaker
+  // Default is 1 so Omi never blasts a private answer out of the speaker
+  // in public unless the user explicitly opts in.
+  set voiceResponseMode(int value) => saveInt('voiceResponseMode', value);
+
+  int get voiceResponseMode => getInt('voiceResponseMode', defaultValue: 1);
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 

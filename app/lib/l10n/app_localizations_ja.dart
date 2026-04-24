@@ -2327,6 +2327,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryLevel => 'バッテリー残量';
 
   @override
+  String get charging => '充電中';
+
+  @override
   String get productUpdate => '製品アップデート';
 
   @override
@@ -8148,6 +8151,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8974,4 +8983,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
+
+  @override
+  String get voiceResponseAudio => 'Omiの応答を音声で再生';
+
+  @override
+  String get voiceResponseMode => '音声応答';
+
+  @override
+  String get voiceResponseModeTitle => '応答を読み上げるタイミング';
+
+  @override
+  String get voiceResponseOff => 'オフ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ヘッドフォンのみ';
+
+  @override
+  String get voiceResponseAlways => '常に';
 }

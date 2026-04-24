@@ -733,6 +733,7 @@
     "slideToUpdate": "Deslize para atualizar",
     "copiedToClipboard": "{title} copiado para a área de transferência",
     "batteryLevel": "Nível da Bateria",
+    "charging": "Carregando",
     "productUpdate": "Atualização do Produto",
     "offline": "Offline",
     "available": "Disponível",
@@ -2687,6 +2688,8 @@
     "onTheCallEnterThisCode": "Durante a chamada, digite este codigo",
     "phoneAllow": "Permitir",
     "phoneCallSettingsTitle": "Configuracoes de chamada",
+    "showPhoneCallButtonTitle": "Mostrar botão de chamada",
+    "showPhoneCallButtonDesc": "Exibir botão de chamada telefônica na tela inicial",
     "phoneCallsSubtitle": "Faca chamadas com transcricao em tempo real",
     "phoneCallsWithOmi": "Chamadas com Omi",
     "phoneContactsTab": "Contatos",
@@ -3013,5 +3016,11 @@
     "batteryHistory": "Bateria",
     "day": "Dia",
     "noBatteryDataYet": "Ainda sem dados de bateria",
-    "week": "Semana"
+    "week": "Semana",
+    "voiceResponseAudio": "Ler resposta do Omi em voz alta",
+    "voiceResponseMode": "Resposta por voz",
+    "voiceResponseModeTitle": "Quando ler respostas",
+    "voiceResponseOff": "Desligado",
+    "voiceResponseHeadphonesOnly": "Apenas fones",
+    "voiceResponseAlways": "Sempre"
 }

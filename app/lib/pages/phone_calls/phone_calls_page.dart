@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
+import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -162,6 +163,14 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage()),
+            ),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,

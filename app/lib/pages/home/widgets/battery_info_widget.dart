@@ -24,11 +24,16 @@ class BatteryInfoWidget extends StatelessWidget {
       builder: (context, isMemoriesPage, child) {
         // Use Selector to only rebuild when battery level, connected device, or connecting state changes
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
-        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool)>(
-          selector: (_, provider) =>
-              (provider.batteryLevel, provider.connectedDevice, provider.pairedDevice, provider.isConnecting),
+        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
+          selector: (_, provider) => (
+            provider.batteryLevel,
+            provider.connectedDevice,
+            provider.pairedDevice,
+            provider.isConnecting,
+            provider.isCharging
+          ),
           builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, pairedDevice, isConnecting) = data;
+            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
             if (connectedDevice != null) {
               return GestureDetector(
                 onTap: () {
@@ -59,19 +64,22 @@ class BatteryInfoWidget extends StatelessWidget {
                       // Only show battery indicator and percentage when battery level is valid (> 0)
                       if (batteryLevel > 0) ...[
                         const SizedBox(width: 6.0),
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : Colors.red,
-                            shape: BoxShape.circle,
+                        if (isCharging)
+                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
+                        else
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6.0),
+                        const SizedBox(width: 4.0),
                         Text(
                           '$batteryLevel%',
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),

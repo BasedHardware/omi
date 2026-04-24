@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Ниво на батерија",
+    "charging": "Полнење",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "Глас",
     "phoneEndCall": "Завршена",
     "phoneCallSettingsTitle": "Поставки за телефонски разговор",
+    "showPhoneCallButtonTitle": "Прикажи копче за повик",
+    "showPhoneCallButtonDesc": "Прикажи копче за телефонски повик на почетниот екран",
     "yourVerifiedNumbers": "Твоите потврдени броеви",
     "verifiedNumbersDescription": "Кога ќе повикаш некој, тие ќе видат овој број на нивниот телефон",
     "noVerifiedNumbers": "Нема потврдени броеви",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "Батерија",
     "day": "Ден",
     "noBatteryDataYet": "Сè уште нема податоци за батеријата",
-    "week": "Седмица"
+    "week": "Седмица",
+    "voiceResponseAudio": "Прочитај го одговорот на Omi гласно",
+    "voiceResponseMode": "Гласовен одговор",
+    "voiceResponseModeTitle": "Кога да се изговараат одговорите",
+    "voiceResponseOff": "Исклучено",
+    "voiceResponseHeadphonesOnly": "Само слушалки",
+    "voiceResponseAlways": "Секогаш"
 }

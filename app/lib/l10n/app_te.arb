@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "బ్యాటరీ స్థాయి",
+    "charging": "ఛార్జ్ అవుతోంది",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "స్పీకర్",
     "phoneEndCall": "ముగించు",
     "phoneCallSettingsTitle": "ఫోన్ కాల్ సెట్టింగ్‌లు",
+    "showPhoneCallButtonTitle": "ఫోన్ కాల్ బటన్ చూపించు",
+    "showPhoneCallButtonDesc": "హోమ్ స్క్రీన్‌లో ఫోన్ కాల్ బటన్ చూపించు",
     "yourVerifiedNumbers": "మీ ధృవీకరించిన సంఖ్యలు",
     "verifiedNumbersDescription": "మీరు ఎవరికైనా కాల్ చేసినప్పుడు, వారు తమ ఫోన్‌లో ఈ నంబర్‌ను చూస్తారు",
     "noVerifiedNumbers": "ధృవీకరించిన సంఖ్యలు లేవు",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "బ్యాటరీ",
     "day": "రోజు",
     "noBatteryDataYet": "ఇంకా బ్యాటరీ డేటా లేదు",
-    "week": "వారం"
+    "week": "వారం",
+    "voiceResponseAudio": "Omi ప్రతిస్పందనను బిగ్గరగా చదవండి",
+    "voiceResponseMode": "వాయిస్ ప్రతిస్పందన",
+    "voiceResponseModeTitle": "ప్రతిస్పందనలను ఎప్పుడు చదవాలి",
+    "voiceResponseOff": "ఆఫ్",
+    "voiceResponseHeadphonesOnly": "హెడ్‌ఫోన్‌లు మాత్రమే",
+    "voiceResponseAlways": "ఎల్లప్పుడూ"
 }

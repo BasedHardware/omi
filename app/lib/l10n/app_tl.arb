@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Antas ng Baterya",
+    "charging": "Nagcha-charge",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "Tapos",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Ipakita ang button ng tawag",
+    "showPhoneCallButtonDesc": "Ipakita ang button ng tawag sa home screen",
     "yourVerifiedNumbers": "Ang Iyong Na-verify na Mga Numero",
     "verifiedNumbersDescription": "Kapag tumatawag ka sa isang tao, makikita nila ang numerong ito sa kanilang phone",
     "noVerifiedNumbers": "Walang na-verify na mga numero",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "Baterya",
     "day": "Araw",
     "noBatteryDataYet": "Wala pang datos ng baterya",
-    "week": "Linggo"
+    "week": "Linggo",
+    "voiceResponseAudio": "Basahin nang malakas ang sagot ng Omi",
+    "voiceResponseMode": "Tugon sa boses",
+    "voiceResponseModeTitle": "Kailan bibigkasin ang tugon",
+    "voiceResponseOff": "Naka-off",
+    "voiceResponseHeadphonesOnly": "Headphones lang",
+    "voiceResponseAlways": "Palagi"
 }

@@ -2327,6 +2327,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryLevel => '배터리 수준';
 
   @override
+  String get charging => '충전 중';
+
+  @override
   String get productUpdate => '제품 업데이트';
 
   @override
@@ -8150,6 +8153,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSettingsTitle => '통화 설정';
 
   @override
+  String get showPhoneCallButtonTitle => '통화 버튼 표시';
+
+  @override
+  String get showPhoneCallButtonDesc => '홈 화면에 전화 통화 버튼 표시';
+
+  @override
   String get yourVerifiedNumbers => '인증된 번호';
 
   @override
@@ -8975,4 +8984,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '월간 한도에 도달했습니다. 제한 없이 Omi와 계속 채팅하려면 업그레이드하세요.';
+
+  @override
+  String get voiceResponseAudio => 'Omi의 응답 소리 내어 읽기';
+
+  @override
+  String get voiceResponseMode => '음성 응답';
+
+  @override
+  String get voiceResponseModeTitle => '응답을 말할 시점';
+
+  @override
+  String get voiceResponseOff => '끄기';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '헤드폰만';
+
+  @override
+  String get voiceResponseAlways => '항상';
 }

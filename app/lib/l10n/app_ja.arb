@@ -733,6 +733,7 @@
     "slideToUpdate": "スライドして更新",
     "copiedToClipboard": "{title}をクリップボードにコピーしました",
     "batteryLevel": "バッテリー残量",
+    "charging": "充電中",
     "productUpdate": "製品アップデート",
     "offline": "オフライン",
     "available": "利用可能",
@@ -2652,6 +2653,8 @@
     "onTheCallEnterThisCode": "通話中にこのコードを入力",
     "phoneAllow": "許可",
     "phoneCallSettingsTitle": "通話設定",
+    "showPhoneCallButtonTitle": "通話ボタンを表示",
+    "showPhoneCallButtonDesc": "ホーム画面に通話ボタンを表示する",
     "phoneCallsSubtitle": "リアルタイム文字起こし付きで通話",
     "phoneCallsWithOmi": "Omiで通話",
     "phoneContactsTab": "連絡先",
@@ -2978,5 +2981,11 @@
     "batteryHistory": "バッテリー",
     "day": "日",
     "noBatteryDataYet": "バッテリーデータはまだありません",
-    "week": "週"
+    "week": "週",
+    "voiceResponseAudio": "Omiの応答を音声で再生",
+    "voiceResponseMode": "音声応答",
+    "voiceResponseModeTitle": "応答を読み上げるタイミング",
+    "voiceResponseOff": "オフ",
+    "voiceResponseHeadphonesOnly": "ヘッドフォンのみ",
+    "voiceResponseAlways": "常に"
 }

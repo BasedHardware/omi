@@ -732,6 +732,7 @@
     "slideToUpdate": "Gli for å oppdatere",
     "copiedToClipboard": "{title} kopiert til utklippstavlen",
     "batteryLevel": "Batterinivå",
+    "charging": "Lader",
     "productUpdate": "Produktoppdatering",
     "offline": "Frakoblet",
     "available": "Tilgjengelig",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "Under samtalen, tast inn denne koden",
     "phoneAllow": "Tillat",
     "phoneCallSettingsTitle": "Samtaleinnstillinger",
+    "showPhoneCallButtonTitle": "Vis anropsknapp",
+    "showPhoneCallButtonDesc": "Vis telefonanropsknapp på startskjermen",
     "phoneCallsSubtitle": "Ring med sanntids transkripsjon",
     "phoneCallsWithOmi": "Samtaler med Omi",
     "phoneContactsTab": "Kontakter",
@@ -2977,5 +2980,11 @@
     "batteryHistory": "Batteri",
     "day": "Dag",
     "noBatteryDataYet": "Ingen batteridata ennå",
-    "week": "Uke"
+    "week": "Uke",
+    "voiceResponseAudio": "Les Omis svar høyt",
+    "voiceResponseMode": "Stemmesvar",
+    "voiceResponseModeTitle": "Når svar skal leses",
+    "voiceResponseOff": "Av",
+    "voiceResponseHeadphonesOnly": "Bare hodetelefoner",
+    "voiceResponseAlways": "Alltid"
 }

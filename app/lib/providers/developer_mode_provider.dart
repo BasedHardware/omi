@@ -36,6 +36,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool showDailyScoreEnabled = true;
   bool showTasksEnabled = true;
+  bool showPhoneCallButton = true;
 
   // VAD Gate (experimental)
   bool vadGateEnabled = false;
@@ -117,6 +118,7 @@ class DeveloperModeProvider extends BaseProvider {
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     showDailyScoreEnabled = SharedPreferencesUtil().showDailyScoreEnabled;
     showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
+    showPhoneCallButton = SharedPreferencesUtil().showPhoneCallButton;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
@@ -271,6 +273,12 @@ class DeveloperModeProvider extends BaseProvider {
   void onShowTasksChanged(var value) {
     showTasksEnabled = value;
     SharedPreferencesUtil().showTasksEnabled = value;
+    notifyListeners();
+  }
+
+  void onShowPhoneCallButtonChanged(var value) {
+    showPhoneCallButton = value;
+    SharedPreferencesUtil().showPhoneCallButton = value;
     notifyListeners();
   }
 

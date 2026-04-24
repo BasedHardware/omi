@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Razina baterije",
+    "charging": "Punjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "Zvučnik",
     "phoneEndCall": "Završi",
     "phoneCallSettingsTitle": "Postavke telefonskih poziva",
+    "showPhoneCallButtonTitle": "Prikaži gumb za poziv",
+    "showPhoneCallButtonDesc": "Prikaži gumb za telefonski poziv na početnom zaslonu",
     "yourVerifiedNumbers": "Vaši potvrđeni brojevi",
     "verifiedNumbersDescription": "Kada pozovete nekoga, on/ona će vidjeti ovaj broj na svom telefonu",
     "noVerifiedNumbers": "Nema potvrđenih brojeva",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "Baterija",
     "day": "Dan",
     "noBatteryDataYet": "Još nema podataka o bateriji",
-    "week": "Tjedan"
+    "week": "Tjedan",
+    "voiceResponseAudio": "Pročitaj Omijev odgovor naglas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kada izgovarati odgovore",
+    "voiceResponseOff": "Isključeno",
+    "voiceResponseHeadphonesOnly": "Samo slušalice",
+    "voiceResponseAlways": "Uvijek"
 }

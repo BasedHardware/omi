@@ -732,6 +732,7 @@
     "slideToUpdate": "Csúsztassa a frissítéshez",
     "copiedToClipboard": "{title} a vágólapra másolva",
     "batteryLevel": "Akkumulátor szint",
+    "charging": "Töltés",
     "productUpdate": "Termékfrissítés",
     "offline": "Offline",
     "available": "Elérhető",
@@ -2747,6 +2748,8 @@
     "onTheCallEnterThisCode": "A hivas soran adja meg ezt a kodot",
     "phoneAllow": "Engedelyezes",
     "phoneCallSettingsTitle": "Hivasbeallitasok",
+    "showPhoneCallButtonTitle": "Telefonhívás gomb megjelenítése",
+    "showPhoneCallButtonDesc": "Telefonhívás gomb megjelenítése a főképernyőn",
     "phoneCallsSubtitle": "Hivjon valos ideju atirassal",
     "phoneCallsWithOmi": "Hivasok az Omival",
     "phoneContactsTab": "Nevjegyek",
@@ -3073,5 +3076,11 @@
     "batteryHistory": "Akkumulátor",
     "day": "Nap",
     "noBatteryDataYet": "Még nincsenek akkumulátor adatok",
-    "week": "Hét"
+    "week": "Hét",
+    "voiceResponseAudio": "Omi válaszának felolvasása",
+    "voiceResponseMode": "Hangválasz",
+    "voiceResponseModeTitle": "Mikor szólaljon meg a válasz",
+    "voiceResponseOff": "Ki",
+    "voiceResponseHeadphonesOnly": "Csak fülhallgató",
+    "voiceResponseAlways": "Mindig"
 }

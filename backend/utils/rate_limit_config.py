@@ -86,6 +86,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
+    # char caps are enforced in database.redis_db.check_tts_rate_limit.
+    "tts:synthesize": (300, 3600),
 }
 
 

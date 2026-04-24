@@ -407,6 +407,13 @@ class MixpanelManager {
         properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
       );
 
+  void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
+
+  void voiceResponseModeChanged(int mode) {
+    const names = {0: 'off', 1: 'headphones_only', 2: 'always'};
+    track('Voice Response Mode Changed', properties: {'mode': names[mode] ?? 'unknown', 'mode_int': mode});
+  }
+
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
 

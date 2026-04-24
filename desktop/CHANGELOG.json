@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Proactive notifications now only appear in the floating bar, not as macOS system banners",
+    "Made the entire floating bar notification clickable (previously only the text opened the chat)"
+  ],
   "releases": [
     {
       "version": "0.11.358",

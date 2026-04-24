@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "ব্যাটারি স্তর",
+    "charging": "চার্জ হচ্ছে",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "স্পিকার",
     "phoneEndCall": "শেষ করুন",
     "phoneCallSettingsTitle": "ফোন কল সেটিংস",
+    "showPhoneCallButtonTitle": "ফোন কল বাটন দেখান",
+    "showPhoneCallButtonDesc": "হোম স্ক্রিনে ফোন কল বাটন প্রদর্শন করুন",
     "yourVerifiedNumbers": "আপনার যাচাইকৃত নম্বর",
     "verifiedNumbersDescription": "যখন আপনি কাউকে কল করেন, তারা তাদের ফোনে এই নম্বর দেখবেন",
     "noVerifiedNumbers": "কোনো যাচাইকৃত নম্বর নেই",
@@ -10685,5 +10688,11 @@
     "batteryHistory": "ব্যাটারি",
     "day": "দিন",
     "noBatteryDataYet": "এখনও কোনো ব্যাটারি ডেটা নেই",
-    "week": "সপ্তাহ"
+    "week": "সপ্তাহ",
+    "voiceResponseAudio": "Omi-র উত্তর জোরে পড়ুন",
+    "voiceResponseMode": "ভয়েস প্রতিক্রিয়া",
+    "voiceResponseModeTitle": "কখন উত্তর বলা হবে",
+    "voiceResponseOff": "বন্ধ",
+    "voiceResponseHeadphonesOnly": "শুধু হেডফোন",
+    "voiceResponseAlways": "সর্বদা"
 }

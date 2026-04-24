@@ -4581,6 +4581,12 @@ abstract class AppLocalizations {
   /// **'Battery Level'**
   String get batteryLevel;
 
+  /// No description provided for @charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Charging'**
+  String get charging;
+
   /// Menu item for product/firmware update
   ///
   /// In en, this message translates to:
@@ -15513,6 +15519,18 @@ abstract class AppLocalizations {
   /// **'Phone Call Settings'**
   String get phoneCallSettingsTitle;
 
+  /// No description provided for @showPhoneCallButtonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Phone Call Button'**
+  String get showPhoneCallButtonTitle;
+
+  /// No description provided for @showPhoneCallButtonDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Display phone call button on home screen'**
+  String get showPhoneCallButtonDesc;
+
   /// No description provided for @yourVerifiedNumbers.
   ///
   /// In en, this message translates to:
@@ -17024,6 +17042,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.'**
   String get chatQuotaExceededReply;
+
+  /// Voice response audio feature title
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Omi responses aloud'**
+  String get voiceResponseAudio;
+
+  /// Voice response mode setting row title
+  ///
+  /// In en, this message translates to:
+  /// **'Voice response'**
+  String get voiceResponseMode;
+
+  /// Bottom sheet title for voice response mode selector
+  ///
+  /// In en, this message translates to:
+  /// **'When to speak responses'**
+  String get voiceResponseModeTitle;
+
+  /// Voice response mode: off
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get voiceResponseOff;
+
+  /// Voice response mode: only when headphones connected
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones only'**
+  String get voiceResponseHeadphonesOnly;
+
+  /// Voice response mode: always, including phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get voiceResponseAlways;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

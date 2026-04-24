@@ -2375,6 +2375,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get batteryLevel => 'بیٹری کی سطح';
 
   @override
+  String get charging => 'چارج ہو رہا ہے';
+
+  @override
   String get productUpdate => 'مصنوع کی اپ ڈیٹ';
 
   @override
@@ -8301,6 +8304,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'فون کال کی ترتیبات';
 
   @override
+  String get showPhoneCallButtonTitle => 'فون کال بٹن دکھائیں';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ہوم اسکرین پر فون کال بٹن دکھائیں';
+
+  @override
   String get yourVerifiedNumbers => 'آپ کے تصدیق شدہ نمبر';
 
   @override
@@ -9140,4 +9149,22 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'آپ اپنی ماہانہ حد تک پہنچ گئے ہیں۔ بغیر کسی پابندی کے Omi کے ساتھ چیٹ جاری رکھنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get voiceResponseAudio => 'Omi کا جواب بلند آواز میں پڑھیں';
+
+  @override
+  String get voiceResponseMode => 'آواز کا جواب';
+
+  @override
+  String get voiceResponseModeTitle => 'جواب کب پڑھے جائیں';
+
+  @override
+  String get voiceResponseOff => 'بند';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'صرف ہیڈ فون';
+
+  @override
+  String get voiceResponseAlways => 'ہمیشہ';
 }

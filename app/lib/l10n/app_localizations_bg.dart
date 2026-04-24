@@ -2373,6 +2373,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get batteryLevel => 'Ниво на батерията';
 
   @override
+  String get charging => 'Зареждане';
+
+  @override
   String get productUpdate => 'Актуализация на продукта';
 
   @override
@@ -8321,6 +8324,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показване на бутона за телефонно обаждане';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Показване на бутона за телефонно обаждане на началния екран';
+
+  @override
   String get yourVerifiedNumbers => 'Вашите потвърдени номера';
 
   @override
@@ -9158,4 +9167,22 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Достигнахте месечния си лимит. Надградете, за да продължите да чатите с Omi без ограничения.';
+
+  @override
+  String get voiceResponseAudio => 'Прочитай отговора на Omi на глас';
+
+  @override
+  String get voiceResponseMode => 'Гласов отговор';
+
+  @override
+  String get voiceResponseModeTitle => 'Кога да се произнасят отговорите';
+
+  @override
+  String get voiceResponseOff => 'Изкл';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Само слушалки';
+
+  @override
+  String get voiceResponseAlways => 'Винаги';
 }

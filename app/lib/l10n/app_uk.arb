@@ -732,6 +732,7 @@
     "slideToUpdate": "Проведіть для оновлення",
     "copiedToClipboard": "{title} скопійовано в буфер обміну",
     "batteryLevel": "Рівень заряду",
+    "charging": "Заряджається",
     "productUpdate": "Оновлення продукту",
     "offline": "Не в мережі",
     "available": "Доступно",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "Під час дзвінка введіть цей код",
     "phoneAllow": "Дозволити",
     "phoneCallSettingsTitle": "Налаштування дзвінків",
+    "showPhoneCallButtonTitle": "Показати кнопку дзвінка",
+    "showPhoneCallButtonDesc": "Відображати кнопку телефонного дзвінка на головному екрані",
     "phoneCallsSubtitle": "Дзвоніть з транскрипцією в реальному часі",
     "phoneCallsWithOmi": "Дзвінки з Omi",
     "phoneContactsTab": "Контакти",
@@ -2977,5 +2980,11 @@
     "batteryHistory": "Батарея",
     "day": "День",
     "noBatteryDataYet": "Даних про батарею ще немає",
-    "week": "Тиждень"
+    "week": "Тиждень",
+    "voiceResponseAudio": "Читати відповідь Omi вголос",
+    "voiceResponseMode": "Голосова відповідь",
+    "voiceResponseModeTitle": "Коли озвучувати відповіді",
+    "voiceResponseOff": "Вимк",
+    "voiceResponseHeadphonesOnly": "Лише навушники",
+    "voiceResponseAlways": "Завжди"
 }

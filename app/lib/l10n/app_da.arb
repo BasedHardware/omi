@@ -732,6 +732,7 @@
     "slideToUpdate": "Glid for at opdatere",
     "copiedToClipboard": "{title} kopieret til udklipsholder",
     "batteryLevel": "Batteriniveau",
+    "charging": "Oplader",
     "productUpdate": "Produktopdatering",
     "offline": "Offline",
     "available": "Tilgængelig",
@@ -2660,6 +2661,8 @@
     "onTheCallEnterThisCode": "Indtast denne kode under opkaldet",
     "phoneAllow": "Tillad",
     "phoneCallSettingsTitle": "Opkaldsindstillinger",
+    "showPhoneCallButtonTitle": "Vis telefonopkaldsknap",
+    "showPhoneCallButtonDesc": "Vis knap til telefonopkald på startskærmen",
     "phoneCallsSubtitle": "Foretag opkald med realtidstranskription",
     "phoneCallsWithOmi": "Opkald med Omi",
     "phoneContactsTab": "Kontakter",
@@ -2986,5 +2989,11 @@
     "batteryHistory": "Batteri",
     "day": "Dag",
     "noBatteryDataYet": "Ingen batteridata endnu",
-    "week": "Uge"
+    "week": "Uge",
+    "voiceResponseAudio": "Læs Omis svar højt",
+    "voiceResponseMode": "Stemmesvar",
+    "voiceResponseModeTitle": "Hvornår svar skal læses",
+    "voiceResponseOff": "Fra",
+    "voiceResponseHeadphonesOnly": "Kun hovedtelefoner",
+    "voiceResponseAlways": "Altid"
 }
