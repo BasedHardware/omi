@@ -197,8 +197,11 @@ int app_settings_init(void)
         return err;
     }
 
-    /* Load only app-owned settings here.
-     * BT settings must be loaded after bt_enable(). */
+    /*
+     * Load only app-owned settings here.
+     * BT-side settings_load() is done later in transport_start() after
+     * bt_enable(), which is the correct ordering.
+     */
     err = settings_load_subtree("omi");
     if (err && err != -ENOENT) {
         LOG_ERR("Failed to load app settings (err %d)", err);

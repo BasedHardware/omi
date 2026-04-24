@@ -2515,6 +2515,7 @@
     "@batteryLevel": {
         "description": "Battery level label"
     },
+    "charging": "Charging",
     "productUpdate": "Product Update",
     "@productUpdate": {
         "description": "Menu item for product/firmware update"
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Track your personal goals on homepage",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Daily Reflection",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Get a 9 PM reminder to reflect on your day",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Action item description cannot be empty",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "No API keys. Create one to get started.",
     "autoCreateWhenDetected": "Auto-create when name detected",
     "trackPersonalGoals": "Track personal goals on homepage",
-    "dailyReflectionDescription": "Get a reminder at 9 PM to reflect on your day and capture your thoughts.",
     "endpointURL": "Endpoint URL",
     "links": "Links",
     "discordMemberCount": "8000+ members on Discord",
@@ -6839,9 +6831,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "Off",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8897,14 +8886,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Time for Daily Reflection",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Tell me about your day",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi Reminder",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10013,6 +9994,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "End",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Show Phone Call Button",
+    "showPhoneCallButtonDesc": "Display phone call button on home screen",
     "yourVerifiedNumbers": "Your Verified Numbers",
     "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
     "noVerifiedNumbers": "No verified numbers",
@@ -10957,5 +10940,29 @@
     "chatQuotaExceededReply": "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
     "@chatQuotaExceededReply": {
         "description": "AI reply message shown when user exceeds chat quota"
+    },
+    "voiceResponseAudio": "Speak Omi responses aloud",
+    "@voiceResponseAudio": {
+        "description": "Voice response audio feature title"
+    },
+    "voiceResponseMode": "Voice response",
+    "@voiceResponseMode": {
+        "description": "Voice response mode setting row title"
+    },
+    "voiceResponseModeTitle": "When to speak responses",
+    "@voiceResponseModeTitle": {
+        "description": "Bottom sheet title for voice response mode selector"
+    },
+    "voiceResponseOff": "Off",
+    "@voiceResponseOff": {
+        "description": "Voice response mode: off"
+    },
+    "voiceResponseHeadphonesOnly": "Headphones only",
+    "@voiceResponseHeadphonesOnly": {
+        "description": "Voice response mode: only when headphones connected"
+    },
+    "voiceResponseAlways": "Always",
+    "@voiceResponseAlways": {
+        "description": "Voice response mode: always, including phone speaker"
     }
 }

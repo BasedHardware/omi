@@ -2377,6 +2377,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get batteryLevel => 'Nivo baterije';
 
   @override
+  String get charging => 'Punjenje';
+
+  @override
   String get productUpdate => 'Ažuriranje proizvoda';
 
   @override
@@ -2503,12 +2506,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Prati svoje lične ciljeve na početnoj stranici';
-
-  @override
-  String get dailyReflection => 'Dnevna refleksija';
-
-  @override
-  String get get9PmReminderToReflect => 'Dobij podsjetnik u 21:00 za razmišljanje o svom danu';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Opis elementa akcije ne može biti prazan';
@@ -3925,9 +3922,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Prati osobne ciljeve na početnoj stranici';
-
-  @override
-  String get dailyReflectionDescription => 'Obavijest u 21:00 da razmislim na dan i zabilježi svoje misli.';
 
   @override
   String get endpointURL => 'URL krajnje točke';
@@ -7203,12 +7197,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Vrijeme za dnevnu razmjenu';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Reči mi o tvom danu';
-
-  @override
   String get actionItemReminderTitle => 'Omi podsjetnik';
 
   @override
@@ -8325,6 +8313,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Podešavanja telefonskih poziva';
 
   @override
+  String get showPhoneCallButtonTitle => 'Prikaži dugme za pozive';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Prikaži dugme za pozive na početnom ekranu';
+
+  @override
   String get yourVerifiedNumbers => 'Tvoji verifikovani brojevi';
 
   @override
@@ -9162,4 +9156,22 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.';
+
+  @override
+  String get voiceResponseAudio => 'Pročitaj Omi odgovor naglas';
+
+  @override
+  String get voiceResponseMode => 'Glasovni odgovor';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada izgovarati odgovore';
+
+  @override
+  String get voiceResponseOff => 'Isključeno';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Samo slušalice';
+
+  @override
+  String get voiceResponseAlways => 'Uvijek';
 }

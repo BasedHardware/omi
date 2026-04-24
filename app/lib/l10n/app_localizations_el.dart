@@ -2387,6 +2387,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get batteryLevel => 'Επίπεδο μπαταρίας';
 
   @override
+  String get charging => 'Φόρτιση';
+
+  @override
   String get productUpdate => 'Ενημέρωση προϊόντος';
 
   @override
@@ -2513,12 +2516,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα';
-
-  @override
-  String get dailyReflection => 'Ημερήσιος αναστοχασμός';
-
-  @override
-  String get get9PmReminderToReflect => 'Λάβετε υπενθύμιση στις 9 μ.μ. για να αναλογιστείτε την ημέρα σας';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Η περιγραφή του στοιχείου ενέργειας δεν μπορεί να είναι κενή';
@@ -3945,10 +3942,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Παρακολουθήστε προσωπικούς στόχους στην αρχική σελίδα';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Λάβετε μια υπενθύμιση στις 9 μ.μ. για να αναστοχαστείτε την ημέρα σας και να καταγράψετε τις σκέψεις σας.';
 
   @override
   String get endpointURL => 'URL τελικού σημείου';
@@ -7233,12 +7226,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Ώρα για ημερήσιο αναστοχασμό';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Πες μου για την ημέρα σου';
-
-  @override
   String get actionItemReminderTitle => 'Υπενθύμιση Omi';
 
   @override
@@ -8365,6 +8352,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Ρυθμίσεις κλήσεων';
 
   @override
+  String get showPhoneCallButtonTitle => 'Εμφάνιση κουμπιού κλήσης';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Εμφάνιση κουμπιού τηλεφωνικής κλήσης στην αρχική οθόνη';
+
+  @override
   String get yourVerifiedNumbers => 'Οι επαληθευμένοι αριθμοί σας';
 
   @override
@@ -9204,4 +9197,22 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Φτάσατε το μηνιαίο σας όριο. Αναβαθμίστε για να συνεχίσετε να συνομιλείτε με το Omi χωρίς περιορισμούς.';
+
+  @override
+  String get voiceResponseAudio => 'Ανάγνωση απάντησης Omi φωναχτά';
+
+  @override
+  String get voiceResponseMode => 'Φωνητική απάντηση';
+
+  @override
+  String get voiceResponseModeTitle => 'Πότε να εκφωνούνται οι απαντήσεις';
+
+  @override
+  String get voiceResponseOff => 'Απενεργ.';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Μόνο ακουστικά';
+
+  @override
+  String get voiceResponseAlways => 'Πάντα';
 }

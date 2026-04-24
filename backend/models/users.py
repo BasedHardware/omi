@@ -89,6 +89,19 @@ class SubscriptionPlan(BaseModel):
     legacy: bool = False
 
 
+class PhoneCallQuota(BaseModel):
+    """Phone call feature access + remaining-quota snapshot for the client."""
+
+    has_access: bool
+    is_paid: bool
+    monthly_limit: Optional[int] = None  # None = unlimited (paid), 0 = disabled
+    monthly_used: int = 0
+    remaining: Optional[int] = None  # None = unlimited
+    max_duration_seconds: Optional[int] = None
+    allowed_countries: List[str] = []
+    reset_at: Optional[int] = None  # unix seconds — start of next month UTC
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -107,3 +120,6 @@ class UserSubscriptionResponse(BaseModel):
     chat_quota_percent: float = 0.0
     chat_quota_allowed: bool = True
     chat_quota_reset_at: Optional[int] = None
+    # Phone call feature access snapshot — null means the client hasn't been
+    # given a quota read (older servers or disabled endpoints).
+    phone_call_quota: Optional[PhoneCallQuota] = None

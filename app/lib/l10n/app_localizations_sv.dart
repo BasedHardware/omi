@@ -2371,6 +2371,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get batteryLevel => 'Batterinivå';
 
   @override
+  String get charging => 'Laddar';
+
+  @override
   String get productUpdate => 'Produktuppdatering';
 
   @override
@@ -2497,12 +2500,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Spåra dina personliga mål på startsidan';
-
-  @override
-  String get dailyReflection => 'Daglig reflektion';
-
-  @override
-  String get get9PmReminderToReflect => 'Få en påminnelse kl. 21 att reflektera över din dag';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Åtgärdspostbeskrivning kan inte vara tom';
@@ -3921,10 +3918,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Spåra personliga mål på startsidan';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Få en påminnelse kl. 21 för att reflektera över din dag och fånga dina tankar.';
 
   @override
   String get endpointURL => 'Slutpunkts-URL';
@@ -7187,12 +7180,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Dags för daglig reflektion';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Berätta om din dag';
-
-  @override
   String get actionItemReminderTitle => 'Omi-påminnelse';
 
   @override
@@ -8306,6 +8293,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Samtalsinstellningar';
 
   @override
+  String get showPhoneCallButtonTitle => 'Visa samtalsknapp';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Visa telefonsamtalsknapp på startskärmen';
+
+  @override
   String get yourVerifiedNumbers => 'Dina verifierade nummer';
 
   @override
@@ -9143,4 +9136,22 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du har nått din månatliga gräns. Uppgradera för att fortsätta chatta med Omi utan begränsningar.';
+
+  @override
+  String get voiceResponseAudio => 'Läs upp Omis svar';
+
+  @override
+  String get voiceResponseMode => 'Röstsvar';
+
+  @override
+  String get voiceResponseModeTitle => 'När svar ska läsas upp';
+
+  @override
+  String get voiceResponseOff => 'Av';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Endast hörlurar';
+
+  @override
+  String get voiceResponseAlways => 'Alltid';
 }

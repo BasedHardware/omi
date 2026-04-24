@@ -2375,6 +2375,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get batteryLevel => 'Level Baterai';
 
   @override
+  String get charging => 'Mengisi daya';
+
+  @override
   String get productUpdate => 'Pembaruan Produk';
 
   @override
@@ -2501,12 +2504,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Lacak tujuan pribadi Anda di beranda';
-
-  @override
-  String get dailyReflection => 'Refleksi Harian';
-
-  @override
-  String get get9PmReminderToReflect => 'Dapatkan pengingat jam 9 malam untuk merenungkan hari Anda';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Deskripsi item tindakan tidak boleh kosong';
@@ -3926,10 +3923,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Lacak tujuan pribadi di halaman utama';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Dapatkan pengingat pukul 21.00 untuk merefleksikan hari Anda dan mencatat pikiran Anda.';
 
   @override
   String get endpointURL => 'URL Endpoint';
@@ -7197,12 +7190,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Refleksi Harian';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Saatnya untuk refleksi harian Anda';
-
-  @override
   String get actionItemReminderTitle => 'Pengingat Item Tindakan';
 
   @override
@@ -8313,6 +8300,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Pengaturan panggilan';
 
   @override
+  String get showPhoneCallButtonTitle => 'Tampilkan Tombol Panggilan';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Tampilkan tombol panggilan telepon di layar utama';
+
+  @override
   String get yourVerifiedNumbers => 'Nomor terverifikasi Anda';
 
   @override
@@ -9149,4 +9142,22 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Anda telah mencapai batas bulanan. Upgrade untuk terus mengobrol dengan Omi tanpa batasan.';
+
+  @override
+  String get voiceResponseAudio => 'Bacakan respons Omi';
+
+  @override
+  String get voiceResponseMode => 'Respons suara';
+
+  @override
+  String get voiceResponseModeTitle => 'Kapan respons diucapkan';
+
+  @override
+  String get voiceResponseOff => 'Mati';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Hanya headphone';
+
+  @override
+  String get voiceResponseAlways => 'Selalu';
 }

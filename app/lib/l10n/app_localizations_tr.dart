@@ -2375,6 +2375,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get batteryLevel => 'Pil Seviyesi';
 
   @override
+  String get charging => 'Şarj oluyor';
+
+  @override
   String get productUpdate => 'Ürün Güncellemesi';
 
   @override
@@ -2501,12 +2504,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Ana sayfada kişisel hedeflerinizi takip edin';
-
-  @override
-  String get dailyReflection => 'Günlük Düşünce';
-
-  @override
-  String get get9PmReminderToReflect => 'Gününüzü değerlendirmek için saat 21:00 hatırlatıcısı alın';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Eylem öğesi açıklaması boş olamaz';
@@ -3924,10 +3921,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Ana sayfada kişisel hedefleri izleyin';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Gününüzü değerlendirmek ve düşüncelerinizi kaydetmek için saat 21:00\'da hatırlatıcı alın.';
 
   @override
   String get endpointURL => 'Uç Nokta URL\'si';
@@ -7194,12 +7187,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Günlük düşünce zamanı';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Bana gününü anlat';
-
-  @override
   String get actionItemReminderTitle => 'Omi Hatırlatıcı';
 
   @override
@@ -8316,6 +8303,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Arama ayarlari';
 
   @override
+  String get showPhoneCallButtonTitle => 'Arama Düğmesini Göster';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Ana ekranda telefon arama düğmesini göster';
+
+  @override
   String get yourVerifiedNumbers => 'Dogrulanmis numaralariniz';
 
   @override
@@ -9152,4 +9145,22 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Aylık limitinize ulaştınız. Kısıtlama olmadan Omi ile sohbete devam etmek için yükseltin.';
+
+  @override
+  String get voiceResponseAudio => 'Omi yanıtını sesli oku';
+
+  @override
+  String get voiceResponseMode => 'Sesli yanıt';
+
+  @override
+  String get voiceResponseModeTitle => 'Yanıtlar ne zaman okunsun';
+
+  @override
+  String get voiceResponseOff => 'Kapalı';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Sadece kulaklık';
+
+  @override
+  String get voiceResponseAlways => 'Her zaman';
 }

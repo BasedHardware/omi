@@ -2388,6 +2388,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get batteryLevel => 'பேட்டரி நிலை';
 
   @override
+  String get charging => 'சார்ஜ் ஆகிறது';
+
+  @override
   String get productUpdate => 'பொருள் புதுப்பிப்பு';
 
   @override
@@ -2514,12 +2517,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'முதற்பக்கத்தில் உங்கள் ব்যক்திগত இலக்குகளை ট்র்যாக் செய்';
-
-  @override
-  String get dailyReflection => 'தினசரி பிரதிபலனை';
-
-  @override
-  String get get9PmReminderToReflect => 'உங்கள் நாளைப் பிரதிபலிக்க 9 PM நினைவூட்டல் பெறவும்';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'செயல் உருப்படி விளக்கம் காலியாக இருக்க முடியாது';
@@ -3942,10 +3939,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'முகப்பில் ব்যக்তிगத இலக்குகளைக் கண்காணிக்கவும்';
-
-  @override
-  String get dailyReflectionDescription =>
-      'உங்கள் நாளைக் பிரதிபலிக்கவும் மற்றும் உங்கள் எண்ணங்களைப் பிடிக்க இரவு 9 மணிக்கு நினைவூட்டல் பান்.';
 
   @override
   String get endpointURL => 'இறுதிப்புள்ளி URL';
@@ -7240,12 +7233,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'தினசரி சிந்தனைக்கான நேரம்';
-
-  @override
-  String get dailyReflectionNotificationBody => 'உங்கள் நாளைப் பற்றி சொல்லுங்கள்';
-
-  @override
   String get actionItemReminderTitle => 'Omi நினைவூட்டல்';
 
   @override
@@ -8363,6 +8350,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'தொலைபேசி அழைப்பு அமைப்பாடுகள்';
 
   @override
+  String get showPhoneCallButtonTitle => 'ஃபோன் அழைப்பு பொத்தானை காட்டு';
+
+  @override
+  String get showPhoneCallButtonDesc => 'முகப்பு திரையில் ஃபோன் அழைப்பு பொத்தானை காட்டு';
+
+  @override
   String get yourVerifiedNumbers => 'உங்கள் சரிபார்க்கப்பட்ட எண்கள்';
 
   @override
@@ -9208,4 +9201,22 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'நீங்கள் உங்கள் மாதாந்திர வரம்பை அடைந்துவிட்டீர்கள். கட்டுப்பாடுகள் இல்லாமல் Omi உடன் அரட்டையைத் தொடர மேம்படுத்தவும்.';
+
+  @override
+  String get voiceResponseAudio => 'Omi பதிலை சத்தமாக படிக்கவும்';
+
+  @override
+  String get voiceResponseMode => 'குரல் பதில்';
+
+  @override
+  String get voiceResponseModeTitle => 'பதில்களை எப்போது பேசுவது';
+
+  @override
+  String get voiceResponseOff => 'முடக்கம்';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ஹெட்ஃபோன் மட்டும்';
+
+  @override
+  String get voiceResponseAlways => 'எப்போதும்';
 }

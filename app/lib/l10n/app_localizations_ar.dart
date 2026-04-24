@@ -2352,6 +2352,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get batteryLevel => 'مستوى البطارية';
 
   @override
+  String get charging => 'شحن';
+
+  @override
   String get productUpdate => 'تحديث المنتج';
 
   @override
@@ -2478,12 +2481,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'تتبع أهدافك الشخصية على الصفحة الرئيسية';
-
-  @override
-  String get dailyReflection => 'التأمل اليومي';
-
-  @override
-  String get get9PmReminderToReflect => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'لا يمكن أن يكون وصف عنصر الإجراء فارغًا';
@@ -3887,9 +3884,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'تتبع الأهداف الشخصية على الصفحة الرئيسية';
-
-  @override
-  String get dailyReflectionDescription => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك وتدوين أفكارك.';
 
   @override
   String get endpointURL => 'عنوان URL لنقطة النهاية';
@@ -7130,12 +7124,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'حان وقت التأمل اليومي';
-
-  @override
-  String get dailyReflectionNotificationBody => 'أخبرني عن يومك';
-
-  @override
   String get actionItemReminderTitle => 'تذكير Omi';
 
   @override
@@ -8245,6 +8233,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'إعدادات المكالمات الهاتفية';
 
   @override
+  String get showPhoneCallButtonTitle => 'إظهار زر المكالمة الهاتفية';
+
+  @override
+  String get showPhoneCallButtonDesc => 'عرض زر المكالمة الهاتفية على الشاشة الرئيسية';
+
+  @override
   String get yourVerifiedNumbers => 'أرقامك المتحقق منها';
 
   @override
@@ -9077,4 +9071,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => 'لقد وصلت إلى حدك الشهري. قم بالترقية لمتابعة الدردشة مع Omi بدون قيود.';
+
+  @override
+  String get voiceResponseAudio => 'قراءة رد Omi بصوت عالٍ';
+
+  @override
+  String get voiceResponseMode => 'استجابة صوتية';
+
+  @override
+  String get voiceResponseModeTitle => 'متى تُقرأ الردود';
+
+  @override
+  String get voiceResponseOff => 'إيقاف';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'السماعات فقط';
+
+  @override
+  String get voiceResponseAlways => 'دائماً';
 }

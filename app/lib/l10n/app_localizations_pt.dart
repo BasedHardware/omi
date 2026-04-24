@@ -2343,6 +2343,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get batteryLevel => 'Nível da Bateria';
 
   @override
+  String get charging => 'Carregando';
+
+  @override
   String get productUpdate => 'Atualização do Produto';
 
   @override
@@ -2469,12 +2472,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Acompanhe suas metas pessoais na página inicial';
-
-  @override
-  String get dailyReflection => 'Reflexão diária';
-
-  @override
-  String get get9PmReminderToReflect => 'Receba um lembrete às 21h para refletir sobre seu dia';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'A descrição do item de ação não pode estar vazia';
@@ -3897,10 +3894,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Acompanhar metas pessoais na página inicial';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Receba um lembrete às 21h para refletir sobre seu dia e capturar seus pensamentos.';
 
   @override
   String get endpointURL => 'URL do Endpoint';
@@ -7178,12 +7171,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Hora da reflexão diária';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Conte-me sobre o seu dia';
-
-  @override
   String get actionItemReminderTitle => 'Lembrete do Omi';
 
   @override
@@ -8305,6 +8292,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracoes de chamada';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostrar botão de chamada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Exibir botão de chamada telefônica na tela inicial';
+
+  @override
   String get yourVerifiedNumbers => 'Seus numeros verificados';
 
   @override
@@ -9143,4 +9136,22 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Você atingiu seu limite mensal. Atualize para continuar conversando com Omi sem restrições.';
+
+  @override
+  String get voiceResponseAudio => 'Ler resposta do Omi em voz alta';
+
+  @override
+  String get voiceResponseMode => 'Resposta por voz';
+
+  @override
+  String get voiceResponseModeTitle => 'Quando ler respostas';
+
+  @override
+  String get voiceResponseOff => 'Desligado';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Apenas fones';
+
+  @override
+  String get voiceResponseAlways => 'Sempre';
 }

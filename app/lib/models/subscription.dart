@@ -90,6 +90,34 @@ class SubscriptionPlan {
 }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
+class PhoneCallQuota {
+  final bool hasAccess;
+  final bool isPaid;
+  final int? monthlyLimit;
+  @JsonKey(defaultValue: 0)
+  final int monthlyUsed;
+  final int? remaining;
+  final int? maxDurationSeconds;
+  @JsonKey(defaultValue: [])
+  final List<String> allowedCountries;
+  final int? resetAt;
+
+  PhoneCallQuota({
+    required this.hasAccess,
+    required this.isPaid,
+    this.monthlyLimit,
+    this.monthlyUsed = 0,
+    this.remaining,
+    this.maxDurationSeconds,
+    this.allowedCountries = const [],
+    this.resetAt,
+  });
+
+  factory PhoneCallQuota.fromJson(Map<String, dynamic> json) => _$PhoneCallQuotaFromJson(json);
+  Map<String, dynamic> toJson() => _$PhoneCallQuotaToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -113,6 +141,7 @@ class UserSubscriptionResponse {
   @JsonKey(defaultValue: true)
   final bool chatQuotaAllowed;
   final int? chatQuotaResetAt;
+  final PhoneCallQuota? phoneCallQuota;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -131,6 +160,7 @@ class UserSubscriptionResponse {
     this.chatQuotaPercent = 0.0,
     this.chatQuotaAllowed = true,
     this.chatQuotaResetAt,
+    this.phoneCallQuota,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);

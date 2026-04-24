@@ -2383,6 +2383,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryLevel => 'Akkumulátor szint';
 
   @override
+  String get charging => 'Töltés';
+
+  @override
   String get productUpdate => 'Termékfrissítés';
 
   @override
@@ -2509,12 +2512,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Kövesse személyes céljait a kezdőlapon';
-
-  @override
-  String get dailyReflection => 'Napi reflexió';
-
-  @override
-  String get get9PmReminderToReflect => 'Kapjon emlékeztetőt este 9-kor, hogy elgondolkodjon a napján';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'A műveleti elem leírása nem lehet üres';
@@ -3937,10 +3934,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Személyes célok követése a főoldalon';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Kapj emlékeztetőt este 9-kor, hogy elgondolkodj a napodról és rögzítsd gondolataidat.';
 
   @override
   String get endpointURL => 'Végpont URL';
@@ -7216,12 +7209,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Ideje a napi reflexiónak';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Mesélj a napodról';
-
-  @override
   String get actionItemReminderTitle => 'Omi emlékeztető';
 
   @override
@@ -8340,6 +8327,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Hivasbeallitasok';
 
   @override
+  String get showPhoneCallButtonTitle => 'Telefonhívás gomb megjelenítése';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Telefonhívás gomb megjelenítése a főképernyőn';
+
+  @override
   String get yourVerifiedNumbers => 'Ellenorzott szamai';
 
   @override
@@ -9178,4 +9171,22 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Elérted a havi limitedet. Frissíts, hogy korlátozás nélkül folytasd a csevegést az Omival.';
+
+  @override
+  String get voiceResponseAudio => 'Omi válaszának felolvasása';
+
+  @override
+  String get voiceResponseMode => 'Hangválasz';
+
+  @override
+  String get voiceResponseModeTitle => 'Mikor szólaljon meg a válasz';
+
+  @override
+  String get voiceResponseOff => 'Ki';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Csak fülhallgató';
+
+  @override
+  String get voiceResponseAlways => 'Mindig';
 }

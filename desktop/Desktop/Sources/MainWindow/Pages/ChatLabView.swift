@@ -331,7 +331,7 @@ class ChatLabViewModel: ObservableObject {
             // Build the real system prompt — same as ChatProvider does
             let systemPrompt = buildRealSystemPrompt(version: versions[vIdx])
 
-            // Run through the real ACP bridge (with tools, real context)
+            // Run through the real agent bridge (with tools, real context)
             let response = await runThroughBridge(
                 question: q.text,
                 systemPrompt: systemPrompt,
@@ -360,7 +360,7 @@ class ChatLabViewModel: ObservableObject {
         )
     }
 
-    /// Send a question through the real ACP bridge (same path as floating bar / main chat).
+    /// Send a question through the real agent bridge (same path as floating bar / main chat).
     /// Falls back to direct API if bridge isn't available.
     private func runThroughBridge(question: String, systemPrompt: String, sessionKey: String) async -> String {
         let chatProvider = chatProvider

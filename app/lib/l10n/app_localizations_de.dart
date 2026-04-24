@@ -2389,6 +2389,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get batteryLevel => 'Batteriestand';
 
   @override
+  String get charging => 'Wird geladen';
+
+  @override
   String get productUpdate => 'Produktaktualisierung';
 
   @override
@@ -2515,12 +2518,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Verfolgen Sie Ihre persönlichen Ziele auf der Startseite';
-
-  @override
-  String get dailyReflection => 'Tägliche Reflexion';
-
-  @override
-  String get get9PmReminderToReflect => 'Erhalten Sie um 21 Uhr eine Erinnerung, über Ihren Tag nachzudenken';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Aktionselementbeschreibung darf nicht leer sein';
@@ -3947,10 +3944,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Persönliche Ziele auf der Startseite verfolgen';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Erhalten Sie um 21 Uhr eine Erinnerung, über Ihren Tag nachzudenken und Ihre Gedanken festzuhalten.';
 
   @override
   String get endpointURL => 'Endpunkt-URL';
@@ -7238,12 +7231,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Zeit für tägliche Reflexion';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Erzähl mir von deinem Tag';
-
-  @override
   String get actionItemReminderTitle => 'Omi-Erinnerung';
 
   @override
@@ -8373,6 +8360,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Anrufeinstellungen';
 
   @override
+  String get showPhoneCallButtonTitle => 'Anruf-Schaltfläche anzeigen';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Anruf-Schaltfläche auf dem Startbildschirm anzeigen';
+
+  @override
   String get yourVerifiedNumbers => 'Ihre verifizierten Nummern';
 
   @override
@@ -9216,4 +9209,22 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du hast dein monatliches Limit erreicht. Upgrade, um ohne Einschränkungen mit Omi weiterzuchatten.';
+
+  @override
+  String get voiceResponseAudio => 'Omis Antwort laut vorlesen';
+
+  @override
+  String get voiceResponseMode => 'Sprachantwort';
+
+  @override
+  String get voiceResponseModeTitle => 'Wann Antworten vorgelesen werden';
+
+  @override
+  String get voiceResponseOff => 'Aus';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Nur Kopfhörer';
+
+  @override
+  String get voiceResponseAlways => 'Immer';
 }

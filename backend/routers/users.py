@@ -60,7 +60,9 @@ from models.users import (
     SubscriptionStatus,
     PlanType,
     PricingOption,
+    PhoneCallQuota,
 )
+from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
     get_chat_quota_snapshot,
@@ -832,6 +834,10 @@ def get_user_subscription_endpoint(
     # BYOK free plan: user supplies their own OpenAI/Anthropic/Gemini/Deepgram keys.
     # Only return unlimited when the request actually carries BYOK headers (desktop).
     # Mobile (no BYOK headers) should see the real subscription even if BYOK is active.
+    # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
+    # these users aren't surprised by a disabled phone-call feature.
+    unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
+
     if users_db.is_byok_active(uid) and has_byok_keys():
         return UserSubscriptionResponse(
             subscription=_byok_unlimited_subscription(),
@@ -845,6 +851,7 @@ def get_user_subscription_endpoint(
             memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
+            phone_call_quota=unlimited_phone_quota,
         )
 
     marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
@@ -871,6 +878,7 @@ def get_user_subscription_endpoint(
             memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
+            phone_call_quota=unlimited_phone_quota,
         )
     # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
     raw_subscription = get_user_subscription(uid)
@@ -996,6 +1004,9 @@ def get_user_subscription_endpoint(
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
 
+    # Phone-call feature access + monthly free-tier usage snapshot.
+    phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
+
     # Chat quota — reuse the shared snapshot helper
     chat_snapshot = get_chat_quota_snapshot(uid)
     chat_percent = 0.0
@@ -1020,6 +1031,7 @@ def get_user_subscription_endpoint(
         chat_quota_percent=chat_percent,
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
+        phone_call_quota=phone_call_quota,
     )
 
 

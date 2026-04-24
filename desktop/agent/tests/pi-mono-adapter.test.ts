@@ -30,7 +30,6 @@ vi.mock("child_process", async () => {
 
 function createAdapter() {
   const config: HarnessConfig = {
-    passApiKey: false,
     authToken: "test-token",
   };
   const adapter = new PiMonoAdapter(config);
@@ -175,7 +174,6 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("does not pass --no-extensions to the subprocess", async () => {
     const config: HarnessConfig = {
-      passApiKey: false,
       authToken: "test-token",
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
@@ -196,7 +194,6 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("includes required base flags: --mode rpc, -e, --provider, --model", async () => {
     const config: HarnessConfig = {
-      passApiKey: false,
       authToken: "test-token",
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");
@@ -215,7 +212,6 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
 
   it("scrubs OMI_API_KEY into the subprocess env from authToken", async () => {
     const config: HarnessConfig = {
-      passApiKey: false,
       authToken: "firebase-id-token-xyz",
     };
     const adapter = new PiMonoAdapter(config, "/fake/pi", "/fake/ext.ts");

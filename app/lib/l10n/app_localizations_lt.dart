@@ -2368,6 +2368,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get batteryLevel => 'Baterijos lygis';
 
   @override
+  String get charging => 'Kraunama';
+
+  @override
   String get productUpdate => 'Produkto atnaujinimas';
 
   @override
@@ -2494,12 +2497,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sekite savo asmeninius tikslus pagrindiniame puslapyje';
-
-  @override
-  String get dailyReflection => 'Dienos refleksija';
-
-  @override
-  String get get9PmReminderToReflect => 'Gaukite priminimą 21 val. apmąstyti savo dieną';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Veiksmo elemento aprašymas negali būti tuščias';
@@ -3916,9 +3913,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Stebėti asmeninius tikslus pagrindiniame puslapyje';
-
-  @override
-  String get dailyReflectionDescription => 'Gaukite priminimą 21 val. apmąstyti savo dieną ir užfiksuoti mintis.';
 
   @override
   String get endpointURL => 'Galinio taško URL';
@@ -7187,12 +7181,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Laikas dienos refleksijai';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Papasakok apie savo dieną';
-
-  @override
   String get actionItemReminderTitle => 'Omi priminimas';
 
   @override
@@ -8311,6 +8299,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Skambuciu nustatymai';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rodyti skambučio mygtuką';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rodyti telefono skambučio mygtuką pradiniame ekrane';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu patvirtinti numeriai';
 
   @override
@@ -9147,4 +9141,22 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Pasiekėte savo mėnesinį limitą. Atnaujinkite, kad galėtumėte toliau bendrauti su Omi be apribojimų.';
+
+  @override
+  String get voiceResponseAudio => 'Skaityti Omi atsakymą garsiai';
+
+  @override
+  String get voiceResponseMode => 'Balso atsakymas';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada įgarsinti atsakymus';
+
+  @override
+  String get voiceResponseOff => 'Išjungta';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Tik ausinėmis';
+
+  @override
+  String get voiceResponseAlways => 'Visada';
 }

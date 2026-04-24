@@ -2327,6 +2327,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryLevel => 'バッテリー残量';
 
   @override
+  String get charging => '充電中';
+
+  @override
   String get productUpdate => '製品アップデート';
 
   @override
@@ -2453,12 +2456,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflection => 'デイリー振り返り';
-
-  @override
-  String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'アクションアイテムの説明を空にすることはできません';
@@ -3850,9 +3847,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
 
   @override
   String get endpointURL => 'エンドポイント URL';
@@ -7057,12 +7051,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
-
-  @override
-  String get dailyReflectionNotificationBody => '今日のことを教えてください';
-
-  @override
   String get actionItemReminderTitle => 'Omiリマインダー';
 
   @override
@@ -8163,6 +8151,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8989,4 +8983,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
+
+  @override
+  String get voiceResponseAudio => 'Omiの応答を音声で再生';
+
+  @override
+  String get voiceResponseMode => '音声応答';
+
+  @override
+  String get voiceResponseModeTitle => '応答を読み上げるタイミング';
+
+  @override
+  String get voiceResponseOff => 'オフ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ヘッドフォンのみ';
+
+  @override
+  String get voiceResponseAlways => '常に';
 }

@@ -2389,6 +2389,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get batteryLevel => 'Antas ng Baterya';
 
   @override
+  String get charging => 'Nagcha-charge';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -2515,12 +2518,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Subaybayan ang iyong personal na mga layunin sa homepage';
-
-  @override
-  String get dailyReflection => 'Pang-araw-araw na Pag-iisip';
-
-  @override
-  String get get9PmReminderToReflect => 'Makatanggap ng 9 PM reminder upang mag-isip sa iyong araw';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Ang paglalarawan ng action item ay hindi maaaring walang laman';
@@ -3949,10 +3946,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Subaybayan ang personal na mga layunin sa homepage';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Makatanggap ng reminder sa 9 PM upang mag-isip tungkol sa iyong araw at kunin ang iyong mga iisip.';
 
   @override
   String get endpointURL => 'Endpoint URL';
@@ -7249,12 +7242,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Panahon na para sa Daily Reflection';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Sabihin sa akin ang tungkol sa iyong araw';
-
-  @override
   String get actionItemReminderTitle => 'Omi Reminder';
 
   @override
@@ -8379,6 +8366,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Ipakita ang button ng tawag';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Ipakita ang button ng tawag sa home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Ang Iyong Na-verify na Mga Numero';
 
   @override
@@ -9224,4 +9217,22 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.';
+
+  @override
+  String get voiceResponseAudio => 'Basahin nang malakas ang sagot ng Omi';
+
+  @override
+  String get voiceResponseMode => 'Tugon sa boses';
+
+  @override
+  String get voiceResponseModeTitle => 'Kailan bibigkasin ang tugon';
+
+  @override
+  String get voiceResponseOff => 'Naka-off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones lang';
+
+  @override
+  String get voiceResponseAlways => 'Palagi';
 }

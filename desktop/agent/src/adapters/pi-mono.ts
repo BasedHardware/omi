@@ -117,34 +117,36 @@ function mapModel(model: string): string {
  *  1. $PI_MONO_PATH (test/dev override)
  *  2. The actual pi-coding-agent dist/cli.js (bypasses .bin symlinks that
  *     get resolved by ditto during app bundle install)
- *  3. acp-bridge/node_modules/.bin/pi (fallback for dev where symlinks work)
+ *  3. agent/node_modules/.bin/pi (fallback for dev where symlinks work)
  *  4. Fall back to "pi" on PATH (dev machines only)
  */
 function resolveBundledPi(): string {
-  // this file compiles to acp-bridge/dist/adapters/pi-mono.js
+  // this file compiles to agent/dist/adapters/pi-mono.js
   // Prefer the direct package path — .bin/pi is a symlink that ditto resolves
   // into a flat copy, breaking its relative import of ./main.js
-  const direct = new URL(
+  // Note: URL.pathname percent-encodes spaces (%20) which breaks existsSync
+  // for app bundles with spaces in their name (e.g. "Omi Beta.app").
+  const direct = decodeURIComponent(new URL(
     "../../node_modules/@mariozechner/pi-coding-agent/dist/cli.js",
     import.meta.url
-  ).pathname;
+  ).pathname);
   if (existsSync(direct)) return direct;
-  const binFallback = new URL("../../node_modules/.bin/pi", import.meta.url)
-    .pathname;
+  const binFallback = decodeURIComponent(new URL("../../node_modules/.bin/pi", import.meta.url)
+    .pathname);
   if (existsSync(binFallback)) return binFallback;
   return "pi";
 }
 
 /** Resolve the omi-provider extension file bundled alongside the app.
  *
- *  Dev: <repo>/desktop/acp-bridge/dist/adapters/../../.. → <repo>/desktop/pi-mono-extension/index.ts
- *  Shipped: <App>.app/Contents/Resources/acp-bridge/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
+ *  Dev: <repo>/desktop/agent/dist/adapters/../../.. → <repo>/desktop/pi-mono-extension/index.ts
+ *  Shipped: <App>.app/Contents/Resources/agent/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
  */
 function resolveBundledExtension(): string {
-  return new URL(
+  return decodeURIComponent(new URL(
     "../../../pi-mono-extension/index.ts",
     import.meta.url
-  ).pathname;
+  ).pathname);
 }
 
 export class PiMonoAdapter implements HarnessAdapter {

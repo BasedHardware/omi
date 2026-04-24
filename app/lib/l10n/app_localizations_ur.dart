@@ -2375,6 +2375,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get batteryLevel => 'بیٹری کی سطح';
 
   @override
+  String get charging => 'چارج ہو رہا ہے';
+
+  @override
   String get productUpdate => 'مصنوع کی اپ ڈیٹ';
 
   @override
@@ -2501,12 +2504,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ہوم پیج پر اپنے ذاتی مقاصد کو ٹریک کریں';
-
-  @override
-  String get dailyReflection => 'روز مرہ کا تفکر';
-
-  @override
-  String get get9PmReminderToReflect => 'اپنے دن پر غور کرنے کے لیے رات 9 بجے کی یاد دہانی حاصل کریں';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'کارروائی کی چیز کی تفصیل خالی نہیں ہو سکتی';
@@ -3924,10 +3921,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ہوم پیج پر ذاتی اہداف کو ٹریک کریں';
-
-  @override
-  String get dailyReflectionDescription =>
-      'رات 9 بجے اپنے دن پر غور کرنے اور اپنے خیالات کو ریکارڈ کرنے کی یاد دہانی حاصل کریں۔';
 
   @override
   String get endpointURL => 'اختتام پوائنٹ URL';
@@ -7196,12 +7189,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'روزانہ عکاسی کا وقت';
-
-  @override
-  String get dailyReflectionNotificationBody => 'مجھے اپنے دن کے بارے میں بتائیں';
-
-  @override
   String get actionItemReminderTitle => 'Omi یادگار';
 
   @override
@@ -8317,6 +8304,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'فون کال کی ترتیبات';
 
   @override
+  String get showPhoneCallButtonTitle => 'فون کال بٹن دکھائیں';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ہوم اسکرین پر فون کال بٹن دکھائیں';
+
+  @override
   String get yourVerifiedNumbers => 'آپ کے تصدیق شدہ نمبر';
 
   @override
@@ -9156,4 +9149,22 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'آپ اپنی ماہانہ حد تک پہنچ گئے ہیں۔ بغیر کسی پابندی کے Omi کے ساتھ چیٹ جاری رکھنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get voiceResponseAudio => 'Omi کا جواب بلند آواز میں پڑھیں';
+
+  @override
+  String get voiceResponseMode => 'آواز کا جواب';
+
+  @override
+  String get voiceResponseModeTitle => 'جواب کب پڑھے جائیں';
+
+  @override
+  String get voiceResponseOff => 'بند';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'صرف ہیڈ فون';
+
+  @override
+  String get voiceResponseAlways => 'ہمیشہ';
 }

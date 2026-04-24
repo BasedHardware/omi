@@ -2381,6 +2381,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get batteryLevel => 'ಬ್ಯಾಟರಿ ಸ್ತರ';
 
   @override
+  String get charging => 'ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ';
+
+  @override
   String get productUpdate => 'ಉತ್ಪನ್ನ ನವೀಕರಣ';
 
   @override
@@ -2507,12 +2510,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ಹೋಮ್‌ಪೇಜ್‌ನಲ್ಲಿ ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಲಕ್ಷ್ಯಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ';
-
-  @override
-  String get dailyReflection => 'ದೈನಿಕ ಪ್ರತಿಫಲನ';
-
-  @override
-  String get get9PmReminderToReflect => 'ನಿಮ್ಮ ದಿನದ ಮೇಲೆ ಪ್ರತಿಫಲಿತ ಮಾಡಲು ರಾತ್ರಿ 9 ಬಾರಿ ಸ್ಮರಣೆ ಪಡೆಯಿರಿ';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'ಕ್ರಿಯೆ ಪದ ವಿವರಣೆ ಖಾಲಿ ಇರಬಾರದು';
@@ -3930,10 +3927,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ಮುಖ್ಯ ಪುಟದಲ್ಲಿ ವ್ಯಕ್ತಿಗತ ಲಕ್ಷ್ಯಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ';
-
-  @override
-  String get dailyReflectionDescription =>
-      'ನಿಮ್ಮ ದಿನವನ್ನು ಪ್ರತಿಫಲಿತ ಮಾಡಲು ಮತ್ತು ನಿಮ್ಮ ಆಲೋಚನೆಗಳನ್ನು ಹಿಡಿದುಕೊಳ್ಳಲು ರಾತ್ರಿ 9 ಗಂಟೆಗೆ ಸ್ಮರಣೀಯ ಪಡೆಯಿರಿ.';
 
   @override
   String get endpointURL => 'ಸಮಾಪ್ತಿ URL';
@@ -7210,12 +7203,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'ದೈನಿಕ ಪ್ರತಿಫಲನದ ಸಮಯ';
-
-  @override
-  String get dailyReflectionNotificationBody => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ ನನಗೆ ಹೇಳಿ';
-
-  @override
   String get actionItemReminderTitle => 'Omi ಜ್ಞಾಪಕ';
 
   @override
@@ -8334,6 +8321,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
+  String get showPhoneCallButtonTitle => 'ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ';
+
+  @override
   String get yourVerifiedNumbers => 'ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು';
 
   @override
@@ -9171,4 +9164,22 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿರ್ಬಂಧಗಳಿಲ್ಲದೆ Omi ಜೊತೆ ಚಾಟ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+
+  @override
+  String get voiceResponseAudio => 'Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ';
+
+  @override
+  String get voiceResponseMode => 'ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ';
+
+  @override
+  String get voiceResponseModeTitle => 'ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ';
+
+  @override
+  String get voiceResponseOff => 'ಆಫ್';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ';
+
+  @override
+  String get voiceResponseAlways => 'ಯಾವಾಗಲೂ';
 }

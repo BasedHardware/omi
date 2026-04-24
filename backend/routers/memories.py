@@ -50,15 +50,32 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
-def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
+async def create_memory(
+    memory: Memory,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
+):
     memory.category = MemoryCategory.manual
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    memories_db.create_memory(uid, memory_db.dict())
 
-    upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+    # Build payload outside try so serialization bugs aren't misreported as
+    # transient 503s — only the Firestore write should be retryable.
+    payload = memory_db.dict()
+
+    try:
+        await asyncio.to_thread(memories_db.create_memory, uid, payload)
+    except Exception:
+        logger.exception("Firestore create_memory failed uid=%s", uid)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    try:
+        await asyncio.to_thread(upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value)
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
     if memory.visibility == 'public':
-        critical_executor.submit(update_personas_async, uid)
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(critical_executor, update_personas_async, uid)
+
     return memory_db
 
 
@@ -146,40 +163,55 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
-def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_memory(
+    memory_id: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
+):
     _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
-    delete_memory_vector(uid, memory_id)
+    try:
+        delete_memory_vector(uid, memory_id)
+    except Exception:
+        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
     return {'status': 'ok'}
 
 
 @router.delete('/v3/memories', tags=['memories'])
-def delete_memories(uid: str = Depends(auth.get_current_user_uid)):
+def delete_memories(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
+):
     memories_db.delete_all_memories(uid)
     return {'status': 'ok'}
 
 
 @router.post('/v3/memories/{memory_id}/review', tags=['memories'])
-def review_memory(memory_id: str, value: bool, uid: str = Depends(auth.get_current_user_uid)):
+def review_memory(
+    memory_id: str,
+    value: bool,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+):
     _validate_memory(uid, memory_id)
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
 
 @router.patch('/v3/memories/{memory_id}', tags=['memories'])
-def edit_memory(memory_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+def edit_memory(
+    memory_id: str,
+    value: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+):
     _validate_memory(uid, memory_id)
-    # first_word = value.split(' ')[0]
-    # user_name = get_user_name(uid, use_default=False)
-    # if user_name == first_word:
-    #     value = value[len(first_word):].strip()
-
     memories_db.edit_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
 
 @router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
-def update_memory_visibility(memory_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+def update_memory_visibility(
+    memory_id: str,
+    value: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+):
     _validate_memory(uid, memory_id)
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')

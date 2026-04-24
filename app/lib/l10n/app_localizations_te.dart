@@ -2385,6 +2385,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get batteryLevel => 'బ్యాటరీ స్థాయి';
 
   @override
+  String get charging => 'ఛార్జ్ అవుతోంది';
+
+  @override
   String get productUpdate => 'ఉత్పత్తి అపడేట్';
 
   @override
@@ -2511,12 +2514,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'హోమ్‌పేజ్‌లో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి';
-
-  @override
-  String get dailyReflection => 'రోజువారీ ఆలోచన';
-
-  @override
-  String get get9PmReminderToReflect => 'మీ రోజుపై ఆలోచించడానికి సాయంత్రం 9 గంటలకు రిమైండర్ పొందండి';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'కార్యాచరణ అంశం వివరణ ఖాళీగా ఉండకూడదు';
@@ -3939,10 +3936,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'హోమ్‌పేజీలో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి';
-
-  @override
-  String get dailyReflectionDescription =>
-      'రాత్రి 9:00 కు మీ దిన్ను ఆలోచించుకోవటానికి మరియు మీ ఆలోచనలను కేటుకోవటానికి రిమైండర్ పొందండి.';
 
   @override
   String get endpointURL => 'ఎండ్‌పాయింట్ URL';
@@ -7228,12 +7221,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'రోజువారీ ప్రతిబింబ సమయం';
-
-  @override
-  String get dailyReflectionNotificationBody => 'మీ రోజు గురించి నాకు చెప్పండి';
-
-  @override
   String get actionItemReminderTitle => 'Omi రిమైండర్';
 
   @override
@@ -8353,6 +8340,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ఫోన్ కాల్ సెట్టింగ్‌లు';
 
   @override
+  String get showPhoneCallButtonTitle => 'ఫోన్ కాల్ బటన్ చూపించు';
+
+  @override
+  String get showPhoneCallButtonDesc => 'హోమ్ స్క్రీన్‌లో ఫోన్ కాల్ బటన్ చూపించు';
+
+  @override
   String get yourVerifiedNumbers => 'మీ ధృవీకరించిన సంఖ్యలు';
 
   @override
@@ -9190,4 +9183,22 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'మీరు మీ నెలవారీ పరిమితిని చేరుకున్నారు. పరిమితులు లేకుండా Omi తో చాట్ కొనసాగించడానికి అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get voiceResponseAudio => 'Omi ప్రతిస్పందనను బిగ్గరగా చదవండి';
+
+  @override
+  String get voiceResponseMode => 'వాయిస్ ప్రతిస్పందన';
+
+  @override
+  String get voiceResponseModeTitle => 'ప్రతిస్పందనలను ఎప్పుడు చదవాలి';
+
+  @override
+  String get voiceResponseOff => 'ఆఫ్';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'హెడ్‌ఫోన్‌లు మాత్రమే';
+
+  @override
+  String get voiceResponseAlways => 'ఎల్లప్పుడూ';
 }

@@ -2374,6 +2374,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get batteryLevel => 'Úroveň batérie';
 
   @override
+  String get charging => 'Nabíjanie';
+
+  @override
   String get productUpdate => 'Aktualizácia produktu';
 
   @override
@@ -2500,12 +2503,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sledujte svoje osobné ciele na domovskej stránke';
-
-  @override
-  String get dailyReflection => 'Denná reflexia';
-
-  @override
-  String get get9PmReminderToReflect => 'Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Popis akčnej položky nesmie byť prázdny';
@@ -3918,10 +3915,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Sledovať osobné ciele na domovskej stránke';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
 
   @override
   String get endpointURL => 'URL koncového bodu';
@@ -7180,12 +7173,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Čas na dennú reflexiu';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
-
-  @override
   String get actionItemReminderTitle => 'Pripomienka Omi';
 
   @override
@@ -8293,6 +8280,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastavenia hovorov';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobraziť tlačidlo hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobraziť tlačidlo telefonického hovoru na domovskej obrazovke';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overene cisla';
 
   @override
@@ -9127,4 +9120,22 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosiahli ste svoj mesačný limit. Inovujte, aby ste mohli pokračovať v chate s Omi bez obmedzení.';
+
+  @override
+  String get voiceResponseAudio => 'Prečítať odpoveď Omi nahlas';
+
+  @override
+  String get voiceResponseMode => 'Hlasová odpoveď';
+
+  @override
+  String get voiceResponseModeTitle => 'Kedy vysloviť odpovede';
+
+  @override
+  String get voiceResponseOff => 'Vypnuté';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Len slúchadlá';
+
+  @override
+  String get voiceResponseAlways => 'Vždy';
 }

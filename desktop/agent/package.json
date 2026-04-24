@@ -1,5 +1,5 @@
 {
-  "name": "omi-acp-bridge",
+  "name": "omi-agent",
   "version": "1.0.0",
   "private": true,
   "type": "module",

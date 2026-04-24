@@ -2372,6 +2372,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get batteryLevel => 'Mức Pin';
 
   @override
+  String get charging => 'Đang sạc';
+
+  @override
   String get productUpdate => 'Cập Nhật Sản Phẩm';
 
   @override
@@ -2498,12 +2501,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Theo dõi mục tiêu cá nhân trên trang chủ';
-
-  @override
-  String get dailyReflection => 'Suy ngẫm hàng ngày';
-
-  @override
-  String get get9PmReminderToReflect => 'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Mô tả mục hành động không được để trống';
@@ -3923,10 +3920,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Theo dõi mục tiêu cá nhân trên trang chủ';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn và ghi lại suy nghĩ.';
 
   @override
   String get endpointURL => 'URL Điểm cuối';
@@ -7189,12 +7182,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Đến giờ suy ngẫm hàng ngày';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Kể cho tôi nghe về ngày của bạn';
-
-  @override
   String get actionItemReminderTitle => 'Nhắc nhở Omi';
 
   @override
@@ -8305,6 +8292,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Hiển thị nút gọi điện';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Hiển thị nút gọi điện trên màn hình chính';
+
+  @override
   String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
 
   @override
@@ -9139,4 +9132,22 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Bạn đã đạt giới hạn hàng tháng. Nâng cấp để tiếp tục trò chuyện với Omi không giới hạn.';
+
+  @override
+  String get voiceResponseAudio => 'Đọc to phản hồi của Omi';
+
+  @override
+  String get voiceResponseMode => 'Phản hồi bằng giọng nói';
+
+  @override
+  String get voiceResponseModeTitle => 'Khi nào đọc phản hồi';
+
+  @override
+  String get voiceResponseOff => 'Tắt';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Chỉ tai nghe';
+
+  @override
+  String get voiceResponseAlways => 'Luôn luôn';
 }

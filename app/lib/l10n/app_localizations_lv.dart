@@ -2374,6 +2374,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get batteryLevel => 'Akumulatora līmenis';
 
   @override
+  String get charging => 'Uzlāde';
+
+  @override
   String get productUpdate => 'Produkta atjauninājums';
 
   @override
@@ -2500,12 +2503,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Izsekojiet savus personīgos mērķus sākumlapā';
-
-  @override
-  String get dailyReflection => 'Ikdienas pārdomu';
-
-  @override
-  String get get9PmReminderToReflect => 'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Darbības vienuma apraksts nevar būt tukšs';
@@ -3922,10 +3919,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Izsekot personīgos mērķus sākumlapā';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu un piefiksētu domas.';
 
   @override
   String get endpointURL => 'Galapunkta URL';
@@ -7197,12 +7190,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Laiks ikdienas pārdomām';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Pastāsti man par savu dienu';
-
-  @override
   String get actionItemReminderTitle => 'Omi atgādinājums';
 
   @override
@@ -8321,6 +8308,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Zvanu iestatijumi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rādīt zvana pogu';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rādīt tālruņa zvana pogu sākuma ekrānā';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu verificetie numuri';
 
   @override
@@ -9157,4 +9150,22 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Jūs esat sasniedzis savu mēneša limitu. Jauniniet, lai turpinātu tērzēt ar Omi bez ierobežojumiem.';
+
+  @override
+  String get voiceResponseAudio => 'Lasīt Omi atbildi skaļi';
+
+  @override
+  String get voiceResponseMode => 'Balss atbilde';
+
+  @override
+  String get voiceResponseModeTitle => 'Kad atskaņot atbildes';
+
+  @override
+  String get voiceResponseOff => 'Izslēgts';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Tikai austiņās';
+
+  @override
+  String get voiceResponseAlways => 'Vienmēr';
 }

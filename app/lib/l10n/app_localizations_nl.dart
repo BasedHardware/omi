@@ -2376,6 +2376,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get batteryLevel => 'Batterijniveau';
 
   @override
+  String get charging => 'Opladen';
+
+  @override
   String get productUpdate => 'Productupdate';
 
   @override
@@ -2502,12 +2505,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Volg je persoonlijke doelen op de startpagina';
-
-  @override
-  String get dailyReflection => 'Dagelijkse reflectie';
-
-  @override
-  String get get9PmReminderToReflect => 'Ontvang om 21:00 uur een herinnering om te reflecteren op je dag';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Actiepuntomschrijving mag niet leeg zijn';
@@ -3928,10 +3925,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Persoonlijke doelen volgen op de homepage';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Ontvang om 21:00 een herinnering om te reflecteren op je dag en je gedachten vast te leggen.';
 
   @override
   String get endpointURL => 'Eindpunt-URL';
@@ -7205,12 +7198,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Tijd voor dagelijkse reflectie';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Vertel me over je dag';
-
-  @override
   String get actionItemReminderTitle => 'Omi-herinnering';
 
   @override
@@ -8330,6 +8317,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Gespreksinstellingen';
 
   @override
+  String get showPhoneCallButtonTitle => 'Toon belknop';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Toon de telefoonbelknop op het startscherm';
+
+  @override
   String get yourVerifiedNumbers => 'Uw geverifieerde nummers';
 
   @override
@@ -9167,4 +9160,22 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Je hebt je maandelijkse limiet bereikt. Upgrade om zonder beperkingen met Omi te blijven chatten.';
+
+  @override
+  String get voiceResponseAudio => 'Lees Omi\'s antwoord voor';
+
+  @override
+  String get voiceResponseMode => 'Spraakantwoord';
+
+  @override
+  String get voiceResponseModeTitle => 'Wanneer antwoorden worden voorgelezen';
+
+  @override
+  String get voiceResponseOff => 'Uit';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Alleen koptelefoon';
+
+  @override
+  String get voiceResponseAlways => 'Altijd';
 }

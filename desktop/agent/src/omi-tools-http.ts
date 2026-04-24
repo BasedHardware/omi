@@ -34,7 +34,7 @@ function sendToSwift(msg: ToolUseMessage): void {
   try {
     process.stdout.write(JSON.stringify(msg) + "\n");
   } catch (err) {
-    process.stderr.write(`[acp-bridge] Failed to write to stdout: ${err}\n`);
+    process.stderr.write(`[agent] Failed to write to stdout: ${err}\n`);
   }
 }
 
@@ -303,7 +303,7 @@ export async function startOmiToolsServer(): Promise<string> {
       const addr = server.address();
       if (addr && typeof addr === "object") {
         const url = `http://127.0.0.1:${addr.port}/`;
-        process.stderr.write(`[acp-bridge] omi-tools HTTP MCP server on ${url}\n`);
+        process.stderr.write(`[agent] omi-tools HTTP MCP server on ${url}\n`);
         resolve(url);
       } else {
         reject(new Error("Failed to get server address"));

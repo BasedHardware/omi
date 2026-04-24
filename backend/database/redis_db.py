@@ -636,7 +636,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -649,7 +650,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -670,6 +672,83 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     allowed = current <= max_requests
     retry_after = max(0, ttl) if not allowed else 0
     return allowed, remaining, retry_after
+
+
+# Atomic TTS rate-limit: burst (sliding-window ZSET) + daily char counter.
+# Returns [status, retry_after_seconds]:
+#   0 = allow, 1 = burst exceeded, 2 = daily char limit exceeded.
+# Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
+# trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
+# UTC (caller passes seconds_until_midnight_utc as the TTL).
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
+local burst_key = KEYS[1]
+local daily_key = KEYS[2]
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local burst_limit = tonumber(ARGV[3])
+local char_count = tonumber(ARGV[4])
+local daily_limit = tonumber(ARGV[5])
+local daily_ttl = tonumber(ARGV[6])
+
+redis.call('ZREMRANGEBYSCORE', burst_key, 0, now_ms - window_ms)
+local burst_current = redis.call('ZCARD', burst_key)
+if burst_current >= burst_limit then
+    return {1, math.floor(window_ms / 1000)}
+end
+
+local daily_current = tonumber(redis.call('GET', daily_key) or '0')
+if daily_current + char_count > daily_limit then
+    return {2, daily_ttl}
+end
+
+redis.call('ZADD', burst_key, now_ms, now_ms .. ':' .. math.random())
+redis.call('PEXPIRE', burst_key, window_ms)
+local new_daily = redis.call('INCRBY', daily_key, char_count)
+if new_daily == char_count then
+    redis.call('EXPIRE', daily_key, daily_ttl)
+end
+return {0, 0}
+"""
+)
+
+
+def _seconds_until_midnight_utc() -> int:
+    now = datetime.now(timezone.utc)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((tomorrow - now).total_seconds()))
+
+
+def check_tts_rate_limit(
+    uid: str,
+    char_count: int,
+    burst_limit: int = 50,
+    burst_window_secs: int = 60,
+    daily_char_limit: int = 10_000,
+) -> tuple[int, int]:
+    """Atomic per-user TTS rate limit check.
+
+    Returns (status, retry_after_seconds) where status is:
+        0  — allow
+        1  — burst window exceeded
+        2  — daily character limit exceeded
+       -1  — Redis error (fail-open: caller should allow the request)
+    """
+    try:
+        burst_key = f'tts:burst:{uid}'
+        today_utc = datetime.now(timezone.utc).strftime('%Y%m%d')
+        daily_key = f'tts:chars:{uid}:{today_utc}'
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        window_ms = burst_window_secs * 1000
+        daily_ttl = _seconds_until_midnight_utc()
+        result = _TTS_RATE_LIMIT_LUA(
+            keys=[burst_key, daily_key],
+            args=[now_ms, window_ms, burst_limit, char_count, daily_char_limit, daily_ttl],
+        )
+        return int(result[0]), int(result[1])
+    except Exception as e:
+        logger.error(f'check_tts_rate_limit: redis error uid={uid}: {e}')
+        return -1, 0
 
 
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:

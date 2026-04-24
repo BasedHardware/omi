@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 import logging
+from models.memories import MemoryDB
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     memory_id = str(uuid.uuid4())
     memory_data = {
         'id': memory_id,
+        'uid': uid,
         'content': preference,
         'category': 'system',
         'manually_added': False,
@@ -80,6 +82,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         'visibility': 'private',
         'tags': ['agent-learned'],
     }
+    memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
         memory_db.create_memory(uid, memory_data)

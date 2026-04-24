@@ -103,7 +103,7 @@ struct OnboardingView: View {
     }
     .task {
       guard !isExportPreview else { return }
-      // Pre-warm the ACP bridge before the chat step starts.
+      // Pre-warm the agent bridge before the chat step starts.
       await chatProvider.warmupBridge()
       await graphViewModel.addGraphFromStorage()
       if graphViewModel.isEmpty {

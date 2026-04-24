@@ -2380,6 +2380,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get batteryLevel => 'Nivel baterie';
 
   @override
+  String get charging => 'Se încarcă';
+
+  @override
   String get productUpdate => 'Actualizare produs';
 
   @override
@@ -2506,12 +2509,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Urmărește-ți obiectivele personale pe pagina principală';
-
-  @override
-  String get dailyReflection => 'Reflecție zilnică';
-
-  @override
-  String get get9PmReminderToReflect => 'Primește o reamintire la ora 21 pentru a reflecta asupra zilei tale';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Descrierea elementului de acțiune nu poate fi goală';
@@ -3938,10 +3935,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Urmăriți obiective personale pe pagina de pornire';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
 
   @override
   String get endpointURL => 'URL punct final';
@@ -7217,12 +7210,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'E timpul pentru reflecție zilnică';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Povestește-mi despre ziua ta';
-
-  @override
   String get actionItemReminderTitle => 'Memento Omi';
 
   @override
@@ -8345,6 +8332,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Setari apeluri';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afișați butonul de apel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afișați butonul de apel telefonic pe ecranul de pornire';
+
+  @override
   String get yourVerifiedNumbers => 'Numerele dvs. verificate';
 
   @override
@@ -9182,4 +9175,22 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Ai atins limita lunară. Fă upgrade pentru a continua să discuți cu Omi fără restricții.';
+
+  @override
+  String get voiceResponseAudio => 'Citește răspunsul Omi cu voce tare';
+
+  @override
+  String get voiceResponseMode => 'Răspuns vocal';
+
+  @override
+  String get voiceResponseModeTitle => 'Când să rostească răspunsurile';
+
+  @override
+  String get voiceResponseOff => 'Oprit';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Doar căști';
+
+  @override
+  String get voiceResponseAlways => 'Întotdeauna';
 }

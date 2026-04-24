@@ -2377,6 +2377,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get batteryLevel => 'बॅटरी स्तर';
 
   @override
+  String get charging => 'चार्ज होत आहे';
+
+  @override
   String get productUpdate => 'उत्पादन अपडेट';
 
   @override
@@ -2503,12 +2506,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'मुख्यपृष्ठावर आपल्या व्यक्तिगत लक्ष्यांचा मागोवा घ्या';
-
-  @override
-  String get dailyReflection => 'दैनिक चिंतन';
-
-  @override
-  String get get9PmReminderToReflect => 'आपल्या दिवसावर विचार करण्यासाठी रात्रि ९ वाजताचा स्मरण मिळवा';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'कृती आयटमचे वर्णन रिक्त असू शकत नाही';
@@ -3923,10 +3920,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'होमपेजवर व्यक्तिगत लक्ष्य ट्रॅक करा';
-
-  @override
-  String get dailyReflectionDescription =>
-      'आपल्या दिवसावर चिंतन करण्यासाठी आणि आपल्या विचार कॅप्चर करण्यासाठी रात्री ९ वाजता स्मरणपत्र प्राप्त करा.';
 
   @override
   String get endpointURL => 'एंडपॉइंट URL';
@@ -7195,12 +7188,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'दैनिक प्रतिबिंबसाठी वेळ';
-
-  @override
-  String get dailyReflectionNotificationBody => 'मला तुमच्या दिवसाविषयी सांगा';
-
-  @override
   String get actionItemReminderTitle => 'Omi स्मरणपत्र';
 
   @override
@@ -8314,6 +8301,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'फोन कॉल सेटिंग्ज';
 
   @override
+  String get showPhoneCallButtonTitle => 'फोन कॉल बटण दाखवा';
+
+  @override
+  String get showPhoneCallButtonDesc => 'मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा';
+
+  @override
   String get yourVerifiedNumbers => 'तुमचे सत्यापित नंबर';
 
   @override
@@ -9150,4 +9143,22 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'तुम्ही तुमची मासिक मर्यादा गाठली आहे. निर्बंधांशिवाय Omi सोबत चॅट सुरू ठेवण्यासाठी अपग्रेड करा.';
+
+  @override
+  String get voiceResponseAudio => 'Omi चे उत्तर मोठ्याने वाचा';
+
+  @override
+  String get voiceResponseMode => 'व्हॉइस प्रतिसाद';
+
+  @override
+  String get voiceResponseModeTitle => 'प्रतिसाद केव्हा बोलायचा';
+
+  @override
+  String get voiceResponseOff => 'बंद';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'फक्त हेडफोन';
+
+  @override
+  String get voiceResponseAlways => 'नेहमी';
 }

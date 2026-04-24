@@ -14,6 +14,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
@@ -34,7 +35,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
+  StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
+  bool isCharging = false;
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
@@ -193,6 +196,30 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  Future<void> initiateChargingStatusListener() async {
+    if (connectedDevice == null) return;
+    _bleChargingStatusListener?.cancel();
+
+    var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
+    if (connection == null) return;
+    if (connection is! OmiDeviceConnection) return;
+
+    final currentStatus = await connection.readChargingStatus();
+    if (isCharging != currentStatus) {
+      isCharging = currentStatus;
+      notifyListeners();
+    }
+
+    _bleChargingStatusListener = await connection.getChargingStatusListener(
+      onChargingStatusChange: (bool charging) {
+        if (isCharging != charging) {
+          isCharging = charging;
+          notifyListeners();
+        }
+      },
+    );
+  }
+
   /// Updates battery level with throttling logic. Returns true if notifyListeners was called.
   /// This method is exposed for testing the throttling behavior.
   @visibleForTesting
@@ -203,9 +230,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed = _lastBatteryNotifyTime == null
-        ? const Duration(minutes: 999)
-        : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -320,6 +346,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   @override
   void dispose() {
     _bleBatteryLevelListener?.cancel();
+    _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
@@ -331,6 +358,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug('onDisconnected inside: $connectedDevice');
     _havingNewFirmware = false;
     _isFirmwareDialogShowing = false;
+    _bleChargingStatusListener?.cancel();
+    isCharging = false;
     setConnectedDevice(null);
     setisDeviceStorageSupport();
     setIsConnected(false);
@@ -414,8 +443,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     }
 
-    // Then set up listener for battery changes
+    // Then set up listeners for battery changes and charging status
     await initiateBleBatteryListener();
+    await initiateChargingStatusListener();
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }

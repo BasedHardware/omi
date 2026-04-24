@@ -2373,6 +2373,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryLevel => 'Battery Level';
 
   @override
+  String get charging => 'Charging';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -2499,12 +2502,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Track your personal goals on homepage';
-
-  @override
-  String get dailyReflection => 'Daily Reflection';
-
-  @override
-  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Action item description cannot be empty';
@@ -3920,9 +3917,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Track personal goals on homepage';
-
-  @override
-  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
 
   @override
   String get endpointURL => 'Endpoint URL';
@@ -7180,12 +7174,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Tell me about your day';
-
-  @override
   String get actionItemReminderTitle => 'Omi Reminder';
 
   @override
@@ -8299,6 +8287,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Show Phone Call Button';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Display phone call button on home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Your Verified Numbers';
 
   @override
@@ -9135,4 +9129,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.';
+
+  @override
+  String get voiceResponseAudio => 'Speak Omi responses aloud';
+
+  @override
+  String get voiceResponseMode => 'Voice response';
+
+  @override
+  String get voiceResponseModeTitle => 'When to speak responses';
+
+  @override
+  String get voiceResponseOff => 'Off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones only';
+
+  @override
+  String get voiceResponseAlways => 'Always';
 }

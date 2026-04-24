@@ -2381,6 +2381,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get batteryLevel => 'Nivell de bateria';
 
   @override
+  String get charging => 'Carregant';
+
+  @override
   String get productUpdate => 'Actualització del producte';
 
   @override
@@ -2507,12 +2510,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Segueix els teus objectius personals a la pàgina d\'inici';
-
-  @override
-  String get dailyReflection => 'Reflexió diària';
-
-  @override
-  String get get9PmReminderToReflect => 'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'La descripció de l\'element d\'acció no pot estar buida';
@@ -3936,10 +3933,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Fes el seguiment d\'objectius personals a la pàgina d\'inici';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.';
 
   @override
   String get endpointURL => 'URL del Punt Final';
@@ -7223,12 +7216,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Hora de la reflexió diària';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Explica\'m el teu dia';
-
-  @override
   String get actionItemReminderTitle => 'Recordatori d\'Omi';
 
   @override
@@ -8354,6 +8341,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracio de trucades';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostra el botó de trucada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostra el botó de trucada telefònica a la pantalla d\'inici';
+
+  @override
   String get yourVerifiedNumbers => 'Els teus numeros verificats';
 
   @override
@@ -9193,4 +9186,22 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Has assolit el teu límit mensual. Actualitza per continuar xatejant amb Omi sense restriccions.';
+
+  @override
+  String get voiceResponseAudio => 'Llegeix la resposta d\'Omi en veu alta';
+
+  @override
+  String get voiceResponseMode => 'Resposta de veu';
+
+  @override
+  String get voiceResponseModeTitle => 'Quan pronunciar les respostes';
+
+  @override
+  String get voiceResponseOff => 'Desactivat';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Només auriculars';
+
+  @override
+  String get voiceResponseAlways => 'Sempre';
 }

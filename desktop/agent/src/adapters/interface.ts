@@ -9,10 +9,6 @@ import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
  * Configuration for creating a harness adapter.
  */
 export interface HarnessConfig {
-  /** Whether to pass an API key (OMI mode) vs user's own account */
-  passApiKey: boolean;
-  /** Anthropic API key (only used in passApiKey mode) */
-  apiKey?: string;
   /** Omi API base URL for pi-mono provider */
   omiApiBaseUrl?: string;
   /** Firebase auth token for Omi API authentication */

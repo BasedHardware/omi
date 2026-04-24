@@ -2373,6 +2373,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get batteryLevel => 'Ниво на батерията';
 
   @override
+  String get charging => 'Зареждане';
+
+  @override
   String get productUpdate => 'Актуализация на продукта';
 
   @override
@@ -2499,12 +2502,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Проследявайте личните си цели на началната страница';
-
-  @override
-  String get dailyReflection => 'Дневна рефлексия';
-
-  @override
-  String get get9PmReminderToReflect => 'Получете напомняне в 21:00 да размислите за деня си';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Описанието на задачата не може да бъде празно';
@@ -3928,10 +3925,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Проследяване на лични цели на началната страница';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Получавайте напомняне в 21:00 ч. да размислите за деня си и да запишете мислите си.';
 
   @override
   String get endpointURL => 'URL на крайна точка';
@@ -7209,12 +7202,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Време за дневна рефлексия';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Разкажи ми за деня си';
-
-  @override
   String get actionItemReminderTitle => 'Напомняне от Omi';
 
   @override
@@ -8337,6 +8324,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показване на бутона за телефонно обаждане';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Показване на бутона за телефонно обаждане на началния екран';
+
+  @override
   String get yourVerifiedNumbers => 'Вашите потвърдени номера';
 
   @override
@@ -9174,4 +9167,22 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Достигнахте месечния си лимит. Надградете, за да продължите да чатите с Omi без ограничения.';
+
+  @override
+  String get voiceResponseAudio => 'Прочитай отговора на Omi на глас';
+
+  @override
+  String get voiceResponseMode => 'Гласов отговор';
+
+  @override
+  String get voiceResponseModeTitle => 'Кога да се произнасят отговорите';
+
+  @override
+  String get voiceResponseOff => 'Изкл';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Само слушалки';
+
+  @override
+  String get voiceResponseAlways => 'Винаги';
 }

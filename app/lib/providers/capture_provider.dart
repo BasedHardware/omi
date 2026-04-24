@@ -33,6 +33,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
@@ -458,6 +459,9 @@ class CaptureProvider extends ChangeNotifier
           _playSpeakerHaptic(deviceId, 2);
         },
         codec: codec,
+        // Device-button voice → speak the reply aloud (BG/lock-screen safe).
+        // Gated by SharedPreferencesUtil().voiceResponseEnabled inside the service.
+        playResponseAudio: true,
       );
     }
   }
@@ -560,6 +564,11 @@ class CaptureProvider extends ChangeNotifier
           if (_voiceCommandSession == null) {
             // Start voice question session (new toggle mode)
             debugPrint("Starting voice question session (toggle mode)");
+            // Cut off any in-flight voice playback from a prior reply so the
+            // new recording starts clean.
+            if (OmiVoicePlaybackService.instance.isSpeaking) {
+              OmiVoicePlaybackService.instance.interrupt();
+            }
             _voiceCommandSession = DateTime.now();
             _commandBytes = [];
             _voiceSessionStartedByLegacyLongPress = false; // New toggle mode

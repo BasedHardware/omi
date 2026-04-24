@@ -9,9 +9,9 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
  *
  * The relay works as follows:
  * 1. pi-mono-extension connects to a Unix socket and sends {"type":"tool_use", callId, name, input}
- * 2. acp-bridge receives it, forwards to Swift via stdout, creates a pending promise
+ * 2. agent receives it, forwards to Swift via stdout, creates a pending promise
  * 3. Swift executes the tool and sends {"type":"tool_result", callId, result} back via stdin
- * 4. acp-bridge's resolveToolCall() resolves the pending promise, writing back to the socket client
+ * 4. agent's resolveToolCall() resolves the pending promise, writing back to the socket client
  *
  * These tests verify that the relay mechanism correctly routes tool_result
  * messages back to the original socket client for ALL 13 Omi tools.
@@ -99,7 +99,7 @@ describe("Tool relay: Unix socket end-to-end", () => {
   });
 
   /**
-   * Creates a Unix socket server that mimics the acp-bridge relay:
+   * Creates a Unix socket server that mimics the agent relay:
    * - Receives tool_use from client
    * - Forwards to "Swift" (captured in capturedStdoutMessages)
    * - Creates pending promise that writes tool_result back to client

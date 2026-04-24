@@ -26,6 +26,9 @@
 #include "rtc.h"
 #include "spi_flash.h"
 #include "wdog_facade.h"
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+#include "aad.h"
+#endif
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -80,6 +83,12 @@ static void mic_handler(int16_t *buffer)
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Track total bytes processed (each sample is 2 bytes)
     monitor_inc_mic_buffer();
+#endif
+
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    if (!aad_process_audio(buffer, MIC_BUFFER_SAMPLES)) {
+        return;
+    }
 #endif
 
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
@@ -343,6 +352,14 @@ int main(void)
         error_microphone();
         return ret;
     }
+
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    ret = aad_start();
+    if (ret) {
+        LOG_ERR("AAD start failed (%d)", ret);
+    }
+#endif
+
     LOG_INF("Device initialized successfully\n");
 
     while (1) {

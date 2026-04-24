@@ -7,7 +7,7 @@
 
 use axum::{
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
@@ -27,6 +27,19 @@ const DEFAULT_MAX_TOKENS: u64 = 8192;
 
 /// Maximum allowed max_tokens to prevent abuse.
 const MAX_TOKENS_CAP: u64 = 16384;
+
+/// Request body size limit for /v2/chat/completions.
+///
+/// Axum's default is 2 MB, which is too small for multi-modal chat: the
+/// pi-mono floating-bar session reuses history across turns and posts every
+/// prior screenshot back to Anthropic on every request, so after ~3 turns
+/// with a 500 KB WebP screenshot per turn the body exceeds 2 MB and requests
+/// fail with `413 Failed to buffer the request body: length limit exceeded`.
+///
+/// 16 MB gives headroom for ~20 accumulated screenshots before hitting the
+/// cap, which covers all realistic floating-bar sessions. History trimming
+/// is tracked separately as the longer-term fix.
+const CHAT_COMPLETIONS_MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
 
 /// Anthropic API base URL.
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -887,7 +900,9 @@ async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, co
 // ── Route registration ──────────────────────────────────────────────────────
 
 pub fn chat_completions_routes() -> Router<AppState> {
-    Router::new().route("/v2/chat/completions", post(chat_completions))
+    Router::new()
+        .route("/v2/chat/completions", post(chat_completions))
+        .layer(DefaultBodyLimit::max(CHAT_COMPLETIONS_MAX_BODY_SIZE))
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────

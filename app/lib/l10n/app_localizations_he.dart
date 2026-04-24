@@ -2357,6 +2357,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryLevel => 'רמת הסוללה';
 
   @override
+  String get charging => 'טוען';
+
+  @override
   String get productUpdate => 'עדכון מוצר';
 
   @override
@@ -2483,12 +2486,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'עקוב אחר היעדים האישיים שלך בעמוד הבית';
-
-  @override
-  String get dailyReflection => 'השתקפות יומית';
-
-  @override
-  String get get9PmReminderToReflect => 'קבל תזכורת בשעה 21:00 להשתקפות על היום שלך';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'תיאור פריט פעולה לא יכול להיות ריק';
@@ -3891,9 +3888,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'עקוב אחר יעדים אישיים בדף הבית';
-
-  @override
-  String get dailyReflectionDescription => 'קבל תזכורת ב-9 בערב להתבוננות על היום שלך וללכידת המחשבות שלך.';
 
   @override
   String get endpointURL => 'כתובת URL של נקודת קצה';
@@ -7124,12 +7118,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'זמן להתרכזות יומית';
-
-  @override
-  String get dailyReflectionNotificationBody => 'ספר לי על היום שלך';
-
-  @override
   String get actionItemReminderTitle => 'תזכורת Omi';
 
   @override
@@ -8235,6 +8223,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'הגדרות שיחות טלפון';
 
   @override
+  String get showPhoneCallButtonTitle => 'הצג כפתור שיחת טלפון';
+
+  @override
+  String get showPhoneCallButtonDesc => 'הצג כפתור שיחת טלפון במסך הבית';
+
+  @override
   String get yourVerifiedNumbers => 'המספרים המאומתים שלך';
 
   @override
@@ -9066,4 +9060,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => 'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
+
+  @override
+  String get voiceResponseAudio => 'קרא את תגובת Omi בקול';
+
+  @override
+  String get voiceResponseMode => 'תגובה קולית';
+
+  @override
+  String get voiceResponseModeTitle => 'מתי לקרוא תשובות';
+
+  @override
+  String get voiceResponseOff => 'כבוי';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'אוזניות בלבד';
+
+  @override
+  String get voiceResponseAlways => 'תמיד';
 }

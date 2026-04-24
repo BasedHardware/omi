@@ -2323,6 +2323,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryLevel => '电池电量';
 
   @override
+  String get charging => '充电中';
+
+  @override
   String get productUpdate => '产品更新';
 
   @override
@@ -2448,12 +2451,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => '在主页上跟踪您的个人目标';
-
-  @override
-  String get dailyReflection => '每日反思';
-
-  @override
-  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
@@ -3845,9 +3842,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => '在主页上跟踪个人目标';
-
-  @override
-  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
 
   @override
   String get endpointURL => '端点 URL';
@@ -7048,12 +7042,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => '每日反思时间';
-
-  @override
-  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
-
-  @override
   String get actionItemReminderTitle => 'Omi 提醒';
 
   @override
@@ -8154,6 +8142,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSettingsTitle => '通话设置';
 
   @override
+  String get showPhoneCallButtonTitle => '显示电话按钮';
+
+  @override
+  String get showPhoneCallButtonDesc => '在主屏幕上显示电话按钮';
+
+  @override
   String get yourVerifiedNumbers => '您已验证的号码';
 
   @override
@@ -8975,4 +8969,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '您已达到每月限额。升级以无限制地继续与Omi聊天。';
+
+  @override
+  String get voiceResponseAudio => '朗读 Omi 的回复';
+
+  @override
+  String get voiceResponseMode => '语音回复';
+
+  @override
+  String get voiceResponseModeTitle => '何时朗读回复';
+
+  @override
+  String get voiceResponseOff => '关闭';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '仅耳机';
+
+  @override
+  String get voiceResponseAlways => '始终';
 }

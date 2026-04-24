@@ -2,6 +2,48 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.358",
+      "date": "2026-04-23",
+      "changes": [
+        "Fixed AI provider switch not restarting the agent bridge session"
+      ]
+    },
+    {
+      "version": "0.11.357",
+      "date": "2026-04-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.356",
+      "date": "2026-04-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.355",
+      "date": "2026-04-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.354",
+      "date": "2026-04-23",
+      "changes": [
+        "Removed Anthropic API key from client, added Omi AI branding in Settings, improved harness switching"
+      ]
+    },
+    {
+      "version": "0.11.353",
+      "date": "2026-04-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.352",
       "date": "2026-04-21",
       "changes": [

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Checks every 60 seconds for recurring tasks that are due and triggers
-/// AI chat investigations for each one via TaskChatCoordinator (ACP bridge).
+/// AI chat investigations for each one via TaskChatCoordinator (agent bridge).
 /// Dedup is automatic — investigateInBackground skips tasks with existing messages.
 @MainActor
 class RecurringTaskScheduler {

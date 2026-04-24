@@ -395,10 +395,10 @@ if [ -n "$SWIFTPM_PID" ]; then
     done
 fi
 
-step "Building acp-bridge (npm install + tsc)..."
-ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
-if [ -d "$ACP_BRIDGE_DIR" ]; then
-    cd "$ACP_BRIDGE_DIR"
+step "Building agent (npm install + tsc)..."
+AGENT_DIR="$(dirname "$0")/agent"
+if [ -d "$AGENT_DIR" ]; then
+    cd "$AGENT_DIR"
     if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
         substep "Installing npm dependencies"
         npm install --no-fund --no-audit 2>&1 | tail -1
@@ -407,7 +407,7 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
     npm run build --silent
     cd - > /dev/null
 else
-    echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"
+    echo "Warning: agent directory not found at $AGENT_DIR"
 fi
 
 step "Checking schema docs..."
@@ -494,12 +494,12 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
 fi
 
-substep "Copying acp-bridge"
-if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
-    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+substep "Copying agent"
+if [ -d "$AGENT_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+    cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
+    cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
+    cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
@@ -597,6 +597,9 @@ fi
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Removing extended attributes (xattr -cr)..."
+# SwiftPM copies some dylibs (libsharpyuv, libwebp) with read-only perms,
+# which makes `xattr -cr` fail with EACCES. Make the bundle writable first.
+chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Signing app with hardened runtime..."
@@ -690,6 +693,7 @@ else
 fi
 
 step "Removing quarantine attributes..."
+chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Installing to /Applications/..."

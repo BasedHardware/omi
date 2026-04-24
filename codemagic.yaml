@@ -1945,9 +1945,9 @@ workflows:
             "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-      - name: Build acp-bridge (TypeScript → JavaScript)
+      - name: Build agent (TypeScript → JavaScript)
         script: |
-          cd acp-bridge
+          cd agent
           npm install --no-fund --no-audit
           npm run build
           cd ..
@@ -2229,14 +2229,14 @@ workflows:
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi
 
-          # Copy acp-bridge (Claude Code integration)
-          if [ -d "acp-bridge/dist" ]; then
-            mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
-            cp -Rf acp-bridge/dist        "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-            cp -f  acp-bridge/package.json "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-            cp -Rf acp-bridge/node_modules "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+          # Copy agent (Claude Code integration)
+          if [ -d "agent/dist" ]; then
+            mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+            cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
+            cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
+            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
           else
-            echo "ERROR: acp-bridge/dist not found"
+            echo "ERROR: agent/dist not found"
             exit 1
           fi
 
@@ -2304,15 +2304,15 @@ workflows:
               "$NODE_BUNDLE_PATH"
           fi
 
-          # Sign acp-bridge native binaries
-          ACP_BRIDGE_BUNDLE="$APP_BUNDLE/Contents/Resources/acp-bridge"
-          if [ -d "$ACP_BRIDGE_BUNDLE/node_modules" ]; then
+          # Sign agent native binaries
+          AGENT_BUNDLE="$APP_BUNDLE/Contents/Resources/agent"
+          if [ -d "$AGENT_BUNDLE/node_modules" ]; then
             # Remove JetBrains plugin — its JARs contain .jnilib files Apple rejects during notarization
-            rm -rf "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" \
+            rm -rf "$AGENT_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" \
               2>/dev/null || true
 
             # Primary pass: sign known native binary extensions
-            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+            find "$AGENT_BUNDLE/node_modules" -type f \
               \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
               2>/dev/null | while read native_bin; do
               file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
@@ -2321,7 +2321,7 @@ workflows:
             done
 
             # Catch-all pass: any remaining unsigned Mach-O binaries
-            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+            find "$AGENT_BUNDLE/node_modules" -type f \
               ! -name "*.js"   ! -name "*.json" ! -name "*.ts"   ! -name "*.map" \
               ! -name "*.md"   ! -name "*.txt"  ! -name "*.yml"  ! -name "*.yaml" \
               ! -name "*.css"  ! -name "*.html" ! -name "*.jar"  ! -name "*.d.ts" \

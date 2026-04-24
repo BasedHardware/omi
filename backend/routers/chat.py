@@ -98,7 +98,7 @@ def _build_quota_exceeded_reply(
     Mobile clients render the reply as a normal AI message, so users on
     older builds without structured 402 handling at least see *why* nothing
     happened instead of a silent failure. Desktop never reaches this path —
-    its client-side quota pre-check in ACPBridge throws BridgeError.quotaExceeded
+    its client-side quota pre-check in AgentBridge throws BridgeError.quotaExceeded
     before the request fires.
     """
     now = datetime.now(timezone.utc)

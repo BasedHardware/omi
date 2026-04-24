@@ -465,7 +465,7 @@ class AppState: ObservableObject {
             guard !key.hasPrefix("#") else { continue }
             // API keys are fetched from the backend at runtime (APIKeyService).
             // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
-            let backendServedKeys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
               continue
