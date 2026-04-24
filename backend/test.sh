@@ -69,6 +69,7 @@ pytest tests/unit/test_fair_use_async.py -v
 pytest tests/unit/test_dg_usage_batch.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_pcm_decode.py -v
+pytest tests/unit/test_sync_opus_decode.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_fair_use_upgrade.py -v
