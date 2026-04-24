@@ -30,7 +30,7 @@ class BatteryInfoWidget extends StatelessWidget {
             provider.connectedDevice,
             provider.pairedDevice,
             provider.isConnecting,
-            provider.isCharging,
+            provider.isCharging
           ),
           builder: (context, data, child) {
             final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
@@ -74,8 +74,8 @@ class BatteryInfoWidget extends StatelessWidget {
                               color: batteryLevel > 75
                                   ? const Color.fromARGB(255, 0, 255, 8)
                                   : batteryLevel > 20
-                                  ? Colors.yellow.shade700
-                                  : Colors.red,
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -109,7 +109,10 @@ class BatteryInfoWidget extends StatelessWidget {
                         height: 16,
                         child: Stack(
                           children: [
-                            Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
+                            Image.asset(
+                              DeviceUtils.getDeviceImageFromBtDevice(pairedDevice),
+                              fit: BoxFit.contain,
+                            ),
                             // Slash line across the image
                             Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
                           ],
@@ -152,13 +155,13 @@ class BatteryInfoWidget extends StatelessWidget {
                               ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
-                          ? Text(
-                              context.l10n.connectDevice,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                            )
-                          : const SizedBox.shrink(),
+                              ? Text(
+                                  context.l10n.connectDevice,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                )
+                              : const SizedBox.shrink(),
                     ],
                   ),
                 ),

@@ -145,12 +145,15 @@ class OmiVoicePlaybackService {
 
   /// Called on every streamed text update. [fullText] is the cumulative AI
   /// response so far. [isFinal] means this is the last chunk.
-  void updateStreamingResponse({required String messageId, required String fullText, required bool isFinal}) {
+  void updateStreamingResponse({
+    required String messageId,
+    required String fullText,
+    required bool isFinal,
+  }) {
     if (SharedPreferencesUtil().voiceResponseMode == 0) return;
     if (_activeMessageId != messageId) {
       Logger.log(
-        'OmiVoicePlayback: updateStreamingResponse skipped — activeId=$_activeMessageId != incoming=$messageId',
-      );
+          'OmiVoicePlayback: updateStreamingResponse skipped — activeId=$_activeMessageId != incoming=$messageId');
       return;
     }
     Logger.log('OmiVoicePlayback: updateStreamingResponse len=${fullText.length} isFinal=$isFinal spoken=$_spoken');
@@ -344,7 +347,12 @@ class OmiVoicePlaybackService {
 
   /// Returns the index at which to cut the next chunk, or null if we should
   /// wait for more text. Mirrors `FloatingBarVoicePlaybackService.nextChunkBoundary`.
-  int? _nextChunkBoundary(String text, {required int start, required bool isFirstChunk, required bool isFinal}) {
+  int? _nextChunkBoundary(
+    String text, {
+    required int start,
+    required bool isFirstChunk,
+    required bool isFinal,
+  }) {
     final remaining = text.length - start;
     final minChars = isFirstChunk ? _firstChunkMinChars : _chunkMinChars;
     final idealChars = isFirstChunk ? _firstChunkIdealChars : _chunkIdealChars;
