@@ -137,9 +137,7 @@ void main() {
     });
 
     test('no-op when no pending WALs exist', () async {
-      sync.testWals = [
-        _makeWal(timerStart: 1000, status: WalStatus.synced, filePath: null),
-      ];
+      sync.testWals = [_makeWal(timerStart: 1000, status: WalStatus.synced, filePath: null)];
 
       await sync.deleteAllPendingWals();
 
@@ -164,8 +162,11 @@ void main() {
 
       await sync.syncAll();
 
-      expect(sync.testWals.first.status, WalStatus.corrupted,
-          reason: 'null filePath must be marked corrupted so the WAL is not retried as miss');
+      expect(
+        sync.testWals.first.status,
+        WalStatus.corrupted,
+        reason: 'null filePath must be marked corrupted so the WAL is not retried as miss',
+      );
     });
 
     test('WAL with non-existent file is marked corrupted after syncAll', () async {
@@ -177,8 +178,11 @@ void main() {
 
       await sync.syncAll();
 
-      expect(sync.testWals.first.status, WalStatus.corrupted,
-          reason: 'missing file must be marked corrupted, not silently re-queued');
+      expect(
+        sync.testWals.first.status,
+        WalStatus.corrupted,
+        reason: 'missing file must be marked corrupted, not silently re-queued',
+      );
     });
 
     test('corrupted WAL is excluded from syncAll retry pool', () async {
@@ -191,8 +195,11 @@ void main() {
       final result = await sync.syncAll();
 
       expect(result, isNull);
-      expect(sync.testWals.first.status, WalStatus.corrupted,
-          reason: 'corrupted WAL must not be reset to miss by syncAll');
+      expect(
+        sync.testWals.first.status,
+        WalStatus.corrupted,
+        reason: 'corrupted WAL must not be reset to miss by syncAll',
+      );
     });
 
     test('multiple null-filePath WALs in one batch are all marked corrupted', () async {
@@ -217,7 +224,7 @@ void main() {
       // This test only exercises the file-existence guard path.
       const filename = 'valid_audio_5000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);  // Any content — just needs to exist
+      await file.writeAsBytes([0xAA, 0xBB]); // Any content — just needs to exist
 
       final wal = _makeWal(timerStart: 5000, filePath: filename);
       sync.testWals = [wal];
@@ -231,9 +238,13 @@ void main() {
       }
 
       // No server in test environment — upload fails, WAL stays miss.
-      expect(sync.testWals.first.status, WalStatus.miss,
-          reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
-              'upload failure in this environment leaves it as miss');
+      expect(
+        sync.testWals.first.status,
+        WalStatus.miss,
+        reason:
+            'a WAL whose file exists must not be corrupted by pre-upload checks; '
+            'upload failure in this environment leaves it as miss',
+      );
     });
   });
 
@@ -273,13 +284,19 @@ void main() {
       } catch (_) {}
 
       final stuck = sync.testWals.first;
-      expect(stuck.status, WalStatus.miss,
-          reason: 'upload failure must not permanently corrupt the WAL — it stays miss');
-      expect(stuck.retryCount, 0,
-          reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
-              'on every app open and is unconditionally re-queued');
-      expect(stuck.isSyncing, false,
-          reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
+      expect(
+        stuck.status,
+        WalStatus.miss,
+        reason: 'upload failure must not permanently corrupt the WAL — it stays miss',
+      );
+      expect(
+        stuck.retryCount,
+        0,
+        reason:
+            'syncAll() never increments retryCount, so the WAL looks brand-new '
+            'on every app open and is unconditionally re-queued',
+      );
+      expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
     });
 
     test('KNOWN GAP: syncAll picks up miss WAL regardless of retryCount', () async {
@@ -305,9 +322,13 @@ void main() {
         await sync.syncAll().timeout(const Duration(seconds: 5));
       } catch (_) {}
 
-      expect(sync.testWals.first.isSyncing, false,
-          reason: 'isSyncing cleared confirms syncAll processed this WAL, '
-              'despite retryCount=50 — no cap is enforced');
+      expect(
+        sync.testWals.first.isSyncing,
+        false,
+        reason:
+            'isSyncing cleared confirms syncAll processed this WAL, '
+            'despite retryCount=50 — no cap is enforced',
+      );
     });
   });
 }
