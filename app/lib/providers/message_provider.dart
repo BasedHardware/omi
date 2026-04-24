@@ -559,7 +559,8 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
@@ -689,7 +690,8 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             return;

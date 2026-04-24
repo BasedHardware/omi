@@ -358,10 +358,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
           // so the widget tree is fully settled — push directly.
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
           }
           break;
         case "settings":
@@ -699,8 +696,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         child: Container(
                                           width: 56,
                                           height: 56,
-                                          decoration:
-                                              const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Color(0xFF1F1F25),
+                                          ),
                                           child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
                                         ),
                                       ),
@@ -829,8 +828,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -839,8 +838,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
