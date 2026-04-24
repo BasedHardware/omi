@@ -387,20 +387,18 @@ class LocalWalSyncImpl implements LocalWalSync {
       // Use a distinct timerStart so we don't collide with WALs from _chunk().
       // This is the tail buffer that _chunk() left behind.
       _wals = List.from(_wals)
-        ..add(
-          Wal(
-            codec: _codec,
-            timerStart: timerStart,
-            data: chunk,
-            storage: WalStorage.mem,
-            status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
-            device: _deviceId ?? "omi",
-            deviceModel: _deviceModel ?? "Omi",
-            seconds: chunkFrameCount ~/ _framesPerSecond,
-            totalFrames: chunkFrameCount,
-            syncedFrameOffset: syncedOffset,
-          ),
-        );
+        ..add(Wal(
+          codec: _codec,
+          timerStart: timerStart,
+          data: chunk,
+          storage: WalStorage.mem,
+          status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+          device: _deviceId ?? "omi",
+          deviceModel: _deviceModel ?? "Omi",
+          seconds: chunkFrameCount ~/ _framesPerSecond,
+          totalFrames: chunkFrameCount,
+          syncedFrameOffset: syncedOffset,
+        ));
     }
 
     _frames = [];
@@ -436,13 +434,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Used for startup recovery after app kill.
   List<Wal> getOrphanedWals() {
     return _wals
-        .where(
-          (w) =>
-              w.status == WalStatus.miss &&
-              w.storage == WalStorage.disk &&
-              w.conversationId != null &&
-              w.retryCount < 3,
-        )
+        .where((w) =>
+            w.status == WalStatus.miss && w.storage == WalStorage.disk && w.conversationId != null && w.retryCount < 3)
         .toList();
   }
 
