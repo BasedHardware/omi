@@ -447,16 +447,7 @@ class TestDecodeFilesToWavOpus:
         with tempfile.TemporaryDirectory() as d:
             valid_bin = self._opus_filename(d, ts=1710000001)
             corrupt_bin = self._opus_filename(d, ts=1710000002)
-            self._write_valid_opus_bin(valid_bin)
 
-            def _route_decoder(*args, **kwargs):
-                """Succeed for valid_bin frames, fail for corrupt_bin frames."""
-                instance = MagicMock()
-                instance.decode.side_effect = Exception("corrupt")
-                return instance
-
-            # Decode the valid one with a good decoder, the corrupt one with a failing decoder.
-            # We patch Decoder once; differentiate via decode side_effect per instance.
             call_count = {'n': 0}
             pcm = FAKE_PCM_FRAME
 
