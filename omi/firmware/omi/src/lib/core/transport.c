@@ -47,6 +47,9 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+extern bool is_charging;
+#endif
 static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
@@ -94,6 +97,13 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               void *buf,
                                               uint16_t len,
                                               uint16_t offset);
+static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
+                                                     const struct bt_gatt_attr *attr,
+                                                     void *buf,
+                                                     uint16_t len,
+                                                     uint16_t offset);
+static int notify_charging_status(struct bt_conn *conn, bool force_notify);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -168,6 +178,8 @@ static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -183,6 +195,13 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
                            NULL),
+    BT_GATT_CHARACTERISTIC(&settings_charging_status_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ,
+                           settings_charging_status_read_handler,
+                           NULL,
+                           NULL),
+    BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -304,6 +323,22 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
 }
 
+static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    ARG_UNUSED(attr);
+
+    if (value == BT_GATT_CCC_NOTIFY) {
+        LOG_INF("Client subscribed for charging status notifications");
+        if (current_connection != NULL) {
+            (void) notify_charging_status(current_connection, true);
+        }
+    } else if (value == 0) {
+        LOG_INF("Client unsubscribed from charging status notifications");
+    } else {
+        LOG_INF("Invalid charging status CCC value: %u", value);
+    }
+}
+
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn,
                                               const struct bt_gatt_attr *attr,
                                               void *buf,
@@ -417,6 +452,17 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
 }
 
+static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
+                                                     const struct bt_gatt_attr *attr,
+                                                     void *buf,
+                                                     uint16_t len,
+                                                     uint16_t offset)
+{
+    uint8_t charging_status = is_charging ? 1U : 0U;
+    LOG_INF("Reading charging status: %u", charging_status);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &charging_status, sizeof(charging_status));
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -470,14 +516,40 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL_CONNECTED   10000 // 10 seconds
-#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 30000 // 30 seconds
-#define BATTERY_RETRY_INTERVAL          1000  // 1 second - retry when BLE TX buffer unavailable
-#define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
+#define BATTERY_REFRESH_INTERVAL_CONNECTED   5000 // 5 seconds
+#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 10000 // 10 seconds
 #define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
 uint8_t battery_percentage = 0;
-static uint8_t battery_retry_count = 0;
+static int8_t charging_status_last_notified = -1;
 void broadcast_battery_level(struct k_work *work_item);
+
+static int notify_charging_status(struct bt_conn *conn, bool force_notify)
+{
+    if (conn == NULL) {
+        return -ENOTCONN;
+    }
+
+    if (!bt_gatt_is_subscribed(
+            conn, &settings_service.attrs[6], BT_GATT_CCC_NOTIFY)) {
+        return 0;
+    }
+
+    uint8_t charging_status = is_charging ? 1U : 0U;
+    if (!force_notify && charging_status_last_notified == (int8_t) charging_status) {
+        return 0;
+    }
+
+    int err = bt_gatt_notify(
+        conn, &settings_service.attrs[6], &charging_status, sizeof(charging_status));
+    if (err) {
+        LOG_WRN("Charging status notify failed: %d", err);
+        return err;
+    }
+
+    charging_status_last_notified = (int8_t) charging_status;
+    LOG_INF("Charging status notified: %u", charging_status);
+    return 0;
+}
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
@@ -497,25 +569,17 @@ void broadcast_battery_level(struct k_work *work_item)
 
         if (is_connected && current_connection != NULL) {
             if (storage_transfer_active()) {
-                battery_retry_count = 0;
                 k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
                 return;
             }
+
+            (void) notify_charging_status(current_connection, false);
+
             // Use the Zephyr BAS function to set (and notify) the battery level
             int err = bt_bas_set_battery_level(battery_percentage);
             if (err) {
-                if (battery_retry_count < BATTERY_RETRY_MAX) {
-                    battery_retry_count++;
-                    LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
-                            err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
-                    k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
-                    return;
-                }
-                LOG_ERR("Error updating battery level: %d (max retries reached)", err);
+                LOG_ERR("Error updating battery level: %d", err);
             }
-            battery_retry_count = 0;
-        } else {
-            battery_retry_count = 0;
         }
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
@@ -523,7 +587,6 @@ void broadcast_battery_level(struct k_work *work_item)
         }
     } else {
         LOG_ERR("Failed to read battery level");
-        battery_retry_count = 0;
     }
 
     k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
@@ -635,6 +698,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         current_connection = NULL;
     }
     current_mtu = 0;
+    charging_status_last_notified = -1;
 
     // Reset the audio TX throttle semaphore so the pusher thread is not
     // left blocked forever if it was waiting for a slot when the connection dropped.
