@@ -230,10 +230,10 @@ void main() {
         // Expected: network call fails in test environment
       }
 
-      // The WAL must not have been corrupted by the pre-upload checks.
-      // It may be miss (upload failed) or synced (upload succeeded) — both are valid.
-      expect(sync.testWals.first.status, isNot(WalStatus.corrupted),
-          reason: 'a WAL whose file exists must not be marked corrupted during pre-upload checks');
+      // No server in test environment — upload fails, WAL stays miss.
+      expect(sync.testWals.first.status, WalStatus.miss,
+          reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
+              'upload failure in this environment leaves it as miss');
     });
   });
 
