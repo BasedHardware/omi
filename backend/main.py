@@ -53,6 +53,7 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    tts,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -122,6 +123,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(tts.router)
 
 
 methods_timeout = {
@@ -133,6 +135,10 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+
+from utils.byok import BYOKMiddleware
+
+app.add_middleware(BYOKMiddleware)
 
 
 @app.on_event("shutdown")

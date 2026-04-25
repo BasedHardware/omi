@@ -20,7 +20,13 @@ import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
-from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
+from database.vector_db import (
+    find_similar_memories,
+    upsert_memory_vector,
+    delete_memory_vector,
+    upsert_action_item_vectors_batch,
+    delete_action_item_vectors_batch,
+)
 from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
@@ -550,7 +556,11 @@ def _save_action_items(uid: str, conversation: Conversation):
         action_items_data.append(action_item_data)
 
     if action_items_data:
-        # Delete existing action items for this conversation first (in case of reprocessing)
+        # Delete existing action items and their vectors first (in case of reprocessing)
+        old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
+        old_ids = [item['id'] for item in old_items]
+        if old_ids:
+            delete_action_item_vectors_batch(uid, old_ids)
         action_items_db.delete_action_items_for_conversation(uid, conversation.id)
         # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
@@ -566,6 +576,14 @@ def _save_action_items(uid: str, conversation: Conversation):
                     description=action_item.description,
                     due_at=action_item.due_at.isoformat(),
                 )
+
+        upsert_action_item_vectors_batch(
+            uid,
+            [
+                {'action_item_id': aid, 'description': data['description']}
+                for aid, data in zip(action_item_ids, action_items_data)
+            ],
+        )
 
         # Auto-sync to task integration
         created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]

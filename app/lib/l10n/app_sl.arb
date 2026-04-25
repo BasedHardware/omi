@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Morda kasneje",
+    "maybeLater": "Morda pozneje",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Raven baterije",
+    "charging": "Polnjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Sledite svojim osebnim ciljem na domači strani",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Dnevna razmislek",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Prejmi opomnik ob 21. uri, da razmisliš o svojem dnevu",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Opis akcijske točke ne sme biti prazen",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Nobenih ključev API. Ustvarite enega, da bi se začeli.",
     "autoCreateWhenDetected": "Samodejna ustvaritev pri zaznavi imena",
     "trackPersonalGoals": "Sledite osebnim ciljem na domači strani",
-    "dailyReflectionDescription": "Dobite opomnik ob 21:00, da se porazmislite o svojem dnevu in zajamete svoje misli.",
     "endpointURL": "Končna točka URL",
     "links": "Povezave",
     "discordMemberCount": "8000+ članov na Discordu",
@@ -5317,11 +5309,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Ni mogoče naložiti načrtov",
+    "unableToLoadPlans": "Načrtov ni mogoče naložiti",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Prosimo, preverite svojo povezavo in poskusite ponovno",
+    "checkConnectionTryAgain": "Preverite povezavo in poskusite znova",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6034,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "S nadaljevanjem bodo vsi podatki, ki jih delite s to aplikacijo (vključno s pogovori, posnetki in osebnimi informacijami), varno shranjeni na naših strežnikih, da vam zagotovimo umetnostno inteligenco in omogočimo vse funkcije aplikacije.",
+    "consentDataMessage": "Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6832,6 @@
     "notificationFrequencyDescription": "Kontrolirajte, kako pogosto Omi pošilja proaktivna obvestila in opomniki.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "Izključeno",
     "@sliderOff": {
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Čas za Dnevni Razmislek",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Povejte mi o vaš dan",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Opomnik Omi",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Zvočnik",
     "phoneEndCall": "Konec",
     "phoneCallSettingsTitle": "Nastavitve telefonskih klicev",
+    "showPhoneCallButtonTitle": "Pokaži gumb za klic",
+    "showPhoneCallButtonDesc": "Prikaži gumb za telefonski klic na domačem zaslonu",
     "yourVerifiedNumbers": "Tvoje preverjene številke",
     "verifiedNumbersDescription": "Ko nekoga pokličeš, bo videl to številko na svojem telefonu",
     "noVerifiedNumbers": "Nima preverjenih številk",
@@ -10674,5 +10657,42 @@
     "youAreOnAPaidPlan": "Imate plačljiv načrt.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Klepet",
+    "chatMessages": "sporočil",
+    "unlimitedChatThisMonth": "Neomejeno število sporočil ta mesec",
+    "chatUsedOfLimitCompute": "{used} od {limit} proračuna porabljeno",
+    "chatUsedOfLimitMessages": "{used} od {limit} sporočil porabljenih ta mesec",
+    "chatUsageProgress": "{used} / {limit} porabljeno",
+    "chatLimitReachedUpgrade": "Dosežena omejitev klepeta. Nadgradite za več sporočil.",
+    "chatLimitReachedTitle": "Dosežena omejitev klepeta",
+    "chatUsageDescription": "Porabili ste {used} od {limitDisplay} na načrtu {plan}.",
+    "resetsInDays": "Ponastavitev čez {count} dni",
+    "resetsInHours": "Ponastavitev čez {count} ur",
+    "resetsSoon": "Kmalu se ponastavi",
+    "upgradePlan": "Nadgradi načrt",
+    "billingMonthly": "Mesečno",
+    "billingYearly": "Letno",
+    "savePercent": "Prihranite ~17%",
+    "popular": "Priljubljeno",
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} vprašanj na mesec",
+    "operatorSubtitle": "{count} vprašanj na mesec",
+    "architectSubtitle": "Napreden AI — tisoče pogovorov + agentna avtomatizacija",
+    "chatUsageCost": "Klepet: ${used} / ${limit} porabljeno ta mesec",
+    "chatUsageCostNoLimit": "Klepet: ${used} porabljeno ta mesec",
+    "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
+    "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Dosegli ste svojo mesečno omejitev. Nadgradite, da nadaljujete pogovor z Omi brez omejitev.",
+    "batteryHistory": "Baterija",
+    "day": "Dan",
+    "noBatteryDataYet": "Še ni podatkov o bateriji",
+    "week": "Teden",
+    "voiceResponseAudio": "Preberi odgovor Omi na glas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kdaj prebrati odgovore",
+    "voiceResponseOff": "Izklop",
+    "voiceResponseHeadphonesOnly": "Samo slušalke",
+    "voiceResponseAlways": "Vedno"
 }

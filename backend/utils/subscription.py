@@ -6,7 +6,9 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from database.announcements import _compare_versions
+from fastapi import HTTPException
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -34,8 +36,8 @@ def get_paid_plan_definitions() -> list[dict]:
             "subtitle": f"{NEO_CHAT_QUESTIONS_PER_MONTH} questions per month",
             "description": f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
             "eyebrow": "Starter",
-            "monthly_price_id": os.getenv('STRIPE_NEO_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_NEO_ANNUAL_PRICE_ID'),
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
             "annual_description": "Save ~17% with annual billing.",
             "legacy": False,
         },
@@ -78,14 +80,39 @@ LEGACY_PRICE_MAP = {
 }
 
 
-def filter_plans_for_user(definitions: list[dict], current_plan: PlanType) -> list[dict]:
-    """Drop legacy plans from the purchase catalog unless the user is on one.
+def _platform_hidden_plans(platform: Optional[str]) -> set:
+    """Plans that are hidden from the purchase catalog for the given platform.
 
-    Legacy subscribers need their plan kept in the catalog so the mobile app
-    can detect `is_active` for interval-change flows.  New users never see
-    legacy plans in the picker.
+    Desktop (macOS) sells Operator + Architect (pricier tier with usage-based
+    overage on Operator), so Neo is dropped from the desktop picker. Mobile
+    and all other clients are left alone — their catalog is unchanged.
     """
-    return [d for d in definitions if not d.get('legacy') or d.get('plan_type') == current_plan]
+    if (platform or '').lower() == 'macos':
+        return {PlanType.unlimited}
+    return set()
+
+
+def filter_plans_for_user(
+    definitions: list[dict],
+    current_plan: PlanType,
+    platform: Optional[str] = None,
+) -> list[dict]:
+    """Drop legacy / platform-hidden plans from the purchase catalog.
+
+    Subscribers already on a "wrong-platform" plan (e.g. a Neo subscriber
+    opening the desktop app) still see their current plan so the management UI
+    works. Only the *purchase* catalog is filtered.
+    """
+    hidden = _platform_hidden_plans(platform)
+    out: list[dict] = []
+    for d in definitions:
+        plan_type = d.get('plan_type')
+        if d.get('legacy') and plan_type != current_plan:
+            continue
+        if plan_type in hidden and plan_type != current_plan:
+            continue
+        out.append(d)
+    return out
 
 
 # Minimum desktop build that ships with the new plan catalog + quota UI.
@@ -215,11 +242,6 @@ NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '20
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
-# Hard kill-switch for the cap. Default OFF so we can deploy the backend to
-# prod without immediately blocking any existing over-cap user. Flip to "true"
-# via Cloud Run env var once beta has validated the UX.
-CHAT_CAP_ENFORCEMENT_ENABLED = os.getenv('CHAT_CAP_ENFORCEMENT_ENABLED', 'false').lower() in ('true', '1', 'yes', 'on')
-
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
     PlanType.basic: 'Free',
@@ -271,15 +293,27 @@ def get_chat_quota_snapshot(uid: str) -> dict:
     }
 
 
+# Plans that enter usage-based overage billing instead of hard-blocking when
+# they exceed their included allowance. Paying users are never asked to
+# "upgrade past their plan" — the excess is billed at end of cycle against
+# the card on file. Free stays hard-capped (no payment method on file).
+OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
+
+
 def enforce_chat_quota(uid: str) -> None:
-    """Raise HTTPException(402) if the user is past their monthly chat cap.
+    """Block or allow a chat request based on the user's plan + usage.
 
-    Guarded by CHAT_CAP_ENFORCEMENT_ENABLED so we can deploy the code first,
-    ship the UI to beta, validate, then flip the kill-switch from ops.
+    - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
+    - Paid plans past their cap: ALLOWED — the call is served and the excess
+      accrues an overage charge. See ``utils.overage``.
+    - Free plan past its cap: blocked (no card on file) → 402, which the
+      chat endpoint converts into a canned AI reply for mobile UX.
     """
-    from fastapi import HTTPException
-
-    if not CHAT_CAP_ENFORCEMENT_ENABLED:
+    # BYOK users pay their own LLM provider — no Omi-side cost to cap.
+    # Require an LLM provider key on this request (not just any BYOK header)
+    # so a user can't activate with fake fingerprints or send only x-byok-deepgram
+    # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
+    if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
         return
 
     snapshot = get_chat_quota_snapshot(uid)
@@ -287,6 +321,13 @@ def enforce_chat_quota(uid: str) -> None:
         return
 
     plan = snapshot['plan']
+
+    # Every paying plan goes into overage mode past its cap, regardless of
+    # whether the cap is expressed in questions or dollars. Only Free
+    # (PlanType.basic) falls through to the 402 below.
+    if plan in OVERAGE_ENABLED_PLANS:
+        return
+
     raise HTTPException(
         status_code=402,
         detail={
@@ -323,7 +364,7 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
     Chat caps:
       - Free: question count
       - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
-      - Unlimited (legacy): question count (NEO_CHAT_QUESTIONS_PER_MONTH, default 500)
+      - Unlimited (legacy): question count (NEO_CHAT_QUESTIONS_PER_MONTH, default 200)
       - Architect: dollar cap ($400/mo default)
     """
     if plan == PlanType.operator:
@@ -353,31 +394,51 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
     return get_basic_plan_limits()
 
 
-def get_plan_features(plan: PlanType) -> List[str]:
-    """Returns the list of feature strings for the given plan."""
+def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
+    """Returns the list of feature strings for the given plan.
+
+    Args:
+        plan: The plan type.
+        simplified: If True, returns only plan-differentiating features (for mobile),
+                    omitting items already shown in the top-level highlights section.
+                    If False, returns the full feature list (for desktop).
+    """
     if plan == PlanType.architect:
-        # Lead with what you GET, keep the $400 as a soft fair-use line at the bottom.
+        if simplified:
+            return [
+                "Automations and vibe coding",
+                "Priority desktop AI features",
+                f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
+            ]
         return [
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
-            f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included (fair-use cap)",
+            f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
         ]
 
     if plan == PlanType.operator:
+        if simplified:
+            return [
+                f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
         return [
             f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Shared with mobile and web",
+            "Available on Mac, mobile, and web",
         ]
 
     if plan == PlanType.unlimited:
+        if simplified:
+            return [
+                f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
         return [
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Shared with mobile and web",
+            "Available on Mac, mobile, and web",
         ]
 
     # Basic plan
@@ -496,6 +557,12 @@ def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
     """
+    # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
+    # Require the Deepgram header on this request so a user can't activate BYOK
+    # with fake fingerprints then omit x-byok-deepgram to ride Omi's key.
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
+        return True
+
     subscription = users_db.get_user_valid_subscription(uid)
     if not subscription:
         return False
@@ -517,6 +584,11 @@ def get_remaining_transcription_seconds(uid: str) -> int | None:
     Returns None if unlimited, otherwise the remaining seconds (>= 0).
     Used for freemium auto-switch to on-device transcription.
     """
+    # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
+    # Require the Deepgram header to prevent fake-fingerprint abuse.
+    if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
+        return None
+
     subscription = users_db.get_user_valid_subscription(uid)
     if not subscription:
         # No subscription = use basic limits

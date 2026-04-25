@@ -988,7 +988,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
@@ -996,7 +996,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         prompt: prompt,
         systemPrompt:
           "You are a structured onboarding research assistant. Output only valid JSON.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.chat,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }
@@ -1155,14 +1155,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ?? fallbackGoalConfig(from: title)
 
     do {
-      let goal = try await APIClient.shared.createGoal(
+      let goal = try await createGoalWithRetry(
         title: title,
         description: "Added from onboarding",
         goalType: config.goalType,
         targetValue: config.targetValue,
-        currentValue: 0,
-        unit: config.unit,
-        source: "onboarding_step_flow"
+        unit: config.unit
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
 
@@ -1178,10 +1176,51 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           ["source_id": "user", "target_id": "goal_\(slug(title))", "label": "prioritizes"]
         ]
       )
+    } catch APIError.httpError(let statusCode) where statusCode == 429 {
+      logError(
+        "OnboardingPagedIntroCoordinator: Goal save rate-limited (429)",
+        error: APIError.httpError(statusCode: 429))
+      lastActionError =
+        "Too many requests right now. Skip this step or try again in a moment."
     } catch {
       logError("OnboardingPagedIntroCoordinator: Failed to save onboarding goal", error: error)
       lastActionError = error.localizedDescription
     }
+  }
+
+  /// Create a goal with retry/backoff for transient 429s. The onboarding flow can saturate
+  /// Cloud Armor's per-Authorization limit through the local-file memory batch import that
+  /// runs in parallel; this gives the limiter time to drain before failing the user.
+  private func createGoalWithRetry(
+    title: String,
+    description: String,
+    goalType: GoalType,
+    targetValue: Double,
+    unit: String?
+  ) async throws -> Goal {
+    let backoffsSec: [UInt64] = [1, 3, 6]
+    var lastError: Error?
+    for attempt in 0...backoffsSec.count {
+      do {
+        return try await APIClient.shared.createGoal(
+          title: title,
+          description: description,
+          goalType: goalType,
+          targetValue: targetValue,
+          currentValue: 0,
+          unit: unit,
+          source: "onboarding_step_flow"
+        )
+      } catch APIError.httpError(let statusCode) where statusCode == 429 {
+        lastError = APIError.httpError(statusCode: 429)
+        guard attempt < backoffsSec.count else { break }
+        log(
+          "OnboardingPagedIntroCoordinator: createGoal 429, retrying in \(backoffsSec[attempt])s "
+            + "(attempt \(attempt + 2)/\(backoffsSec.count + 1))")
+        try? await Task.sleep(nanoseconds: backoffsSec[attempt] * 1_000_000_000)
+      }
+    }
+    throw lastError ?? APIError.httpError(statusCode: 429)
   }
 
   func completeIntro(appState: AppState) async -> Bool {

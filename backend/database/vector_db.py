@@ -387,3 +387,101 @@ def delete_screen_activity_vectors(uid: str, ids: List[int]):
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
     index.delete(ids=vector_ids, namespace=SCREEN_ACTIVITY_NAMESPACE)
+
+
+# ==========================================
+# Action Item Vector Functions
+# ==========================================
+
+ACTION_ITEMS_NAMESPACE = "ns4"
+
+
+def upsert_action_item_vector(uid: str, action_item_id: str, description: str):
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping action item vector upsert')
+        return None
+
+    vector = embeddings.embed_query(description)
+    data = {
+        "id": f'{uid}-ai-{action_item_id}',
+        "values": vector,
+        "metadata": {
+            "uid": uid,
+            "action_item_id": action_item_id,
+            "created_at": int(datetime.now(timezone.utc).timestamp()),
+        },
+    }
+    res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
+    logger.info(f'upsert_action_item_vector {action_item_id} {res}')
+    return vector
+
+
+def upsert_action_item_vectors_batch(uid: str, items: List[dict]) -> int:
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping action item vector batch upsert')
+        return 0
+
+    if not items:
+        return 0
+
+    descriptions = [item['description'] for item in items]
+    vectors = embeddings.embed_documents(descriptions)
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    payload = [
+        {
+            "id": f"{uid}-ai-{item['action_item_id']}",
+            "values": vectors[i],
+            "metadata": {
+                "uid": uid,
+                "action_item_id": item['action_item_id'],
+                "created_at": now_ts,
+            },
+        }
+        for i, item in enumerate(items)
+    ]
+    res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
+    logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
+    return len(payload)
+
+
+def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping action item search')
+        return []
+
+    vector = embeddings.embed_query(query)
+    filter_data = {'uid': uid}
+
+    xc = index.query(
+        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+    )
+
+    matches = xc.get('matches', [])
+    top_score = matches[0]['score'] if matches else None
+    kept = [m for m in matches if m.get('score', 0.0) >= min_score]
+    logger.info(
+        f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
+        f'top_score={top_score} min_score={min_score}'
+    )
+    return [m['metadata'].get('action_item_id') for m in kept]
+
+
+def delete_action_item_vector(uid: str, action_item_id: str):
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping action item vector delete')
+        return
+
+    vector_id = f'{uid}-ai-{action_item_id}'
+    result = index.delete(ids=[vector_id], namespace=ACTION_ITEMS_NAMESPACE)
+    logger.info(f'delete_action_item_vector {vector_id} {result}')
+
+
+def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]):
+    if index is None:
+        return
+    if not action_item_ids:
+        return
+    vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
+    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')

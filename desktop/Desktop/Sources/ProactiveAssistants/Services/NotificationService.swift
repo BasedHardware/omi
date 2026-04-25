@@ -206,13 +206,23 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
     }
 
+    /// Send a notification via the floating bar, and optionally as a native macOS system banner.
+    ///
+    /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
+    /// floating-bar only — users who disabled the floating bar reported clicking the
+    /// top-right system banner and getting no conversation context, which was confusing.
+    /// Functional notifications (Crisp support replies, screen-recording permission
+    /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
+    /// still surface as a system banner — they either have no floating-bar equivalent
+    /// or must reach the user even when the floating bar is hidden/snoozed.
     func sendNotification(
         title: String,
         message: String,
         assistantId: String = "default",
         sound: NotificationSound = .default,
         context: FloatingBarNotificationContext? = nil,
-        screenshotData: Data? = nil
+        screenshotData: Data? = nil,
+        deliverSystemBanner: Bool = false
     ) {
         // Rate-limit the screen-capture reset notification to one per broken-capture
         // episode. The recovery loop in ProactiveAssistantsPlugin.attemptAutoReset
@@ -227,6 +237,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             UserDefaults.standard.set(true, forKey: Self.screenCaptureResetShownKey)
         }
 
+        // Honor the floating-bar snooze for both the in-bar preview and the native
+        // macOS banner — the user opted into "no notifications for 2h".
+        if FloatingControlBarManager.shared.isSnoozed {
+            log("NotificationService: suppressing notification because floating bar is snoozed")
+            return
+        }
+
         FloatingControlBarManager.shared.showNotification(
             title: title,
             message: message,
@@ -236,8 +253,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             screenshotData: screenshotData
         )
 
-        // Keep the floating-bar preview, but still deliver the real macOS
-        // notification when authorization is available.
+        // Default path: floating-bar only. Functional callers opt-in via
+        // `deliverSystemBanner: true` (see the parameter doc above).
+        guard deliverSystemBanner else { return }
+
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
             Task { @MainActor in
                 guard settings.authorizationStatus == .authorized else {

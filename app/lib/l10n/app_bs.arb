@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Nivo baterije",
+    "charging": "Punjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Prati svoje lične ciljeve na početnoj stranici",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Dnevna refleksija",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Dobij podsjetnik u 21:00 za razmišljanje o svom danu",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Opis elementa akcije ne može biti prazan",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Nema API ključeva. Stvori jedan kako bi započeo.",
     "autoCreateWhenDetected": "Automatski stvori kada je ime detektirano",
     "trackPersonalGoals": "Prati osobne ciljeve na početnoj stranici",
-    "dailyReflectionDescription": "Obavijest u 21:00 da razmislim na dan i zabilježi svoje misli.",
     "endpointURL": "URL krajnje točke",
     "links": "Veze",
     "discordMemberCount": "8000+ članova na Discordu",
@@ -5321,7 +5313,7 @@
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Molimo provjerite vašu konekciju i pokušajte ponovno",
+    "checkConnectionTryAgain": "Provjerite vezu i pokušajte ponovo",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6034,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Nastavkom, svi podaci koje dijelite s ovom aplikacijom (uključujući vaše razgovore, snimke i osobne informacije) bit će sigurno pohranjeni na našim serverima kako bi vam omogućili AI-pogonjena uvida i omogućili sve značajke aplikacije.",
+    "consentDataMessage": "Nastavljanjem, vaši razgovori, snimke i lični podaci bit će sigurno pohranjeni na našim serverima. Vaši audio zapisi i transkripti se obrađuju od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane vještačkom inteligencijom i omogućili sve funkcije aplikacije.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6832,6 @@
     "notificationFrequencyDescription": "Kontroliši kako često Omi šalje proaktivna obaveštenja i podsetnike.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "Isključeno",
     "@sliderOff": {
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Vrijeme za dnevnu razmjenu",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Reči mi o tvom danu",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi podsjetnik",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Zvučnik",
     "phoneEndCall": "Završi",
     "phoneCallSettingsTitle": "Podešavanja telefonskih poziva",
+    "showPhoneCallButtonTitle": "Prikaži dugme za pozive",
+    "showPhoneCallButtonDesc": "Prikaži dugme za pozive na početnom ekranu",
     "yourVerifiedNumbers": "Tvoji verifikovani brojevi",
     "verifiedNumbersDescription": "Kada pozoveš nekoga, oni će videti ovaj broj na svom telefonu",
     "noVerifiedNumbers": "Nema verifikovanih brojeva",
@@ -10674,5 +10657,42 @@
     "youAreOnAPaidPlan": "Na plaćenom ste planu.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "poruka",
+    "unlimitedChatThisMonth": "Neograničene poruke ovog mjeseca",
+    "chatUsedOfLimitCompute": "{used} od {limit} budžeta korišteno",
+    "chatUsedOfLimitMessages": "{used} od {limit} poruka korišteno ovog mjeseca",
+    "chatUsageProgress": "{used} / {limit} korišteno",
+    "chatLimitReachedUpgrade": "Limit chata dostignut. Nadogradite za više poruka.",
+    "chatLimitReachedTitle": "Limit chata dostignut",
+    "chatUsageDescription": "Koristili ste {used} od {limitDisplay} na planu {plan}.",
+    "resetsInDays": "Resetuje se za {count} dana",
+    "resetsInHours": "Resetuje se za {count} sati",
+    "resetsSoon": "Uskoro se resetuje",
+    "upgradePlan": "Nadogradi plan",
+    "billingMonthly": "Mjesečno",
+    "billingYearly": "Godišnje",
+    "savePercent": "Uštedite ~17%",
+    "popular": "Popularno",
+    "currentPlan": "Trenutni",
+    "neoSubtitle": "{count} pitanja mjesečno",
+    "operatorSubtitle": "{count} pitanja mjesečno",
+    "architectSubtitle": "Napredni AI — hiljade razgovora + agentna automatizacija",
+    "chatUsageCost": "Chat: ${used} / ${limit} iskorišteno ovog mjeseca",
+    "chatUsageCostNoLimit": "Chat: ${used} iskorišteno ovog mjeseca",
+    "chatUsageMessages": "Chat: {used} / {limit} poruka ovog mjeseca",
+    "chatUsageMessagesNoLimit": "Chat: {used} poruka ovog mjeseca",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.",
+    "batteryHistory": "Baterija",
+    "day": "Dan",
+    "noBatteryDataYet": "Još nema podataka o bateriji",
+    "week": "Sedmica",
+    "voiceResponseAudio": "Pročitaj Omi odgovor naglas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kada izgovarati odgovore",
+    "voiceResponseOff": "Isključeno",
+    "voiceResponseHeadphonesOnly": "Samo slušalice",
+    "voiceResponseAlways": "Uvijek"
 }

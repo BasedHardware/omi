@@ -30,8 +30,8 @@ struct TasksWidget: View {
             }
 
             if totalTaskCount == 0 {
-                // Empty state
-                VStack {
+                // Empty state — vertically centered in the cell
+                VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
                     VStack(spacing: 8) {
@@ -45,11 +45,13 @@ struct TasksWidget: View {
 
                     Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let allTasks = (combinedTodayTasks + recentTasks).prefix(3)
 
+                // Task rows + "View all" centered vertically in remaining
+                // cell height — when the Goals card is taller, the row
+                // group floats to the middle instead of pinning to the top.
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
@@ -88,7 +90,7 @@ struct TasksWidget: View {
             }
         }
         .padding(22)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .omiPanel(fill: OmiColors.backgroundSecondary)
     }
 }

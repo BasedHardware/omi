@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Ниво на батерија",
+    "charging": "Полнење",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Прати твои лични цели на почетната страница",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Дневна рефлексија",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Добивај потсетник во 21:00 да се размислиш за твојот ден",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Описот на активниот предмет не може да буде празан",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Нема API клучеви. Создај еден за да почнеш.",
     "autoCreateWhenDetected": "Автоматски создај кога се открие име",
     "trackPersonalGoals": "Праток лични цели на почетна страница",
-    "dailyReflectionDescription": "Добиј потсетник во 21:00 за да размислиш на твоиот ден и да го напишеш твое размислување.",
     "endpointURL": "URL на крајна точка",
     "links": "Врски",
     "discordMemberCount": "8000+ членови на Discord",
@@ -5317,11 +5309,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не може да се вчитаат планови",
+    "unableToLoadPlans": "Не можат да се вчитаат плановите",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Проверете ја вашата врска и обидете се повторно",
+    "checkConnectionTryAgain": "Проверете ја врската и обидете се повторно",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6034,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Со продолжување, сите податоци што ги делите со оваа апликација (вклучувајќи ги вашите разговори, снимки и лични информации) ќе бидат безбедно складирани на нашите сервери за да вам обезбедиме AI-powered insights и да ги овозможиме сите функции на апликацијата.",
+    "consentDataMessage": "Со продолжување, вашите разговори, снимки и лични информации ќе бидат безбедно зачувани на нашите сервери. Вашите аудио снимки и транскрипти се обработуваат од AI услуги на трети страни (вклучувајќи Deepgram за транскрипција и OpenAI за анализа) за да ви обезбедат увиди базирани на AI и да ги овозможат сите функции на апликацијата.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6832,6 @@
     "notificationFrequencyDescription": "Контролирајте колку често Omi ви испраќа проактивни известувања и потсетници.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "Исклучено",
     "@sliderOff": {
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Време за Дневно Размислување",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Кажи ми за твојот ден",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi Потсетник",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Глас",
     "phoneEndCall": "Завршена",
     "phoneCallSettingsTitle": "Поставки за телефонски разговор",
+    "showPhoneCallButtonTitle": "Прикажи копче за повик",
+    "showPhoneCallButtonDesc": "Прикажи копче за телефонски повик на почетниот екран",
     "yourVerifiedNumbers": "Твоите потврдени броеви",
     "verifiedNumbersDescription": "Кога ќе повикаш некој, тие ќе видат овој број на нивниот телефон",
     "noVerifiedNumbers": "Нема потврдени броеви",
@@ -10674,5 +10657,42 @@
     "youAreOnAPaidPlan": "Вие сте на платен план.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Чат",
+    "chatMessages": "пораки",
+    "unlimitedChatThisMonth": "Неограничени пораки овој месец",
+    "chatUsedOfLimitCompute": "{used} од {limit} буџет за пресметка искористен",
+    "chatUsedOfLimitMessages": "{used} од {limit} пораки искористени овој месец",
+    "chatUsageProgress": "{used} / {limit} искористено",
+    "chatLimitReachedUpgrade": "Лимитот за чат е достигнат. Надградете за повеќе пораки.",
+    "chatLimitReachedTitle": "Лимитот за чат е достигнат",
+    "chatUsageDescription": "Искористивте {used} од {limitDisplay} на планот {plan}.",
+    "resetsInDays": "Се ресетира за {count} дена",
+    "resetsInHours": "Се ресетира за {count} часа",
+    "resetsSoon": "Наскоро се ресетира",
+    "upgradePlan": "Надгради план",
+    "billingMonthly": "Месечно",
+    "billingYearly": "Годишно",
+    "savePercent": "Заштедете ~17%",
+    "popular": "Популарно",
+    "currentPlan": "Тековен",
+    "neoSubtitle": "{count} прашања месечно",
+    "operatorSubtitle": "{count} прашања месечно",
+    "architectSubtitle": "Напреден AI — илјадници разговори + агентна автоматизација",
+    "chatUsageCost": "Разговор: ${used} / ${limit} искористено овој месец",
+    "chatUsageCostNoLimit": "Разговор: ${used} искористено овој месец",
+    "chatUsageMessages": "Разговор: {used} / {limit} пораки овој месец",
+    "chatUsageMessagesNoLimit": "Разговор: {used} пораки овој месец",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Го достигнавте вашиот месечен лимит. Надградете за да продолжите да разговарате со Omi без ограничувања.",
+    "batteryHistory": "Батерија",
+    "day": "Ден",
+    "noBatteryDataYet": "Сè уште нема податоци за батеријата",
+    "week": "Седмица",
+    "voiceResponseAudio": "Прочитај го одговорот на Omi гласно",
+    "voiceResponseMode": "Гласовен одговор",
+    "voiceResponseModeTitle": "Кога да се изговараат одговорите",
+    "voiceResponseOff": "Исклучено",
+    "voiceResponseHeadphonesOnly": "Само слушалки",
+    "voiceResponseAlways": "Секогаш"
 }

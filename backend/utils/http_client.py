@@ -217,6 +217,10 @@ def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 
 
+def get_tts_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('tts', 32)
+
+
 # ---------------------------------------------------------------------------
 # Shared httpx.AsyncClient instances
 # ---------------------------------------------------------------------------
@@ -225,6 +229,7 @@ _webhook_client: httpx.AsyncClient | None = None
 _maps_client: httpx.AsyncClient | None = None
 _auth_client: httpx.AsyncClient | None = None
 _stt_client: httpx.AsyncClient | None = None
+_tts_client: httpx.AsyncClient | None = None
 
 
 def get_webhook_client() -> httpx.AsyncClient:
@@ -275,10 +280,29 @@ def get_stt_client() -> httpx.AsyncClient:
     return _stt_client
 
 
+def get_tts_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for TTS streaming (ElevenLabs).
+
+    Keep-alive is disabled (`max_keepalive_connections=0`) because in Cloud
+    Run we observed stale keep-alive sockets being reused after the remote
+    or an intermediate NAT silently dropped them, raising asyncio's
+    "handler is closed" error and returning 502 to the client. TTS
+    volume is low enough that paying a TLS handshake per request is fine,
+    and the correctness win is worth it.
+    """
+    global _tts_client
+    if _tts_client is None:
+        _tts_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=5.0),
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=0),
+        )
+    return _tts_client
+
+
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
-    global _webhook_client, _maps_client, _auth_client, _stt_client
-    for client in (_webhook_client, _maps_client, _auth_client, _stt_client):
+    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client
+    for client in (_webhook_client, _maps_client, _auth_client, _stt_client, _tts_client):
         if client is not None:
             try:
                 await client.aclose()
@@ -287,6 +311,7 @@ async def close_all_clients():
     _webhook_client = None
     _maps_client = None
     _auth_client = None
+    _tts_client = None
     _stt_client = None
     # Reset stateful registries
     _semaphores.clear()

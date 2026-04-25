@@ -32,6 +32,10 @@ class OmiBleManager private constructor(private val application: Application) {
         private const val TAG = "OmiBle"
         private const val RSSI_HISTORY_LIMIT = 10
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
+        private const val PREFS_BATTERY = "battery_history"
+        private const val MAX_BATTERY_HISTORY = 2000
+        private const val BATTERY_RETENTION_MS = 7L * 24 * 3600 * 1000
+        private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
 
         @Volatile
         private var _instance: OmiBleManager? = null
@@ -522,6 +526,54 @@ class OmiBleManager private constructor(private val application: Application) {
         isProcessingCommand = false
     }
 
+    // ── Battery history ──
+
+    private fun batteryHistoryKey(address: String) = "battery_history_${address.uppercase()}"
+
+    private fun persistBatteryReading(address: String, level: Int) {
+        val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
+        val key = batteryHistoryKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { org.json.JSONArray(historyJson) } catch (_: Exception) { org.json.JSONArray() }
+
+        val now = System.currentTimeMillis()
+        val cutoff = now - BATTERY_RETENTION_MS
+
+        val pruned = org.json.JSONArray()
+        for (i in 0 until history.length()) {
+            val obj = history.getJSONObject(i)
+            if (obj.getLong("ts") >= cutoff) pruned.put(obj)
+        }
+
+        pruned.put(org.json.JSONObject().apply {
+            put("ts", now)
+            put("level", level)
+        })
+
+        while (pruned.length() > MAX_BATTERY_HISTORY) pruned.remove(0)
+
+        prefs.edit().putString(key, pruned.toString()).apply()
+    }
+
+    fun getBatteryHistory(address: String): List<BleBatteryPoint> {
+        val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
+        val key = batteryHistoryKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { org.json.JSONArray(historyJson) } catch (_: Exception) { return emptyList() }
+
+        val now = System.currentTimeMillis()
+        val cutoff = now - BATTERY_RETENTION_MS
+        val result = mutableListOf<BleBatteryPoint>()
+        for (i in 0 until history.length()) {
+            val obj = history.getJSONObject(i)
+            val ts = obj.getLong("ts")
+            if (ts >= cutoff) {
+                result.add(BleBatteryPoint(timestamp = ts, level = obj.getInt("level").toLong()))
+            }
+        }
+        return result
+    }
+
     // ── GATT callback factory ──
 
     private fun createGattCallback() = object : BluetoothGattCallback() {
@@ -611,6 +663,11 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
+
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID && value.isNotEmpty()) {
+                persistBatteryReading(address, value[0].toInt() and 0xFF)
+            }
+
             mainHandler.post {
                 flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
             }

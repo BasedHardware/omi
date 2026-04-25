@@ -7,9 +7,9 @@
 #include <zephyr/fs/fs_sys.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/check.h>
-#include <zephyr/pm/device.h>
 
 LOG_MODULE_REGISTER(sdcard, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -408,7 +408,7 @@ int get_offset()
 }
 
 void sd_off()
- {
+{
     // Suspend SPI peripheral to save power
     const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
     if (device_is_ready(spi_dev)) {
@@ -417,19 +417,18 @@ void sd_off()
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 15, GPIO_DISCONNECTED); // MOSI
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_DISCONNECTED); // MISO
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 13, GPIO_DISCONNECTED); // SCK
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio0)), 2, GPIO_DISCONNECTED); // CS
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio0)), 2, GPIO_DISCONNECTED);  // CS
     gpio_pin_set_dt(&sd_en_gpio_pin, 0);
 
     sd_enabled = false;
 }
 
-
 void sd_on()
 {
     gpio_pin_set_dt(&sd_en_gpio_pin, 1);
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 15, GPIO_OUTPUT); // MOSI
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_INPUT); // MISO
-    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 13, GPIO_OUTPUT); // SCK
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 15, GPIO_OUTPUT);     // MOSI
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 14, GPIO_INPUT);      // MISO
+    gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 13, GPIO_OUTPUT);     // SCK
     gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio0)), 2, GPIO_OUTPUT_HIGH); // CS
     const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi2));
     if (device_is_ready(spi_dev)) {

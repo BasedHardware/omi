@@ -29,7 +29,7 @@ from models.users import PlanType, PlanLimits, Subscription
 def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
     """F4: Operator and Unlimited chat caps must be independently configurable."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "750")
-    monkeypatch.setenv("PLUS_CHAT_QUESTIONS_PER_MONTH", "500")
+    monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "3000")
 
     # Re-import to pick up env vars
     import importlib
@@ -41,14 +41,14 @@ def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
     unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 750
-    assert unlimited_limits.chat_questions_per_month == 500
+    assert unlimited_limits.chat_questions_per_month == 3000
     assert operator_limits.chat_questions_per_month != unlimited_limits.chat_questions_per_month
 
 
-def test_operator_default_matches_unlimited_default(monkeypatch):
-    """Both default to 500 when no env override is set."""
+def test_operator_and_neo_defaults(monkeypatch):
+    """Operator defaults to 500, Neo defaults to 200."""
     monkeypatch.delenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", raising=False)
-    monkeypatch.delenv("PLUS_CHAT_QUESTIONS_PER_MONTH", raising=False)
+    monkeypatch.delenv("NEO_CHAT_QUESTIONS_PER_MONTH", raising=False)
 
     import importlib
     import utils.subscription as sub_mod
@@ -59,7 +59,7 @@ def test_operator_default_matches_unlimited_default(monkeypatch):
     unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 500
-    assert unlimited_limits.chat_questions_per_month == 500
+    assert unlimited_limits.chat_questions_per_month == 200
 
 
 def test_architect_uses_dollar_cap():
@@ -81,15 +81,14 @@ def test_operator_is_paid():
     assert not is_paid_plan(PlanType.basic)
 
 
-def test_filter_plans_hides_legacy():
-    """Legacy plans (Unlimited) hidden from purchase catalog for all users."""
+def test_filter_plans_for_basic_user():
+    """Basic users see Neo, Operator, and Architect in purchase catalog."""
     from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
 
     definitions = get_paid_plan_definitions()
     filtered = filter_plans_for_user(definitions, PlanType.basic)
 
     plan_ids = [d['plan_id'] for d in filtered]
-    assert 'unlimited' not in plan_ids
     assert 'operator' in plan_ids
     assert 'architect' in plan_ids
 
@@ -216,10 +215,10 @@ def test_operator_price_id_mapping(monkeypatch):
     assert sub_mod.get_plan_type_from_price_id("price_op_annual") == PlanType.operator
 
 
-def test_plan_features_differentiate_operator_unlimited(monkeypatch):
-    """Operator and Unlimited show separate feature lists with their own caps."""
+def test_plan_features_differentiate_operator_neo(monkeypatch):
+    """Operator and Neo show separate feature lists with their own caps."""
     monkeypatch.setenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", "600")
-    monkeypatch.setenv("PLUS_CHAT_QUESTIONS_PER_MONTH", "500")
+    monkeypatch.setenv("NEO_CHAT_QUESTIONS_PER_MONTH", "300")
 
     import importlib
     import utils.subscription as sub_mod
@@ -227,10 +226,10 @@ def test_plan_features_differentiate_operator_unlimited(monkeypatch):
     importlib.reload(sub_mod)
 
     op_features = sub_mod.get_plan_features(PlanType.operator)
-    ul_features = sub_mod.get_plan_features(PlanType.unlimited)
+    neo_features = sub_mod.get_plan_features(PlanType.unlimited)
 
     assert "600 chat questions per month" in op_features
-    assert "500 chat questions per month" in ul_features
+    assert "300 chat questions per month" in neo_features
 
 
 def test_plan_display_names():
@@ -239,4 +238,4 @@ def test_plan_display_names():
     assert get_plan_display_name(PlanType.basic) == 'Free'
     assert get_plan_display_name(PlanType.operator) == 'Operator'
     assert get_plan_display_name(PlanType.architect) == 'Architect'
-    assert 'legacy' in get_plan_display_name(PlanType.unlimited).lower()
+    assert get_plan_display_name(PlanType.unlimited) == 'Neo'

@@ -11,7 +11,7 @@ import { ReactNode, useMemo } from 'react';
 //
 // We cap each entry at ~1MB and the total payload at ~5MB, because the
 // iOS/desktop webkit localStorage quota is 5MB per origin.
-const STORAGE_KEY = 'omi-admin-swr-cache-v1';
+const STORAGE_KEY = 'omi-admin-swr-cache-v5';
 const MAX_ENTRY_BYTES = 1_000_000;
 const MAX_TOTAL_BYTES = 5_000_000;
 

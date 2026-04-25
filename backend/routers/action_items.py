@@ -10,6 +10,13 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+from database.vector_db import (
+    upsert_action_item_vector,
+    upsert_action_item_vectors_batch,
+    delete_action_item_vector,
+    delete_action_item_vectors_batch,
+    search_action_items_by_vector,
+)
 from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
@@ -169,6 +176,14 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             updates.append({'id': item.id, 'data': update_data})
 
     action_items_db.batch_sync_update_action_items(uid, updates)
+
+    desc_updates = [u for u in updates if 'description' in u['data']]
+    if desc_updates:
+        upsert_action_item_vectors_batch(
+            uid,
+            [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
+        )
+
     return {"status": "ok", "updated_count": len(updates)}
 
 
@@ -201,6 +216,8 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
             description=request.description,
             due_at=request.due_at.isoformat(),
         )
+
+    upsert_action_item_vector(uid, action_item_id, request.description)
 
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
@@ -260,6 +277,22 @@ def get_action_items(
     return {"action_items": response_items, "has_more": has_more}
 
 
+@router.get("/v1/action-items/search", tags=['action-items'])
+def search_action_items(
+    query: str = Query(..., min_length=1, description="Search query"),
+    limit: int = Query(10, ge=1, le=50, description="Maximum results"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Semantic search across action items using vector similarity."""
+    action_item_ids = search_action_items_by_vector(uid, query, limit=limit)
+    if not action_item_ids:
+        return {"action_items": []}
+
+    action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
+    action_items = [item for item in action_items if not item.get('is_locked', False)]
+    return {"action_items": [ActionItemResponse(**item) for item in action_items]}
+
+
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific action item by ID."""
@@ -316,6 +349,9 @@ def update_action_item(
     success = action_items_db.update_action_item(uid, action_item_id, update_data)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
+
+    if request.description is not None:
+        upsert_action_item_vector(uid, action_item_id, request.description)
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
@@ -377,6 +413,8 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
     if not success:
         raise HTTPException(status_code=404, detail="Action item not found")
 
+    delete_action_item_vector(uid, action_item_id)
+
     # Send FCM deletion message to cancel scheduled notification
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
 
@@ -405,7 +443,13 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
 @router.delete("/v1/conversations/{conversation_id}/action-items", status_code=204, tags=['action-items'])
 def delete_conversation_action_items(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete all action items for a specific conversation."""
+    existing = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+    existing_ids = [item['id'] for item in existing]
+
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+
+    if existing_ids:
+        delete_action_item_vectors_batch(uid, existing_ids)
 
     return {"status": "Ok", "deleted_count": deleted_count}
 
@@ -447,6 +491,14 @@ def create_action_items_batch(
                     description=action_items[idx].description,
                     due_at=action_items[idx].due_at.isoformat(),
                 )
+
+    upsert_action_item_vectors_batch(
+        uid,
+        [
+            {'action_item_id': aid, 'description': data['description']}
+            for aid, data in zip(created_ids, action_items_data)
+        ],
+    )
 
     return {"action_items": created_items, "created_count": len(created_items)}
 
@@ -567,6 +619,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         }
         new_id = action_items_db.create_action_item(uid, new_item)
         created_ids.append(new_id)
+        upsert_action_item_vector(uid, new_id, new_item['description'])
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:

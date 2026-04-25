@@ -44,7 +44,6 @@ import {
   UserPlus,
   Lightbulb,
   Target,
-  Moon,
   ArrowLeft,
   Crown,
   ChevronRight,
@@ -1944,7 +1943,6 @@ function DeveloperSection({
     autoCreateSpeakers: false,
     followUpQuestions: false,
     goalTracker: false,
-    dailyReflection: true,
   });
 
   // Load experimental features from localStorage on mount
@@ -2402,23 +2400,6 @@ function DeveloperSection({
               <Toggle
                 enabled={experimentalFeatures.goalTracker}
                 onChange={(v) => updateExperimentalFeature('goalTracker', v)}
-              />
-            </div>
-
-            {/* Daily Reflection */}
-            <div className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-bg-tertiary">
-                  <Moon className="w-4 h-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-text-primary font-medium text-sm">Daily Reflection</p>
-                  <p className="text-xs text-text-tertiary">Get a 9 PM reminder to reflect on your day</p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.dailyReflection}
-                onChange={(v) => updateExperimentalFeature('dailyReflection', v)}
               />
             </div>
           </div>

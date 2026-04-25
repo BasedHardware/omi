@@ -426,44 +426,106 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
-def test_models_unchanged_for_llm_calls():
-    """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
-    # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py
+def test_llm_calls_use_omi_qos_tier_system():
+    """Verify all LLM functions use get_llm() with correct feature keys and cache_key param."""
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text()
 
-    # get_transcript_structure should use llm_medium_experiment (may have .bind() for cache key)
+    # get_transcript_structure should use get_llm('conv_structure', cache_key=...)
     struct_match = re.search(
-        r'def get_transcript_structure.*?chain = prompt \| (\w+)[\.\|]',
+        r'def get_transcript_structure.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
     assert struct_match is not None
     assert (
-        struct_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for structure, got {struct_match.group(1)}"
+        struct_match.group(1) == "conv_structure"
+    ), f"Expected get_llm('conv_structure') for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use llm_medium_experiment (may have extra kwargs in invoke)
+    # get_app_result should use get_llm('conv_app_result', cache_key=...)
     app_match = re.search(
-        r'def get_app_result.*?response = (\w+)\.invoke\(prompt',
+        r'def get_app_result.*?response = get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
     assert app_match is not None
     assert (
-        app_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
+        app_match.group(1) == "conv_app_result"
+    ), f"Expected get_llm('conv_app_result') for app result, got {app_match.group(1)}"
 
-    # extract_action_items should use llm_medium_experiment (may have .bind() for cache key)
+    # extract_action_items should use get_llm('conv_action_items', cache_key=...)
     action_match = re.search(
-        r'def extract_action_items.*?chain = prompt \| (\w+)[\.\|]',
+        r'def extract_action_items.*?chain = prompt \| get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
     assert action_match is not None
     assert (
-        action_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
+        action_match.group(1) == "conv_action_items"
+    ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
+
+    # Verify cache keys are passed through get_llm's cache_key param (model-safe)
+    assert "cache_key='omi-extract-actions'" in conv_proc_source, "Missing cache_key for action items"
+    assert "cache_key='omi-transcript-structure'" in conv_proc_source, "Missing cache_key for structure"
+    assert "cache_key='omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
+    assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
+
+
+def test_all_callsites_use_get_llm():
+    """Verify ALL callsites across conversation_processing, knowledge_graph, and memories use get_llm()."""
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+
+    # conversation_processing.py: 9 callsites
+    conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text()
+    conv_proc_calls = re.findall(r"get_llm\('(\w+)'", conv_proc_source)
+    assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
+    assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
+    assert 'conv_app_select' in conv_proc_calls, "Missing get_llm('conv_app_select') in conversation_processing.py"
+    assert 'conv_folder' in conv_proc_calls, "Missing get_llm('conv_folder') in conversation_processing.py"
+    assert 'conv_discard' in conv_proc_calls, "Missing get_llm('conv_discard') in conversation_processing.py"
+    assert 'daily_summary' in conv_proc_calls, "Missing get_llm('daily_summary') in conversation_processing.py"
+    # conv_structure appears in both get_transcript_structure and get_reprocess_transcript_structure
+    assert (
+        conv_proc_calls.count('conv_structure') >= 2
+    ), f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
+
+    # knowledge_graph.py: 2 callsites
+    kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text()
+    kg_calls = re.findall(r"get_llm\('(\w+)'", kg_source)
+    assert (
+        kg_calls.count('knowledge_graph') == 2
+    ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
+
+    # memories.py: 5 callsites (memories x2, learnings x1, memory_category x1, memory_conflict x1)
+    mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text()
+    mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
+    assert mem_calls.count('memories') == 2, f"Expected 2 get_llm('memories') calls, got {mem_calls.count('memories')}"
+    assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
+    assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
+    assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
+
+    # Total: 9 + 2 + 5 = 16 callsites
+    total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
+    assert total == 16, f"Expected 16 total get_llm() callsites, got {total}"
+
+
+def test_no_direct_llm_instance_usage_in_wired_files():
+    """Verify wired files don't invoke direct llm_mini/llm_medium_experiment/llm_high instances in function bodies."""
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+    for filename in ["conversation_processing.py", "knowledge_graph.py", "memories.py"]:
+        filepath = backend_dir / "utils" / "llm" / filename
+        source = filepath.read_text()
+        # Check for actual invocations, not just imports
+        for usage_pattern in [
+            'llm_medium_experiment.invoke',
+            'llm_medium_experiment |',
+            'llm_mini.invoke',
+            'llm_mini |',
+            'llm_mini.with_structured_output',
+            'llm_high |',
+            'llm_high.invoke',
+        ]:
+            assert usage_pattern not in source, f"{filename} still invokes {usage_pattern} instead of get_llm()"
 
 
 def test_threaded_tracking_context_isolation():

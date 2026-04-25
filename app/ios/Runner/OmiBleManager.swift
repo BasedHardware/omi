@@ -304,6 +304,12 @@ final class OmiBleManager: NSObject {
 
     // MARK: - Diagnostics Persistence
 
+    private static let batteryHistoryKeyPrefix = "battery_history_"
+    private static let maxBatteryHistoryEntries = 2000
+    private static let batteryHistoryRetentionMs: Int64 = 7 * 24 * 3600 * 1000
+
+    private static let batteryLevelCharUuid = CBUUID(string: "2A19")
+
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
@@ -472,6 +478,42 @@ final class OmiBleManager: NSObject {
             connectedAt: connectedAt,
             failToConnectCount: Int64(failToConnectCount)
         )
+    }
+
+    // MARK: - Battery History
+
+    private static func batteryHistoryKey(_ uuid: String) -> String { "\(batteryHistoryKeyPrefix)\(uuid)" }
+
+    private func persistBatteryReading(uuid: String, level: Int) {
+        let defaults = UserDefaults.standard
+        let key = OmiBleManager.batteryHistoryKey(uuid)
+        var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
+        history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
+
+        history.append(["ts": now, "level": level])
+
+        if history.count > OmiBleManager.maxBatteryHistoryEntries {
+            history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
+        }
+
+        defaults.set(history, forKey: key)
+    }
+
+    func getBatteryHistory(uuid: String) -> [BleBatteryPoint] {
+        let defaults = UserDefaults.standard
+        let key = OmiBleManager.batteryHistoryKey(uuid)
+        let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
+
+        return history.compactMap { obj in
+            guard let ts = obj["ts"] as? Int64, let level = obj["level"] as? Int, ts >= cutoff else { return nil }
+            return BleBatteryPoint(timestamp: ts, level: Int64(level))
+        }
     }
 
     // MARK: - Audio Batch Helpers
@@ -709,6 +751,10 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         // Handle notification
         guard let data = characteristic.value, !data.isEmpty else { return }
+
+        if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
+            persistBatteryReading(uuid: uuid, level: Int(firstByte))
+        }
 
         let typedData = FlutterStandardTypedData(bytes: data)
         flutterApi?.onCharacteristicValueUpdated(

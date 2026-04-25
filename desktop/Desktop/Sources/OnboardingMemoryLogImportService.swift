@@ -85,7 +85,7 @@ actor OnboardingMemoryLogImportService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
@@ -93,7 +93,7 @@ actor OnboardingMemoryLogImportService {
         prompt: importPrompt,
         systemPrompt:
           "You convert memory-log exports into concise durable user memories. Output only valid JSON.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in "" },
         onToolActivity: { @Sendable _, _, _, _ in }

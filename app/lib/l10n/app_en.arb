@@ -2515,6 +2515,7 @@
     "@batteryLevel": {
         "description": "Battery level label"
     },
+    "charging": "Charging",
     "productUpdate": "Product Update",
     "@productUpdate": {
         "description": "Menu item for product/firmware update"
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Track your personal goals on homepage",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Daily Reflection",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Get a 9 PM reminder to reflect on your day",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Action item description cannot be empty",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "No API keys. Create one to get started.",
     "autoCreateWhenDetected": "Auto-create when name detected",
     "trackPersonalGoals": "Track personal goals on homepage",
-    "dailyReflectionDescription": "Get a reminder at 9 PM to reflect on your day and capture your thoughts.",
     "endpointURL": "Endpoint URL",
     "links": "Links",
     "discordMemberCount": "8000+ members on Discord",
@@ -5349,13 +5341,11 @@
     "@cancelSubscription": {
         "description": "Button text to cancel a subscription"
     },
-    "endsOnDate": "Ends on {date}",
+    "endsOnDate": "Ends {date}",
     "@endsOnDate": {
-        "description": "Shows end date",
         "placeholders": {
             "date": {
-                "type": "String",
-                "example": "January 15, 2026"
+                "type": "String"
             }
         }
     },
@@ -6042,7 +6032,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.",
+    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services (including Deepgram for transcription and OpenAI for analysis) to provide you with AI-powered insights and enable all app features.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6830,6 @@
     "notificationFrequencyDescription": "Control how often Omi sends you proactive notifications and reminders.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "Off",
     "@sliderOff": {
@@ -8899,14 +8886,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Time for Daily Reflection",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Tell me about your day",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi Reminder",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9994,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "End",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Show Phone Call Button",
+    "showPhoneCallButtonDesc": "Display phone call button on home screen",
     "yourVerifiedNumbers": "Your Verified Numbers",
     "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
     "noVerifiedNumbers": "No verified numbers",
@@ -10554,6 +10535,10 @@
             }
         }
     },
+    "batteryHistory": "Battery",
+    "noBatteryDataYet": "No battery data yet",
+    "day": "Day",
+    "week": "Week",
     "rollbackToStableFirmware": "Roll Back to Stable Firmware",
     "@rollbackToStableFirmware": {
         "description": "Action item title for rolling back to the latest stable firmware version"
@@ -10744,5 +10729,164 @@
     "youAreOnAPaidPlan": "You are on a paid plan.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "messages",
+    "unlimitedChatThisMonth": "Unlimited chat messages this month",
+    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "@chatUsedOfLimitCompute": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
+    "@chatUsedOfLimitMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageProgress": "{used} / {limit} used",
+    "@chatUsageProgress": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatLimitReachedUpgrade": "Chat limit reached. Upgrade for more messages.",
+    "chatLimitReachedTitle": "Chat Limit Reached",
+    "chatUsageDescription": "You've used {used} of your {limitDisplay} on the {plan} plan.",
+    "@chatUsageDescription": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limitDisplay": {
+                "type": "String"
+            },
+            "plan": {
+                "type": "String"
+            }
+        }
+    },
+    "resetsInDays": "Resets in {count} day(s)",
+    "@resetsInDays": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsInHours": "Resets in {count} hour(s)",
+    "@resetsInHours": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsSoon": "Resets soon",
+    "upgradePlan": "Upgrade Plan",
+    "billingMonthly": "Monthly",
+    "billingYearly": "Yearly",
+    "savePercent": "Save ~17%",
+    "popular": "Popular",
+    "currentPlan": "Current",
+    "neoSubtitle": "{count} questions per month",
+    "@neoSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "operatorSubtitle": "{count} questions per month",
+    "@operatorSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "@chatUsageCost": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "@chatUsageCostNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "@chatUsageMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month",
+    "@chatUsageMessagesNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
+    },
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
+    "@chatQuotaExceededReply": {
+        "description": "AI reply message shown when user exceeds chat quota"
+    },
+    "voiceResponseAudio": "Speak Omi responses aloud",
+    "@voiceResponseAudio": {
+        "description": "Voice response audio feature title"
+    },
+    "voiceResponseMode": "Voice response",
+    "@voiceResponseMode": {
+        "description": "Voice response mode setting row title"
+    },
+    "voiceResponseModeTitle": "When to speak responses",
+    "@voiceResponseModeTitle": {
+        "description": "Bottom sheet title for voice response mode selector"
+    },
+    "voiceResponseOff": "Off",
+    "@voiceResponseOff": {
+        "description": "Voice response mode: off"
+    },
+    "voiceResponseHeadphonesOnly": "Headphones only",
+    "@voiceResponseHeadphonesOnly": {
+        "description": "Voice response mode: only when headphones connected"
+    },
+    "voiceResponseAlways": "Always",
+    "@voiceResponseAlways": {
+        "description": "Voice response mode: always, including phone speaker"
     }
 }

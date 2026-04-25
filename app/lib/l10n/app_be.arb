@@ -1721,7 +1721,7 @@
     "@rateOnGooglePlay": {
         "description": "Button text to rate on Google Play Store"
     },
-    "maybeLater": "Можа позней",
+    "maybeLater": "Магчыма пазней",
     "@maybeLater": {
         "description": "Button text to defer action"
     },
@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Узровень батарэі",
+    "charging": "Зарадка",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Отстёгивайте свои личные цели на главной странице",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Ежедневное размышленне",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Атрымаць напамін ў 21:00, каб адбыцца",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Апісанне пункту дзеяння не можа быць пусты",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Адсутнічаюць API ключы. Создайте адзін для пачатку.",
     "autoCreateWhenDetected": "Аўтаматычна стварыць, калі выявлена імя",
     "trackPersonalGoals": "Сачыць персанальныя мэты на хатняй старонцы",
-    "dailyReflectionDescription": "Атрымайце нагаданне ў 9 PM для роздуму над днём і захопу вашых думак.",
     "endpointURL": "URL дакрайнай кропкі",
     "links": "Спасылкі",
     "discordMemberCount": "8000+ членаў на Discord",
@@ -5317,11 +5309,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "Не ўдалося загрузіць планы",
+    "unableToLoadPlans": "Немагчыма загрузіць планы",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "Калі ласка, праверце вашае падлучэнне і спробуйце яшчэ раз",
+    "checkConnectionTryAgain": "Праверце падключэнне і паспрабуйце зноў",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6034,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Прыступаючы, усе дадзеныя, якія вы дзеліцеся з гэтым прыложэннем (уключаючы вашы разговоры, запісы і персанальную інфармацыю), будуць безбяспечна захаваны на нашых серверах, каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі прыложэння.",
+    "consentDataMessage": "Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6832,6 @@
     "notificationFrequencyDescription": "Кантраліруйце, як часта Omi адпраўляе вам прааактыўныя апавяшчэнні і напамінаўі.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "Выкл.",
     "@sliderOff": {
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Час штодзённага роздуму",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Расказыце мне пра ваш дзень",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Нагадаванне Omi",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Спікер",
     "phoneEndCall": "Завершыць",
     "phoneCallSettingsTitle": "Параметры тэлефонных вызваў",
+    "showPhoneCallButtonTitle": "Паказаць кнопку тэлефоннага выкліку",
+    "showPhoneCallButtonDesc": "Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране",
     "yourVerifiedNumbers": "Ваш параўныя нумары",
     "verifiedNumbersDescription": "Калі вы звяжэцца з кім-небудзь, яны паўідяць гэты нумар на сваім тэлефоне",
     "noVerifiedNumbers": "Няма параўныш нумараў",
@@ -10674,5 +10657,42 @@
     "youAreOnAPaidPlan": "Вы на платным плане.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "Чат",
+    "chatMessages": "паведамленняў",
+    "unlimitedChatThisMonth": "Неабмежаваныя паведамленні ў чаце гэты месяц",
+    "chatUsedOfLimitCompute": "{used} з {limit} бюджэту вылічэнняў выкарыстана",
+    "chatUsedOfLimitMessages": "{used} з {limit} паведамленняў выкарыстана гэты месяц",
+    "chatUsageProgress": "{used} / {limit} выкарыстана",
+    "chatLimitReachedUpgrade": "Ліміт чату дасягнуты. Абнавіце для большай колькасці паведамленняў.",
+    "chatLimitReachedTitle": "Ліміт чату дасягнуты",
+    "chatUsageDescription": "Вы выкарысталі {used} з {limitDisplay} на плане {plan}.",
+    "resetsInDays": "Скід праз {count} дзён",
+    "resetsInHours": "Скід праз {count} гадзін",
+    "resetsSoon": "Хутка скінецца",
+    "upgradePlan": "Абнавіць план",
+    "billingMonthly": "Штомесяц",
+    "billingYearly": "Штогод",
+    "savePercent": "Зэканомце ~17%",
+    "popular": "Папулярны",
+    "currentPlan": "Бягучы",
+    "neoSubtitle": "{count} пытанняў у месяц",
+    "operatorSubtitle": "{count} пытанняў у месяц",
+    "architectSubtitle": "AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя",
+    "chatUsageCost": "Чат: ${used} / ${limit} выкарыстана ў гэтым месяцы",
+    "chatUsageCostNoLimit": "Чат: ${used} выкарыстана ў гэтым месяцы",
+    "chatUsageMessages": "Чат: {used} / {limit} паведамленняў у гэтым месяцы",
+    "chatUsageMessagesNoLimit": "Чат: {used} паведамленняў у гэтым месяцы",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "Вы дасягнулі свайго месячнага ліміту. Абнавіце, каб працягваць размаўляць з Omi без абмежаванняў.",
+    "batteryHistory": "Батарэя",
+    "day": "Дзень",
+    "noBatteryDataYet": "Даных пра батарэю яшчэ няма",
+    "week": "Тыдзень",
+    "voiceResponseAudio": "Чытаць адказ Omi уголас",
+    "voiceResponseMode": "Галасавы адказ",
+    "voiceResponseModeTitle": "Калі агучваць адказы",
+    "voiceResponseOff": "Выкл",
+    "voiceResponseHeadphonesOnly": "Толькі навушнікі",
+    "voiceResponseAlways": "Заўсёды"
 }

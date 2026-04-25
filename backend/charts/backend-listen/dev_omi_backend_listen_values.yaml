@@ -240,7 +240,7 @@ env:
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
   - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
-    value: "price_1TN7s21F8wnoWYvwG6JuEFm6"
+    value: "price_1TLFXK1F8wnoWYvwG1TaUkZ3"
   - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
     value: "price_1TN7sF1F8wnoWYvwd0QaLZNA"
   - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID

@@ -115,7 +115,7 @@ struct OnboardingChatView: View {
   @FocusState private var isInputFocused: Bool
 
   // Parallel exploration state
-  @State private var explorationBridge: ACPBridge?
+  @State private var explorationBridge: AgentBridge?
   @State private var explorationRunning = false
   @State private var explorationCompleted = false
   @State private var explorationText = ""
@@ -1369,7 +1369,7 @@ struct OnboardingChatView: View {
 
     explorationTask = Task {
       do {
-        let bridge = ACPBridge(passApiKey: true)
+        let bridge = AgentBridge(harnessMode: "piMono")
         await MainActor.run { explorationBridge = bridge }
         try await bridge.start()
 
@@ -1383,7 +1383,7 @@ struct OnboardingChatView: View {
           prompt:
             "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
           systemPrompt: systemPrompt,
-          model: "claude-opus-4-6",
+          model: ModelQoS.Claude.chat,
           onTextDelta: { @Sendable delta in
             Task { @MainActor in
               explorationText += delta

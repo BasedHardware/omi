@@ -105,6 +105,12 @@ actor APIClient {
       }
     }
 
+    // BYOK: attach user-provided keys so the backend uses them for LLM/STT
+    // calls this request triggers. Sent per-request; never stored server-side.
+    for (provider, entry) in APIKeyService.byokSnapshot {
+      headers[provider.headerName] = entry.key
+    }
+
     return headers
   }
 
@@ -3812,6 +3818,40 @@ struct AvailablePlansResponse: Codable {
   let plans: [AvailablePlanPriceOption]
 }
 
+struct OverageInfoResponse: Codable {
+  let plan: String
+  let planType: String
+  let isOveragePlan: Bool
+  let includedQuestions: Int?
+  let usedQuestions: Int
+  let excessQuestions: Int
+  let realCostUsd: Double
+  let overageUsd: Double
+  let markupMultiplier: Double
+  let markupPercent: Double
+  let resetAt: Int?
+  let explainerTitle: String
+  let explainerBody: String
+  let byokAvailable: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case plan
+    case planType = "plan_type"
+    case isOveragePlan = "is_overage_plan"
+    case includedQuestions = "included_questions"
+    case usedQuestions = "used_questions"
+    case excessQuestions = "excess_questions"
+    case realCostUsd = "real_cost_usd"
+    case overageUsd = "overage_usd"
+    case markupMultiplier = "markup_multiplier"
+    case markupPercent = "markup_percent"
+    case resetAt = "reset_at"
+    case explainerTitle = "explainer_title"
+    case explainerBody = "explainer_body"
+    case byokAvailable = "byok_available"
+  }
+}
+
 struct CustomerPortalResponse: Codable {
   let url: String
 }
@@ -4382,6 +4422,10 @@ extension APIClient {
     return try await get("v1/payments/available-plans")
   }
 
+  func getOverageInfo() async throws -> OverageInfoResponse {
+    return try await get("v1/payments/overage-info")
+  }
+
   func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
     struct Request: Encodable {
       let priceId: String
@@ -4408,6 +4452,24 @@ extension APIClient {
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
     return try await post("v1/payments/customer-portal")
+  }
+
+  /// Activate the Bring-Your-Own-Keys free plan on the backend.
+  /// Sends SHA-256 fingerprints (never the keys themselves) so the backend
+  /// can tell when the user rotates keys and re-validate.
+  func activateBYOK(fingerprints: [String: String]) async throws {
+    struct Request: Encodable {
+      let fingerprints: [String: String]
+    }
+    struct Empty: Decodable {}
+    let _: Empty = try await post(
+      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints)
+    )
+  }
+
+  /// Deactivate BYOK (user cleared keys) so they return to the paid plan gate.
+  func deactivateBYOK() async throws {
+    try await delete("v1/users/me/byok-active")
   }
 
   /// Fetches all people for the current user
@@ -4558,14 +4620,12 @@ extension APIClient {
   struct ApiKeysResponse: Decodable {
     let deepgramApiKey: String?
     let geminiApiKey: String?
-    let anthropicApiKey: String?
     let firebaseApiKey: String?
     let googleCalendarApiKey: String?
 
     enum CodingKeys: String, CodingKey {
       case deepgramApiKey = "deepgram_api_key"
       case geminiApiKey = "gemini_api_key"
-      case anthropicApiKey = "anthropic_api_key"
       case firebaseApiKey = "firebase_api_key"
       case googleCalendarApiKey = "google_calendar_api_key"
     }

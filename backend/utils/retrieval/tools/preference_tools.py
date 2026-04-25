@@ -12,8 +12,6 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 import logging
-from models.memories import MemoryDB, MemoryCategory
-
 logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
@@ -87,6 +85,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
 
     memory_data = {
         'id': memory_id,
+        'uid': uid,
         'content': preference,
         'category': 'system',
         'manually_added': False,
@@ -97,6 +96,7 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
         'tags': ['agent-learned'],
         'scoring': scoring,            # Bug 2 fix: was missing
     }
+    memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
         memory_db.create_memory(uid, memory_data)

@@ -48,6 +48,40 @@ class UsageProvider with ChangeNotifier {
 
   bool _forceOutOfCredits = false;
 
+  // Chat quota derived from subscription response
+  double get chatQuotaUsed => _subscription?.chatQuotaUsed ?? 0.0;
+  String? get chatQuotaUnit => _subscription?.chatQuotaUnit;
+  double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
+  bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
+
+  // Phone call feature — derived from subscription response. Only consult
+  // the server-driven quota when the user is on the free tier or the
+  // subscription UI is hidden; paid users with the paywall visible skip
+  // straight to the existing unlimited behavior.
+  PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
+
+  bool get _isPaidPlan {
+    final plan = _subscription?.subscription.plan;
+    return plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+  }
+
+  bool get canAccessPhoneCalls {
+    if (_isPaidPlan) return true;
+    final quota = phoneCallQuota;
+    if (quota == null) return false;
+    return quota.hasAccess;
+  }
+
+  bool get shouldShowPhoneCallsEntry {
+    if (_isPaidPlan) return true;
+    final quota = phoneCallQuota;
+    final freeTierEnabled = quota != null && (quota.monthlyLimit ?? 0) > 0;
+    if (freeTierEnabled) return true;
+    // Free tier disabled → only surface the entry for real users who can still
+    // see the paywall. Hidden-paywall builds (App Review) keep it off-screen.
+    return showSubscriptionUI;
+  }
+
   // Payment-related state
   Map<String, dynamic>? _availablePlans;
   Map<String, dynamic>? get availablePlans => _availablePlans;

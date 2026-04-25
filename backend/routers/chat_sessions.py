@@ -209,7 +209,7 @@ def generate_session_title(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     """Generate a title for a chat session based on its messages."""
-    from utils.llm.clients import llm_mini
+    from utils.llm.clients import get_llm
 
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
@@ -217,7 +217,7 @@ def generate_session_title(
         "Return ONLY the title text, no quotes or punctuation.\n\n"
         f"{conversation}"
     )
-    title = llm_mini.invoke(prompt).content.strip().strip('"\'')
+    title = get_llm('session_titles').invoke(prompt).content.strip().strip('"\'')
     if not title:
         title = 'New Chat'
 

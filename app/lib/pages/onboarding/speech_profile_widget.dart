@@ -360,15 +360,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     ),
                                   ),
                                 ),
-
-                          // Skip for now
-                          TextButton(
-                            onPressed: () => widget.onSkip(),
-                            child: Text(
-                              context.l10n.skipForNow,
-                              style: const TextStyle(color: Colors.grey, fontSize: 16),
-                            ),
-                          ),
                         ] else if (provider.profileCompleted) ...[
                           // All Done state
                           const SizedBox(height: 16),
@@ -494,9 +485,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           ),
 
                           TextButton(
-                            onPressed: () => provider.skipCurrentQuestion(),
+                            onPressed: () {
+                              provider.close();
+                              widget.onSkip();
+                            },
                             child: Text(
-                              context.l10n.skipThisQuestion,
+                              context.l10n.skipForNow,
                               style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
                             ),
                           ),

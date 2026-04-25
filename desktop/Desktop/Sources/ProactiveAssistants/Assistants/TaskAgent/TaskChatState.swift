@@ -16,7 +16,7 @@ class TaskChatState: ObservableObject {
     @Published var chatMode: ChatMode = .act
 
     /// Own bridge process — completely independent from sidebar chat
-    private var acpBridge: ACPBridge?
+    private var agentBridge: AgentBridge?
     private var bridgeStarted = false
 
     /// Workspace path for file-system tools
@@ -28,8 +28,8 @@ class TaskChatState: ObservableObject {
     var systemPromptBuilder: (() -> String)?
 
     /// Auth callbacks for ACP mode
-    var onAuthRequired: ACPBridge.AuthRequiredHandler?
-    var onAuthSuccess: ACPBridge.AuthSuccessHandler?
+    var onAuthRequired: AgentBridge.AuthRequiredHandler?
+    var onAuthSuccess: AgentBridge.AuthSuccessHandler?
 
     /// Follow-up chaining
     private var pendingFollowUpText: String?
@@ -111,7 +111,7 @@ class TaskChatState: ObservableObject {
     }
 
     deinit {
-        if let bridge = acpBridge {
+        if let bridge = agentBridge {
             Task { await bridge.stop() }
         }
     }
@@ -120,7 +120,7 @@ class TaskChatState: ObservableObject {
 
     private func ensureBridgeStarted() async -> Bool {
         if bridgeStarted {
-            let alive = await acpBridge?.isAlive ?? false
+            let alive = await agentBridge?.isAlive ?? false
             if !alive {
                 log("TaskChatState[\(taskId)]: Bridge process died, will restart")
                 bridgeStarted = false
@@ -128,12 +128,13 @@ class TaskChatState: ObservableObject {
         }
         guard !bridgeStarted else { return true }
         do {
-            let useOmiKey = UserDefaults.standard.string(forKey: "chatBridgeMode") != "claudeCode"
-            let bridge = ACPBridge(passApiKey: useOmiKey)
+            let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
+            let harness = mode == "piMono" ? "piMono" : "acp"
+            let bridge = AgentBridge(harnessMode: harness)
             try await bridge.start()
-            acpBridge = bridge
+            agentBridge = bridge
             bridgeStarted = true
-            log("TaskChatState[\(taskId)]: ACP bridge started")
+            log("TaskChatState[\(taskId)]: agent bridge started")
             return true
         } catch {
             logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
@@ -222,7 +223,7 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            guard let bridge = acpBridge else {
+            guard let bridge = agentBridge else {
                 throw BridgeError.notRunning
             }
             // If task context is provided (first message), prepend it to the prompt
@@ -317,7 +318,7 @@ class TaskChatState: ObservableObject {
 
         // Queue follow-up and interrupt current query
         pendingFollowUpText = trimmedText
-        await acpBridge?.interrupt()
+        await agentBridge?.interrupt()
         log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
@@ -327,7 +328,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            await acpBridge?.interrupt()
+            await agentBridge?.interrupt()
         }
     }
 

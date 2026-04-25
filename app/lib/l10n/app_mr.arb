@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "बॅटरी स्तर",
+    "charging": "चार्ज होत आहे",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "मुख्यपृष्ठावर आपल्या व्यक्तिगत लक्ष्यांचा मागोवा घ्या",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "दैनिक चिंतन",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "आपल्या दिवसावर विचार करण्यासाठी रात्रि ९ वाजताचा स्मरण मिळवा",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "कृती आयटमचे वर्णन रिक्त असू शकत नाही",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "कोणतीही API की नाही. सुरू करण्यासाठी एक तयार करा.",
     "autoCreateWhenDetected": "नाव शोधले जाताना स्वयंचलितपणे तयार करा",
     "trackPersonalGoals": "होमपेजवर व्यक्तिगत लक्ष्य ट्रॅक करा",
-    "dailyReflectionDescription": "आपल्या दिवसावर चिंतन करण्यासाठी आणि आपल्या विचार कॅप्चर करण्यासाठी रात्री ९ वाजता स्मरणपत्र प्राप्त करा.",
     "endpointURL": "एंडपॉइंट URL",
     "links": "लिंक्स",
     "discordMemberCount": "Discord वर ८००० + सदस्य",
@@ -5317,11 +5309,11 @@
     "@alreadyBestValuePlan": {
         "description": "Message when user already has best plan"
     },
-    "unableToLoadPlans": "योजना लोड करू शकत नाही",
+    "unableToLoadPlans": "प्लॅन लोड करता आले नाहीत",
     "@unableToLoadPlans": {
         "description": "Error message when plans cannot load"
     },
-    "checkConnectionTryAgain": "कृपया आपला जोडणी तपासा आणि पुन्हा प्रयत्न करा",
+    "checkConnectionTryAgain": "कनेक्शन तपासा आणि पुन्हा प्रयत्न करा",
     "@checkConnectionTryAgain": {
         "description": "Message to check connection"
     },
@@ -6042,7 +6034,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "सुरू ठेवून, आप या अ‍ॅप्लिकेशनशी शेयर केलेले सर्व डेटा (आपल्या संभाषण, रेकॉर्डिंग्ज आणि व्यक्तिगत माहितीसह) आपल्याला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अ‍ॅप वैशिष्ट्ये सक्षम करण्यासाठी आमच्या सर्व्हरवर सुरक्षितपणे संग्रहीत केले जाईल.",
+    "consentDataMessage": "पुढे चालू ठेवल्यास, तुमच्या संभाषणा, रेकॉर्डिंग आणि वैयक्तिक माहिती आमच्या सर्व्हरवर सुरक्षितपणे साठवली जाईल. तुमच्या ऑडिओ रेकॉर्डिंग आणि ट्रान्सक्रिप्ट तृतीय-पक्ष AI सेवांद्वारे प्रक्रिया केली जातात (ट्रान्सक्रिप्शनसाठी Deepgram आणि विश्लेषणासाठी OpenAI सह) तुम्हाला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अॅप वैशिष्ट्ये सक्षम करण्यासाठी.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6840,9 +6832,6 @@
     "notificationFrequencyDescription": "Omi किती वेळा सक्रिय सूचना आणि स्मरणीये पाठवते हे नियंत्रित करा.",
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
-    },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
     },
     "sliderOff": "बंद",
     "@sliderOff": {
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "दैनिक प्रतिबिंबसाठी वेळ",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "मला तुमच्या दिवसाविषयी सांगा",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi स्मरणपत्र",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "स्पीकर",
     "phoneEndCall": "संपला",
     "phoneCallSettingsTitle": "फोन कॉल सेटिंग्ज",
+    "showPhoneCallButtonTitle": "फोन कॉल बटण दाखवा",
+    "showPhoneCallButtonDesc": "मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा",
     "yourVerifiedNumbers": "तुमचे सत्यापित नंबर",
     "verifiedNumbersDescription": "तू कोणाला कॉल करतोस तेव्हा त्यांना त्यांच्या फोनवर हा नंबर दिसेल",
     "noVerifiedNumbers": "कोणतेही सत्यापित नंबर नाही",
@@ -10674,5 +10657,42 @@
     "youAreOnAPaidPlan": "तुम्ही सशुल्क प्लॅनवर आहात.",
     "@youAreOnAPaidPlan": {
         "description": "Subtitle for paid plan users on plans sheet"
-    }
+    },
+    "chatTitle": "चॅट",
+    "chatMessages": "संदेश",
+    "unlimitedChatThisMonth": "या महिन्यात अमर्यादित चॅट संदेश",
+    "chatUsedOfLimitCompute": "{used} / {limit} गणना बजेट वापरले",
+    "chatUsedOfLimitMessages": "या महिन्यात {used} / {limit} संदेश वापरले",
+    "chatUsageProgress": "{used} / {limit} वापरले",
+    "chatLimitReachedUpgrade": "चॅट मर्यादा गाठली. अधिक संदेशांसाठी अपग्रेड करा.",
+    "chatLimitReachedTitle": "चॅट मर्यादा गाठली",
+    "chatUsageDescription": "{plan} प्लॅनवर {limitDisplay} पैकी {used} वापरले.",
+    "resetsInDays": "{count} दिवसांत रीसेट होईल",
+    "resetsInHours": "{count} तासांत रीसेट होईल",
+    "resetsSoon": "लवकरच रीसेट होईल",
+    "upgradePlan": "प्लॅन अपग्रेड करा",
+    "billingMonthly": "मासिक",
+    "billingYearly": "वार्षिक",
+    "savePercent": "~17% बचत करा",
+    "popular": "लोकप्रिय",
+    "currentPlan": "सध्याचा",
+    "neoSubtitle": "दरमहा {count} प्रश्न",
+    "operatorSubtitle": "दरमहा {count} प्रश्न",
+    "architectSubtitle": "पॉवर-यूजर AI — हजारो चॅट + एजेंटिक ऑटोमेशन",
+    "chatUsageCost": "चॅट: ${used} / ${limit} या महिन्यात वापरले",
+    "chatUsageCostNoLimit": "चॅट: ${used} या महिन्यात वापरले",
+    "chatUsageMessages": "चॅट: {used} / {limit} संदेश या महिन्यात",
+    "chatUsageMessagesNoLimit": "चॅट: {used} संदेश या महिन्यात",
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "तुम्ही तुमची मासिक मर्यादा गाठली आहे. निर्बंधांशिवाय Omi सोबत चॅट सुरू ठेवण्यासाठी अपग्रेड करा.",
+    "batteryHistory": "बॅटरी",
+    "day": "दिवस",
+    "noBatteryDataYet": "अजून बॅटरी डेटा नाही",
+    "week": "आठवडा",
+    "voiceResponseAudio": "Omi चे उत्तर मोठ्याने वाचा",
+    "voiceResponseMode": "व्हॉइस प्रतिसाद",
+    "voiceResponseModeTitle": "प्रतिसाद केव्हा बोलायचा",
+    "voiceResponseOff": "बंद",
+    "voiceResponseHeadphonesOnly": "फक्त हेडफोन",
+    "voiceResponseAlways": "नेहमी"
 }

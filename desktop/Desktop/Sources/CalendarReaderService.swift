@@ -126,7 +126,7 @@ actor CalendarReaderService {
   }
 
   /// Synthesize profile memories and tasks from calendar events.
-  /// Uses local LLM (ACPBridge) to extract ~10 memories and 2-3 tasks.
+  /// Uses local LLM (AgentBridge) to extract ~10 memories and 2-3 tasks.
   func synthesizeFromEvents(events: [CalendarEvent]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
@@ -183,7 +183,7 @@ actor CalendarReaderService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
@@ -191,7 +191,7 @@ actor CalendarReaderService {
         prompt: synthesisPrompt,
         systemPrompt:
           "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

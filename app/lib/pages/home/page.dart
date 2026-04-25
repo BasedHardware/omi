@@ -35,7 +35,6 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_upsell_sheet.dart';
-import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
@@ -43,6 +42,7 @@ import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -53,12 +53,10 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/apple_reminders_sync_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/enums.dart';
@@ -74,8 +72,7 @@ import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
-  final String? autoMessage;
-  const HomePageWrapper({super.key, this.navigateToRoute, this.autoMessage});
+  const HomePageWrapper({super.key, this.navigateToRoute});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
@@ -83,7 +80,6 @@ class HomePageWrapper extends StatefulWidget {
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
-  String? _autoMessage;
 
   @override
   void initState() {
@@ -98,28 +94,21 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
-
-        // Schedule daily reflection notification if enabled
-        if (SharedPreferencesUtil().dailyReflectionEnabled) {
-          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-        }
       }
     });
     _navigateToRoute = widget.navigateToRoute;
-    _autoMessage = widget.autoMessage;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute, autoMessage: _autoMessage);
+    return HomePage(navigateToRoute: _navigateToRoute);
   }
 }
 
 class HomePage extends StatefulWidget {
   final String? navigateToRoute;
-  final String? autoMessage;
-  const HomePage({super.key, this.navigateToRoute, this.autoMessage});
+  const HomePage({super.key, this.navigateToRoute});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -368,12 +357,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           // Navigate to chat page directly since it's no longer in the tab bar
           // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
           // so the widget tree is fully settled — push directly.
-          // If there's an auto-message (e.g., from daily reflection notification), send it
-          final autoMessageToSend = widget.autoMessage;
           if (mounted) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => ChatPage(isPivotBottom: false, autoMessage: autoMessageToSend)),
+              MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
             );
           }
           break;
@@ -680,40 +667,45 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
-                              // Phone calls button - bottom left.
-                              if (home.selectedIndex == 0 && context.watch<UsageProvider>().showSubscriptionUI)
-                                Positioned(
-                                  left: 20,
-                                  bottom: 100,
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      HapticFeedback.mediumImpact();
-                                      MixpanelManager().bottomNavigationTabClicked('Phone Calls');
-                                      var usageProvider = context.read<UsageProvider>();
-                                      if (usageProvider.subscription == null) {
-                                        await usageProvider.fetchSubscription();
-                                      }
-                                      final p = usageProvider.subscription?.subscription.plan;
-                                      var isUnlimited = p == PlanType.unlimited || p == PlanType.operator || p == PlanType.architect;
-                                      if (!isUnlimited) {
-                                        MixpanelManager().phoneCallUpsellShown(source: 'home');
-                                        if (!context.mounted) return;
-                                        showPhoneCallsUpsell(context);
-                                        return;
-                                      }
-                                      if (!context.mounted) return;
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
-                                      );
-                                    },
-                                    child: Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
-                                      child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
-                                    ),
-                                  ),
+                              // Phone calls button - bottom left
+                              if (home.selectedIndex == 0 && context.watch<UsageProvider>().shouldShowPhoneCallsEntry)
+                                Consumer<DeveloperModeProvider>(
+                                  builder: (context, devProvider, _) {
+                                    if (!devProvider.showPhoneCallButton) return const SizedBox.shrink();
+                                    return Positioned(
+                                      left: 20,
+                                      bottom: 100,
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          HapticFeedback.mediumImpact();
+                                          MixpanelManager().bottomNavigationTabClicked('Phone Calls');
+                                          var usageProvider = context.read<UsageProvider>();
+                                          if (usageProvider.subscription == null) {
+                                            await usageProvider.fetchSubscription();
+                                          }
+                                          if (!usageProvider.canAccessPhoneCalls) {
+                                            if (!usageProvider.showSubscriptionUI) return;
+                                            MixpanelManager().phoneCallUpsellShown(source: 'home');
+                                            if (!context.mounted) return;
+                                            showPhoneCallsUpsell(context);
+                                            return;
+                                          }
+                                          if (!context.mounted) return;
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration:
+                                              const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
+                                          child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               // Ask Omi button - bottom right
                               if (home.selectedIndex == 0)
@@ -837,8 +829,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                              ? Colors.orange.withValues(alpha: 0.15)
-                              : const Color(0xFF1F1F25),
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -847,8 +839,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                              ? Colors.orangeAccent
-                              : Colors.white70,
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );

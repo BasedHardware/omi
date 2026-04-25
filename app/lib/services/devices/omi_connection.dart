@@ -18,6 +18,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -725,6 +726,38 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  Future<bool> readChargingStatus() async {
+    try {
+      final value = await transport.readCharacteristic(
+        settingsServiceUuid,
+        settingsChargingStatusCharacteristicUuid,
+      );
+      return value.isNotEmpty && value[0] == 1;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
+      return false;
+    }
+  }
+
+  Future<StreamSubscription?> getChargingStatusListener({
+    required void Function(bool isCharging) onChargingStatusChange,
+  }) async {
+    try {
+      final stream = transport.getCharacteristicStream(
+        settingsServiceUuid,
+        settingsChargingStatusCharacteristicUuid,
+      );
+      return stream.listen((value) {
+        if (value.isNotEmpty) {
+          onChargingStatusChange(value[0] == 1);
+        }
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting up charging status listener: $e');
       return null;
     }
   }

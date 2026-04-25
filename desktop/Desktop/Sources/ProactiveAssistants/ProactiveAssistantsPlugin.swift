@@ -1271,7 +1271,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             // Send user notification
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
-                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
+                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
+                deliverSystemBanner: true
             )
         }
     }
@@ -1578,7 +1579,8 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             NotificationService.shared.sendNotification(
                 title: NotificationService.screenCaptureResetTitle,
-                message: "Screen recording permission needs to be re-enabled. Click to open Settings."
+                message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
+                deliverSystemBanner: true
             )
             return
         }
@@ -1591,7 +1593,8 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         NotificationService.shared.sendNotification(
             title: NotificationService.screenCaptureResetTitle,
-            message: "Screen recording permission needs to be re-enabled. Click to open Settings."
+            message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
+            deliverSystemBanner: true
         )
     }
 }

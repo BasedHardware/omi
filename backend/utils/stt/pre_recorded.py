@@ -7,6 +7,7 @@ import fal_client
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
+from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 import logging
 
@@ -16,6 +17,15 @@ logger = logging.getLogger(__name__)
 # WARN: the pre-recorded transcription is available on deepgram cloud
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
+
+
+def _deepgram_client_for_request() -> DeepgramClient:
+    """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
+    byok = get_byok_key('deepgram')
+    if byok:
+        return DeepgramClient(byok, _deepgram_options)
+    return _deepgram_client
+
 
 # Languages supported by nova-3
 _deepgram_nova3_languages = {
@@ -180,7 +190,7 @@ def deepgram_prerecorded(
             else:
                 options["keywords"] = list(keywords)
 
-        response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
+        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_url({"url": audio_url}, options)
 
         # Extract words from response
         result = response.to_dict()
@@ -304,7 +314,7 @@ def deepgram_prerecorded_from_bytes(
         mimetype = "audio/raw" if encoding else "audio/wav"
         source = {"buffer": audio_buffer, "mimetype": mimetype}
 
-        response = _deepgram_client.listen.rest.v("1").transcribe_file(source, options)
+        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options)
 
         # Extract words from response
         result = response.to_dict()

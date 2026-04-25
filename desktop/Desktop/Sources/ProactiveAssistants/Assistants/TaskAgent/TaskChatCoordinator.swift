@@ -188,7 +188,7 @@ class TaskChatCoordinator: ObservableObject {
     // MARK: - Background Investigation
 
     /// Run an AI investigation for a task without opening the panel.
-    /// Uses the ACP bridge via TaskChatState. Skips tasks already sending.
+    /// Uses the agent bridge via TaskChatState. Skips tasks already sending.
     func investigateInBackground(for task: TaskActionItem) async {
         log("TaskChatCoordinator: investigateInBackground for \(task.id)")
 

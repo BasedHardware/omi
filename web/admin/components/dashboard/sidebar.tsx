@@ -21,6 +21,7 @@ import {
   BarChart3,
   ShieldAlert,
   FlaskConical,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,11 @@ export function DashboardSidebar() {
       title: "Analytics",
       href: "/dashboard/analytics",
       icon: BarChart3,
+    },
+    {
+      title: "Releases",
+      href: "/dashboard/releases",
+      icon: Rocket,
     },
     {
       title: "Chat Lab",
