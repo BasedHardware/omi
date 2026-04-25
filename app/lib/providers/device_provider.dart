@@ -388,14 +388,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     // Show a notification if still disconnected after 30 seconds.
-    _disconnectNotificationTimer?.cancel();
-    _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
-      final ctx = globalNavigatorKey.currentContext;
-      NotificationService.instance.createNotification(
-        title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
-        body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
-      );
-    });
+    // Disabling this notification as it was being triggered too frequently.
+    // _disconnectNotificationTimer?.cancel();
+    // _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+    //   final ctx = globalNavigatorKey.currentContext;
+    //   NotificationService.instance.createNotification(
+    //     title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
+    //     body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
+    //   );
+    // });
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {

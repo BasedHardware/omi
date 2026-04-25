@@ -611,11 +611,13 @@ abstract class DeviceConnection {
   }
 
   void _showDeviceDisconnectedNotification() {
-    final ctx = globalNavigatorKey.currentContext;
-    final deviceName = device.name;
-    NotificationService.instance.createNotification(
-      title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',
-      body: ctx?.l10n.deviceDisconnectedBody(deviceName) ?? 'Please reconnect to continue using your $deviceName.',
-    );
+    // Disabling this notification as it was being called from ~17 BLE/audio disconnect paths,
+    // making it too noisy. Easy to revert when we want them back.
+    // final ctx = globalNavigatorKey.currentContext;
+    // final deviceName = device.name;
+    // NotificationService.instance.createNotification(
+    //   title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',
+    //   body: ctx?.l10n.deviceDisconnectedBody(deviceName) ?? 'Please reconnect to continue using your $deviceName.',
+    // );
   }
 }
