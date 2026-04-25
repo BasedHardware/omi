@@ -477,6 +477,18 @@ export async function deleteMemory(id: string): Promise<void> {
 }
 
 /**
+ * Delete multiple memories in a single batch request
+ */
+export async function deleteMemoriesBatch(ids: string[]): Promise<void> {
+  await fetchWithAuth(`/v3/memories/batch`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ memory_ids: ids }),
+  });
+  invalidateCache(invalidationPatterns.memories);
+}
+
+/**
  * Review a memory (accept or reject)
  */
 export async function reviewMemory(id: string, accept: boolean): Promise<void> {

@@ -53,6 +53,7 @@ export function MemoriesPage() {
     addMemory,
     editMemory,
     removeMemory,
+    removeMemories,
     toggleVisibility,
     acceptMemory,
     rejectMemory,
@@ -299,16 +300,14 @@ export function MemoriesPage() {
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      // Delete each selected memory
-      const deletePromises = selectedIds.map((id) => removeMemory(id));
-      await Promise.all(deletePromises);
+      await removeMemories(selectedIds);
       setSelectedIds([]);
       setIsSelectMode(false);
       setShowDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedIds, removeMemory]);
+  }, [selectedIds, removeMemories]);
 
   // Handle copy to clipboard
   const handleCopy = useCallback(async () => {
