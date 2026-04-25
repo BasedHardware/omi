@@ -52,6 +52,8 @@ class HomeProvider extends ChangeNotifier {
 
   // Available languages ordered by popularity
   final Map<String, String> availableLanguages = {
+    // Multi-language mode (auto-detect via Soniox)
+    'Multi-language (Auto-detect)': 'multi',
     // Top languages first
     'English': 'en',
     'English (US)': 'en-US',
