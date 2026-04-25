@@ -289,6 +289,17 @@ def delete_memory_vector(uid: str, memory_id: str):
     logger.info(f'delete_memory_vector {vector_id} {result}')
 
 
+def delete_memory_vectors_batch(uid: str, memory_ids: List[str]):
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping memory vector batch delete')
+        return
+    if not memory_ids:
+        return
+    vector_ids = [f'{uid}-{mid}' for mid in memory_ids]
+    index.delete(ids=vector_ids, namespace=MEMORIES_NAMESPACE)
+    logger.info(f'delete_memory_vectors_batch uid={uid} count={len(vector_ids)}')
+
+
 # ==========================================
 # Screen Activity Vector Functions
 # For screenshot embeddings (Gemini embedding-001, 3072-dim)

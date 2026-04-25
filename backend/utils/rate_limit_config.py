@@ -62,6 +62,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:modify": (120, 3600),
     # Memory deletes — destructive operations
     "memories:delete": (60, 3600),
+    # Batch delete — each request can remove up to 100 memories
+    "memories:delete_batch": (10, 3600),
     # Delete-all is extremely destructive; tight cap with one retry cushion
     "memories:delete_all": (2, 3600),
     # Goals — single LLM call

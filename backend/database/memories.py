@@ -254,6 +254,15 @@ def delete_memory(uid: str, memory_id: str):
     memory_ref.delete()
 
 
+def delete_memories_batch(uid: str, memory_ids: List[str]):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    batch = db.batch()
+    for memory_id in memory_ids:
+        batch.delete(memories_ref.document(memory_id))
+    batch.commit()
+
+
 def delete_all_memories(uid: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)

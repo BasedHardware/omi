@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.memories as memories_db
 from database.vector_db import (
     delete_memory_vector,
+    delete_memory_vectors_batch,
     upsert_memory_vector,
     upsert_memory_vectors_batch,
 )
@@ -36,6 +37,13 @@ class BatchMemoriesRequest(BaseModel):
 class BatchMemoriesResponse(BaseModel):
     memories: List[MemoryDB]
     created_count: int
+
+
+class BatchDeleteMemoriesRequest(BaseModel):
+    memory_ids: List[str] = Field(
+        description="List of memory IDs to delete",
+        max_length=MEMORIES_BATCH_MAX,
+    )
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -160,6 +168,24 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
             )
             continue
     return valid_memories
+
+
+@router.delete('/v3/memories/batch', tags=['memories'])
+def delete_memories_batch(
+    data: BatchDeleteMemoriesRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_batch")),
+):
+    if not data.memory_ids:
+        return {'status': 'ok', 'deleted_count': 0}
+    # Validate ownership of all memories before deleting any
+    for memory_id in data.memory_ids:
+        _validate_memory(uid, memory_id)
+    memories_db.delete_memories_batch(uid, data.memory_ids)
+    try:
+        delete_memory_vectors_batch(uid, data.memory_ids)
+    except Exception:
+        logger.exception("Vector batch delete failed uid=%s count=%d (Firestore deleted)", uid, len(data.memory_ids))
+    return {'status': 'ok', 'deleted_count': len(data.memory_ids)}
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
