@@ -25,7 +25,6 @@ export const ONBOARDING_STEP_IDS = [
   "language",
   "trust",
   "screen_recording",
-  "full_disk_access",
   "file_scan",
   "microphone",
   "notifications",
@@ -68,13 +67,19 @@ interface OnboardingState {
   resetOnboarding: () => void;
 }
 
+// currentStepIndex + permissions are persisted so relaunching the app
+// (required for FDA and sometimes Accessibility on macOS to take effect)
+// resumes the flow at the right step instead of dropping the user back at
+// step 0 with everything they already granted or entered.
 const persistedKeys: Array<keyof OnboardingState> = [
   "hasCompletedOnboarding",
+  "currentStepIndex",
   "preferredName",
   "language",
   "goal",
   "floatingBarShortcut",
   "voiceShortcut",
+  "permissions",
 ];
 
 export const useOnboardingStore = create<OnboardingState>()(
@@ -85,7 +90,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       preferredName: "",
       language: null,
       goal: null,
-      floatingBarShortcut: "Cmd+Shift+Space",
+      floatingBarShortcut: "Cmd+\\",
       voiceShortcut: "Option",
       permissions: {},
 

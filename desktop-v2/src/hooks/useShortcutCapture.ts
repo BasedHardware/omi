@@ -1,108 +1,151 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type ShortcutKey = string; // normalized label from Rust ("Cmd","Shift",…)
-
-interface ShortcutKeyEvent {
-  kind: "press" | "release";
-  label: ShortcutKey;
-  raw: string;
-}
+export type ShortcutKey = string; // "Cmd","Shift","Space","A",…
 
 interface Options {
   /** Modifier-only chords are valid (e.g. push-to-talk = "Option"). When
    * false, the captured chord must contain at least one non-modifier key. */
   allowModifierOnly?: boolean;
-  /** Called once a stable chord is captured (all keys held simultaneously
-   * after at least one key is released, OR a non-modifier was pressed while
-   * modifiers were held). Caller decides what to do with it. */
-  onCaptured?: (chord: ShortcutKey[]) => void;
+  /** When true, the hook detaches its keyboard listeners. Used after commit
+   * so later keystrokes (in other inputs, or the next step) can't overwrite
+   * the displayed chord. */
+  disabled?: boolean;
 }
 
 const MODIFIERS = new Set(["Cmd", "Win", "Ctrl", "Shift", "Option", "Alt", "Right Option", "Fn"]);
+const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
 
-/** Captures a global keyboard chord during onboarding. Arms the Rust
- * shortcut-capture listener on mount, disarms on unmount. Returns the
- * currently-held keys (live) and the last captured chord (stable). */
+/** Captures a keyboard chord while the Nooto webview is focused. Uses
+ * browser `keydown`/`keyup`, not a global event listener — the onboarding
+ * flow runs in our own window so local capture is sufficient and avoids
+ * rdev's macOS permissions / crash pitfalls. */
 export function useShortcutCapture(opts: Options = {}) {
-  const { allowModifierOnly = false, onCaptured } = opts;
+  const { allowModifierOnly = false, disabled = false } = opts;
   const [held, setHeld] = useState<ShortcutKey[]>([]);
   const [captured, setCaptured] = useState<ShortcutKey[] | null>(null);
   const heldRef = useRef<Set<ShortcutKey>>(new Set());
-  const onCapturedRef = useRef(onCaptured);
-  onCapturedRef.current = onCaptured;
+  // Peak of the held set across the current gesture. Needed because the
+  // "commit on final release" path reads the set AFTER a key has been
+  // removed — without this, Cmd+Shift released one-by-one would commit "Cmd"
+  // instead of "Cmd+Shift".
+  const peakRef = useRef<Set<ShortcutKey>>(new Set());
 
   const reset = useCallback(() => {
     heldRef.current.clear();
+    peakRef.current.clear();
     setHeld([]);
     setCaptured(null);
   }, []);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-    let cancelled = false;
+    if (disabled) return;
 
-    (async () => {
-      try {
-        await invoke("start_shortcut_capture");
-      } catch (err) {
-        console.warn("[shortcut_capture] arm failed:", err);
+    const handleDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat) return;
+      const label = normalizeFromEvent(e);
+      if (!label) return;
+
+      const set = heldRef.current;
+
+      if (MODIFIERS.has(label)) {
+        set.add(label);
+        peakRef.current.add(label);
+        setHeld(orderChord(Array.from(set)));
+        return;
       }
-      try {
-        unlisten = await listen<ShortcutKeyEvent>(
-          "onboarding:shortcut_key",
-          (e) => {
-            if (cancelled) return;
-            const { kind, label } = e.payload;
-            const set = heldRef.current;
 
-            if (kind === "press") {
-              set.add(label);
-              const arr = orderChord(Array.from(set));
-              setHeld(arr);
+      // Non-modifier pressed — snapshot the chord from the event's modifier
+      // flags directly. macOS webviews frequently drop the separate keydown
+      // for modifiers when Cmd is held, so the tracked `set` can be empty
+      // even though the user IS holding Cmd. The event itself always carries
+      // the correct metaKey/ctrlKey/altKey/shiftKey state.
+      const chord: ShortcutKey[] = [];
+      if (e.metaKey) chord.push(IS_MAC ? "Cmd" : "Win");
+      if (e.ctrlKey) chord.push("Ctrl");
+      if (e.altKey) chord.push(IS_MAC ? "Option" : "Alt");
+      if (e.shiftKey) chord.push("Shift");
+      chord.push(label);
 
-              // Capture as soon as a non-modifier joins held modifiers — that's
-              // a complete chord like Cmd+Shift+Space. For modifier-only mode,
-              // wait for release to capture (so users can pick "Option").
-              if (!MODIFIERS.has(label) && arr.length >= 1) {
-                setCaptured(arr);
-                onCapturedRef.current?.(arr);
-              }
-            } else {
-              // release: commit the just-released chord when the user lets go
-              // of every key. In modifier-only mode, the chord IS the set of
-              // modifiers that were held. We always overwrite the previous
-              // captured chord — the user re-pressing keys to "change" it
-              // means the new combination wins.
-              const wasHeld = orderChord(Array.from(set));
-              set.delete(label);
-              if (set.size === 0) {
-                setHeld([]);
-                if (allowModifierOnly && wasHeld.length > 0) {
-                  setCaptured(wasHeld);
-                  onCapturedRef.current?.(wasHeld);
-                }
-              } else {
-                setHeld(orderChord(Array.from(set)));
-              }
-            }
-          },
-        );
-      } catch (err) {
-        console.warn("[shortcut_capture] listen failed:", err);
+      set.clear();
+      peakRef.current.clear();
+      for (const k of chord) {
+        set.add(k);
+        peakRef.current.add(k);
       }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (unlisten) unlisten();
-      invoke("stop_shortcut_capture").catch(() => {});
+      const ordered = orderChord(chord);
+      setHeld(ordered);
+      setCaptured(ordered);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowModifierOnly]);
+
+    const handleUp = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const label = normalizeFromEvent(e);
+      if (!label) return;
+      const set = heldRef.current;
+      set.delete(label);
+      if (set.size === 0) {
+        setHeld([]);
+        if (allowModifierOnly && peakRef.current.size > 0) {
+          const peakChord = orderChord(Array.from(peakRef.current));
+          setCaptured(peakChord);
+        }
+        peakRef.current.clear();
+      } else {
+        setHeld(orderChord(Array.from(set)));
+      }
+    };
+
+    const handleBlur = () => {
+      heldRef.current.clear();
+      peakRef.current.clear();
+      setHeld([]);
+    };
+
+    window.addEventListener("keydown", handleDown, true);
+    window.addEventListener("keyup", handleUp, true);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleDown, true);
+      window.removeEventListener("keyup", handleUp, true);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [allowModifierOnly, disabled]);
 
   return { held, captured, reset };
+}
+
+function normalizeFromEvent(e: KeyboardEvent): ShortcutKey | null {
+  // `event.code` is layout-independent ("KeyA" even on AZERTY) — the right
+  // signal for a shortcut. Modifiers are reported via `event.key` since
+  // `code` distinguishes left/right variants we don't care about.
+  const code = e.code;
+  const key = e.key;
+
+  if (key === "Meta") return IS_MAC ? "Cmd" : "Win";
+  if (key === "Control") return "Ctrl";
+  if (key === "Shift") return "Shift";
+  if (key === "Alt") return IS_MAC ? "Option" : "Alt";
+  if (key === "AltGraph") return "Right Option";
+
+  if (code === "Space") return "Space";
+  if (code === "Enter") return "Return";
+  if (code === "Tab") return "Tab";
+  if (code === "Escape") return "Esc";
+  if (code === "Backspace") return "Backspace";
+  if (code === "CapsLock") return "CapsLock";
+  if (code === "ArrowUp") return "↑";
+  if (code === "ArrowDown") return "↓";
+  if (code === "ArrowLeft") return "←";
+  if (code === "ArrowRight") return "→";
+
+  if (/^F\d{1,2}$/.test(code)) return code;
+  const letter = code.match(/^Key([A-Z])$/)?.[1];
+  if (letter) return letter;
+  const digit = code.match(/^Digit(\d)$/)?.[1];
+  if (digit) return digit;
+
+  return null;
 }
 
 /** Sort chord so modifiers come first (Cmd → Ctrl → Option → Shift → key). */

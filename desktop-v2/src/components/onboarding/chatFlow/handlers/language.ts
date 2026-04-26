@@ -4,9 +4,6 @@ import type { ChatStepHandler } from "../types";
 const LANGUAGES: Record<string, string> = {
   en: "English",
   "pt-BR": "Português (Brasil)",
-  es: "Español",
-  fr: "Français",
-  de: "Deutsch",
 };
 
 export const languageHandler: ChatStepHandler = {
@@ -22,9 +19,6 @@ export const languageHandler: ChatStepHandler = {
     options: [
       { id: "en", label: "English" },
       { id: "pt-BR", label: "Português (Brasil)" },
-      { id: "es", label: "Español" },
-      { id: "fr", label: "Français" },
-      { id: "de", label: "Deutsch" },
     ],
   }),
   summarize: (r) => {

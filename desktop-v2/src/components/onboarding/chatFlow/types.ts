@@ -97,6 +97,9 @@ export type StepWidget =
       type: "shortcut_capture";
       kind: "floating_bar" | "voice";
       allowModifierOnly: boolean;
+      /** Pre-populates the widget with an existing chord so the user can
+       *  confirm it, test it (for floating_bar), or opt to re-pick. */
+      defaultChord?: string;
     }
   | {
       type: "research_panel";

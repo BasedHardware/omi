@@ -32,6 +32,7 @@ import {
   stepIdsForPlatform,
 } from "./ChatStepRegistry";
 import { WidgetMount } from "./widgets";
+import { COMPANION_CUTOVER_ENABLED } from "@/config/companionFeatureFlag";
 import type {
   AssistantTextTurn,
   AssistantWidgetTurn,
@@ -282,7 +283,7 @@ function promptPlaceholder(activeStepId: StepId | null): string {
   if (!activeStepId) return "Say hi";
   const handler = getHandler(activeStepId);
   if (handler?.acceptsTypedAnswer) return "Type your answer…";
-  return "Ask Nooto anything";
+  return COMPANION_CUTOVER_ENABLED ? "Ask Companion anything" : "Ask Nooto anything";
 }
 
 // ---------------------------------------------------------------------------

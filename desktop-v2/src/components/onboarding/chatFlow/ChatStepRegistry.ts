@@ -12,7 +12,6 @@ import { nameHandler } from "./handlers/name";
 import { languageHandler } from "./handlers/language";
 import { trustHandler } from "./handlers/trust";
 import { screenRecordingHandler } from "./handlers/screenRecording";
-import { fullDiskAccessHandler } from "./handlers/fullDiskAccess";
 import { fileScanHandler } from "./handlers/fileScan";
 import { microphoneHandler } from "./handlers/microphone";
 import { notificationsHandler } from "./handlers/notifications";
@@ -31,7 +30,6 @@ export const ALL_HANDLERS: ChatStepHandler[] = [
   languageHandler,
   trustHandler,
   screenRecordingHandler,
-  fullDiskAccessHandler,
   fileScanHandler,
   microphoneHandler,
   notificationsHandler,

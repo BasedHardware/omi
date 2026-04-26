@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useFocusStore } from "../stores/focusStore";
 import { useAudioStore } from "../stores/audioStore";
+import { COMPANION_CUTOVER_ENABLED } from "../config/companionFeatureFlag";
 
 /**
  * Keeps the system tray menu in sync with app state and dispatches tray
@@ -33,6 +34,15 @@ export function useTraySync(): void {
     });
   }, [focusEnabled, audioEnabled]);
 
+  // Relabel the "Ask Nooto" tray menu item to "Companion" when the cutover is
+  // active. Falls back to "Ask Nooto" when the flag is off (rollback path).
+  useEffect(() => {
+    const label = COMPANION_CUTOVER_ENABLED ? "Companion" : "Ask Nooto";
+    void invoke("set_tray_ask_label", { label }).catch(() => {
+      // Tray command not registered in this build — safe to ignore.
+    });
+  }, []);
+
   // Handle clicks from the tray menu.
   useEffect(() => {
     const unlisteners: Array<() => void> = [];
@@ -48,8 +58,14 @@ export function useTraySync(): void {
       });
       unlisteners.push(u2);
 
+      // When the cutover is active, "Ask Nooto" in the tray shows the
+      // Companion buddy. When off, it toggles the legacy floating bar.
       const u3 = await listen("tray:ask-nooto", () => {
-        void invoke("toggle_floating_bar");
+        if (COMPANION_CUTOVER_ENABLED) {
+          void invoke("companion_show_buddy");
+        } else {
+          void invoke("toggle_floating_bar");
+        }
       });
       unlisteners.push(u3);
 

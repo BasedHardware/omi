@@ -50,12 +50,19 @@ export function PermissionGrantWidget({ widget, disabled, onCapture }: Props) {
     if (disabled || capturedRef.current) return;
     if (status === "granted") {
       capturedRef.current = true;
+      // Accessibility is gated behind a global rdev listener that is skipped
+      // at app startup when TCC says not-trusted. Kick it now so the shortcut-
+      // capture step right after onboarding actually receives keys without
+      // requiring a full app restart.
+      if (widget.kind === "accessibility") {
+        invoke("ensure_ptt_listener").catch(() => {});
+      }
       const t = window.setTimeout(() => {
         onCapture({ granted: true }, "Granted");
       }, 450);
       return () => window.clearTimeout(t);
     }
-  }, [status, disabled, onCapture]);
+  }, [status, disabled, onCapture, widget.kind]);
 
   const handleRequest = async () => {
     if (disabled) return;
