@@ -20,6 +20,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed, pendingRecovery }
 
+typedef VoiceMessageTranscriber = Future<String> Function(List<File> audioFiles);
+
 class VoiceRecorderProvider extends ChangeNotifier {
   static const _wavPathKey = 'voice_recorder_pending_wav_path';
 
@@ -46,6 +48,11 @@ class VoiceRecorderProvider extends ChangeNotifier {
   // Callbacks for UI integration
   Function(String transcript)? _onTranscriptReady;
   VoidCallback? _onClose;
+
+  final VoiceMessageTranscriber _transcribeVoiceMessage;
+
+  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber})
+      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
 
   VoiceRecorderState get state => _state;
   String get transcript => _transcript;
@@ -94,9 +101,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
     // Clean up any previous WAV file
     await _cleanupWavFile();
 
-    // Create temp PCM file for streaming audio to disk
-    final tempDir = await getTemporaryDirectory();
-    _pcmFile = File('${tempDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.pcm');
+    // Create a persisted PCM file for streaming audio to disk.
+    final recordingsDir = await _recordingsDirectory();
+    _pcmFile = File('${recordingsDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.pcm');
     _pcmSink = _pcmFile!.openWrite();
 
     // Reset audio levels
@@ -217,18 +224,17 @@ class VoiceRecorderProvider extends ChangeNotifier {
       // Split into chunks if the WAV is large, then transcribe
       final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
       try {
-        final transcript = await transcribeVoiceMessage(chunks);
-        _transcript = transcript;
-        _state = VoiceRecorderState.transcribeSuccess;
-        _isProcessing = false;
-        notifyListeners();
-
-        if (transcript.isNotEmpty) {
+        final transcript = await _transcribeVoiceMessage(chunks);
+        if (transcript.trim().isNotEmpty) {
+          _transcript = transcript;
+          _state = VoiceRecorderState.transcribeSuccess;
+          _isProcessing = false;
+          notifyListeners();
           _onTranscriptReady?.call(transcript);
           close();
         } else {
-          Logger.debug('Empty transcript received, closing without error');
-          close();
+          Logger.debug('Empty transcript received; preserving recording for retry');
+          _markTranscriptionFailed();
         }
       } finally {
         _cleanupChunkFiles(chunks);
@@ -243,21 +249,19 @@ class VoiceRecorderProvider extends ChangeNotifier {
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio',
-      );
+      _showTranscriptionFailedSnackbar();
     }
   }
 
-  void retry() {
+  Future<void> retry() async {
     if (_wavFile != null && _wavFile!.existsSync()) {
       // Retry transcription with existing WAV file on disk (no re-encoding needed)
-      _retryTranscription();
+      await _retryTranscription();
     } else if (_pcmFile != null && _pcmFile!.existsSync()) {
       // WAV conversion failed but PCM survived — retry from PCM
-      processRecording();
+      await processRecording();
     } else {
-      startRecording();
+      await startRecording();
     }
   }
 
@@ -271,18 +275,17 @@ class VoiceRecorderProvider extends ChangeNotifier {
     try {
       final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
       try {
-        final transcript = await transcribeVoiceMessage(chunks);
-        _transcript = transcript;
-        _state = VoiceRecorderState.transcribeSuccess;
-        _isProcessing = false;
-        notifyListeners();
-
-        if (transcript.isNotEmpty) {
+        final transcript = await _transcribeVoiceMessage(chunks);
+        if (transcript.trim().isNotEmpty) {
+          _transcript = transcript;
+          _state = VoiceRecorderState.transcribeSuccess;
+          _isProcessing = false;
+          notifyListeners();
           _onTranscriptReady?.call(transcript);
           close();
         } else {
-          Logger.debug('Empty transcript received on retry, closing without error');
-          close();
+          Logger.debug('Empty transcript received on retry; preserving recording for retry');
+          _markTranscriptionFailed();
         }
       } finally {
         _cleanupChunkFiles(chunks);
@@ -292,10 +295,17 @@ class VoiceRecorderProvider extends ChangeNotifier {
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      AppSnackbar.showSnackbarError(
-        globalNavigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio',
-      );
+      _showTranscriptionFailedSnackbar();
     }
+  }
+
+  static Future<Directory> _recordingsDirectory() async {
+    final supportDir = await getApplicationSupportDirectory();
+    final directory = Directory('${supportDir.path}/voice_recordings');
+    if (!directory.existsSync()) {
+      await directory.create(recursive: true);
+    }
+    return directory;
   }
 
   /// Convert a PCM file on disk to a WAV file on disk.
@@ -304,8 +314,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
     final pcmLength = await pcmFile.length();
     final wavHeader = WavBytesUtil.getWavHeader(pcmLength, sampleRate, channelCount: channels);
 
-    final tempDir = await getTemporaryDirectory();
-    final wavPath = '${tempDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.wav';
+    final recordingsDir = await _recordingsDirectory();
+    final wavPath = '${recordingsDir.path}/voice_recording_${DateTime.now().millisecondsSinceEpoch}.wav';
     final wavFile = File(wavPath);
     final sink = wavFile.openWrite();
 
@@ -423,6 +433,19 @@ class VoiceRecorderProvider extends ChangeNotifier {
         }
       }
     }
+  }
+
+  void _markTranscriptionFailed() {
+    _state = VoiceRecorderState.transcribeFailed;
+    _isProcessing = false;
+    notifyListeners();
+    _showTranscriptionFailedSnackbar();
+  }
+
+  void _showTranscriptionFailedSnackbar() {
+    final context = globalNavigatorKey.currentContext;
+    if (context == null) return;
+    AppSnackbar.showSnackbarError(context.l10n.voiceFailedToTranscribe);
   }
 
   void close() {
