@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+import os
 import re
 import base64
 from datetime import datetime, timezone
@@ -1047,7 +1048,8 @@ def share_chat_messages(
     if result is None:
         raise HTTPException(status_code=500, detail='Failed to create share link')
 
-    return {"url": f"https://h.omi.me/chat/{token}", "token": token}
+    base_url = os.environ.get("OMI_HOST", "https://h.omi.me")
+    return {"url": f"{base_url}/chat/{token}"} 
 
 
 @router.get('/v2/messages/shared/{token}', tags=['chat'])

@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-
+import os
 from utils.executors import critical_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -484,7 +484,8 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     if result is None:
         raise HTTPException(status_code=500, detail="Failed to create share link")
 
-    return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
+    base_url = os.environ.get("OMI_HOST", "https://h.omi.me")
+    return {"url": f"{base_url}/tasks/{token}"}
 
 
 @router.get("/v1/action-items/shared/{token}", tags=['action-items'])
