@@ -21,6 +21,9 @@ Default permissions for the screen capture plugin
 - `allow-save-screenshot-embedding`
 - `allow-search-screenshots-semantic`
 - `allow-screenshots-missing-embeddings`
+- `allow-save-companion-session`
+- `allow-get-recent-companion-sessions`
+- `allow-delete-companion-session`
 
 ## Permission Table
 
@@ -53,6 +56,32 @@ Enables the delete_all_screenshots command without any pre-configured scope.
 <td>
 
 Denies the delete_all_screenshots command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-delete-companion-session`
+
+</td>
+<td>
+
+Enables the delete_companion_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-delete-companion-session`
+
+</td>
+<td>
+
+Denies the delete_companion_session command without any pre-configured scope.
 
 </td>
 </tr>
@@ -131,6 +160,32 @@ Enables the get_active_window_info command without any pre-configured scope.
 <td>
 
 Denies the get_active_window_info command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-get-recent-companion-sessions`
+
+</td>
+<td>
+
+Enables the get_recent_companion_sessions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-get-recent-companion-sessions`
+
+</td>
+<td>
+
+Denies the get_recent_companion_sessions command without any pre-configured scope.
 
 </td>
 </tr>
@@ -235,6 +290,32 @@ Enables the get_screenshot_image command without any pre-configured scope.
 <td>
 
 Denies the get_screenshot_image command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-save-companion-session`
+
+</td>
+<td>
+
+Enables the save_companion_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:deny-save-companion-session`
+
+</td>
+<td>
+
+Denies the save_companion_session command without any pre-configured scope.
 
 </td>
 </tr>
@@ -690,6 +771,45 @@ Allows cosine-similarity search over stored screenshot embeddings
 <td>
 
 Allows listing screenshots that still need embeddings (for backfill)
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-save-companion-session`
+
+</td>
+<td>
+
+Allows persisting a companion Q&A session to the Rewind database
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-get-recent-companion-sessions`
+
+</td>
+<td>
+
+Allows retrieving recent companion sessions from the Rewind database
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`screen-capture:allow-delete-companion-session`
+
+</td>
+<td>
+
+Allows deleting a companion session by its database ID
 
 </td>
 </tr>

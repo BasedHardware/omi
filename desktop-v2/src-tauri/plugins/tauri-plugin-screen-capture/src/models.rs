@@ -1,5 +1,48 @@
 use serde::{Deserialize, Serialize};
 
+/// Origin of a display in global screen coordinates (AppKit bottom-left origin,
+/// points).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayOriginPt {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Size of a display in points.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplaySizePt {
+    pub w: f64,
+    pub h: f64,
+}
+
+/// Display geometry metadata attached to every `take_screenshot_with_ocr`
+/// response.  Lets the Companion overlay do precise coordinate mapping from
+/// Gemini image-space → overlay-window-local points without any additional
+/// IPC round-trips.
+///
+/// All point-space values use the AppKit coordinate system (bottom-left origin,
+/// points).  To convert to screen coordinates for an NSWindow, add
+/// `display_origin_pt.y` to the y component (AppKit bottom-up).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayMetadata {
+    /// `CGDirectDisplayID` of the captured display.
+    pub display_id: u32,
+    /// Width of the JPEG returned by the plugin (after any downscale).
+    pub capture_width_px: u32,
+    /// Height of the JPEG returned by the plugin (after any downscale).
+    pub capture_height_px: u32,
+    /// Native pixel width of the display (before downscale).
+    pub display_width_px: u32,
+    /// Native pixel height of the display (before downscale).
+    pub display_height_px: u32,
+    /// `NSScreen.backingScaleFactor` for this display (e.g. 2.0 for Retina).
+    pub display_scale_factor: f64,
+    /// Display origin in global AppKit points (bottom-left origin).
+    pub display_origin_pt: DisplayOriginPt,
+    /// Display size in points.
+    pub display_size_pt: DisplaySizePt,
+}
+
 /// A single captured screenshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Screenshot {
@@ -13,6 +56,12 @@ pub struct Screenshot {
     pub height: u32,
     /// Image format identifier (e.g. "jpeg").
     pub format: String,
+    /// `CGDirectDisplayID` of the display that was captured. `0` on
+    /// platforms that do not expose display IDs (Linux, Windows).
+    pub display_id: u32,
+    /// Native pixel resolution of the captured display.
+    pub native_width: u32,
+    pub native_height: u32,
 }
 
 /// Information about the currently active (focused) window.

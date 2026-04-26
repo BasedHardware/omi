@@ -86,6 +86,23 @@ pub struct CaptureConfig {
     /// VAD sensitivity preset.
     #[serde(default)]
     pub vad_mode: VadMode,
+    /// When true, skip the live Deepgram WebSocket entirely — only record
+    /// audio to disk and upload to /v1/conversations/from-audio on stop.
+    /// Default false preserves the existing live-streaming behavior.
+    #[serde(default)]
+    pub skip_live_transcription: bool,
+    /// When true, record mic-only to a WAV file and skip all
+    /// ScreenCaptureKit / system-audio / Deepgram / transcription plumbing.
+    /// Intended for the Companion PTT flow where `stop_recording` must return
+    /// the WAV path synchronously so the caller can send it to Gemini as
+    /// `inline_data`.  Default false preserves the existing meeting-capture
+    /// behaviour and is backward-compatible with all existing callers.
+    ///
+    /// WAV format: PCM 16-bit LE, 16 kHz, 1 channel (mono).
+    /// Written to: `<app_data_dir>/companion/recordings/<uuid>.wav`.
+    /// The frontend is responsible for deleting the file after use.
+    #[serde(default)]
+    pub mic_only: bool,
 }
 
 impl Default for CaptureConfig {
@@ -98,8 +115,26 @@ impl Default for CaptureConfig {
             mode: CaptureMode::default(),
             capture_system_audio: false,
             vad_mode: VadMode::default(),
+            skip_live_transcription: false,
+            mic_only: false,
         }
     }
+}
+
+/// Metadata returned by `stop_recording` when the session was started with
+/// `mic_only: true`.  All the fields needed by the Companion Gemini call are
+/// present so the caller never needs a second IPC round-trip.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanionRecording {
+    /// Absolute path to the finalized WAV file.
+    /// Format: PCM 16-bit LE, 16 kHz, 1 channel (mono).
+    pub wav_path: String,
+    /// Recording duration in milliseconds (derived from PCM byte count).
+    pub duration_ms: u64,
+    /// Sample rate of the WAV (always 16 000 for Gemini compatibility).
+    pub sample_rate: u32,
+    /// Number of channels (always 1 — mono).
+    pub channels: u16,
 }
 
 /// Instantaneous audio level computed from a sample buffer.
@@ -117,6 +152,16 @@ pub struct CaptureState {
     pub is_capturing: bool,
     pub device_name: Option<String>,
     pub sample_rate: u32,
+    /// Whether system-audio capture is also active alongside the mic.
+    #[serde(default)]
+    pub system_audio_active: bool,
+    /// Total mic samples delivered to the mixer since start.
+    #[serde(default)]
+    pub mic_samples_total: u64,
+    /// Total system-audio samples delivered to the mixer since start.
+    /// Stays at 0 if the tap is active but nothing is playing.
+    #[serde(default)]
+    pub sys_samples_total: u64,
 }
 
 impl Default for CaptureState {
@@ -125,6 +170,9 @@ impl Default for CaptureState {
             is_capturing: false,
             device_name: None,
             sample_rate: 16000,
+            system_audio_active: false,
+            mic_samples_total: 0,
+            sys_samples_total: 0,
         }
     }
 }

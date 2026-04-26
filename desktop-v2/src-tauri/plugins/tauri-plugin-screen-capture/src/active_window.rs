@@ -122,15 +122,112 @@ mod platform {
 }
 
 // ---------------------------------------------------------------------------
-// macOS stub
+// macOS implementation
 // ---------------------------------------------------------------------------
+//
+// App name + PID come from NSWorkspace.frontmostApplication (no special
+// permission). Window title comes from CGWindowListCopyWindowInfo, scanning
+// for the topmost on-screen window owned by that PID. The window-list call
+// only returns titles when Screen Recording is granted (same TCC scope as
+// capture), so without that grant `window_title` is the empty string.
 #[cfg(target_os = "macos")]
 mod platform {
     use super::*;
+    use core_foundation::array::CFArray;
+    use core_foundation::base::{CFType, TCFType, ToVoid};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+        kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo,
+    };
+    use objc2::msg_send;
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSRunningApplication, NSWorkspace};
+
+    fn frontmost_app() -> Option<Retained<NSRunningApplication>> {
+        // sharedWorkspace + frontmostApplication are typed-safe in
+        // objc2-app-kit 0.3; no unsafe block needed.
+        NSWorkspace::sharedWorkspace().frontmostApplication()
+    }
+
+    /// Look up the title of the topmost on-screen window owned by `pid`.
+    /// Returns "" if none is found or the OS withholds the title.
+    fn window_title_for_pid(pid: i32) -> String {
+        let info: CFArray<CFDictionary> = unsafe {
+            let raw = CGWindowListCopyWindowInfo(
+                kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+                kCGNullWindowID,
+            );
+            if raw.is_null() {
+                return String::new();
+            }
+            CFArray::wrap_under_create_rule(raw)
+        };
+
+        // CGWindowListCopyWindowInfo returns front-to-back, so the first dict
+        // owned by our PID is the visually frontmost one.
+        let owner_pid_key = CFString::from_static_string("kCGWindowOwnerPID");
+        let name_key = CFString::from_static_string("kCGWindowName");
+
+        for i in 0..info.len() {
+            let dict = match info.get(i) {
+                Some(d) => d,
+                None => continue,
+            };
+
+            let owner_pid: Option<i32> = unsafe {
+                dict.find(owner_pid_key.to_void()).and_then(|item| {
+                    let ty = CFType::wrap_under_get_rule(*item);
+                    ty.downcast::<CFNumber>().and_then(|n| n.to_i32())
+                })
+            };
+
+            if owner_pid != Some(pid) {
+                continue;
+            }
+
+            let title: Option<String> = unsafe {
+                dict.find(name_key.to_void()).and_then(|item| {
+                    let ty = CFType::wrap_under_get_rule(*item);
+                    ty.downcast::<CFString>().map(|s| s.to_string())
+                })
+            };
+
+            return title.unwrap_or_default();
+        }
+
+        String::new()
+    }
 
     pub fn get_active_window_impl() -> Result<ActiveWindow, String> {
-        Err("Active window detection is not yet implemented on macOS".to_string())
+        let app = frontmost_app().ok_or_else(|| "No frontmost application".to_string())?;
+
+        let app_name = app
+            .localizedName()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        // `processIdentifier` is a `pid_t` (i32) selector on NSRunningApplication.
+        // It isn't surfaced as a typed method by objc2-app-kit 0.2, so we send
+        // the message directly. The selector is part of the public AppKit ABI
+        // and has been stable since macOS 10.6.
+        let pid: i32 = unsafe {
+            let obj: &AnyObject = &*(Retained::as_ptr(&app) as *const AnyObject);
+            msg_send![obj, processIdentifier]
+        };
+
+        let window_title = window_title_for_pid(pid);
+
+        Ok(ActiveWindow {
+            app_name,
+            window_title,
+            pid: pid as u32,
+        })
     }
+
 }
 
 // ---------------------------------------------------------------------------

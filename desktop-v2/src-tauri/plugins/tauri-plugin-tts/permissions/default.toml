@@ -1,0 +1,22 @@
+[default]
+description = "Default permissions for the TTS plugin"
+permissions = [
+    "allow-tts-speak",
+    "allow-tts-stop",
+    "allow-tts-list-voices",
+]
+
+[[permission]]
+identifier = "allow-tts-speak"
+description = "Allows speaking text via the system TTS synthesizer"
+commands.allow = ["tts_speak"]
+
+[[permission]]
+identifier = "allow-tts-stop"
+description = "Allows stopping any in-progress TTS speech immediately"
+commands.allow = ["tts_stop"]
+
+[[permission]]
+identifier = "allow-tts-list-voices"
+description = "Allows listing installed AVSpeechSynthesisVoice voices"
+commands.allow = ["tts_list_voices"]

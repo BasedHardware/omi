@@ -13,6 +13,7 @@
 //! event is emitted so the frontend can swap the local-only placeholder for
 //! the real backend row.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,7 +22,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 use tokio_util::sync::CancellationToken;
 
 use crate::storage::TranscriptionStorage;
-use crate::transcription::{post_conversation, TranscriptSegmentRequest};
+use crate::transcription::{post_conversation, upload_audio_conversation, TranscriptSegmentRequest};
 
 const RETRY_INTERVAL_SECS: u64 = 60;
 const MAX_RETRIES: i32 = 5;
@@ -223,27 +224,33 @@ async fn upload_session<R: Runtime>(
         }
     };
 
-    if segments.is_empty() {
+    // Read id_token fresh each attempt — refresh may have rotated it since
+    // the session was recorded. Done before the empty-segments branch so
+    // the audio-upload fallback can use the token too.
+    let id_token = if segments.is_empty() && session.audio_file_path.is_none() {
+        // Nothing to upload — no token needed, fall through to delete.
+        String::new()
+    } else {
+        match crate::read_id_token(app) {
+            Some(t) if !t.is_empty() => t,
+            _ => {
+                tracing::warn!(
+                    "[retry] skipping session {} — no id_token (user signed out?)",
+                    session_id
+                );
+                return Err("no auth token".into());
+            }
+        }
+    };
+
+    if segments.is_empty() && session.audio_file_path.is_none() {
         tracing::info!(
-            "[retry] session {} has no segments, deleting",
+            "[retry] session {} has no segments and no audio, deleting",
             session_id
         );
         let _ = storage.delete_session(session_id);
         return Ok(());
     }
-
-    // Read id_token fresh each attempt — refresh may have rotated it since
-    // the session was recorded.
-    let id_token = match crate::read_id_token(app) {
-        Some(t) if !t.is_empty() => t,
-        _ => {
-            tracing::warn!(
-                "[retry] skipping session {} — no id_token (user signed out?)",
-                session_id
-            );
-            return Err("no auth token".into());
-        }
-    };
 
     if let Err(e) = storage.mark_uploading(session_id) {
         tracing::warn!("[retry] mark_uploading failed: {}", e);
@@ -260,30 +267,47 @@ async fn upload_session<R: Runtime>(
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(Utc::now);
 
-    let request_segments: Vec<TranscriptSegmentRequest> = segments
-        .into_iter()
-        .map(|s| TranscriptSegmentRequest {
-            text: s.text,
-            speaker: s.speaker,
-            speaker_id: s.speaker_id,
-            is_user: s.is_user,
-            person_id: None,
-            start: s.start_time,
-            end: s.end_time,
-        })
-        .collect();
+    let result = if !segments.is_empty() {
+        let request_segments: Vec<TranscriptSegmentRequest> = segments
+            .into_iter()
+            .map(|s| TranscriptSegmentRequest {
+                text: s.text,
+                speaker: s.speaker,
+                speaker_id: s.speaker_id,
+                is_user: s.is_user,
+                person_id: None,
+                start: s.start_time,
+                end: s.end_time,
+            })
+            .collect();
 
-    match post_conversation(
-        crate::BACKEND_URL,
-        &id_token,
-        request_segments,
-        started_at,
-        finished_at,
-        session.input_device_name.clone(),
-        &session.language,
-    )
-    .await
-    {
+        post_conversation(
+            crate::BACKEND_URL,
+            &id_token,
+            request_segments,
+            started_at,
+            finished_at,
+            session.input_device_name.clone(),
+            &session.language,
+        )
+        .await
+    } else {
+        // No live segments but we have a saved WAV — upload to /from-audio
+        // so the backend can transcribe + summarize server-side.
+        let path = session.audio_file_path.as_deref().unwrap_or("");
+        upload_audio_conversation(
+            crate::BACKEND_URL,
+            &id_token,
+            Path::new(path),
+            started_at,
+            finished_at,
+            session.input_device_name.clone(),
+            &session.language,
+        )
+        .await
+    };
+
+    match result {
         Ok(backend_id) => {
             tracing::info!(
                 "[retry] session {} uploaded (backend_id={:?})",

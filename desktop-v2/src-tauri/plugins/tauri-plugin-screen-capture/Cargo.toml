@@ -31,8 +31,14 @@ windows = { version = "0.58", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = ["NSString", "NSArray"] }
+# Pinned to 0.6/0.3 to match what tao + arboard already pull in. Older
+# 0.5/0.2 versions cause `Encode`/`IsRetainable` trait-resolution failures
+# when both versions land in the same dep graph.
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDictionary", "NSValue", "NSData"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication", "NSScreen", "NSGraphics"] }
+core-graphics = "0.24"
+core-foundation = "0.10"
 
 [build-dependencies]
 tauri-plugin = { version = "2", features = ["build"] }

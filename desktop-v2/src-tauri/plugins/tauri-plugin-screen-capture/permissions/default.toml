@@ -18,6 +18,9 @@ permissions = [
     "allow-save-screenshot-embedding",
     "allow-search-screenshots-semantic",
     "allow-screenshots-missing-embeddings",
+    "allow-save-companion-session",
+    "allow-get-recent-companion-sessions",
+    "allow-delete-companion-session",
 ]
 
 [[permission]]
@@ -104,3 +107,18 @@ commands.allow = ["search_screenshots_semantic"]
 identifier = "allow-screenshots-missing-embeddings"
 description = "Allows listing screenshots that still need embeddings (for backfill)"
 commands.allow = ["screenshots_missing_embeddings"]
+
+[[permission]]
+identifier = "allow-save-companion-session"
+description = "Allows persisting a companion Q&A session to the Rewind database"
+commands.allow = ["save_companion_session"]
+
+[[permission]]
+identifier = "allow-get-recent-companion-sessions"
+description = "Allows retrieving recent companion sessions from the Rewind database"
+commands.allow = ["get_recent_companion_sessions"]
+
+[[permission]]
+identifier = "allow-delete-companion-session"
+description = "Allows deleting a companion session by its database ID"
+commands.allow = ["delete_companion_session"]

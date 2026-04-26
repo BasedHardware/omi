@@ -8,6 +8,9 @@ Default permissions for the audio capture plugin
 - `allow-start-recording`
 - `allow-stop-recording`
 - `allow-get-capture-state`
+- `allow-probe-system-audio`
+- `allow-probe-live-capture`
+- `allow-request-system-audio-permission`
 
 ## Permission Table
 
@@ -66,6 +69,84 @@ Enables the list_devices command without any pre-configured scope.
 <td>
 
 Denies the list_devices command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-probe-live-capture`
+
+</td>
+<td>
+
+Enables the probe_live_capture command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:deny-probe-live-capture`
+
+</td>
+<td>
+
+Denies the probe_live_capture command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-probe-system-audio`
+
+</td>
+<td>
+
+Enables the probe_system_audio command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:deny-probe-system-audio`
+
+</td>
+<td>
+
+Denies the probe_system_audio command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-request-system-audio-permission`
+
+</td>
+<td>
+
+Enables the request_system_audio_permission command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:deny-request-system-audio-permission`
+
+</td>
+<td>
+
+Denies the request_system_audio_permission command without any pre-configured scope.
 
 </td>
 </tr>
@@ -170,6 +251,45 @@ Allows stopping audio recording
 <td>
 
 Allows reading the current capture state
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-probe-system-audio`
+
+</td>
+<td>
+
+Allows running the system-audio capture diagnostic probe
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-probe-live-capture`
+
+</td>
+<td>
+
+Allows running the combined mic + system-audio live capture probe
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`audio-capture:allow-request-system-audio-permission`
+
+</td>
+<td>
+
+Allows triggering the system-audio TCC prompt and opening System Settings
 
 </td>
 </tr>

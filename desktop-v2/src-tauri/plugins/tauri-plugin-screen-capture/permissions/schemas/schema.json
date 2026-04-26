@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the delete_all_screenshots command without any pre-configured scope."
         },
         {
+          "description": "Enables the delete_companion_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-companion-session",
+          "markdownDescription": "Enables the delete_companion_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_companion_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-companion-session",
+          "markdownDescription": "Denies the delete_companion_session command without any pre-configured scope."
+        },
+        {
           "description": "Enables the delete_old_screenshots command without any pre-configured scope.",
           "type": "string",
           "const": "allow-delete-old-screenshots",
@@ -341,6 +353,18 @@
           "type": "string",
           "const": "deny-get-active-window-info",
           "markdownDescription": "Denies the get_active_window_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_recent_companion_sessions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-recent-companion-sessions",
+          "markdownDescription": "Enables the get_recent_companion_sessions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_recent_companion_sessions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-recent-companion-sessions",
+          "markdownDescription": "Denies the get_recent_companion_sessions command without any pre-configured scope."
         },
         {
           "description": "Enables the get_recent_screenshots command without any pre-configured scope.",
@@ -389,6 +413,18 @@
           "type": "string",
           "const": "deny-get-screenshot-image",
           "markdownDescription": "Denies the get_screenshot_image command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_companion_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-companion-session",
+          "markdownDescription": "Enables the save_companion_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_companion_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-companion-session",
+          "markdownDescription": "Denies the save_companion_session command without any pre-configured scope."
         },
         {
           "description": "Enables the save_screenshot command without any pre-configured scope.",
@@ -499,10 +535,10 @@
           "markdownDescription": "Denies the take_screenshot_with_ocr command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`",
+          "description": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`\n- `allow-save-companion-session`\n- `allow-get-recent-companion-sessions`\n- `allow-delete-companion-session`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`"
+          "markdownDescription": "Default permissions for the screen capture plugin\n#### This default permission set includes:\n\n- `allow-take-screenshot`\n- `allow-take-screenshot-with-ocr`\n- `allow-start-screen-capture`\n- `allow-stop-screen-capture`\n- `allow-get-active-window-info`\n- `allow-get-screen-capture-state`\n- `allow-save-screenshot`\n- `allow-search-screenshots`\n- `allow-get-recent-screenshots`\n- `allow-get-screenshot-image`\n- `allow-get-screenshot-by-id`\n- `allow-delete-old-screenshots`\n- `allow-delete-screenshot-by-id`\n- `allow-delete-all-screenshots`\n- `allow-save-screenshot-embedding`\n- `allow-search-screenshots-semantic`\n- `allow-screenshots-missing-embeddings`\n- `allow-save-companion-session`\n- `allow-get-recent-companion-sessions`\n- `allow-delete-companion-session`"
         },
         {
           "description": "Allows taking a single screenshot",
@@ -605,6 +641,24 @@
           "type": "string",
           "const": "allow-screenshots-missing-embeddings",
           "markdownDescription": "Allows listing screenshots that still need embeddings (for backfill)"
+        },
+        {
+          "description": "Allows persisting a companion Q&A session to the Rewind database",
+          "type": "string",
+          "const": "allow-save-companion-session",
+          "markdownDescription": "Allows persisting a companion Q&A session to the Rewind database"
+        },
+        {
+          "description": "Allows retrieving recent companion sessions from the Rewind database",
+          "type": "string",
+          "const": "allow-get-recent-companion-sessions",
+          "markdownDescription": "Allows retrieving recent companion sessions from the Rewind database"
+        },
+        {
+          "description": "Allows deleting a companion session by its database ID",
+          "type": "string",
+          "const": "allow-delete-companion-session",
+          "markdownDescription": "Allows deleting a companion session by its database ID"
         }
       ]
     }

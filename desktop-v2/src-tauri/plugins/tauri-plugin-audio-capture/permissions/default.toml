@@ -5,6 +5,9 @@ permissions = [
     "allow-start-recording",
     "allow-stop-recording",
     "allow-get-capture-state",
+    "allow-probe-system-audio",
+    "allow-probe-live-capture",
+    "allow-request-system-audio-permission",
 ]
 
 [[permission]]
@@ -26,3 +29,18 @@ commands.allow = ["stop_recording"]
 identifier = "allow-get-capture-state"
 description = "Allows reading the current capture state"
 commands.allow = ["get_capture_state"]
+
+[[permission]]
+identifier = "allow-probe-system-audio"
+description = "Allows running the system-audio capture diagnostic probe"
+commands.allow = ["probe_system_audio"]
+
+[[permission]]
+identifier = "allow-probe-live-capture"
+description = "Allows running the combined mic + system-audio live capture probe"
+commands.allow = ["probe_live_capture"]
+
+[[permission]]
+identifier = "allow-request-system-audio-permission"
+description = "Allows triggering the system-audio TCC prompt and opening System Settings"
+commands.allow = ["request_system_audio_permission"]

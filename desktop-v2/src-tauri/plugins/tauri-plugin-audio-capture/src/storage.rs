@@ -25,6 +25,7 @@ pub struct LocalSession {
     pub language: String,
     pub timezone: String,
     pub input_device_name: Option<String>,
+    pub audio_file_path: Option<String>,
     pub status: String,
     pub backend_id: Option<String>,
     pub last_error: Option<String>,
@@ -78,6 +79,7 @@ impl TranscriptionStorage {
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 
         conn.execute_batch(MIGRATION_V1)?;
+        ensure_column(&conn, "transcription_sessions", "audio_file_path", "TEXT")?;
 
         tracing::info!("Transcription database ready");
         Ok(Self { conn: Mutex::new(conn) })
@@ -152,6 +154,18 @@ impl TranscriptionStorage {
         Ok(())
     }
 
+    /// Attach the on-disk audio file path to a session — called after the
+    /// WAV has been flushed to disk, separate from the recording lifecycle.
+    pub fn set_audio_file_path(&self, session_id: i64, path: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "UPDATE transcription_sessions SET audio_file_path = ?1, updated_at = ?2 WHERE id = ?3",
+            params![path, now, session_id],
+        )?;
+        Ok(())
+    }
+
     /// Move a session into `uploading` state just before POSTing.
     pub fn mark_uploading(&self, session_id: i64) -> Result<()> {
         let now = Utc::now().to_rfc3339();
@@ -222,7 +236,7 @@ impl TranscriptionStorage {
         let mut stmt = conn.prepare(
             "SELECT id, started_at, finished_at, source, language, timezone, \
                     input_device_name, status, backend_id, last_error, retry_count, \
-                    next_retry_at, created_at, updated_at \
+                    next_retry_at, created_at, updated_at, audio_file_path \
              FROM transcription_sessions ORDER BY started_at DESC",
         )?;
         let rows = stmt.query_map([], map_session)?;
@@ -235,7 +249,7 @@ impl TranscriptionStorage {
         let mut stmt = conn.prepare(
             "SELECT id, started_at, finished_at, source, language, timezone, \
                     input_device_name, status, backend_id, last_error, retry_count, \
-                    next_retry_at, created_at, updated_at \
+                    next_retry_at, created_at, updated_at, audio_file_path \
              FROM transcription_sessions WHERE status = ?1 ORDER BY started_at ASC",
         )?;
         let rows = stmt.query_map(params![status], map_session)?;
@@ -250,7 +264,7 @@ impl TranscriptionStorage {
         let mut stmt = conn.prepare(
             "SELECT id, started_at, finished_at, source, language, timezone, \
                     input_device_name, status, backend_id, last_error, retry_count, \
-                    next_retry_at, created_at, updated_at \
+                    next_retry_at, created_at, updated_at, audio_file_path \
              FROM transcription_sessions \
              WHERE status = 'failed' \
                AND retry_count < ?1 \
@@ -281,7 +295,7 @@ impl TranscriptionStorage {
         let mut stmt = conn.prepare(
             "SELECT id, started_at, finished_at, source, language, timezone, \
                     input_device_name, status, backend_id, last_error, retry_count, \
-                    next_retry_at, created_at, updated_at \
+                    next_retry_at, created_at, updated_at, audio_file_path \
              FROM transcription_sessions WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![session_id], map_session)?;
@@ -302,7 +316,7 @@ impl TranscriptionStorage {
         let mut stmt = conn.prepare(
             "SELECT id, started_at, finished_at, source, language, timezone, \
                     input_device_name, status, backend_id, last_error, retry_count, \
-                    next_retry_at, created_at, updated_at \
+                    next_retry_at, created_at, updated_at, audio_file_path \
              FROM transcription_sessions \
              WHERE status = 'uploading' AND updated_at < ?1 \
              ORDER BY updated_at ASC",
@@ -321,6 +335,31 @@ impl TranscriptionStorage {
         )?;
         Ok(count)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Schema helpers
+// ---------------------------------------------------------------------------
+
+/// Idempotently add a column to an existing table — no-op if it's already
+/// there. Used to migrate pre-existing databases past `MIGRATION_V1` without
+/// bumping the schema version.
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    column_type: &str,
+) -> Result<()> {
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+        params![table, column],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        let sql = format!("ALTER TABLE {} ADD COLUMN {} {}", table, column, column_type);
+        conn.execute(&sql, [])?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +382,7 @@ fn map_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalSession> {
         next_retry_at: row.get(11)?,
         created_at: row.get(12)?,
         updated_at: row.get(13)?,
+        audio_file_path: row.get(14)?,
     })
 }
 
@@ -380,7 +420,8 @@ CREATE TABLE IF NOT EXISTS transcription_sessions (
   retry_count INTEGER NOT NULL DEFAULT 0,
   next_retry_at TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  audio_file_path TEXT
 );
 CREATE TABLE IF NOT EXISTS transcription_segments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

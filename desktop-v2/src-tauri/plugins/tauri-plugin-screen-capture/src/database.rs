@@ -31,6 +31,91 @@ pub struct SemanticHit {
     pub similarity: f32,
 }
 
+/// Input payload for saving a companion session.
+#[derive(Debug, serde::Deserialize)]
+pub struct CompanionSessionInput {
+    /// Unix milliseconds at the moment the user asked the question.
+    pub timestamp: i64,
+    /// Transcribed question text (empty until a transcript round-trip is wired up).
+    pub transcript: String,
+    /// Gemini's text answer.
+    pub answer: String,
+    /// JSON array of `{x,y,label}` objects in overlay-window-local CSS points.
+    pub points_json: String,
+    /// FK to screenshots.id — null when the screenshot wasn't persisted (e.g. dHash dupe).
+    pub screenshot_id: Option<i64>,
+    /// Index of the display the question was asked on.
+    pub display_id: u32,
+    // ---- Telemetry fields (V4) — all optional for backward compatibility ----
+    /// "single" (Mode A) or "chain" (Mode B). Drives downstream analysis of how
+    /// often each mode fires.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// JSON array of chain steps: `[{ instruction, target_label }, ...]`. Empty for single-shot.
+    #[serde(default)]
+    pub steps_json: Option<String>,
+    /// Full raw Gemini response (the JSON payload from the structured-output
+    /// call) so we can debug mode-selection drift without re-running the model.
+    #[serde(default)]
+    pub gemini_raw_json: Option<String>,
+    /// Frontmost macOS app name at PTT-press time ("Google Chrome", "Safari", "Slack").
+    #[serde(default)]
+    pub active_app: Option<String>,
+    /// Frontmost app bundle id ("com.google.Chrome").
+    #[serde(default)]
+    pub active_bundle_id: Option<String>,
+    /// Wall-clock from PTT-press to last user-visible artifact (TTS finish or chain end).
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+}
+
+/// A full companion session row returned from the database.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CompanionSession {
+    pub id: i64,
+    pub timestamp: i64,
+    pub transcript: String,
+    pub answer: String,
+    pub points_json: String,
+    pub screenshot_id: Option<i64>,
+    pub display_id: u32,
+    pub mode: Option<String>,
+    pub steps_json: Option<String>,
+    pub gemini_raw_json: Option<String>,
+    pub active_app: Option<String>,
+    pub active_bundle_id: Option<String>,
+    pub duration_ms: Option<i64>,
+    /// Did the chain run to completion? Null for single-shot answers, false
+    /// for chains that were cancelled (Esc) or aborted (grounding failure),
+    /// true when all steps finished.
+    pub chain_completed: Option<bool>,
+    /// How many of the N planned chain steps the user actually clicked through.
+    pub chain_steps_completed: Option<i64>,
+    /// JSON array recording how each point/step was grounded:
+    /// `["ax", "ocr", "gemini", ...]`.
+    pub grounding_methods_json: Option<String>,
+    /// Error text if the interaction failed (mic, Gemini, no screenshot, etc.).
+    pub error: Option<String>,
+}
+
+/// Patch applied to an existing companion_sessions row when the chain
+/// controller finishes — captures the outcome (completed vs cancelled,
+/// how many steps the user actually did, which grounding methods fired).
+#[derive(Debug, serde::Deserialize)]
+pub struct CompanionSessionPatch {
+    pub id: i64,
+    #[serde(default)]
+    pub chain_completed: Option<bool>,
+    #[serde(default)]
+    pub chain_steps_completed: Option<i64>,
+    #[serde(default)]
+    pub grounding_methods_json: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
 /// SQLite-backed persistence for Rewind screenshots.
 pub struct RewindDatabase {
     conn: Mutex<Connection>,
@@ -69,6 +154,16 @@ impl RewindDatabase {
             conn.execute_batch(MIGRATION_V2)?;
             conn.execute_batch("PRAGMA user_version = 2")?;
             tracing::info!("Ran Rewind DB migration V2 (embeddings)");
+        }
+        if version < 3 {
+            conn.execute_batch(MIGRATION_V3)?;
+            conn.execute_batch("PRAGMA user_version = 3")?;
+            tracing::info!("Ran Rewind DB migration V3 (companion_sessions)");
+        }
+        if version < 4 {
+            conn.execute_batch(MIGRATION_V4)?;
+            conn.execute_batch("PRAGMA user_version = 4")?;
+            tracing::info!("Ran Rewind DB migration V4 (companion telemetry)");
         }
 
         tracing::info!("Rewind database ready");
@@ -278,6 +373,99 @@ impl RewindDatabase {
         Ok(scored)
     }
 
+    // -----------------------------------------------------------------------
+    // Companion sessions
+    // -----------------------------------------------------------------------
+
+    /// Insert a companion Q&A session and return its new row id.
+    pub fn insert_companion_session(&self, input: &CompanionSessionInput) -> Result<i64> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "INSERT INTO companion_sessions \
+             (timestamp, transcript, answer, points_json, screenshot_id, display_id, \
+              mode, steps_json, gemini_raw_json, active_app, active_bundle_id, duration_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                input.timestamp,
+                input.transcript,
+                input.answer,
+                input.points_json,
+                input.screenshot_id,
+                input.display_id,
+                input.mode,
+                input.steps_json,
+                input.gemini_raw_json,
+                input.active_app,
+                input.active_bundle_id,
+                input.duration_ms,
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Patch an existing companion_sessions row with chain outcome /
+    /// post-Gemini telemetry. Only non-None fields in `patch` are written.
+    pub fn update_companion_session(&self, patch: &CompanionSessionPatch) -> Result<()> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        // Build the SET clause dynamically so we don't clobber existing columns
+        // with NULL when a caller only wants to update a subset.
+        let mut sets: Vec<&str> = Vec::new();
+        let mut vals: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(b) = patch.chain_completed {
+            sets.push("chain_completed = ?");
+            vals.push(Box::new(if b { 1i64 } else { 0i64 }));
+        }
+        if let Some(n) = patch.chain_steps_completed {
+            sets.push("chain_steps_completed = ?");
+            vals.push(Box::new(n));
+        }
+        if let Some(ref s) = patch.grounding_methods_json {
+            sets.push("grounding_methods_json = ?");
+            vals.push(Box::new(s.clone()));
+        }
+        if let Some(d) = patch.duration_ms {
+            sets.push("duration_ms = ?");
+            vals.push(Box::new(d));
+        }
+        if let Some(ref e) = patch.error {
+            sets.push("error = ?");
+            vals.push(Box::new(e.clone()));
+        }
+        if sets.is_empty() {
+            return Ok(());
+        }
+        let sql = format!(
+            "UPDATE companion_sessions SET {} WHERE id = ?",
+            sets.join(", ")
+        );
+        vals.push(Box::new(patch.id));
+        let val_refs: Vec<&dyn rusqlite::ToSql> = vals.iter().map(|v| v.as_ref()).collect();
+        conn.execute(&sql, val_refs.as_slice())?;
+        Ok(())
+    }
+
+    /// Return the most recent companion sessions, newest first.
+    pub fn get_recent_companion_sessions(&self, limit: u32) -> Result<Vec<CompanionSession>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT id, timestamp, transcript, answer, points_json, screenshot_id, display_id, \
+                    mode, steps_json, gemini_raw_json, active_app, active_bundle_id, duration_ms, \
+                    chain_completed, chain_steps_completed, grounding_methods_json, error \
+             FROM companion_sessions \
+             ORDER BY timestamp DESC \
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], map_companion_session_row)?;
+        rows.collect()
+    }
+
+    /// Delete a single companion session by id.
+    pub fn delete_companion_session(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute("DELETE FROM companion_sessions WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     /// Return the dhash of the most recently stored screenshot, used for deduplication.
     #[allow(dead_code)]
     pub fn get_latest_dhash(&self) -> Result<Option<String>> {
@@ -310,6 +498,30 @@ fn parse_embedding(blob: &[u8]) -> Option<Vec<f32>> {
 /// cosine similarity.
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+/// Map a SQLite row to a `CompanionSession`.
+fn map_companion_session_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CompanionSession> {
+    let chain_completed: Option<i64> = row.get(13)?;
+    Ok(CompanionSession {
+        id: row.get(0)?,
+        timestamp: row.get(1)?,
+        transcript: row.get(2)?,
+        answer: row.get(3)?,
+        points_json: row.get(4)?,
+        screenshot_id: row.get(5)?,
+        display_id: row.get::<_, u32>(6)?,
+        mode: row.get(7)?,
+        steps_json: row.get(8)?,
+        gemini_raw_json: row.get(9)?,
+        active_app: row.get(10)?,
+        active_bundle_id: row.get(11)?,
+        duration_ms: row.get(12)?,
+        chain_completed: chain_completed.map(|n| n != 0),
+        chain_steps_completed: row.get(14)?,
+        grounding_methods_json: row.get(15)?,
+        error: row.get(16)?,
+    })
 }
 
 /// Map a SQLite row to a `ScreenshotRow` (columns: id, timestamp, app_name,
@@ -386,4 +598,39 @@ ALTER TABLE screenshots ADD COLUMN embedding BLOB;
 
 CREATE INDEX IF NOT EXISTS idx_screenshots_missing_embedding
     ON screenshots(id) WHERE embedding IS NULL;
+";
+
+// V3: companion sessions — one row per Q&A interaction (Phase 5 persistence).
+const MIGRATION_V3: &str = "
+CREATE TABLE IF NOT EXISTS companion_sessions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp     INTEGER NOT NULL,
+    transcript    TEXT    NOT NULL DEFAULT '',
+    answer        TEXT    NOT NULL,
+    points_json   TEXT    NOT NULL,
+    screenshot_id INTEGER,
+    display_id    INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(screenshot_id) REFERENCES screenshots(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_companion_sessions_timestamp
+    ON companion_sessions(timestamp DESC);
+";
+
+// V4: telemetry columns for companion_sessions — captures the full picture of
+// each interaction (mode, raw Gemini response, active app, chain outcome,
+// grounding method) so we can analyze patterns and improve the prompt /
+// grounding pipeline over time. All columns are nullable for backward compat
+// with V3-shaped rows already in user databases.
+const MIGRATION_V4: &str = "
+ALTER TABLE companion_sessions ADD COLUMN mode                  TEXT;
+ALTER TABLE companion_sessions ADD COLUMN steps_json            TEXT;
+ALTER TABLE companion_sessions ADD COLUMN gemini_raw_json       TEXT;
+ALTER TABLE companion_sessions ADD COLUMN active_app            TEXT;
+ALTER TABLE companion_sessions ADD COLUMN active_bundle_id      TEXT;
+ALTER TABLE companion_sessions ADD COLUMN duration_ms           INTEGER;
+ALTER TABLE companion_sessions ADD COLUMN chain_completed       INTEGER;
+ALTER TABLE companion_sessions ADD COLUMN chain_steps_completed INTEGER;
+ALTER TABLE companion_sessions ADD COLUMN grounding_methods_json TEXT;
+ALTER TABLE companion_sessions ADD COLUMN error                 TEXT;
 ";

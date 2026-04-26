@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-probe-system-audio"
+description = "Enables the probe_system_audio command without any pre-configured scope."
+commands.allow = ["probe_system_audio"]
+
+[[permission]]
+identifier = "deny-probe-system-audio"
+description = "Denies the probe_system_audio command without any pre-configured scope."
+commands.deny = ["probe_system_audio"]

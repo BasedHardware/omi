@@ -20,4 +20,10 @@ const COMMANDS: &[&str] = &[
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS).build();
+
+    // Link Apple Vision so `class!(VNRecognizeTextRequest)` resolves at
+    // runtime. AppKit + CoreGraphics get pulled in transitively by the
+    // objc2 crates, but Vision is its own framework and isn't.
+    #[cfg(target_os = "macos")]
+    println!("cargo:rustc-link-lib=framework=Vision");
 }

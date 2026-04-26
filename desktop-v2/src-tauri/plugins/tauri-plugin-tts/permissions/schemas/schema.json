@@ -295,136 +295,64 @@
       "type": "string",
       "oneOf": [
         {
-          "description": "Enables the get_capture_state command without any pre-configured scope.",
+          "description": "Enables the tts_list_voices command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-capture-state",
-          "markdownDescription": "Enables the get_capture_state command without any pre-configured scope."
+          "const": "allow-tts-list-voices",
+          "markdownDescription": "Enables the tts_list_voices command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_capture_state command without any pre-configured scope.",
+          "description": "Denies the tts_list_voices command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-capture-state",
-          "markdownDescription": "Denies the get_capture_state command without any pre-configured scope."
+          "const": "deny-tts-list-voices",
+          "markdownDescription": "Denies the tts_list_voices command without any pre-configured scope."
         },
         {
-          "description": "Enables the list_devices command without any pre-configured scope.",
+          "description": "Enables the tts_speak command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-list-devices",
-          "markdownDescription": "Enables the list_devices command without any pre-configured scope."
+          "const": "allow-tts-speak",
+          "markdownDescription": "Enables the tts_speak command without any pre-configured scope."
         },
         {
-          "description": "Denies the list_devices command without any pre-configured scope.",
+          "description": "Denies the tts_speak command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-list-devices",
-          "markdownDescription": "Denies the list_devices command without any pre-configured scope."
+          "const": "deny-tts-speak",
+          "markdownDescription": "Denies the tts_speak command without any pre-configured scope."
         },
         {
-          "description": "Enables the probe_live_capture command without any pre-configured scope.",
+          "description": "Enables the tts_stop command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-probe-live-capture",
-          "markdownDescription": "Enables the probe_live_capture command without any pre-configured scope."
+          "const": "allow-tts-stop",
+          "markdownDescription": "Enables the tts_stop command without any pre-configured scope."
         },
         {
-          "description": "Denies the probe_live_capture command without any pre-configured scope.",
+          "description": "Denies the tts_stop command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-probe-live-capture",
-          "markdownDescription": "Denies the probe_live_capture command without any pre-configured scope."
+          "const": "deny-tts-stop",
+          "markdownDescription": "Denies the tts_stop command without any pre-configured scope."
         },
         {
-          "description": "Enables the probe_system_audio command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-probe-system-audio",
-          "markdownDescription": "Enables the probe_system_audio command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the probe_system_audio command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-probe-system-audio",
-          "markdownDescription": "Denies the probe_system_audio command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the request_system_audio_permission command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-request-system-audio-permission",
-          "markdownDescription": "Enables the request_system_audio_permission command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the request_system_audio_permission command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-request-system-audio-permission",
-          "markdownDescription": "Denies the request_system_audio_permission command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the start_recording command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-start-recording",
-          "markdownDescription": "Enables the start_recording command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the start_recording command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-start-recording",
-          "markdownDescription": "Denies the start_recording command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the stop_recording command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-stop-recording",
-          "markdownDescription": "Enables the stop_recording command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the stop_recording command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-stop-recording",
-          "markdownDescription": "Denies the stop_recording command without any pre-configured scope."
-        },
-        {
-          "description": "Default permissions for the audio capture plugin\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-start-recording`\n- `allow-stop-recording`\n- `allow-get-capture-state`\n- `allow-probe-system-audio`\n- `allow-probe-live-capture`\n- `allow-request-system-audio-permission`",
+          "description": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-tts-speak`\n- `allow-tts-stop`\n- `allow-tts-list-voices`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the audio capture plugin\n#### This default permission set includes:\n\n- `allow-list-devices`\n- `allow-start-recording`\n- `allow-stop-recording`\n- `allow-get-capture-state`\n- `allow-probe-system-audio`\n- `allow-probe-live-capture`\n- `allow-request-system-audio-permission`"
+          "markdownDescription": "Default permissions for the TTS plugin\n#### This default permission set includes:\n\n- `allow-tts-speak`\n- `allow-tts-stop`\n- `allow-tts-list-voices`"
         },
         {
-          "description": "Allows listing input audio devices",
+          "description": "Allows speaking text via the system TTS synthesizer",
           "type": "string",
-          "const": "allow-list-devices",
-          "markdownDescription": "Allows listing input audio devices"
+          "const": "allow-tts-speak",
+          "markdownDescription": "Allows speaking text via the system TTS synthesizer"
         },
         {
-          "description": "Allows starting audio recording",
+          "description": "Allows stopping any in-progress TTS speech immediately",
           "type": "string",
-          "const": "allow-start-recording",
-          "markdownDescription": "Allows starting audio recording"
+          "const": "allow-tts-stop",
+          "markdownDescription": "Allows stopping any in-progress TTS speech immediately"
         },
         {
-          "description": "Allows stopping audio recording",
+          "description": "Allows listing installed AVSpeechSynthesisVoice voices",
           "type": "string",
-          "const": "allow-stop-recording",
-          "markdownDescription": "Allows stopping audio recording"
-        },
-        {
-          "description": "Allows reading the current capture state",
-          "type": "string",
-          "const": "allow-get-capture-state",
-          "markdownDescription": "Allows reading the current capture state"
-        },
-        {
-          "description": "Allows running the system-audio capture diagnostic probe",
-          "type": "string",
-          "const": "allow-probe-system-audio",
-          "markdownDescription": "Allows running the system-audio capture diagnostic probe"
-        },
-        {
-          "description": "Allows running the combined mic + system-audio live capture probe",
-          "type": "string",
-          "const": "allow-probe-live-capture",
-          "markdownDescription": "Allows running the combined mic + system-audio live capture probe"
-        },
-        {
-          "description": "Allows triggering the system-audio TCC prompt and opening System Settings",
-          "type": "string",
-          "const": "allow-request-system-audio-permission",
-          "markdownDescription": "Allows triggering the system-audio TCC prompt and opening System Settings"
+          "const": "allow-tts-list-voices",
+          "markdownDescription": "Allows listing installed AVSpeechSynthesisVoice voices"
         }
       ]
     }

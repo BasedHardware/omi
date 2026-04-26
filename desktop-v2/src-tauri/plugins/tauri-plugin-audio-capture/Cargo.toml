@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
 tokio-util = "0.7"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 url = "2"
 urlencoding = "2"
 chrono = { version = "0.4", features = ["serde"] }
@@ -23,6 +23,11 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 ort = { version = "2.0.0-rc.12", features = ["download-binaries", "copy-dylibs", "ndarray"] }
 ndarray = "0.17"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# system-audio capture is delegated to a Swift subprocess helper (see
+# `swift-helpers/sys-audio-capture/main.swift`), so no ObjC / Core Audio
+# Rust bindings are needed here anymore.
 
 [build-dependencies]
 tauri-plugin = { version = "2", features = ["build"] }
