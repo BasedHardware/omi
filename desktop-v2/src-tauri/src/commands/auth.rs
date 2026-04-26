@@ -9,6 +9,19 @@ const API_BASE: &str = "https://nooto-desktop-auth-1060764816205.us-central1.run
 const FIREBASE_API_KEY: &str = "AIzaSyAPDdy9ZUCMQOPvcbjkB-dQn6WPcPY5nng";
 const CALLBACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
+/// Mirror the freshly-minted Firebase ID token to /tmp/omi_auth_token.txt and,
+/// in debug builds, print it to the dev-server terminal as `[Auth] Bearer <tok>`.
+/// Pair with `tail -f | grep '\[Auth\]'` or just `cat /tmp/omi_auth_token.txt`.
+fn log_dev_token(token: &str, source: &str) {
+    if let Err(e) = std::fs::write("/tmp/omi_auth_token.txt", token) {
+        tracing::warn!("[Auth] failed to write /tmp/omi_auth_token.txt: {}", e);
+    }
+    if cfg!(debug_assertions) {
+        tracing::info!("[Auth] /tmp/omi_auth_token.txt updated ({})", source);
+        tracing::info!("[Auth] Bearer {}", token);
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResult {
     pub user_id: String,
@@ -224,6 +237,7 @@ pub async fn sign_in(app: tauri::AppHandle, provider: String) -> Result<AuthResu
         .map_err(|e| format!("Failed to save store: {}", e))?;
 
     tracing::info!("Sign-in complete for {}", email);
+    log_dev_token(&firebase_id_token, "sign_in");
 
     Ok(AuthResult {
         user_id,
@@ -385,6 +399,8 @@ pub async fn restore_session(app: tauri::AppHandle) -> Result<Option<AuthResult>
                 }
             }
 
+            log_dev_token(&tok_str, "restore_session");
+
             Ok(Some(AuthResult {
                 user_id: uid_str,
                 email: em_str,
@@ -429,6 +445,7 @@ pub async fn force_refresh_token(app: tauri::AppHandle) -> Result<Option<AuthRes
     let _ = store.save();
 
     tracing::info!("Firebase token force-refreshed");
+    log_dev_token(&refreshed.id_token, "force_refresh_token");
 
     Ok(Some(AuthResult {
         user_id: uid_str,
