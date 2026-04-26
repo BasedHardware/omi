@@ -36,7 +36,7 @@ void main() {
       expect(
         stopwatch.elapsedMilliseconds,
         lessThan(5000),
-        reason: 'Cold start took \${stopwatch.elapsedMilliseconds}ms (limit: 5000ms)',
+        reason: 'Cold start took ${stopwatch.elapsedMilliseconds}ms (limit: 5000ms)',
       );
 
       // Report the metric
@@ -82,7 +82,7 @@ void main() {
       expect(
         stopwatch.elapsedMilliseconds,
         lessThan(300),
-        reason: 'Tab switch took \${stopwatch.elapsedMilliseconds}ms (limit: 300ms)',
+        reason: 'Tab switch took ${stopwatch.elapsedMilliseconds}ms (limit: 300ms)',
       );
     });
   });

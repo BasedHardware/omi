@@ -1,0 +1,47 @@
+name: App Performance Tests
+
+on:
+  push:
+    paths:
+      - 'app/integration_test/**'
+      - 'app/scripts/run_performance_tests.sh'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Test duration (e.g., 5m, 1h)'
+        default: '5m'
+        required: false
+
+jobs:
+  performance-tests:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Setup prerequisites
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+        working-directory: app
+
+      - name: Run performance tests
+        run: |
+          ./scripts/run_performance_tests.sh --duration ${{ inputs.duration || '5m' }}
+
+      - name: Upload perf reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-reports-${{ github.run_number }}
+          path: app/perf_reports/
+          retention-days: 14

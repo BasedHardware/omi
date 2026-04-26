@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 REPORT_DIR="$APP_DIR/perf_reports"
 DURATION="5m"
@@ -54,7 +54,7 @@ else
     flutter test integration_test/performance_suite_test.dart \
         --profile \
         --trace-to-file="$REPORT_DIR/perf_trace.json" \
-        2>&1 | tee "$REPORT_DIR/test_output.log" || true
+        2>&1 | tee "$REPORT_DIR/test_output.log"
 
     echo ""
     echo "═══ Phase 2: Memory Leak Detection ═══"
