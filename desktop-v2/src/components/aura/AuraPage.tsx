@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Monitor,
@@ -32,20 +31,7 @@ const TABS: { id: AuraTab; label: string; icon: typeof Monitor }[] = [
 ];
 
 export function AuraPage() {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<AuraTab>(pathname === "/focus" ? "focus" : "rewind");
-
-  useEffect(() => {
-    if (pathname === "/focus" && tab !== "focus") setTab("focus");
-    else if (pathname === "/rewind" && tab !== "rewind") setTab("rewind");
-  }, [pathname, tab]);
-
-  const selectTab = (next: AuraTab) => {
-    setTab(next);
-    const targetPath = next === "focus" ? "/focus" : "/rewind";
-    if (pathname !== targetPath) navigate(targetPath);
-  };
+  const [tab, setTab] = useState<AuraTab>("rewind");
 
   return (
     <div className="flex h-full flex-col">
@@ -58,7 +44,7 @@ export function AuraPage() {
               <PageHeaderFilter
                 key={t.id}
                 active={tab === t.id}
-                onClick={() => selectTab(t.id)}
+                onClick={() => setTab(t.id)}
                 icon={<Icon className="size-3.5" />}
               >
                 {t.label}

@@ -139,11 +139,29 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "get_recent_screen_activity",
     description:
-      "Return the most recent screen capture rows. Use for questions like 'what was I just working on' or 'what apps have I used today'.",
+      "Return recent screen capture rows (newest first), with OCR text included. " +
+      "ALWAYS prefer this tool over guessing for any question about what the user " +
+      "just typed, said, asked, did, saw, or was working on in the last few minutes — " +
+      "the OCR contains literal on-screen text including prompts the user wrote into " +
+      "any app. Combine since_minutes (recency window) with app_name_contains (case-" +
+      "insensitive substring of the app, e.g. 'ghostty' for terminals running Claude " +
+      "Code, 'chrome' for browser tabs) to scope the slice you need before answering.",
     input_schema: {
       type: "object" as const,
       properties: {
-        limit: { type: "number", description: "Number of recent screenshots (default 30)" },
+        limit: { type: "number", description: "Max rows to return after filtering (default 30)" },
+        since_minutes: {
+          type: "number",
+          description:
+            "Only return shots from the last N minutes. Use small values (1–5) for " +
+            "'just now' / 'a minute ago', larger for 'in the last hour'.",
+        },
+        app_name_contains: {
+          type: "string",
+          description:
+            "Case-insensitive substring filter on app_name. Examples: 'ghostty' for " +
+            "terminal/Claude Code, 'chrome'/'safari' for browser, 'code' for VS Code.",
+        },
       },
       required: [],
     },
@@ -284,12 +302,17 @@ export function createClient(accessToken: string): Anthropic {
 // Tool executors
 // ---------------------------------------------------------------------------
 
+// Per-shot OCR cap. Vision .accurate routinely produces 2–4KB per shot; the
+// old 280-char cutoff was hiding the user's actual typed prompt inside long
+// terminal/IDE captures. 2000 chars × ~30 shots ≈ 60KB, well within budget.
+const OCR_SNIPPET_CAP = 2000;
+
 function fmtScreenshotRows(rows: ScreenshotRow[]): string {
   if (rows.length === 0) return "No screen activity found.";
   return rows
     .map((r, i) => {
       const ts = new Date(r.timestamp).toLocaleString();
-      const ocr = r.ocr_text ? `\n  Text: ${r.ocr_text.slice(0, 280)}` : "";
+      const ocr = r.ocr_text ? `\n  Text: ${r.ocr_text.slice(0, OCR_SNIPPET_CAP)}` : "";
       return `${i + 1}. [${ts}] ${r.app_name} — ${r.window_title}${ocr}`;
     })
     .join("\n\n");
@@ -392,8 +415,22 @@ async function execSearchScreenHistory(args: Record<string, unknown>): Promise<s
 
 async function execGetRecentActivity(args: Record<string, unknown>): Promise<string> {
   const limit = typeof args.limit === "number" ? args.limit : 30;
-  const rows = await getRecentScreenshots(limit, 0);
-  return fmtScreenshotRows(rows);
+  const sinceMinutes = typeof args.since_minutes === "number" ? args.since_minutes : undefined;
+  const appNameContains =
+    typeof args.app_name_contains === "string" ? args.app_name_contains.toLowerCase().trim() : "";
+
+  // Filter TS-side: fetch a generous pool, then narrow. At ~3s capture
+  // cadence, 300 rows ≈ 15 min of raw activity.
+  const pool = Math.max(limit, 300);
+  const all = await getRecentScreenshots(pool, 0);
+
+  const cutoff = sinceMinutes !== undefined ? Date.now() - sinceMinutes * 60_000 : null;
+  const filtered = all
+    .filter((r) => cutoff === null || new Date(r.timestamp).getTime() >= cutoff)
+    .filter((r) => !appNameContains || r.app_name.toLowerCase().includes(appNameContains))
+    .slice(0, limit);
+
+  return fmtScreenshotRows(filtered);
 }
 
 async function execCompleteTask(args: Record<string, unknown>): Promise<string> {

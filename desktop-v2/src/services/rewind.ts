@@ -38,14 +38,43 @@ export interface CaptureConfig {
   max_width?: number;
 }
 
+/** A single OCR text block with image-pixel bounding box (matches resized
+ *  JPEG dimensions, not native). Used by the Companion pipeline to snap
+ *  Gemini's approximate target points onto the actual rendered text. */
+export interface OcrBlock {
+  text: string;
+  confidence: number;
+  /** [x_min, y_min, x_max, y_max] in image pixels. */
+  bbox: [number, number, number, number];
+}
+
 /** Response from take_screenshot_with_ocr containing image, OCR text, and DB ID. */
 export interface ScreenshotWithOcr {
   /** Base64-encoded JPEG image data. */
   image: string;
   /** Full OCR text extracted from the screenshot. */
   ocr_text: string;
+  /** Per-block OCR detections with image-pixel bounding boxes. Empty when OCR
+   *  was skipped (dHash dedup) or failed. */
+  ocr_blocks: OcrBlock[];
   /** Database row ID assigned after the Rust side persists the screenshot (null if frame was deduped). */
   db_id: number | null;
+  /**
+   * Display metadata — populated by the Rust side once Phase 2 Rust subagent lands.
+   * Contains display geometry needed to map Gemini image-space coordinates to
+   * overlay-window-local CSS points via coordinateMap.imageToOverlayPoint.
+   * Optional for backward compatibility with the current Rust side.
+   */
+  display?: {
+    display_id: number;
+    capture_width_px: number;
+    capture_height_px: number;
+    display_width_px: number;
+    display_height_px: number;
+    display_scale_factor: number;
+    display_origin_pt: { x: number; y: number };
+    display_size_pt: { w: number; h: number };
+  };
 }
 
 /** Runtime state returned by the Tauri capture plugin. */

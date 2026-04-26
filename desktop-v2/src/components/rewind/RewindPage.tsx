@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { useRewindStore, type Screenshot } from "../../stores/rewindStore";
 import { getScreenshotImage } from "../../services/rewind";
-import { Search, X, Circle, Square, Clock, Monitor, FileText, ChevronDown, ChevronUp, Loader2, Trash2, Sparkles, Type } from "lucide-react";
+import { Search, X, Circle, Square, Clock, Monitor, FileText, ChevronDown, ChevronUp, Loader2, Trash2, Sparkles, Type, MessageSquare, MapPin, Trash } from "lucide-react";
+
+// ---------------------------------------------------------------------------
+// Companion session types (mirrors the Rust CompanionSession struct)
+// ---------------------------------------------------------------------------
+
+interface CompanionSession {
+  id: number;
+  timestamp: number;
+  transcript: string;
+  answer: string;
+  points_json: string;
+  screenshot_id: number | null;
+  display_id: number;
+}
 
 // ---------------------------------------------------------------------------
 // Hash-based color for app names (matches Swift InteractiveTimelineBar)
@@ -68,11 +83,51 @@ export function RewindPage() {
   }, [isRewindRoute, cancelImageLoad]);
 
   const [ocrExpanded, setOcrExpanded] = useState(false);
+  const [companionPanelExpanded, setCompanionPanelExpanded] = useState(true);
   // Controlled input value — may be ahead of the debounced search query.
   const [inputValue, setInputValue] = useState("");
   const loadedRef = useRef(false);
   // Track whether the user manually picked a frame — if so, stop auto-selecting.
   const userSelectedRef = useRef(false);
+
+  // Companion sessions: full list + index by screenshot_id for O(1) badge lookup.
+  const [companionSessions, setCompanionSessions] = useState<CompanionSession[]>([]);
+  const sessionsByScreenshotId = useMemo(() => {
+    const map = new Map<number, CompanionSession[]>();
+    for (const s of companionSessions) {
+      if (s.screenshot_id == null) continue;
+      const existing = map.get(s.screenshot_id) ?? [];
+      existing.push(s);
+      map.set(s.screenshot_id, existing);
+    }
+    return map;
+  }, [companionSessions]);
+
+  // Load companion sessions from the Rust DB.
+  const loadCompanionSessions = useCallback(async () => {
+    try {
+      const sessions = await invoke<CompanionSession[]>(
+        "plugin:screen-capture|get_recent_companion_sessions",
+        { limit: 500 },
+      );
+      setCompanionSessions(sessions);
+    } catch (e) {
+      console.warn("[RewindPage] Failed to load companion sessions:", e);
+    }
+  }, []);
+
+  // Delete a single companion session and refresh the list.
+  const handleDeleteCompanionSession = useCallback(
+    async (id: number) => {
+      try {
+        await invoke("plugin:screen-capture|delete_companion_session", { id });
+        setCompanionSessions((prev) => prev.filter((s) => s.id !== id));
+      } catch (e) {
+        console.warn("[RewindPage] Failed to delete companion session:", e);
+      }
+    },
+    [],
+  );
 
   // Debounce the search input by 300 ms before firing the FTS5 query.
   const debouncedInput = useDebounce(inputValue, 300);
@@ -82,8 +137,9 @@ export function RewindPage() {
     if (!loadedRef.current) {
       loadedRef.current = true;
       loadCaptureState();
+      void loadCompanionSessions();
     }
-  }, [loadCaptureState]);
+  }, [loadCaptureState, loadCompanionSessions]);
 
   // Fire FTS5 search whenever the debounced value changes.
   useEffect(() => {
@@ -382,6 +438,15 @@ export function RewindPage() {
                 )}
               </div>
             )}
+
+            {/* Companion sessions panel (collapsible) */}
+            <CompanionSessionsPanel
+              sessions={sessionsByScreenshotId.get(selectedScreenshot.dbId) ?? []}
+              expanded={companionPanelExpanded}
+              onToggle={() => setCompanionPanelExpanded(!companionPanelExpanded)}
+              onDelete={handleDeleteCompanionSession}
+              formatTime={formatTime}
+            />
           </div>
         ) : searchQuery && !isSearching && searchResults.length === 0 ? (
           /* No search matches */
@@ -432,8 +497,87 @@ export function RewindPage() {
             selectedId={selectedScreenshot?.id ?? null}
             onSelect={handleThumbnailClick}
             formatTime={formatTime}
+            sessionsByScreenshotId={sessionsByScreenshotId}
           />
         )
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CompanionSessionsPanel — collapsible list of companion Q&A attached to a
+// screenshot. Extracted from RewindPage to avoid an IIFE in JSX and to
+// co-locate the per-session time / point-count parsing.
+// ---------------------------------------------------------------------------
+
+interface CompanionSessionsPanelProps {
+  sessions: CompanionSession[];
+  expanded: boolean;
+  onToggle: () => void;
+  onDelete: (id: number) => void;
+  /** Reuse the parent's formatTime so timestamp formatting is consistent. */
+  formatTime: (ts: string) => string;
+}
+
+function CompanionSessionsPanel({ sessions, expanded, onToggle, onDelete, formatTime }: CompanionSessionsPanelProps) {
+  if (sessions.length === 0) return null;
+  return (
+    <div className="shrink-0 rounded-lg border border-[var(--app-border)] bg-[var(--bg-secondary)]">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-[var(--app-accent)]" />
+          <span className="text-[var(--text-primary)]">Companion Q&A</span>
+          <span className="text-xs text-[var(--text-secondary)] opacity-60">
+            {sessions.length} {sessions.length === 1 ? "session" : "sessions"}
+          </span>
+        </div>
+        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+      {expanded && (
+        <div className="border-t border-[var(--app-border)] divide-y divide-[var(--app-border)]">
+          {sessions.map((session) => {
+            const pointCount = (() => {
+              try {
+                const pts = JSON.parse(session.points_json);
+                return Array.isArray(pts) ? pts.length : 0;
+              } catch {
+                return 0;
+              }
+            })();
+            // Reuse the parent's formatTime by converting unix-ms → ISO string.
+            const timeLabel = formatTime(new Date(session.timestamp).toISOString());
+            return (
+              <div key={session.id} className="flex items-start gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="h-3 w-3 shrink-0 text-[var(--text-secondary)]" />
+                    <span className="text-xs text-[var(--text-secondary)]">{timeLabel}</span>
+                    {pointCount > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+                        <MapPin className="h-3 w-3" />
+                        {pointCount} {pointCount === 1 ? "callout" : "callouts"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-[var(--text-primary)] leading-snug line-clamp-3">
+                    {session.answer}
+                  </p>
+                </div>
+                <button
+                  onClick={() => void onDelete(session.id)}
+                  className="shrink-0 flex items-center justify-center h-6 w-6 rounded hover:bg-red-500/10 transition-colors"
+                  title="Delete this session"
+                >
+                  <Trash className="h-3.5 w-3.5 text-[var(--text-secondary)] hover:text-red-400" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -448,9 +592,11 @@ interface TimelineBarProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   formatTime: (ts: string) => string;
+  /** Map from dbId to companion sessions for badge rendering. */
+  sessionsByScreenshotId: Map<number, CompanionSession[]>;
 }
 
-function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: TimelineBarProps) {
+function TimelineBar({ screenshots, selectedId, onSelect, formatTime, sessionsByScreenshotId }: TimelineBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
@@ -544,17 +690,26 @@ function TimelineBar({ screenshots, selectedId, onSelect, formatTime }: Timeline
       >
         {/* Colored segments */}
         <div className="absolute inset-0 flex">
-          {chronological.map((s, i) => (
-            <div
-              key={s.id}
-              className="h-full transition-opacity"
-              style={{
-                flex: 1,
-                backgroundColor: appNameToColor(s.appName || "unknown"),
-                opacity: selectedIndex === i ? 1 : 0.6,
-              }}
-            />
-          ))}
+          {chronological.map((s, i) => {
+            const hasSession = s.dbId > 0 && (sessionsByScreenshotId.get(s.dbId)?.length ?? 0) > 0;
+            return (
+              <div
+                key={s.id}
+                className="relative h-full transition-opacity"
+                style={{
+                  flex: 1,
+                  backgroundColor: appNameToColor(s.appName || "unknown"),
+                  opacity: selectedIndex === i ? 1 : 0.6,
+                }}
+              >
+                {hasSession && (
+                  <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 pointer-events-none">
+                    <MessageSquare className="h-2.5 w-2.5 text-white/90 drop-shadow" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Hover indicator */}

@@ -47,6 +47,7 @@ const LANGUAGE_STORAGE_KEY = "nooto.audio.language";
 const VAD_MODE_STORAGE_KEY = "nooto.audio.vadMode";
 const LEGACY_VAD_ENABLED_STORAGE_KEY = "nooto.audio.vadEnabled";
 const INPUT_DEVICE_STORAGE_KEY = "nooto.audio.inputDeviceId";
+const LIVE_TRANSCRIPTION_STORAGE_KEY = "nooto.audio.liveTranscription";
 
 const VAD_MODES: readonly VadMode[] = ["off", "sensitive", "balanced", "aggressive"];
 
@@ -72,6 +73,17 @@ function readStoredInputId(): string | null {
     return v && v.length > 0 ? v : null;
   } catch {
     return null;
+  }
+}
+
+function readStoredLiveTranscription(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = window.localStorage.getItem(LIVE_TRANSCRIPTION_STORAGE_KEY);
+    if (v === null) return true;
+    return v === "1";
+  } catch {
+    return true;
   }
 }
 
@@ -103,6 +115,9 @@ interface AudioState {
   isRecording: boolean;
   deviceName: string | null;
   sampleRate: number;
+  systemAudioActive: boolean;
+  micSamplesTotal: number;
+  sysSamplesTotal: number;
   inCommercialHours: boolean;
   recordingStartedAt: number | null;
   liveTranscript: string;
@@ -114,6 +129,13 @@ interface AudioState {
   vadMode: VadMode;
   /** User-selected input device id. `null` means "system default". */
   selectedInputId: string | null;
+  /**
+   * When true, recordings stream to Deepgram over a WebSocket and show live
+   * captions. When false, we only record audio to disk and upload the WAV
+   * to /v1/conversations/from-audio on stop (saves Deepgram streaming
+   * minutes at the cost of no live UI).
+   */
+  liveTranscription: boolean;
 
   toggleAudio: () => Promise<void>;
   startAudio: () => Promise<void>;
@@ -122,6 +144,7 @@ interface AudioState {
   setLanguage: (code: string) => Promise<void>;
   setVadMode: (mode: VadMode) => Promise<void>;
   setSelectedInputId: (id: string | null) => Promise<void>;
+  setLiveTranscription: (value: boolean) => Promise<void>;
   dismissProcessingError: () => void;
 }
 
@@ -135,6 +158,9 @@ function applyCaptureState(
     isRecording: state.is_capturing,
     deviceName: state.device_name,
     sampleRate: state.sample_rate,
+    systemAudioActive: state.system_audio_active,
+    micSamplesTotal: state.mic_samples_total,
+    sysSamplesTotal: state.sys_samples_total,
     recordingStartedAt: state.is_capturing
       ? wasRecording
         ? get().recordingStartedAt
@@ -148,6 +174,9 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   isRecording: false,
   deviceName: null,
   sampleRate: 16000,
+  systemAudioActive: false,
+  micSamplesTotal: 0,
+  sysSamplesTotal: 0,
   inCommercialHours: isCommercialTime(),
   recordingStartedAt: null,
   liveTranscript: "",
@@ -158,6 +187,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   language: readStoredLanguage(),
   vadMode: readStoredVadMode(),
   selectedInputId: readStoredInputId(),
+  liveTranscription: readStoredLiveTranscription(),
 
   toggleAudio: async () => {
     const { audioEnabled } = get();
@@ -188,6 +218,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         language: get().language,
         vad_mode: get().vadMode,
         device_id: get().selectedInputId,
+        capture_system_audio: true,
+        skip_live_transcription: !get().liveTranscription,
       });
       applyCaptureState(set, get, state);
     } catch (err) {
@@ -196,7 +228,21 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   stopAudio: async () => {
-    if (!get().isRecording) return;
+    // Reject re-entry. `stopRecording` awaits the consumer finishing the WS
+    // and POSTing to the backend (long for big meetings), and during that
+    // window the capture handle is already gone Rust-side — a second click
+    // would hit "No capture is running". Gate on both flags so a stray
+    // second stop is a no-op.
+    const { isRecording, isProcessing } = get();
+    if (!isRecording || isProcessing) return;
+    set({
+      isProcessing: true,
+      // Flip isRecording off up-front so the UI stops looking "live" while
+      // the save is in flight, and so any second click trips the guard above.
+      isRecording: false,
+      recordingStartedAt: null,
+      processingError: null,
+    });
     try {
       const state = await stopRecording();
       applyCaptureState(set, get, state);
@@ -204,15 +250,34 @@ export const useAudioStore = create<AudioState>((set, get) => ({
         liveTranscript: "",
         liveSegments: [],
         livePartialBySpeaker: {},
-        processingError: null,
       });
-      void useConversationStore.getState().loadConversations();
     } catch (err) {
       console.error("[Audio] stopRecording failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      // "No capture is running" means the Rust side has already torn down —
+      // treat it as a best-effort no-op, not a save failure, so the user
+      // isn't told their meeting is lost when segments are already queued
+      // in SQLite for the retry service.
+      const isAlreadyStopped = message.includes("No capture is running");
       set({
-        isProcessing: false,
-        processingError: `Couldn't stop recording: ${err instanceof Error ? err.message : String(err)}`,
+        liveTranscript: "",
+        liveSegments: [],
+        livePartialBySpeaker: {},
+        processingError: isAlreadyStopped
+          ? null
+          : `Couldn't save meeting: ${message}. Segments are stored locally and will retry automatically.`,
       });
+      try {
+        const state = await getCaptureState();
+        applyCaptureState(set, get, state);
+      } catch {
+        // ignore
+      }
+    } finally {
+      set({ isProcessing: false });
+      // Always reload — either the backend has the new row (happy path) or
+      // the local-only row is there via listLocalSessions (failure path).
+      void useConversationStore.getState().loadConversations(true);
     }
   },
 
@@ -262,6 +327,20 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     try {
       if (id) window.localStorage.setItem(INPUT_DEVICE_STORAGE_KEY, id);
       else window.localStorage.removeItem(INPUT_DEVICE_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    if (get().isRecording) {
+      await get().stopAudio();
+      await get().startAudio();
+    }
+  },
+
+  setLiveTranscription: async (value: boolean) => {
+    if (get().liveTranscription === value) return;
+    set({ liveTranscription: value });
+    try {
+      window.localStorage.setItem(LIVE_TRANSCRIPTION_STORAGE_KEY, value ? "1" : "0");
     } catch {
       // ignore
     }

@@ -37,12 +37,21 @@ export interface CaptureConfig {
   mode?: CaptureMode;
   capture_system_audio?: boolean;
   vad_mode?: VadMode;
+  /**
+   * When true, skip the live Deepgram WebSocket entirely — the plugin only
+   * records audio to disk and uploads it to /v1/conversations/from-audio on
+   * stop. Default false preserves the existing live-streaming behavior.
+   */
+  skip_live_transcription?: boolean;
 }
 
 export interface CaptureState {
   is_capturing: boolean;
   device_name: string | null;
   sample_rate: number;
+  system_audio_active: boolean;
+  mic_samples_total: number;
+  sys_samples_total: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +114,56 @@ export async function stopRecording(): Promise<CaptureState> {
 
 export async function getCaptureState(): Promise<CaptureState> {
   return invoke<CaptureState>("plugin:audio-capture|get_capture_state");
+}
+
+export interface SystemAudioProbe {
+  ok: boolean;
+  platform: string;
+  message: string;
+  samples_received: number;
+}
+
+export async function probeSystemAudio(): Promise<SystemAudioProbe> {
+  return invoke<SystemAudioProbe>("plugin:audio-capture|probe_system_audio");
+}
+
+export async function requestSystemAudioPermission(): Promise<SystemAudioProbe> {
+  return invoke<SystemAudioProbe>(
+    "plugin:audio-capture|request_system_audio_permission",
+  );
+}
+
+export interface LiveCaptureProbe {
+  ok: boolean;
+  duration_ms: number;
+  mic_samples: number;
+  sys_samples: number;
+  mic_level: number;
+  sys_level: number;
+  mic_peak_i16: number;
+  sys_peak_i16: number;
+  mic_nonzero: number;
+  sys_nonzero: number;
+  transcription_connected: boolean;
+  transcript_count: number;
+  message: string;
+}
+
+export interface ProbeTranscriptEvent {
+  text: string;
+  is_final: boolean;
+  is_user: boolean;
+  speaker: string;
+  start: number;
+  end: number;
+}
+
+export async function probeLiveCapture(
+  durationMs?: number,
+): Promise<LiveCaptureProbe> {
+  return invoke<LiveCaptureProbe>("plugin:audio-capture|probe_live_capture", {
+    durationMs,
+  });
 }
 
 // ---------------------------------------------------------------------------

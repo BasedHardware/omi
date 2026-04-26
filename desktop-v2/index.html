@@ -21,7 +21,11 @@
           var params = new URLSearchParams(window.location.search);
           var win = params.get("window");
           var isHud =
-            win === "floating" || win === "whispr" || win === "live-transcript";
+            win === "floating" ||
+            win === "whispr" ||
+            win === "live-transcript" ||
+            win === "companion-buddy" ||
+            (win && win.indexOf("companion-overlay-") === 0);
           var mode = isHud
             ? "dark"
             : localStorage.getItem("nooto.theme.mode") || "system";

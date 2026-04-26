@@ -52,13 +52,21 @@ export type ContextChangeHandler = (appName: string, windowTitle: string) => voi
 // Constants (matching Swift app)
 // ---------------------------------------------------------------------------
 
-/** Capture interval in ms (matches Swift RewindModels default: 3s). */
+/** Capture interval in ms — Swift `RewindSettings.captureInterval` default. */
 const CAPTURE_INTERVAL_MS = 3_000;
 
-/** Analysis delay after context change (matches Swift AssistantSettings.defaultAnalysisDelay: 60s). */
-const ANALYSIS_DELAY_S = 60;
+/**
+ * Distribution debounce after context change (seconds) — Swift
+ * `ProactiveAssistantsPlugin.distributeFrameIfChanged` uses 3s. Lets rapid
+ * Cmd-Tab spam settle before the (expensive) LLM analysis fires.
+ */
+const ANALYSIS_DELAY_S = 3;
 
-/** Fallback distribution interval if no context change (seconds). */
+/**
+ * Fallback distribution interval (seconds) — Swift
+ * `ProactiveAssistantsPlugin.distributionFallbackInterval`. Re-distribute
+ * even without a context change to catch visual-only updates.
+ */
 const FALLBACK_INTERVAL_S = 60;
 
 /** Screenshot config for focus analysis — lower quality than Rewind. */
@@ -211,8 +219,16 @@ async function captureFrame(): Promise<void> {
       // Notify UI of context change
       onContextChange?.(windowInfo.app_name, windowInfo.window_title);
 
-      // Start analysis delay (3 seconds)
-      startAnalysisDelay();
+      if (frameNumber === 1) {
+        // Match Swift: the first frame after monitoring starts is
+        // distributed immediately with no debounce so the assistant can
+        // anchor on whatever the user is doing right now.
+        distributeFrame(frame);
+      } else {
+        // Subsequent context changes: debounce 3s to let rapid switches
+        // (Cmd-Tab spam) settle before paying for an LLM call.
+        startAnalysisDelay();
+      }
     } else if (!isInDelayPeriod) {
       // No context change — check 60s fallback
       const elapsed = (Date.now() - lastDistributeTime) / 1000;

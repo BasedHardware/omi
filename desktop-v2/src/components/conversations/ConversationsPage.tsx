@@ -3,7 +3,7 @@ import { useConversationStore } from "../../stores/conversationStore";
 import type { Conversation, TranscriptSegment } from "../../stores/conversationStore";
 import { useAudioStore, type LiveSegment, TRANSCRIPTION_LANGUAGES } from "../../stores/audioStore";
 import { retrySyncNow } from "../../services/audioCapture";
-import { Star, Search, Clock, User, CalendarIcon, X, StarIcon, Mic, MicOff, Loader2, Square, AlertTriangle, FileText, RefreshCw, Trash2 } from "lucide-react";
+import { Star, Search, Clock, User, CalendarIcon, X, StarIcon, Mic, MicOff, Loader2, Square, AlertTriangle, FileText, RefreshCw, Trash2, SparklesIcon } from "lucide-react";
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Badge } from "../ui/badge";
@@ -36,6 +36,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
 import { AppInsightsEmpty, AppResultsFull } from "./AppResultsSection";
+import { MeetingChatSidebar } from "./MeetingChatSidebar";
 import { useAppStore } from "../../stores/appStore";
 import { SpeakerBubbles } from "../transcript/SpeakerBubbles";
 import { Waveform } from "../transcript/Waveform";
@@ -510,15 +511,17 @@ function TranscriptView({ segments }: { segments: TranscriptSegment[] }) {
   );
 }
 
+type SidePanel = "transcript" | "chat" | null;
+
 function ConversationDetail({
   conversation,
-  transcriptOpen,
-  onToggleTranscript,
+  openPanel,
+  onTogglePanel,
   onDelete,
 }: {
   conversation: Conversation;
-  transcriptOpen: boolean;
-  onToggleTranscript: () => void;
+  openPanel: SidePanel;
+  onTogglePanel: (panel: Exclude<SidePanel, null>) => void;
   onDelete: () => void;
 }) {
   const title = conversation.structured?.title || "Untitled Meeting";
@@ -546,11 +549,19 @@ function ConversationDetail({
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant={openPanel === "chat" ? "secondary" : "ghost"}
+              size="xs"
+              onClick={() => onTogglePanel("chat")}
+            >
+              <SparklesIcon className="size-3" />
+              Ask
+            </Button>
             {hasResults && hasSegments && (
               <Button
-                variant={transcriptOpen ? "secondary" : "ghost"}
+                variant={openPanel === "transcript" ? "secondary" : "ghost"}
                 size="xs"
-                onClick={onToggleTranscript}
+                onClick={() => onTogglePanel("transcript")}
               >
                 <FileText className="size-3" />
                 Transcript
@@ -619,33 +630,42 @@ function DetailPanel({
   conversation: Conversation;
   onDelete: () => void;
 }) {
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<SidePanel>(null);
 
-  // Reset the sidebar state when switching conversations.
   useEffect(() => {
-    setTranscriptOpen(false);
+    setOpenPanel(null);
   }, [conversation.id]);
 
   const segments = conversation.transcript_segments;
   const hasResults = (conversation.apps_results?.length ?? 0) > 0;
   const hasSegments = !!segments && segments.length > 0;
-  const canToggleSidebar = hasResults && hasSegments;
+  const canShowTranscript = hasResults && hasSegments;
+
+  const handleTogglePanel = (panel: Exclude<SidePanel, null>) => {
+    setOpenPanel((cur) => (cur === panel ? null : panel));
+  };
 
   return (
     <>
       <div className="flex-1 overflow-y-auto">
         <ConversationDetail
           conversation={conversation}
-          transcriptOpen={transcriptOpen}
-          onToggleTranscript={() => setTranscriptOpen((v) => !v)}
+          openPanel={openPanel}
+          onTogglePanel={handleTogglePanel}
           onDelete={onDelete}
         />
       </div>
       <AnimatePresence initial={false}>
-        {canToggleSidebar && transcriptOpen && (
+        {canShowTranscript && openPanel === "transcript" && (
           <TranscriptSidebar
-            onClose={() => setTranscriptOpen(false)}
+            onClose={() => setOpenPanel(null)}
             segments={segments!}
+          />
+        )}
+        {openPanel === "chat" && (
+          <MeetingChatSidebar
+            conversation={conversation}
+            onClose={() => setOpenPanel(null)}
           />
         )}
       </AnimatePresence>

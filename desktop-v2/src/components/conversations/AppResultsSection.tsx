@@ -10,7 +10,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { useAppStore } from "../../stores/appStore";
-import { worksWithMemories } from "../../types/app";
+import { worksExternally, worksWithMemories } from "../../types/app";
 import type { OmiApp } from "../../types/app";
 import type { Conversation } from "../../stores/conversationStore";
 import { AppImage } from "../apps/AppCard";
@@ -22,8 +22,10 @@ import { GenerativeMarkdown } from "../generative-ui/GenerativeMarkdown";
  */
 export function AppInsightsEmpty({ conversation }: { conversation: Conversation }) {
   const apps = useAppStore((s) => s.apps);
-  const hasMemoryApps = apps.some(worksWithMemories);
-  if (!hasMemoryApps) return null;
+  const hasRunnableApp = apps.some(
+    (a) => worksWithMemories(a) || worksExternally(a),
+  );
+  if (!hasRunnableApp) return null;
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/50 px-6 py-3">
@@ -147,9 +149,26 @@ function ReprocessButton({ conversation }: { conversation: Conversation }) {
   const reprocessingAppId = useAppStore((s) => s.reprocessingAppId);
   const reprocessConversation = useAppStore((s) => s.reprocessConversation);
 
-  const enabledMemoryApps = apps.filter(
-    (a) => a.enabled && worksWithMemories(a),
+  // Both Memories (Gemini-prompt) and external integrations (webhook) apps
+  // can produce a per-conversation result via the same /reprocess endpoint
+  // (the backend dispatches based on capability), so include both kinds.
+  const runnableApps = apps.filter(
+    (a) => a.enabled && (worksWithMemories(a) || worksExternally(a)),
   );
+
+  // Distinguish "first run" from "reprocess" so the affordance reads
+  // correctly — saying "Reprocess" before any app has run is misleading.
+  // We look at apps_results directly rather than a flag prop so each render
+  // site stays declarative.
+  const ranAppIds = new Set(
+    (conversation.apps_results ?? []).map((r) => r.app_id),
+  );
+  const hasAnyResults = ranAppIds.size > 0;
+
+  // Don't disable the trigger when there are zero runnable apps — open the
+  // dropdown so the user sees *why* (e.g. "no apps enabled") instead of
+  // wondering at a dead button.
+  const dropdownDisabled = isReprocessing;
 
   const onPick = async (app: OmiApp) => {
     await reprocessConversation(conversation.id, app.id);
@@ -158,31 +177,29 @@ function ReprocessButton({ conversation }: { conversation: Conversation }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="xs"
-          disabled={isReprocessing || enabledMemoryApps.length === 0}
-        >
+        <Button variant="ghost" size="xs" disabled={dropdownDisabled}>
           {isReprocessing ? (
             <Loader2 className="size-3 animate-spin" />
           ) : (
-            <RefreshCw className="size-3" />
+            <Sparkles className="size-3" />
           )}
-          Reprocess
+          {hasAnyResults ? "Run another app" : "Run app"}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        {enabledMemoryApps.length === 0 ? (
+        {runnableApps.length === 0 ? (
           <div className="p-3 text-xs text-muted-foreground">
-            Enable apps with the Memories capability to reprocess conversations.
+            No runnable apps enabled. Install or enable an app with the
+            Memories or Integration capability to run it on a conversation.
           </div>
         ) : (
           <>
             <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Run with app
             </DropdownMenuLabel>
-            {enabledMemoryApps.map((app) => {
+            {runnableApps.map((app) => {
               const isBusy = reprocessingAppId === app.id;
+              const alreadyRan = ranAppIds.has(app.id);
               return (
                 <DropdownMenuItem
                   key={app.id}
@@ -194,6 +211,9 @@ function ReprocessButton({ conversation }: { conversation: Conversation }) {
                   <span className="min-w-0 flex-1 truncate text-xs font-medium">
                     {app.name}
                   </span>
+                  {alreadyRan && !isBusy && (
+                    <RefreshCw className="size-3 text-muted-foreground" />
+                  )}
                   {isBusy && <Loader2 className="size-3 animate-spin" />}
                 </DropdownMenuItem>
               );

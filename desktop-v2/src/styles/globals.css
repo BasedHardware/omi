@@ -3160,9 +3160,97 @@
 .whispr-window,
 .whispr-window body,
 .whispr-window #root {
-  background: #0e1016 !important;
+  background: transparent !important;
   height: 100%;
   width: 100%;
+}
+
+/* Companion buddy window — fully transparent so only the CSS-animated orb
+   inside CompanionBuddy.tsx is visible. We previously kept it opaque to
+   work around Rive WebGL2 not painting on transparent macOS windows; the
+   orb is now CSS-only (no WebGL), so transparency is safe again. */
+.companion-buddy-window,
+.companion-buddy-window body,
+.companion-buddy-window #root {
+  background: transparent !important;
+  height: 100%;
+  width: 100%;
+  overflow: visible;
+}
+
+/* Buddy orb keyframes — used by CompanionBuddy.tsx in lieu of Rive. */
+@keyframes companion-buddy-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.08); opacity: 0.92; }
+}
+@keyframes companion-buddy-ring {
+  0%   { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2); opacity: 0; }
+}
+@keyframes companion-buddy-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Companion overlay windows — one per display, click-through, must stay
+   fully transparent so only the pointer sprites are visible against the
+   underlying desktop. No Rive here, so transparency works reliably. */
+.companion-overlay-window,
+.companion-overlay-window body,
+.companion-overlay-window #root {
+  background: transparent !important;
+  height: 100%;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Companion pointer-sprite keyframe: pop in, hold, fade out. Used by
+   CompanionOverlay when the sprite has a finite lifetime. */
+@keyframes companion-point-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+}
+
+/* Spinner used in the chain HUD while we re-screenshot + ground the next
+   step. Linear infinite rotate of a partial-circle border. */
+@keyframes companion-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Persistent variant: pop in, then hold at full opacity until manually
+   dismissed via companion:click-dismiss. No fade-out keyframe. */
+@keyframes companion-point-pop-hold {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .whispr-hud {
@@ -3174,7 +3262,7 @@
   box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
-  background: #0e1016;
+  background: transparent;
 }
 
 .whispr-hud-inner {
@@ -3183,9 +3271,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16px;
-  background: #0e1016;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
   box-sizing: border-box;
 }
 

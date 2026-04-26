@@ -7,10 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev:signed": "tauri dev --runner ../scripts/cargo-sign.sh",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
+    "@rive-app/react-canvas": "^4.28.2",
     "@rive-app/react-webgl2": "^4.28.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
@@ -46,10 +49,13 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.0",
+    "@vitest/ui": "^4.1.5",
     "typescript": "^5.8.0",
-    "vite": "^6.3.0"
+    "vite": "^6.3.0",
+    "vitest": "^4.1.5"
   }
 }

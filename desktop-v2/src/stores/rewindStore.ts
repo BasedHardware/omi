@@ -162,7 +162,7 @@ function rowToScreenshot(row: {
 // ---------------------------------------------------------------------------
 
 export const useRewindStore = create<RewindState>((set, get) => ({
-  rewindEnabled: false,
+  rewindEnabled: true,
   inCommercialHours: isCommercialTime(),
   isCapturing: false,
   captureStartedAt: null,
@@ -310,6 +310,11 @@ export const useRewindStore = create<RewindState>((set, get) => ({
     const config = get().captureConfig;
     set({ isCapturing: true, captureStartedAt: Date.now() });
 
+    // `max_width` is the *storage* cap. The Rust side captures at native
+    // resolution internally, runs OCR on the native pixels (Vision needs
+    // them to read small UI text correctly), and only then downscales to
+    // this width before persisting / returning the JPEG to us. So we get
+    // accurate OCR without paying native-res storage cost.
     const captureConfig = { ...config, max_width: 1280 };
     const intervalMs = config.interval_ms ?? 3000;
 

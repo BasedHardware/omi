@@ -4,11 +4,8 @@ import { motion, useMotionValue, useTransform, animate } from "motion/react";
 import {
   Home,
   MessageSquare,
-  AudioLines,
-  ListTodo,
-  Brain,
-  Lightbulb,
-  AudioWaveform,
+  Library,
+  CalendarCheck,
   Mic,
   MicOff,
   Rewind,
@@ -18,7 +15,6 @@ import {
   LogOut,
   LayoutGrid,
   ChevronsUpDown,
-  Target,
   Bluetooth,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
@@ -45,18 +41,16 @@ import {
 } from "../feedback/OrbIndicator";
 import { useElapsed } from "../../hooks/useElapsed";
 
-const navItems = [
+const primaryNav = [
   { to: "/dashboard", label: "Home", icon: Home },
   { to: "/chat", label: "Chat", icon: MessageSquare },
-  { to: "/meetings", label: "Meetings", icon: AudioLines },
-  { to: "/tasks", label: "Tasks", icon: ListTodo },
-  { to: "/goals", label: "Goals", icon: Target },
-  { to: "/memories", label: "Memories", icon: Brain },
-  { to: "/insights", label: "Insights", icon: Lightbulb },
-  { to: "/whispr", label: "Whispr", icon: AudioWaveform },
+  { to: "/library", label: "Library", icon: Library },
+  { to: "/plan", label: "Plan", icon: CalendarCheck },
+];
+
+const secondaryNav = [
   { to: "/apps", label: "Apps", icon: LayoutGrid },
   { to: "/devices", label: "Devices", icon: Bluetooth },
-  { to: "/rewind", label: "Rewind", icon: Rewind },
 ];
 
 const EXPANDED = 220;
@@ -119,13 +113,23 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 flex flex-col gap-0.5 px-2">
-        {navItems.map((item) => (
+        {primaryNav.map((item) => (
           <NavItem
             key={item.to}
             {...item}
             isCollapsed={isCollapsed}
             textOpacity={textOpacity}
-            indicator={item.to === "/meetings" && isRecordingForNav ? "recording" : null}
+            indicator={item.to === "/library" && isRecordingForNav ? "recording" : null}
+          />
+        ))}
+
+        <div className="my-2 mx-1 h-px bg-border/40" />
+        {secondaryNav.map((item) => (
+          <NavItem
+            key={item.to}
+            {...item}
+            isCollapsed={isCollapsed}
+            textOpacity={textOpacity}
           />
         ))}
       </nav>

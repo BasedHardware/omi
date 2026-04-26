@@ -334,3 +334,29 @@ listen<MeetingSyncedEvent>("meeting:synced", () => {
   .catch((err) => {
     console.error("[Conversations] failed to subscribe to meeting:synced:", err);
   });
+
+// When the backend persists an app's webhook result onto a conversation
+// (e.g. Slack/Notion auto-trigger after a recording finishes), it emits
+// `conversation:updated` with the conversation id. The trigger is async
+// — fires seconds-to-minutes after `meeting:synced` — so we re-fetch the
+// open detail view if it matches, and reload the list so any new
+// `apps_results` show on the card.
+interface ConversationUpdatedEvent {
+  conversation_id: string;
+  app_id?: string;
+}
+
+listen<ConversationUpdatedEvent>("conversation:updated", (event) => {
+  const { conversation_id } = event.payload;
+  const store = useConversationStore.getState();
+  if (store.selectedConversation?.id === conversation_id) {
+    void store.refreshSelectedConversation();
+  }
+  // Force a list refresh too — the card may render an "apps" badge based
+  // on `apps_results.length`, which changed.
+  void store.loadConversations(true);
+})
+  .then(() => console.log("[Conversations] subscribed to conversation:updated"))
+  .catch((err) => {
+    console.error("[Conversations] failed to subscribe to conversation:updated:", err);
+  });
