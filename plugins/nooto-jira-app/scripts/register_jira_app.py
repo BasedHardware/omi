@@ -32,10 +32,15 @@ ENV_URLS = {
     "prod": "https://nooto.togodynamics.com",
 }
 PUBLIC_URLS = {
-    "staging": "https://nooto-jira-staging.togodynamics.com",
+    # Single Coolify deployment serves both backends. If a dedicated staging
+    # plugin is ever provisioned, split the staging value to its own hostname.
+    "staging": "https://nooto-jira.togodynamics.com",
     "prod": "https://nooto-jira.togodynamics.com",
 }
-APP_ID = "nooto-jira"
+# `nooto-jira` is our preferred id, but the backend overrides it with a ULID on
+# first POST. Subsequent PATCHes need the actual stored id — pass via env var
+# `NOOTO_JIRA_APP_ID` to override (or rely on find_existing's list scan).
+APP_ID = os.environ.get("NOOTO_JIRA_APP_ID", "nooto-jira")
 LOGO = Path(__file__).resolve().parents[2] / "logos" / "nooto-jira.png"
 TIMEOUT = 30
 
