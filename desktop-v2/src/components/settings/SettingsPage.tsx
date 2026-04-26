@@ -9,8 +9,10 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  AlertTriangle,
   AudioLines,
   Bell,
+  Bot,
   Brain,
   Check,
   ChevronRight,
@@ -20,11 +22,13 @@ import {
   Laptop,
   Lightbulb,
   ListTodo,
+  Loader2,
   LogOut,
   MicIcon,
   Monitor,
   Moon,
   Palette,
+  PlayCircle,
   RotateCcw,
   Rewind as RewindIcon,
   Search,
@@ -43,17 +47,35 @@ import { useOnboardingCompanionStore } from "../../stores/onboardingCompanionSto
 import { useThemeStore, type ThemeMode } from "../../stores/themeStore";
 import { useSidebarStore } from "../../stores/sidebarStore";
 import {
+  useCompanionSettingsStore,
+  type CompanionPttKey,
+} from "../../stores/companionSettingsStore";
+import {
   useAudioStore,
   TRANSCRIPTION_LANGUAGES,
 } from "../../stores/audioStore";
-import type { VadMode } from "../../services/audioCapture";
-import { listDevices, type AudioDevice } from "../../services/audioCapture";
+import type {
+  VadMode,
+  SystemAudioProbe,
+  LiveCaptureProbe,
+  ProbeTranscriptEvent,
+} from "../../services/audioCapture";
+import {
+  listDevices,
+  probeSystemAudio,
+  probeLiveCapture,
+  requestSystemAudioPermission,
+  type AudioDevice,
+} from "../../services/audioCapture";
+import { listen } from "@tauri-apps/api/event";
 import { useRewindStore } from "../../stores/rewindStore";
 import { useFocusStore } from "../../stores/focusStore";
 import { useInsightAssistantSettings } from "../../services/insightAssistantSettings";
 import { useTaskAssistantSettings } from "../../services/taskAssistantSettings";
 import { useMemoryAssistantSettings } from "../../services/memoryAssistantSettings";
 import { notify } from "../../services/notifications";
+import { runCompanionTestTask } from "../../services/companionAssistant";
+import { CompanionSessionsViewer } from "../companion/CompanionSessionsViewer";
 import { useShortcutCapture } from "../../hooks/useShortcutCapture";
 import { usePttDiagnostics } from "../../hooks/usePttDiagnostics";
 import { KeyCapDisplay } from "../onboarding/animations/KeyCapDisplay";
@@ -88,6 +110,7 @@ type CategoryId =
   | "rewind"
   | "shortcuts"
   | "notifications"
+  | "companion"
   | "developer";
 
 interface CategoryMeta {
@@ -166,6 +189,14 @@ const CATEGORIES: readonly CategoryMeta[] = [
       "tasks",
       "extraction",
     ],
+  },
+  {
+    id: "companion",
+    label: "Companion",
+    description: "AI buddy, PTT key, TTS voice",
+    icon: Bot,
+    iconTone: "from-blue-500 to-cyan-600",
+    keywords: ["companion", "ptt", "push-to-talk", "fn", "tts", "voice", "speak", "buddy"],
   },
   {
     id: "developer",
@@ -329,6 +360,7 @@ function DetailPane({ categoryId }: { categoryId: CategoryId }) {
           {categoryId === "rewind" && <RewindPane />}
           {categoryId === "shortcuts" && <ShortcutsPane />}
           {categoryId === "notifications" && <NotificationsPane />}
+          {categoryId === "companion" && <CompanionPane />}
           {categoryId === "developer" && <DeveloperPane />}
         </div>
       </ScrollArea>
@@ -660,7 +692,7 @@ function AppearancePane() {
             <span className="inline-flex items-center gap-2">
               <span
                 className="size-5 rounded-full ring-2 ring-border/60"
-                style={{ background: "var(--color-primary, #3B82F6)" }}
+                style={{ background: "var(--color-primary)" }}
               />
               <span className="font-mono text-[11px] text-muted-foreground">
                 Nooto Blue
@@ -708,10 +740,12 @@ function AudioPane() {
     language,
     vadMode,
     selectedInputId,
+    liveTranscription,
     toggleAudio,
     setLanguage,
     setVadMode,
     setSelectedInputId,
+    setLiveTranscription,
   } = useAudioStore();
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [devicesError, setDevicesError] = useState<string | null>(null);
@@ -814,6 +848,17 @@ function AudioPane() {
 
       <Group title="Transcription">
         <Row
+          label="Live transcription"
+          description="Show captions while recording (uses streaming minutes)."
+          control={
+            <Switch
+              checked={liveTranscription}
+              onCheckedChange={(v) => void setLiveTranscription(v)}
+              aria-label="Live transcription"
+            />
+          }
+        />
+        <Row
           label="Language"
           description="Language used for live transcription."
           control={
@@ -857,14 +902,361 @@ function AudioPane() {
         />
       </Group>
 
-      <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-card/40 px-4 py-3 text-[11.5px] text-muted-foreground">
-        <Info className="size-4 shrink-0 text-muted-foreground/70" />
-        <span>
-          Gain control and system-audio capture aren't exposed yet — they need
-          matching Rust commands.
-        </span>
-      </div>
+      <Group title="System audio">
+        <PermissionRequestRow />
+        <ActiveCaptureRow />
+        <SystemAudioDebugRow />
+        <LiveCaptureDebugRow />
+      </Group>
     </>
+  );
+}
+
+function PermissionRequestRow() {
+  const [status, setStatus] = useState<"idle" | "running" | "granted" | "denied">(
+    "idle",
+  );
+  const [message, setMessage] = useState<string | null>(null);
+
+  const run = async () => {
+    setStatus("running");
+    setMessage(null);
+    try {
+      const probe = await requestSystemAudioPermission();
+      if (probe.ok) {
+        setStatus("granted");
+        setMessage(probe.message);
+      } else {
+        setStatus("denied");
+        setMessage(probe.message);
+      }
+    } catch (err) {
+      setStatus("denied");
+      setMessage(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const description = (() => {
+    if (status === "idle") {
+      return "Opens System Settings → Privacy & Security → Screen & System Audio Recording and triggers the TCC prompt. Enable Nooto there (and remove any stale duplicate entries with the − button).";
+    }
+    if (status === "running") {
+      return "Opening System Settings and probing the tap…";
+    }
+    if (status === "granted") {
+      return `Granted — ${message ?? ""}`;
+    }
+    return `Not granted — ${message ?? "tap returned no samples"}. Toggle Nooto on in System Settings, then click Test below.`;
+  })();
+
+  const icon = (() => {
+    if (status === "running") {
+      return <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />;
+    }
+    if (status === "granted") {
+      return <Check className="size-4 shrink-0 text-emerald-500" />;
+    }
+    if (status === "denied") {
+      return <AlertTriangle className="size-4 shrink-0 text-amber-500" />;
+    }
+    return <Info className="size-4 shrink-0 text-muted-foreground/70" />;
+  })();
+
+  return (
+    <Row
+      label={
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          Grant system audio permission
+        </span>
+      }
+      description={description}
+      control={
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void run()}
+          disabled={status === "running"}
+        >
+          {status === "running" ? "Opening…" : "Open settings & request"}
+        </Button>
+      }
+    />
+  );
+}
+
+/// During an active recording, polls the plugin every 500 ms and shows
+/// live per-channel sample counters. If `sys=0` while the user is playing
+/// something, the tap isn't delivering frames during a real meeting even
+/// if the one-shot probe succeeded — the smoking gun we need.
+function ActiveCaptureRow() {
+  const {
+    isRecording,
+    systemAudioActive,
+    micSamplesTotal,
+    sysSamplesTotal,
+    refreshState,
+  } = useAudioStore();
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const id = setInterval(() => {
+      void refreshState();
+    }, 500);
+    return () => clearInterval(id);
+  }, [isRecording, refreshState]);
+
+  const description = isRecording
+    ? `sys tap ${systemAudioActive ? "active" : "inactive"} — mic ${micSamplesTotal.toLocaleString()} samples · sys ${sysSamplesTotal.toLocaleString()} samples`
+    : "Starts updating once you click Start a meeting.";
+
+  const icon = (() => {
+    if (!isRecording) {
+      return <Info className="size-4 shrink-0 text-muted-foreground/70" />;
+    }
+    if (!systemAudioActive) {
+      return <AlertTriangle className="size-4 shrink-0 text-red-500" />;
+    }
+    if (sysSamplesTotal === 0) {
+      return <Info className="size-4 shrink-0 text-amber-500" />;
+    }
+    return <Check className="size-4 shrink-0 text-emerald-500" />;
+  })();
+
+  return (
+    <Row
+      label={
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          Active recording
+        </span>
+      }
+      description={description}
+    />
+  );
+}
+
+type SystemAudioProbeStatus =
+  | { state: "idle" }
+  | { state: "running" }
+  | { state: "done"; probe: SystemAudioProbe };
+
+function SystemAudioDebugRow() {
+  const [status, setStatus] = useState<SystemAudioProbeStatus>({ state: "idle" });
+
+  const runProbe = async () => {
+    setStatus({ state: "running" });
+    try {
+      const probe = await probeSystemAudio();
+      setStatus({ state: "done", probe });
+    } catch (err) {
+      setStatus({
+        state: "done",
+        probe: {
+          ok: false,
+          platform: "unknown",
+          message: err instanceof Error ? err.message : String(err),
+          samples_received: 0,
+        },
+      });
+    }
+  };
+
+  const description = (() => {
+    if (status.state === "idle") {
+      return "Run a 600 ms Core Audio tap probe to verify TCC permission and whether frames are being delivered. Have something playing through the speakers for the most useful result.";
+    }
+    if (status.state === "running") {
+      return "Probing Core Audio tap…";
+    }
+    const { probe } = status;
+    return `${probe.platform} — ${probe.message}`;
+  })();
+
+  const icon = (() => {
+    if (status.state === "running") {
+      return <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />;
+    }
+    if (status.state === "done") {
+      if (status.probe.ok && status.probe.samples_received > 0) {
+        return <Check className="size-4 shrink-0 text-emerald-500" />;
+      }
+      if (status.probe.ok) {
+        return <Info className="size-4 shrink-0 text-amber-500" />;
+      }
+      return <AlertTriangle className="size-4 shrink-0 text-red-500" />;
+    }
+    return <Info className="size-4 shrink-0 text-muted-foreground/70" />;
+  })();
+
+  return (
+    <Row
+      label={
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          Capture system audio (YouTube, calls, etc.)
+        </span>
+      }
+      description={description}
+      control={
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void runProbe()}
+          disabled={status.state === "running"}
+        >
+          {status.state === "running" ? "Probing…" : "Test"}
+        </Button>
+      }
+    />
+  );
+}
+
+type LiveProbeStatus =
+  | { state: "idle" }
+  | { state: "running"; endsAt: number }
+  | { state: "done"; probe: LiveCaptureProbe };
+
+const LIVE_PROBE_MS = 10_000;
+
+function LiveCaptureDebugRow() {
+  const [status, setStatus] = useState<LiveProbeStatus>({ state: "idle" });
+  const [countdown, setCountdown] = useState(0);
+  const [transcripts, setTranscripts] = useState<ProbeTranscriptEvent[]>([]);
+
+  useEffect(() => {
+    if (status.state !== "running") return;
+    const tick = () => {
+      const remaining = Math.max(0, status.endsAt - Date.now());
+      setCountdown(Math.ceil(remaining / 1000));
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [status]);
+
+  useEffect(() => {
+    if (status.state !== "running") return;
+    let unlisten: (() => void) | null = null;
+    void listen<ProbeTranscriptEvent>("probe:transcript", (event) => {
+      setTranscripts((prev) => [...prev.slice(-49), event.payload]);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [status.state]);
+
+  const runProbe = async () => {
+    setTranscripts([]);
+    setStatus({ state: "running", endsAt: Date.now() + LIVE_PROBE_MS });
+    try {
+      const probe = await probeLiveCapture(LIVE_PROBE_MS);
+      setStatus({ state: "done", probe });
+    } catch (err) {
+      setStatus({
+        state: "done",
+        probe: {
+          ok: false,
+          duration_ms: 0,
+          mic_samples: 0,
+          sys_samples: 0,
+          mic_level: 0,
+          sys_level: 0,
+          mic_peak_i16: 0,
+          sys_peak_i16: 0,
+          mic_nonzero: 0,
+          sys_nonzero: 0,
+          transcription_connected: false,
+          transcript_count: 0,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  };
+
+  const description = (() => {
+    if (status.state === "idle") {
+      return `Captures mic + system audio for ${LIVE_PROBE_MS / 1000}s, runs it through Deepgram, and shows live transcript bubbles below (mic = right, system = left). Start a YouTube video, then click Test.`;
+    }
+    if (status.state === "running") {
+      return `Capturing… ${countdown}s left. Talk and let audio play.`;
+    }
+    const p = status.probe;
+    const wsTag = p.transcription_connected
+      ? `${p.transcript_count} transcripts`
+      : "no transcription (no auth or WS failed)";
+    return `${p.message} — mic ${p.mic_samples} samples (RMS ${p.mic_level.toFixed(3)}) · sys ${p.sys_samples} samples (RMS ${p.sys_level.toFixed(3)}) · ${wsTag}`;
+  })();
+
+  const icon = (() => {
+    if (status.state === "running") {
+      return <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />;
+    }
+    if (status.state === "done") {
+      if (status.probe.ok && status.probe.sys_samples > 0) {
+        return <Check className="size-4 shrink-0 text-emerald-500" />;
+      }
+      if (status.probe.mic_samples > 0) {
+        return <Info className="size-4 shrink-0 text-amber-500" />;
+      }
+      return <AlertTriangle className="size-4 shrink-0 text-red-500" />;
+    }
+    return <Info className="size-4 shrink-0 text-muted-foreground/70" />;
+  })();
+
+  const showBubbles = status.state !== "idle" && transcripts.length > 0;
+
+  return (
+    <Row
+      label={
+        <span className="inline-flex items-center gap-2">
+          {icon}
+          Live capture test (mic + system + Deepgram)
+        </span>
+      }
+      description={description}
+      control={
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void runProbe()}
+          disabled={status.state === "running"}
+        >
+          {status.state === "running" ? `${countdown}s…` : "Test"}
+        </Button>
+      }
+    >
+      {showBubbles && (
+        <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-muted/30 p-2 text-[11.5px]">
+          {transcripts.map((t, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex gap-2",
+                t.is_user ? "justify-end" : "justify-start",
+              )}
+            >
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-md px-2 py-1 leading-snug",
+                  t.is_user
+                    ? "bg-primary/15 text-foreground"
+                    : "bg-emerald-500/15 text-foreground",
+                  !t.is_final && "opacity-60 italic",
+                )}
+              >
+                <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t.is_user ? "mic" : "sys"}
+                </span>
+                {t.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Row>
   );
 }
 
@@ -1577,6 +1969,243 @@ function DeveloperPane() {
       )}
 
       <Separator className="opacity-40" />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Companion
+// ---------------------------------------------------------------------------
+
+const PTT_KEY_OPTIONS: readonly { value: CompanionPttKey; label: string }[] = [
+  { value: "Right Shift", label: "Right Shift" },
+  { value: "Cmd+Shift", label: "Cmd + Shift (recommended)" },
+  { value: "Cmd+Right Shift", label: "Cmd + Right Shift" },
+  { value: "Fn", label: "Fn (Function key — flaky on some keyboards)" },
+  { value: "AltGr", label: "AltGr / Right Option (conflicts with Whispr)" },
+];
+
+function CompanionPane() {
+  const companionEnabled = useCompanionSettingsStore((s) => s.companionEnabled);
+  const pttKey = useCompanionSettingsStore((s) => s.pttKey);
+  const ttsVoiceId = useCompanionSettingsStore((s) => s.ttsVoiceId);
+  const persistPointer = useCompanionSettingsStore((s) => s.persistPointer);
+  const setCompanionEnabled = useCompanionSettingsStore((s) => s.setCompanionEnabled);
+  const setPttKey = useCompanionSettingsStore((s) => s.setPttKey);
+  const setTtsVoiceId = useCompanionSettingsStore((s) => s.setTtsVoiceId);
+  const setPersistPointer = useCompanionSettingsStore((s) => s.setPersistPointer);
+
+  const [voices, setVoices] = useState<Array<{ id: string; name: string }>>([]);
+  const [testingVoice, setTestingVoice] = useState(false);
+  const [runningTestTask, setRunningTestTask] = useState(false);
+  const testTimerRef = useRef<number | null>(null);
+  /** Error from set_companion_key (key conflict or unsupported key). */
+  const [pttKeyError, setPttKeyError] = useState<string | null>(null);
+  /** The Whispr PTT key currently configured in Rust — shown as a hint. */
+  const [whisprPttKey, setWhisprPttKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<Array<{ identifier: string; name: string }>>("plugin:tts|tts_list_voices")
+      .then((list) => {
+        const mapped = list.map((v) => ({ id: v.identifier, name: v.name }));
+        setVoices(mapped);
+        // If no voice is persisted yet, default to the first entry.
+        if (!ttsVoiceId && mapped.length > 0) {
+          setTtsVoiceId(mapped[0].id);
+        }
+      })
+      .catch((e) => {
+        console.warn("[CompanionPane] tts_list_voices failed:", e);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch the Whispr PTT key so we can warn the user if they try to reuse it.
+  useEffect(() => {
+    invoke<string>("get_ptt_key")
+      .then((key) => setWhisprPttKey(key))
+      .catch(() => {
+        // Command not present in this build — safe to ignore.
+      });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (testTimerRef.current !== null) {
+        window.clearTimeout(testTimerRef.current);
+      }
+    };
+  }, []);
+
+  const onPttKeyChange = async (key: CompanionPttKey) => {
+    const prev = pttKey;
+    setPttKey(key);
+    setPttKeyError(null);
+    try {
+      await invoke("set_companion_key", { label: key });
+    } catch (e) {
+      // Rust rejected the change (conflict or unsupported key) — revert the
+      // local store to the previous value so it stays in sync with Rust.
+      setPttKey(prev);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      setPttKeyError(errMsg);
+      console.warn("[CompanionPane] set_companion_key failed:", e);
+    }
+  };
+
+  const onTestVoice = async () => {
+    setTestingVoice(true);
+    try {
+      await invoke("plugin:tts|tts_speak", {
+        text: "This is how your companion will sound.",
+        ...(ttsVoiceId ? { voice: ttsVoiceId } : {}),
+      });
+    } catch (e) {
+      console.warn("[CompanionPane] tts_speak failed:", e);
+    } finally {
+      testTimerRef.current = window.setTimeout(() => setTestingVoice(false), 3000);
+    }
+  };
+
+  const onRunTestTask = async () => {
+    setRunningTestTask(true);
+    try {
+      await runCompanionTestTask();
+    } catch (e) {
+      console.warn("[CompanionPane] runCompanionTestTask failed:", e);
+    } finally {
+      // Re-enable the button after the typical pipeline duration. The actual
+      // buddy + TTS continue independently; this just debounces rapid clicks.
+      window.setTimeout(() => setRunningTestTask(false), 4000);
+    }
+  };
+
+  const selectedVoiceName =
+    voices.find((v) => v.id === ttsVoiceId)?.name ?? (ttsVoiceId ? ttsVoiceId : "System default");
+
+  // Build the description for the PTT key row — include a Whispr conflict hint
+  // when the Whispr key is known.
+  const pttKeyDescription = whisprPttKey
+    ? `Hold to invoke the AI pipeline. Whispr uses ${whisprPttKey} — pick a different key here.`
+    : "Hold this key to invoke the voice-to-screen AI pipeline.";
+
+  return (
+    <>
+      <Group title="General">
+        <Row
+          label="Enable Companion"
+          description="When off, the Fn PTT key is still captured but the AI pipeline does not run."
+          control={
+            <Switch
+              checked={companionEnabled}
+              onCheckedChange={setCompanionEnabled}
+              aria-label="Enable Companion"
+            />
+          }
+        />
+        <Row
+          label="Keep pointer until clicked"
+          description="When on, the blue ring stays on screen after an answer until you click anywhere to dismiss. When off, it fades after a couple of seconds."
+          control={
+            <Switch
+              checked={persistPointer}
+              onCheckedChange={setPersistPointer}
+              aria-label="Keep pointer until clicked"
+            />
+          }
+        />
+      </Group>
+
+      <Group title="Push-to-talk">
+        <Row
+          label="Companion PTT key"
+          description={pttKeyDescription}
+          control={
+            <Select
+              value={pttKey}
+              onValueChange={(v) => void onPttKeyChange(v as CompanionPttKey)}
+            >
+              <SelectTrigger size="sm" className="min-w-[200px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PTT_KEY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        >
+          {pttKeyError && (
+            <p className="text-destructive text-[11.5px]">{pttKeyError}</p>
+          )}
+        </Row>
+      </Group>
+
+      <Group title="Voice">
+        <Row
+          label="TTS voice"
+          description="The system voice used to speak Companion answers aloud."
+          control={
+            voices.length > 0 ? (
+              <Select
+                value={ttsVoiceId}
+                onValueChange={setTtsVoiceId}
+              >
+                <SelectTrigger size="sm" className="min-w-[200px] text-xs">
+                  <SelectValue placeholder={selectedVoiceName} />
+                </SelectTrigger>
+                <SelectContent>
+                  {voices.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-xs text-muted-foreground">Loading…</span>
+            )
+          }
+        />
+        <Row
+          label="Test voice"
+          description="Hear a short sample phrase in the selected voice."
+          control={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void onTestVoice()}
+              disabled={testingVoice}
+            >
+              {testingVoice ? "Speaking…" : "Test"}
+            </Button>
+          }
+        />
+      </Group>
+
+      <Group title="Diagnostics">
+        <Row
+          label="Run test task"
+          description="Captures your current screen and exercises the full Companion pipeline (screenshot → AI → pointer animation → spoken answer). No microphone needed — useful for verifying the feature end-to-end without holding the PTT key."
+          control={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void onRunTestTask()}
+              disabled={runningTestTask || !companionEnabled}
+            >
+              <PlayCircle className="size-3.5" aria-hidden />
+              {runningTestTask ? "Running…" : "Run test"}
+            </Button>
+          }
+        />
+      </Group>
+
+      <Group title="Recent sessions">
+        <CompanionSessionsViewer />
+      </Group>
     </>
   );
 }

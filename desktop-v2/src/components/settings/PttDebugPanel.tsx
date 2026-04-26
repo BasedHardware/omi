@@ -122,6 +122,44 @@ export function PttDebugPanel() {
     }
   };
 
+  const handleStartListener = async () => {
+    pushLog("action", "Start listener");
+    try {
+      const ok = await invoke<boolean>("ensure_ptt_listener");
+      pushLog("action", ok ? "listener running" : "listener refused (see error box)");
+    } catch (err) {
+      pushLog("action", `ensure_ptt_listener failed: ${String(err)}`);
+    }
+  };
+
+  const handleGrantInputMonitoring = async () => {
+    pushLog("action", "Requesting Input Monitoring");
+    try {
+      await invoke("request_permission", { kind: "input_monitoring" });
+      pushLog("action", "Opened Input Monitoring pane — toggle Nooto on, then relaunch.");
+    } catch (err) {
+      pushLog("action", `request failed: ${String(err)}`);
+    }
+  };
+
+  const handleGrantAccessibility = async () => {
+    pushLog("action", "Requesting Accessibility");
+    try {
+      await invoke("request_permission", { kind: "accessibility" });
+      pushLog("action", "Opened Accessibility pane — toggle Nooto on, then relaunch.");
+    } catch (err) {
+      pushLog("action", `request failed: ${String(err)}`);
+    }
+  };
+
+  const handleRelaunch = async () => {
+    try {
+      await invoke("relaunch_app");
+    } catch (err) {
+      pushLog("action", `relaunch failed: ${String(err)}`);
+    }
+  };
+
   const handleStartAudio = async () => {
     pushLog("action", "Start audio recording");
     try {
@@ -219,8 +257,31 @@ export function PttDebugPanel() {
         </div>
       )}
 
+      {/* Permission helpers */}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" onClick={handleGrantAccessibility}>
+          Grant Accessibility
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleGrantInputMonitoring}>
+          Grant Input Monitoring
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleRelaunch}>
+          Relaunch Nooto
+        </Button>
+      </div>
+
       {/* Actions */}
       <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={handleStartListener}
+          disabled={diag?.listener_thread_started && !diag?.listener_failed}
+        >
+          {diag?.listener_thread_started && !diag?.listener_failed
+            ? "Listener running"
+            : "Start listener"}
+        </Button>
         <Button
           size="sm"
           variant="secondary"
