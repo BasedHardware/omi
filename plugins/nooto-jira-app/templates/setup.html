@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira for Nooto</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --jira-blue: #2684FF;
+            --jira-blue-dark: #0052CC;
+            --nooto-blue: #3B82F6;
+            --bg: #0D0D0D;
+            --surface: #171717;
+            --surface-elevated: #1F1F1F;
+            --border: #2A2A2A;
+            --text: #FFFFFF;
+            --text-secondary: #9B9B9B;
+            --text-tertiary: #666666;
+            --success: #4ADE80;
+            --error: #F87171;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            color: var(--text);
+            padding: 20px;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(38, 132, 255, 0.15), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(59, 130, 246, 0.08), transparent);
+        }
+        .container { max-width: 480px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 40px; padding-top: 20px; }
+        h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
+        .subtitle { color: var(--text-secondary); font-size: 15px; }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 16px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 14px 20px;
+            border-radius: 12px;
+            border: 0;
+            background: var(--jira-blue);
+            color: white;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .btn:hover { background: var(--jira-blue-dark); }
+        .btn.secondary { background: var(--surface-elevated); border: 1px solid var(--border); }
+        .status { padding: 12px 16px; border-radius: 10px; font-size: 14px; margin-bottom: 16px; }
+        .status.success { background: rgba(74, 222, 128, 0.1); color: var(--success); border: 1px solid rgba(74, 222, 128, 0.3); }
+        .status.error   { background: rgba(248, 113, 113, 0.1); color: var(--error);   border: 1px solid rgba(248, 113, 113, 0.3); }
+        .site-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+        .site-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px; border-radius: 10px;
+            background: var(--surface-elevated); border: 1px solid var(--border);
+            cursor: pointer;
+        }
+        .site-row.active { border-color: var(--jira-blue); }
+        .site-name { font-weight: 600; }
+        .site-url  { color: var(--text-secondary); font-size: 13px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Jira for Nooto</h1>
+        <div class="subtitle">{{ subtitle | default("Connect your Atlassian account to file tickets from your conversations.") }}</div>
+    </div>
+
+    {% if status == "success" %}
+        <div class="card">
+            <div class="status success">Connected as {{ display_name | default("your Atlassian account") }}.</div>
+
+            {% if sites and sites|length > 1 %}
+                <div class="subtitle" style="margin-bottom:8px;">Choose your default Jira site:</div>
+                <form method="post" action="/settings/default-site" class="site-list">
+                    <input type="hidden" name="uid" value="{{ uid }}">
+                    {% for s in sites %}
+                        <button type="submit" name="cloud_id" value="{{ s.id }}" class="site-row {% if s.id == default_cloud_id %}active{% endif %}">
+                            <div>
+                                <div class="site-name">{{ s.name }}</div>
+                                <div class="site-url">{{ s.url }}</div>
+                            </div>
+                        </button>
+                    {% endfor %}
+                </form>
+            {% endif %}
+
+            <a class="btn" href="nooto://app-setup-complete?app_id=nooto-jira&status=success" style="margin-top:16px;">
+                Open Nooto
+            </a>
+        </div>
+    {% elif status == "error" %}
+        <div class="card">
+            <div class="status error">{{ error_message | default("Something went wrong. Try again.") }}</div>
+            <a class="btn" href="/auth/jira?uid={{ uid }}">Retry</a>
+        </div>
+    {% else %}
+        <div class="card">
+            <p class="subtitle" style="margin-bottom:20px;">
+                We'll redirect you to Atlassian to grant Jira access. We need
+                <code>read</code>, <code>write</code>, and <code>offline</code> scopes
+                so the assistant can create, look up, and update issues on your behalf.
+            </p>
+            <a class="btn" href="/auth/jira?uid={{ uid }}">Connect Jira</a>
+        </div>
+    {% endif %}
+</div>
+</body>
+</html>
