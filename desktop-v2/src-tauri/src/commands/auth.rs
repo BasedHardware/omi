@@ -1,13 +1,13 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
-use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
-use tokio::sync::oneshot;
+
+use super::oauth_callback;
 
 const STORE_PATH: &str = "auth.json";
 const API_BASE: &str = "https://nooto-desktop-auth-1060764816205.us-central1.run.app";
-const REDIRECT_URI: &str = "nooto://auth/callback";
 const FIREBASE_API_KEY: &str = "AIzaSyAPDdy9ZUCMQOPvcbjkB-dQn6WPcPY5nng";
+const CALLBACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResult {
@@ -120,37 +120,14 @@ fn decode_jwt_payload(token: &str) -> Result<JwtClaims, String> {
         .map_err(|e| format!("Failed to parse JWT claims: {}", e))
 }
 
-/// Global channel for the deep-link callback to deliver the auth code to
-/// the `sign_in` command that is waiting for it.
-static AUTH_TX: std::sync::Mutex<Option<oneshot::Sender<(String, String)>>> =
-    std::sync::Mutex::new(None);
-
-/// Called from the deep-link handler in `main.rs` when a `omi://auth/callback`
-/// URL arrives.  Extracts `code` and `state` and delivers them.
-pub fn deliver_auth_callback(url: &url::Url) {
-    let params: std::collections::HashMap<String, String> =
-        url.query_pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-
-    let code = params.get("code").cloned().unwrap_or_default();
-    let state = params.get("state").cloned().unwrap_or_default();
-
-    tracing::info!("Deep-link auth callback received (code present: {})", !code.is_empty());
-
-    if let Some(tx) = AUTH_TX.lock().unwrap().take() {
-        let _ = tx.send((code, state));
-    } else {
-        tracing::warn!("Auth callback received but no sign-in is waiting for it");
-    }
-}
-
 /// Initiate sign-in flow.
 ///
-/// 1. Opens `{API}/v1/auth/authorize?provider=...&redirect_uri=omi://auth/callback`
+/// 1. Binds a localhost HTTP listener on a random port as the OAuth redirect target.
+/// 2. Opens `{API}/v1/auth/authorize?provider=...&redirect_uri=http://127.0.0.1:<port>/callback`
 ///    in the system browser.
-/// 2. The production backend handles OAuth and redirects the browser to
-///    `omi://auth/callback?code=xxx&state=yyy`.
-/// 3. The OS routes the `omi://` deep link back to this Tauri app.
-/// 4. `deliver_auth_callback` is called, which sends the code through the channel.
+/// 3. The production backend handles OAuth with Google/Apple and redirects the
+///    browser to our local callback with `?code=xxx&state=yyy`.
+/// 4. The local server captures the code and shuts down.
 /// 5. We exchange the code for tokens via `POST {API}/v1/auth/token`.
 /// 6. Persist session and return `AuthResult`.
 #[tauri::command]
@@ -161,59 +138,28 @@ pub async fn sign_in(app: tauri::AppHandle, provider: String) -> Result<AuthResu
         return Err(format!("Unsupported provider: {}. Use 'google' or 'apple'.", provider));
     };
 
-    // 1. Set up the channel for receiving the deep-link callback
-    let (tx, rx) = oneshot::channel::<(String, String)>();
-    {
-        let mut slot = AUTH_TX.lock().unwrap();
-        // Drop any previous pending sender (e.g. a timed-out sign-in)
-        *slot = Some(tx);
-    }
-
     let state_nonce = uuid::Uuid::new_v4().to_string();
 
-    // 2. Build the authorize URL and open it in the browser
-    let authorize_url = format!(
-        "{}/v1/auth/authorize?provider={}&redirect_uri={}&state={}",
-        API_BASE,
-        provider,
-        urlencoding::encode(REDIRECT_URI),
-        urlencoding::encode(&state_nonce),
-    );
-
-    tracing::info!("Opening OAuth URL in browser");
-
-    app.opener()
-        .open_url(&authorize_url, None::<&str>)
-        .map_err(|e| format!("Failed to open browser: {}", e))?;
-
-    // 3. Wait for the deep-link callback (up to 5 min)
-    let (code, returned_state) = tokio::time::timeout(
-        std::time::Duration::from_secs(300),
-        rx,
-    )
-    .await
-    .map_err(|_| "Sign-in timed out — no response from browser within 5 minutes.".to_string())?
-    .map_err(|_| "Callback channel closed unexpectedly.".to_string())?;
-
-    if code.is_empty() {
-        return Err("OAuth callback did not include an auth code.".to_string());
-    }
-
-    if returned_state != state_nonce {
-        tracing::warn!("State mismatch: expected={}, got={}", state_nonce, returned_state);
-        return Err("OAuth state mismatch — possible CSRF. Please try again.".to_string());
-    }
+    let callback = oauth_callback::run(&app, CALLBACK_TIMEOUT, &state_nonce, |redirect_uri| {
+        format!(
+            "{}/v1/auth/authorize?provider={}&redirect_uri={}&state={}",
+            API_BASE,
+            provider,
+            urlencoding::encode(redirect_uri),
+            urlencoding::encode(&state_nonce),
+        )
+    })
+    .await?;
 
     tracing::info!("Auth code received, exchanging for tokens...");
 
-    // 4. Exchange the code for tokens
     let client = reqwest::Client::new();
     let token_resp = client
         .post(format!("{}/v1/auth/token", API_BASE))
         .form(&[
             ("grant_type", "authorization_code"),
-            ("code", &code),
-            ("redirect_uri", REDIRECT_URI),
+            ("code", &callback.code),
+            ("redirect_uri", &callback.redirect_uri),
         ])
         .send()
         .await

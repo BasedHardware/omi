@@ -2,7 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default permissions for the Nooto desktop app",
-  "windows": ["main"],
+  "windows": [
+    "main",
+    "companion-buddy",
+    "companion-overlay-*"
+  ],
   "permissions": [
     "core:default",
     "shell:allow-open",
@@ -21,6 +25,7 @@
     "autostart:allow-is-enabled",
     "screen-capture:default",
     "audio-capture:default",
+    "tts:default",
     {
       "identifier": "http:default",
       "allow": [

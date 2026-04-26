@@ -189,19 +189,60 @@ fn anchor_whispr_top_center(
 
 #[command]
 pub async fn show_whispr_hud(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window(WHISPR_LABEL)
-        .ok_or_else(|| "whispr window not found".to_string())?;
+    eprintln!("[whispr] show_whispr_hud invoked");
+    let window = app.get_webview_window(WHISPR_LABEL).ok_or_else(|| {
+        eprintln!("[whispr] window not found by label {}", WHISPR_LABEL);
+        "whispr window not found".to_string()
+    })?;
 
+    // Whispr now follows the cursor (same UX as the Companion buddy) instead
+    // of pinning to top-center. Warm the monitor cache so the position calc
+    // works on first call, then set an initial cursor-anchored position so
+    // the window doesn't flash at its old position before the tracker takes
+    // over, then enroll the label in the cursor tracker.
+    #[cfg(target_os = "macos")]
+    {
+        super::companion::refresh_monitor_cache_pub(&app);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(pos) = super::companion::buddy_position_from_cache_pub() {
+            eprintln!(
+                "[whispr] initial cursor-anchored position: ({}, {})",
+                pos.x, pos.y
+            );
+            let _ = window.set_position(pos);
+        } else if let Some(pos) = anchor_whispr_top_center(&app, WHISPR_WIDTH) {
+            eprintln!(
+                "[whispr] cursor unavailable — falling back to top-center: ({}, {})",
+                pos.x, pos.y
+            );
+            let _ = window.set_position(pos);
+        } else {
+            eprintln!("[whispr] no position computable — window will appear at default");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(pos) = anchor_whispr_top_center(&app, WHISPR_WIDTH) {
         let _ = window.set_position(pos);
     }
-    window.show().map_err(|e| e.to_string())?;
+
+    window.show().map_err(|e| {
+        eprintln!("[whispr] window.show() failed: {}", e);
+        e.to_string()
+    })?;
+
+    #[cfg(target_os = "macos")]
+    super::companion::track_window(WHISPR_LABEL, app);
+
     Ok(())
 }
 
 #[command]
 pub async fn hide_whispr_hud(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    super::companion::untrack_window(WHISPR_LABEL);
+
     if let Some(window) = app.get_webview_window(WHISPR_LABEL) {
         window.hide().map_err(|e| e.to_string())?;
     }

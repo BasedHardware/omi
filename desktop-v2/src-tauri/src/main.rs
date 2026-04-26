@@ -2,23 +2,45 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod feature_flags;
 
-use tauri::Manager;
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
+/// Adapter that lets the embedded Backend-Rust emit Tauri events to the
+/// renderer without taking on a Tauri dependency itself. Backend-Rust knows
+/// nothing about `AppHandle` — it just calls `EventEmitter::emit`.
+struct TauriEventEmitter<R: Runtime> {
+    handle: AppHandle<R>,
+}
+
+impl<R: Runtime> nooto_desktop_backend::EventEmitter for TauriEventEmitter<R> {
+    fn emit(&self, event: &str, payload: serde_json::Value) {
+        if let Err(e) = self.handle.emit(event, payload) {
+            tracing::warn!("backend event emit ({}) failed: {}", event, e);
+        }
+    }
+}
 
 /// Spawn the embedded Axum backend on a background Tokio task.
 ///
 /// The backend listens on 127.0.0.1:{port} and serves the same REST API
 /// as the standalone `Backend-Rust` server.
-async fn start_backend() {
+async fn start_backend<R: Runtime>(handle: AppHandle<R>) {
     let port: u16 = std::env::var("OMI_BACKEND_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(10201);
 
     match nooto_desktop_backend::init_services().await {
-        Ok((state, firebase_auth)) => {
+        Ok((mut state, firebase_auth)) => {
+            // Wire the UI event sink so route handlers (e.g. the
+            // app-result persistence path) can emit Tauri events.
+            state.events = Some(Arc::new(TauriEventEmitter { handle }));
+
             let app = nooto_desktop_backend::build_router(state, firebase_auth);
             let addr = format!("127.0.0.1:{}", port);
             tracing::info!("Embedded backend starting on {}", addr);
@@ -58,13 +80,17 @@ fn main() {
         )
         .init();
 
-    // Spawn the backend server in the background before Tauri starts
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("Failed to create Tokio runtime");
-
-    runtime.spawn(start_backend());
+    // Dedicated runtime for the embedded Backend-Rust so its workers don't
+    // contend with the Tauri/audio runtime. Leaked so it lives for the
+    // process lifetime — we'll spawn `start_backend` from inside `setup`
+    // once we have an `AppHandle` to thread into the event emitter.
+    let backend_runtime: &'static tokio::runtime::Runtime = Box::leak(Box::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_name("backend-worker")
+            .build()
+            .expect("Failed to create Tokio runtime"),
+    ));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -90,10 +116,26 @@ fn main() {
                     {
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Err(e) =
-                                commands::floating::toggle_floating_bar(app).await
-                            {
-                                tracing::warn!("toggle_floating_bar: {}", e);
+                            if feature_flags::COMPANION_CUTOVER_ENABLED {
+                                // Tap Cmd+Ctrl+\ — toggle the companion buddy
+                                // (show if hidden, hide if visible).
+                                if let Some(w) = app.get_webview_window("companion-buddy") {
+                                    let visible = w.is_visible().unwrap_or(false);
+                                    if visible {
+                                        if let Err(e) = commands::companion::companion_hide_buddy(app).await {
+                                            tracing::warn!("companion_hide_buddy: {}", e);
+                                        }
+                                    } else if let Err(e) = commands::companion::companion_show_buddy(app).await {
+                                        tracing::warn!("companion_show_buddy: {}", e);
+                                    }
+                                }
+                            } else {
+                                // Legacy: toggle the Ask Nooto floating bar.
+                                if let Err(e) =
+                                    commands::floating::toggle_floating_bar(app).await
+                                {
+                                    tracing::warn!("toggle_floating_bar: {}", e);
+                                }
                             }
                         });
                     }
@@ -104,7 +146,15 @@ fn main() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_audio_capture::init())
         .plugin(tauri_plugin_screen_capture::init())
+        .plugin(tauri_plugin_tts::init())
         .setup(|app| {
+            // Spawn the embedded Backend-Rust now that we have an AppHandle
+            // — the handle is wrapped in a `TauriEventEmitter` and injected
+            // into AppState so route handlers can push UI events back to
+            // the renderer (e.g. `conversation:updated` when an app result
+            // is persisted async after a recording finishes).
+            backend_runtime.spawn(start_backend(app.handle().clone()));
+
             // Register the omi:// URL scheme so the OS routes it to this app.
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
@@ -113,15 +163,26 @@ fn main() {
                 }
             }
 
-            // Listen for deep-link events (omi://auth/callback?code=xxx&state=yyy)
-            app.deep_link().on_open_url(|event| {
-                let urls = event.urls();
-                for url in &urls {
-                    tracing::info!("Deep link received: {}", url);
-                    if url.scheme() == "nooto"
-                        && (url.path() == "/auth/callback" || url.host_str() == Some("auth"))
-                    {
-                        commands::auth::deliver_auth_callback(url);
+            let deep_link_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                use tauri::{Emitter, Manager};
+                for url in &event.urls() {
+                    let raw = url.as_str();
+                    tracing::info!("Deep link received: {}", raw);
+                    // Clicking a notification opens `nooto://notification-click`
+                    // (see `/Applications/Nooto.app/Contents/MacOS/Nooto`). Match
+                    // on the raw string because `url::Url::host_str()` returns
+                    // None for custom schemes on some parser versions. Bring the
+                    // main window forward and emit an event so the frontend can
+                    // route to /chat and seed the notification body.
+                    if url.scheme() == "nooto" && raw.contains("notification-click") {
+                        tracing::info!("Deep link: dispatching notification:click");
+                        if let Some(window) = deep_link_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                        let _ = deep_link_handle.emit("notification:click", ());
                     }
                 }
             });
@@ -141,10 +202,13 @@ fn main() {
                 tracing::error!("Failed to init staged tasks DB: {}", e);
             }
 
-            // Push-to-talk global key listener. Emits ptt:start / ptt:stop
-            // events; the frontend handles the rest (show floating bar,
-            // drive audio capture, paste transcript).
-            commands::ptt::start_listener(app.handle().clone());
+            // PTT global key listener is opt-in, not auto-started. Starting
+            // rdev here can crash the app silently on macOS when Input
+            // Monitoring / Accessibility aren't granted (rdev's C shim calls
+            // `exit(-1)` on the first event). The onboarding Accessibility
+            // step calls `ensure_ptt_listener` after granting, and the
+            // Settings page can too — so real users get PTT exactly when
+            // the OS will cooperate.
 
             // Onboarding file-scan state (snapshot + running flag).
             app.manage(commands::onboarding::ScanState {
@@ -153,6 +217,23 @@ fn main() {
                 )),
                 running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             });
+
+            // Companion cutover: retire the legacy "floating" Ask-Nooto bar so
+            // it never appears in this release. We keep the Whispr window
+            // alive — Companion is for AI Q&A, Whispr is for dictation; they
+            // serve different purposes and the user explicitly wants both.
+            if feature_flags::COMPANION_CUTOVER_ENABLED {
+                if let Some(w) = app.get_webview_window("floating") {
+                    if let Err(e) = w.close() {
+                        tracing::warn!("cutover: failed to close floating window: {}", e);
+                    }
+                }
+            }
+
+            // Tray / menu-bar icon with quick toggles.
+            if let Err(e) = commands::tray::build(app.handle()) {
+                tracing::warn!("Failed to build tray icon: {}", e);
+            }
 
             Ok(())
         })
@@ -168,7 +249,14 @@ fn main() {
             commands::debug::debug_backend_ping,
             commands::debug::backend_request,
             commands::insight_sql::execute_insight_sql,
+            commands::system::get_active_app,
+            commands::system::get_dock_icons,
             commands::system::get_memory_usage,
+            commands::system::read_file_bytes,
+            commands::system::term_log,
+            commands::system::relaunch_app,
+            commands::system::suspend_global_shortcuts,
+            commands::system::restore_global_shortcuts,
             commands::bluetooth::bluetooth_start_scan,
             commands::bluetooth::bluetooth_stop_scan,
             commands::bluetooth::bluetooth_connect,
@@ -186,6 +274,11 @@ fn main() {
             commands::goals_db::insert_goal_progress_history,
             commands::goals_db::get_goal_progress_history,
             commands::goals_db::clear_goals_db,
+            // Companion buddy + overlays
+            commands::companion::companion_show_buddy,
+            commands::companion::companion_hide_buddy,
+            commands::companion::companion_ensure_overlays,
+            commands::companion::companion_set_overlays_visible,
             // Floating bar
             commands::floating::toggle_floating_bar,
             commands::floating::hide_floating_bar,
@@ -197,11 +290,9 @@ fn main() {
             commands::floating::hide_whispr_hud,
             commands::floating::resize_whispr_hud,
             commands::floating::whispr_push_live,
-            // Dedicated notification floating window
+            // OS-native notification (delegates to tauri-plugin-notification)
             commands::notifications::show_notification_alert,
-            commands::notifications::hide_notification_bar,
-            commands::notifications::resize_notification_bar,
-            commands::notifications::notifications_poll,
+            commands::notifications::take_last_notification,
             // Live-transcript floating window (shown during meetings)
             commands::live_transcript::show_live_transcript,
             commands::live_transcript::hide_live_transcript,
@@ -215,6 +306,11 @@ fn main() {
             // PTT diagnostics
             commands::ptt::ptt_diagnostics,
             commands::ptt::ptt_fire_test,
+            commands::ptt::ensure_ptt_listener,
+            commands::ptt::set_ptt_key,
+            commands::ptt::get_ptt_key,
+            commands::ptt::set_companion_key,
+            commands::ptt::get_companion_key,
             // Memories
             commands::memories_db::insert_memory,
             commands::memories_db::get_memories,
@@ -252,6 +348,9 @@ fn main() {
             // Shortcut capture (used by onboarding shortcut steps)
             commands::shortcut_capture::start_shortcut_capture,
             commands::shortcut_capture::stop_shortcut_capture,
+            // Tray menu updates (check marks + label changes)
+            commands::tray::update_tray_menu,
+            commands::tray::set_tray_ask_label,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

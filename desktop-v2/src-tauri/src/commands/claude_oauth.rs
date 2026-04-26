@@ -1,15 +1,16 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as BASE64URL, Engine};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
-use tokio::sync::oneshot;
+
+use super::oauth_callback;
 
 const STORE_PATH: &str = "claude_oauth.json";
 const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL: &str = "https://claude.ai/oauth/authorize";
 const TOKEN_URL: &str = "https://console.anthropic.com/v1/oauth/token";
 const SCOPE: &str = "user:inference";
+const CALLBACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeAuthResult {
@@ -44,131 +45,43 @@ fn compute_code_challenge(verifier: &str) -> String {
     BASE64URL.encode(digest)
 }
 
-/// HTML page shown in the browser after successful OAuth callback.
-const SUCCESS_HTML: &str = r#"<!DOCTYPE html>
-<html><head><title>Nooto</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#111;color:#fff}
-.card{text-align:center;padding:2rem}h1{font-size:1.5rem;margin-bottom:.5rem}p{color:#888;font-size:.9rem}</style>
-</head><body><div class="card"><h1>Signed in successfully</h1><p>You can close this tab and return to Nooto.</p></div></body></html>"#;
-
-/// Axum query params for the callback route.
-#[derive(Deserialize)]
-struct CallbackParams {
-    #[serde(default)]
-    code: String,
-    #[serde(default)]
-    state: String,
-}
-
 /// Initiate Claude OAuth PKCE sign-in.
 ///
 /// 1. Generates PKCE code_verifier + code_challenge.
 /// 2. Starts a temporary local HTTP server on a random port.
 /// 3. Opens Claude authorize URL in the system browser.
-/// 4. Browser redirects to `http://localhost:{port}/callback?code=...&state=...`.
+/// 4. Browser redirects to `http://127.0.0.1:{port}/callback?code=...&state=...`.
 /// 5. Exchanges the authorization code for tokens.
 /// 6. Persists the access token and returns it.
 #[tauri::command]
 pub async fn claude_sign_in(app: tauri::AppHandle) -> Result<ClaudeAuthResult, String> {
-    // 1. PKCE
     let code_verifier = generate_code_verifier();
     let code_challenge = compute_code_challenge(&code_verifier);
     let state_nonce = uuid::Uuid::new_v4().to_string();
 
-    // 2. Bind a TCP listener on a random port.
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("Failed to bind callback server: {}", e))?;
-
-    let port = listener
-        .local_addr()
-        .map_err(|e| format!("Failed to get local addr: {}", e))?
-        .port();
-
-    let redirect_uri = format!("http://localhost:{}/callback", port);
-    tracing::info!("OAuth callback server listening on {}", redirect_uri);
-
-    // Channel for passing the code+state from the callback handler.
-    let (tx, rx) = oneshot::channel::<(String, String)>();
-    let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
-
-    // Build a minimal Axum app with one route.
-    let callback_tx = tx.clone();
-    let router = axum::Router::new().route(
-        "/callback",
-        axum::routing::get(
-            move |axum::extract::Query(params): axum::extract::Query<CallbackParams>| {
-                let tx = callback_tx.clone();
-                async move {
-                    if let Some(sender) = tx.lock().unwrap().take() {
-                        let _ = sender.send((params.code, params.state));
-                    }
-                    axum::response::Html(SUCCESS_HTML)
-                }
-            },
-        ),
-    );
-
-    // Spawn the server.
-    let server_handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, router).await;
-    });
-
-    // 3. Open the authorize URL in the browser.
-    let authorize_url = format!(
-        "{}?code=true&response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
-        AUTHORIZE_URL,
-        CLIENT_ID,
-        urlencoding::encode(&redirect_uri),
-        urlencoding::encode(SCOPE),
-        urlencoding::encode(&state_nonce),
-        urlencoding::encode(&code_challenge),
-    );
-
-    tracing::info!("Opening Claude OAuth URL in browser");
-
-    app.opener()
-        .open_url(&authorize_url, None::<&str>)
-        .map_err(|e| format!("Failed to open browser: {}", e))?;
-
-    // 4. Wait for callback (10 min timeout, matching ACP bridge).
-    let (code, returned_state) = tokio::time::timeout(
-        std::time::Duration::from_secs(600),
-        rx,
-    )
-    .await
-    .map_err(|_| {
-        server_handle.abort();
-        "Claude sign-in timed out — no response from browser within 10 minutes.".to_string()
-    })?
-    .map_err(|_| {
-        server_handle.abort();
-        "Callback channel closed unexpectedly.".to_string()
-    })?;
-
-    // Shut down the callback server.
-    server_handle.abort();
-
-    if code.is_empty() {
-        return Err("OAuth callback did not include an authorization code.".to_string());
-    }
-
-    if returned_state != state_nonce {
-        tracing::warn!("State mismatch: expected={}, got={}", state_nonce, returned_state);
-        return Err("OAuth state mismatch — possible CSRF. Please try again.".to_string());
-    }
+    let callback = oauth_callback::run(&app, CALLBACK_TIMEOUT, &state_nonce, |redirect_uri| {
+        format!(
+            "{}?code=true&response_type=code&client_id={}&redirect_uri={}&scope={}&state={}&code_challenge={}&code_challenge_method=S256",
+            AUTHORIZE_URL,
+            CLIENT_ID,
+            urlencoding::encode(redirect_uri),
+            urlencoding::encode(SCOPE),
+            urlencoding::encode(&state_nonce),
+            urlencoding::encode(&code_challenge),
+        )
+    })
+    .await?;
 
     tracing::info!("Claude auth code received, exchanging for tokens...");
 
-    // 5. Exchange code for tokens.
     let client = reqwest::Client::new();
     let token_resp = client
         .post(TOKEN_URL)
         .form(&[
             ("grant_type", "authorization_code"),
             ("client_id", CLIENT_ID),
-            ("code", code.as_str()),
-            ("redirect_uri", redirect_uri.as_str()),
+            ("code", callback.code.as_str()),
+            ("redirect_uri", callback.redirect_uri.as_str()),
             ("code_verifier", code_verifier.as_str()),
             ("state", state_nonce.as_str()),
             ("expires_in", "31536000"),

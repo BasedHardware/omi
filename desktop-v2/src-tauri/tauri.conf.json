@@ -11,6 +11,7 @@
   },
   "app": {
     "withGlobalTauri": false,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -40,21 +41,6 @@
         "center": false
       },
       {
-        "label": "notifications",
-        "title": "Nooto Notifications",
-        "url": "index.html?window=notifications",
-        "width": 380,
-        "height": 96,
-        "resizable": false,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "focus": false,
-        "visible": false,
-        "center": false
-      },
-      {
         "label": "whispr",
         "title": "Whispr",
         "url": "index.html?window=whispr",
@@ -66,7 +52,7 @@
         "maxHeight": 80,
         "resizable": false,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "focus": false,
@@ -87,6 +73,22 @@
         "focus": false,
         "visible": false,
         "center": false
+      },
+      {
+        "label": "companion-buddy",
+        "title": "Companion",
+        "url": "index.html?window=companion-buddy",
+        "width": 96,
+        "height": 96,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false,
+        "shadow": false
       }
     ],
     "security": {

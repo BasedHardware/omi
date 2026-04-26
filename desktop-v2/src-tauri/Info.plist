@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Nooto needs microphone access to transcribe your conversations in real-time.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Nooto needs permission to capture system audio for transcription of calls and meetings.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Nooto uses screen and system audio capture to record meetings and calls for transcription.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Nooto needs permission to detect which application is currently active.</string>
+</dict>
+</plist>

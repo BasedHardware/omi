@@ -8,7 +8,7 @@ description = "Nooto — cross-platform desktop companion"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["image-png"] }
+tauri = { version = "2", features = ["image-png", "tray-icon", "macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2"
@@ -42,12 +42,28 @@ nooto-desktop-backend = { path = "../../desktop/Backend-Rust" }
 # Plugins
 tauri-plugin-audio-capture = { path = "plugins/tauri-plugin-audio-capture" }
 tauri-plugin-screen-capture = { path = "plugins/tauri-plugin-screen-capture" }
+tauri-plugin-tts = { path = "plugins/tauri-plugin-tts" }
 tauri-plugin-http = "2.5.8"
 chrono = { version = "0.4.44", features = ["serde"] }
 rdev = "0.5"
 arboard = "3"
 enigo = "0.2"
+notify-rust = "4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+core-graphics = "0.24"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3" }
+objc2-app-kit = { version = "0.3", features = ["NSEvent", "NSWindow", "NSScreen", "NSResponder"] }
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+# Vendored fork of rdev 0.5.3 with the macOS event-tap callback patched to
+# stop calling `TSMGetInputSourceProperty` from a non-main thread, which
+# SIGTRAPs the process on macOS 14+ via `dispatch_assert_queue_fail`.
+# See `vendor/rdev/src/macos/common.rs` for the patch.
+[patch.crates-io]
+rdev = { path = "vendor/rdev" }

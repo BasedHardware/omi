@@ -26,11 +26,13 @@ const ID_ASK: &str = "tray_ask";
 const ID_OPEN: &str = "tray_open";
 const ID_QUIT: &str = "tray_quit";
 
-/// Handles to the check items so we can flip their state from
-/// `update_tray_menu`.
+/// Handles to menu items so we can update their state from Tauri commands.
 pub struct TrayMenuItems {
     pub aura: CheckMenuItem<Wry>,
     pub recording: CheckMenuItem<Wry>,
+    /// The "Ask Nooto" / "Companion" menu item — label is updated at runtime
+    /// when the Companion cutover flag is active.
+    pub ask: MenuItem<Wry>,
 }
 
 pub struct TrayMenuState(pub Mutex<Option<TrayMenuItems>>);
@@ -45,20 +47,26 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
+    // Default label: "Ask Nooto" (legacy). The frontend replaces this with
+    // "Companion" at boot when COMPANION_CUTOVER_ENABLED is true.
     let ask = MenuItem::with_id(app, ID_ASK, "Ask Nooto", true, None::<&str>)?;
     let open = MenuItem::with_id(app, ID_OPEN, "Open Nooto", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit", true, None::<&str>)?;
 
+    // Clone `ask` so we can both put it in the menu AND store the handle for
+    // later mutation (update_tray_menu can rename it at runtime).
+    let ask_clone = ask.clone();
     let menu = Menu::with_items(
         app,
-        &[&aura, &recording, &sep1, &ask, &open, &sep2, &quit],
+        &[&aura, &recording, &sep1, &ask_clone, &open, &sep2, &quit],
     )?;
 
     app.manage(TrayMenuState(Mutex::new(Some(TrayMenuItems {
         aura,
         recording,
+        ask,
     }))));
 
     // Reuse the window icon for the tray. On macOS, mark it as a template
@@ -116,6 +124,19 @@ pub fn update_tray_menu(
             .recording
             .set_checked(recording_on)
             .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Rename the "Ask Nooto" tray menu item. Called by the frontend at boot when
+/// the Companion cutover flag is active (passes "Companion"); called with
+/// "Ask Nooto" when the flag is off to preserve the rollback path.
+#[command]
+pub fn set_tray_ask_label(app: AppHandle, label: String) -> Result<(), String> {
+    let state = app.state::<TrayMenuState>();
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(items) = guard.as_ref() {
+        items.ask.set_text(&label).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

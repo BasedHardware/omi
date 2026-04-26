@@ -1,112 +1,133 @@
-//! Dedicated floating notification window.
+//! OS-native notification delivery.
 //!
-//! Separate from the chat floating bar (`commands::floating`) so notifications
-//! never interrupt or clobber an in-progress chat/PTT session. The window
-//! lives at `?window=notifications` and renders
-//! `src/components/notifications/NotificationBar.tsx`.
-//!
-//! Delivery model: Rust stashes a payload in `PENDING` and shows the window.
-//! The webview polls `notifications_poll` every ~250 ms and picks up the
-//! payload via `.take()`. Tauri's event bus was flaky for this case on Linux
-//! (see note in `commands::floating`), so polling keeps this simple.
+//! Platform strategy:
+//!   - **macOS**: try `notify-rust` bound to Nooto's bundle identifier first —
+//!     if a `Nooto.app` is installed on the system (e.g. from a previous
+//!     `pnpm tauri build`), this delivers with Nooto's icon even in dev mode.
+//!     If no bundle is registered, fall back to `osascript` which always works
+//!     but gets attributed to Script Editor's icon.
+//!   - **Linux / Windows**: `notify-rust`, which routes to
+//!     `org.freedesktop.Notifications` or WinRT toast respectively.
 
 use std::sync::Mutex;
+use tauri::command;
 
-use tauri::{command, AppHandle, LogicalSize, Manager, PhysicalPosition};
+#[cfg(target_os = "macos")]
+const NOOTO_BUNDLE_ID: &str = "com.togodynamics.nooto";
 
-pub const NOTIFICATIONS_LABEL: &str = "notifications";
-const TOP_MARGIN: f64 = 20.0;
-const RIGHT_MARGIN: f64 = 20.0;
-pub const DEFAULT_WIDTH: f64 = 380.0;
+/// Last-delivered notification, captured so the frontend can pick it up when
+/// the user clicks the banner. The stub `/Applications/Nooto.app` triggers a
+/// `nooto://notification-click` deep link on click; the deep-link handler in
+/// `main.rs` emits a `notification:click` event to the renderer, which reads
+/// this value via `take_last_notification` and routes to chat.
+static LAST_NOTIFICATION: Mutex<Option<(String, String)>> = Mutex::new(None);
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct NotificationPayload {
-    pub title: String,
-    pub body: String,
-    #[serde(rename = "autoHideMs", skip_serializing_if = "Option::is_none")]
-    pub auto_hide_ms: Option<u64>,
+fn remember_last_notification(title: &str, body: &str) {
+    if let Ok(mut guard) = LAST_NOTIFICATION.lock() {
+        *guard = Some((title.to_string(), body.to_string()));
+    }
 }
 
-static PENDING: Mutex<Option<NotificationPayload>> = Mutex::new(None);
+/// Retrieve and clear the most recent notification's title + body. Returns
+/// `None` if no notification is pending or if it's already been consumed.
+#[command]
+pub fn take_last_notification() -> Option<(String, String)> {
+    LAST_NOTIFICATION.lock().ok().and_then(|mut g| g.take())
+}
 
-fn anchor_top_right(app: &AppHandle, width: f64) -> Option<PhysicalPosition<i32>> {
-    let window = app.get_webview_window(NOTIFICATIONS_LABEL)?;
-    let monitor = window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| app.primary_monitor().ok().flatten())?;
+/// Result of the one-shot `notify_rust::set_application` attempt. `mac-notification-sys`
+/// wraps `setApplication` in `Once::call_once`, so after the first call every subsequent
+/// call returns `Err(AlreadySet)` regardless of actual state. We run it once, cache the
+/// verdict, and route every notification the same way — no more flicker between the
+/// Nooto icon and Script Editor's.
+#[cfg(target_os = "macos")]
+static NOOTO_APP_READY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
-    let scale = monitor.scale_factor();
-    let size = monitor.size();
-    let pos = monitor.position();
-
-    let monitor_width_logical = size.width as f64 / scale;
-    let x_logical = monitor_width_logical - width - RIGHT_MARGIN;
-
-    let x_physical = pos.x + (x_logical * scale).round() as i32;
-    let y_physical = pos.y + (TOP_MARGIN * scale).round() as i32;
-
-    Some(PhysicalPosition::new(x_physical, y_physical))
+#[cfg(target_os = "macos")]
+fn ensure_nooto_application() -> bool {
+    *NOOTO_APP_READY.get_or_init(|| {
+        let ok = notify_rust::set_application(NOOTO_BUNDLE_ID).is_ok();
+        eprintln!(
+            "[notifications] set_application({}) -> {}",
+            NOOTO_BUNDLE_ID,
+            if ok { "ok (Nooto.app found)" } else { "err (bundle not installed)" }
+        );
+        ok
+    })
 }
 
 #[command]
 pub async fn show_notification_alert(
-    app: AppHandle,
     title: String,
     body: String,
-    auto_hide_ms: Option<u64>,
+    #[allow(unused_variables)] auto_hide_ms: Option<u64>,
 ) -> Result<(), String> {
-    let payload = NotificationPayload { title, body, auto_hide_ms };
+    eprintln!(
+        "[notifications] show_notification_alert: title={:?} body_len={}",
+        title,
+        body.len()
+    );
+    remember_last_notification(&title, &body);
 
-    if let Ok(mut guard) = PENDING.lock() {
-        *guard = Some(payload);
+    #[cfg(target_os = "macos")]
+    {
+        // Preferred path: route through an installed Nooto.app so the Nooto
+        // icon appears. Uses a cached OnceLock result because the underlying
+        // `set_application` can only succeed once per process.
+        if ensure_nooto_application() {
+            let result = notify_rust::Notification::new()
+                .summary(&title)
+                .body(&body)
+                .show();
+            if result.is_ok() {
+                eprintln!("[notifications] delivered via Nooto.app bundle");
+                return Ok(());
+            }
+            eprintln!(
+                "[notifications] notify-rust path failed, falling back to osascript: {:?}",
+                result.err()
+            );
+        }
+
+        // Fallback: shell out to osascript. Notifications appear under Script
+        // Editor's icon but always deliver.
+        let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!(
+            r#"display notification "{}" with title "{}""#,
+            esc(&body),
+            esc(&title)
+        );
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("osascript spawn failed: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("[notifications] osascript failed: {}", stderr);
+            return Err(format!("osascript failed: {}", stderr));
+        }
+        eprintln!("[notifications] delivered via osascript");
+        return Ok(());
     }
 
-    let window = app
-        .get_webview_window(NOTIFICATIONS_LABEL)
-        .ok_or_else(|| format!("notification window '{}' not found", NOTIFICATIONS_LABEL))?;
-
-    if let Some(pos) = anchor_top_right(&app, DEFAULT_WIDTH) {
-        let _ = window.set_position(pos);
+    #[cfg(not(target_os = "macos"))]
+    {
+        match notify_rust::Notification::new()
+            .summary(&title)
+            .body(&body)
+            .auto_icon()
+            .show()
+        {
+            Ok(_) => {
+                eprintln!("[notifications] notify-rust delivered");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("[notifications] notify-rust failed: {}", e);
+                Err(e.to_string())
+            }
+        }
     }
-
-    window.show().map_err(|e| e.to_string())?;
-    let _ = window.set_always_on_top(true);
-
-    Ok(())
-}
-
-#[command]
-pub async fn hide_notification_bar(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(NOTIFICATIONS_LABEL) {
-        window.hide().map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[command]
-pub async fn resize_notification_bar(app: AppHandle, height: f64) -> Result<(), String> {
-    let window = app
-        .get_webview_window(NOTIFICATIONS_LABEL)
-        .ok_or_else(|| "notification window not found".to_string())?;
-
-    let clamped = height.clamp(40.0, 400.0);
-    window
-        .set_size(LogicalSize::new(DEFAULT_WIDTH, clamped))
-        .map_err(|e| e.to_string())?;
-
-    if let Some(pos) = anchor_top_right(&app, DEFAULT_WIDTH) {
-        let _ = window.set_position(pos);
-    }
-
-    Ok(())
-}
-
-/// Polled by the notification webview every ~250 ms. Returns any pending
-/// payload and clears it atomically.
-#[command]
-pub async fn notifications_poll() -> Result<Option<NotificationPayload>, String> {
-    let pending = PENDING.lock().ok().and_then(|mut g| g.take());
-    Ok(pending)
 }

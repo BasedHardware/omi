@@ -193,6 +193,33 @@ mod macos {
         }
     }
 
+    /// Probe Input Monitoring via semi-private IOKit API used by
+    /// Karabiner-Elements. Returns "granted" / "not_granted".
+    pub fn input_monitoring_status() -> &'static str {
+        const K_LISTEN_EVENT: u32 = 1;
+        #[link(name = "IOKit", kind = "framework")]
+        extern "C" {
+            fn IOHIDCheckAccess(requestType: u32) -> u32;
+        }
+        if unsafe { IOHIDCheckAccess(K_LISTEN_EVENT) } == 0 {
+            "granted"
+        } else {
+            "not_granted"
+        }
+    }
+
+    /// Fire the native Input Monitoring prompt if not previously decided.
+    pub fn input_monitoring_request() {
+        const K_LISTEN_EVENT: u32 = 1;
+        #[link(name = "IOKit", kind = "framework")]
+        extern "C" {
+            fn IOHIDRequestAccess(requestType: u32) -> bool;
+        }
+        unsafe {
+            IOHIDRequestAccess(K_LISTEN_EVENT);
+        }
+    }
+
     /// Calls AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: true}),
     /// which causes macOS to show the native "grant accessibility" prompt if the
     /// app isn't yet trusted.
@@ -205,17 +232,6 @@ mod macos {
         }
     }
 
-    /// Probe for Full Disk Access by trying to read a file only FDA-enabled
-    /// apps can access. `/Library/Application Support/com.apple.TCC/TCC.db`
-    /// is the TCC database — readable only when FDA is granted.
-    pub fn full_disk_access_status() -> &'static str {
-        use std::fs::File;
-        if File::open("/Library/Application Support/com.apple.TCC/TCC.db").is_ok() {
-            "granted"
-        } else {
-            "not_granted"
-        }
-    }
 }
 
 // ------------------------- unified permission commands -------------------------
@@ -231,7 +247,7 @@ pub async fn get_permission_status<R: Runtime>(
             "microphone" => macos::microphone_status(),
             "screen_recording" => macos::screen_recording_status(),
             "accessibility" => macos::accessibility_status(),
-            "full_disk_access" => macos::full_disk_access_status(),
+            "input_monitoring" => macos::input_monitoring_status(),
             // Automation has no reliable programmatic check on macOS.
             "automation" => "not_granted",
             // Notifications: handled on the JS side via the plugin.
@@ -299,10 +315,15 @@ pub async fn request_permission<R: Runtime>(
                 &app,
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
             )?,
-            "full_disk_access" => open_url(
-                &app,
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
-            )?,
+            "input_monitoring" => {
+                macos::input_monitoring_request();
+                if macos::input_monitoring_status() == "not_granted" {
+                    open_url(
+                        &app,
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+                    )?;
+                }
+            }
             "notifications" => {
                 // Handled on the JS side via tauri-plugin-notification.
             }
