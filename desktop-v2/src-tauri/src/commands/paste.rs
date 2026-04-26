@@ -1,58 +1,42 @@
-//! Clipboard write + simulated Ctrl+V paste.
+//! Clipboard delivery for the Whispr transcript.
 //!
-//! Called by the frontend at the end of a PTT session to deliver the
-//! transcribed text to whichever app was focused before the floating bar
-//! took over.
+//! We used to try simulating Cmd+V via enigo to auto-paste into the focused
+//! app. On dev builds that's unreliable — every rebuild changes the binary
+//! signature, and macOS revokes Accessibility (silently) for keystroke
+//! synthesis. The CGEvent calls then SIGABRT-crash the entire process before
+//! `catch_unwind` can catch them, which means the user not only loses the
+//! auto-paste but the app itself dies right after the transcription.
 //!
-//! Flow:
-//!   1. Write the transcript to the system clipboard.
-//!   2. Simulate Ctrl+V (Cmd+V on macOS) to paste into the focused app.
-//!   3. Leave the transcript on the clipboard.
+//! Trade-off chosen: drop auto-paste, guarantee the clipboard write. The
+//! transcript is always on the clipboard within milliseconds of stop_recording
+//! returning; the user presses Cmd+V manually wherever they want it. This is
+//! one extra keystroke per Whispr session in exchange for never losing a
+//! transcript and never crashing. The previous-clipboard restore was already
+//! out of scope (we don't snapshot it), so functionally the user gets the
+//! same outcome — the transcript on the clipboard, ready to paste.
 //!
-//! We intentionally do NOT restore the previous clipboard. If the
-//! focused window doesn't accept the paste (no text input, wrong
-//! field type, permission issue), the user still has the transcript
-//! on the clipboard and can paste it manually. This trades preserving
-//! the user's previous clipboard for guaranteeing the transcript is
-//! never lost — the latter is the promise of a dictation tool.
+//! If we ever want auto-paste back, the right path is a tiny separate
+//! signed helper binary that we shell out to (like the Swift speech-helper
+//! sidecar pattern). That isolates the unreliable CGEvent at process level
+//! so a crash there can't take the main app down.
 
-use enigo::{Enigo, Key, Keyboard, Settings};
 use tauri::command;
 
 #[command]
 pub async fn paste_transcript(text: String) -> Result<(), String> {
     if text.trim().is_empty() {
+        eprintln!("[paste] paste_transcript: empty text — skipping");
         return Ok(());
     }
+    eprintln!(
+        "[paste] paste_transcript: {} chars on clipboard, preview {:?}",
+        text.chars().count(),
+        text.chars().take(60).collect::<String>()
+    );
 
     let mut cb = arboard::Clipboard::new().map_err(|e| format!("clipboard: {e}"))?;
-
-    // 1. Write the transcript.
-    cb.set_text(text)
-        .map_err(|e| format!("clipboard set: {e}"))?;
-
-    // 2. Give the OS a beat to settle focus after the Whispr HUD hides.
-    tokio::time::sleep(std::time::Duration::from_millis(90)).await;
-
-    // 3. Simulate the paste keystroke. Best-effort: if this fails the
-    //    transcript is still on the clipboard.
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("enigo: {e}"))?;
-    let mod_key = if cfg!(target_os = "macos") {
-        Key::Meta
-    } else {
-        Key::Control
-    };
-
-    enigo
-        .key(mod_key, enigo::Direction::Press)
-        .map_err(|e| format!("enigo press mod: {e}"))?;
-    enigo
-        .key(Key::Unicode('v'), enigo::Direction::Click)
-        .map_err(|e| format!("enigo click v: {e}"))?;
-    enigo
-        .key(mod_key, enigo::Direction::Release)
-        .map_err(|e| format!("enigo release mod: {e}"))?;
-
+    cb.set_text(text).map_err(|e| format!("clipboard set: {e}"))?;
+    eprintln!("[paste] clipboard set OK — press Cmd+V to paste");
     Ok(())
 }
 
