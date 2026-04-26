@@ -19,33 +19,78 @@ Performance:
 Falls back to regex patterns if spaCy is unavailable.
 """
 
+import asyncio
 import logging
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded spaCy model
+# Thread-safe lazy-load state
 _nlp = None
 _nlp_load_attempted = False
+_nlp_load_started = False
+_nlp_lock = threading.Lock()
+
+# Background executor for blocking I/O (spacy.load, disk reads)
+_nlp_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="spacy-loader")
+
+
+def _load_spacy_model():
+    """Load spacy model in a background thread. Returns model or None."""
+    import spacy
+    return spacy.load("en_core_web_sm", disable=["parser", "lemmatizer", "textcat"])
 
 
 def _get_nlp():
-    """Lazy-load spaCy model. Returns None if unavailable."""
-    global _nlp, _nlp_load_attempted
-    if _nlp_load_attempted:
-        return _nlp
-
-    _nlp_load_attempted = True
-    try:
-        import spacy
-        _nlp = spacy.load("en_core_web_sm", disable=["parser", "lemmatizer", "textcat"])
-        logger.info("NER speaker identification: spaCy model loaded")
-    except (ImportError, OSError) as e:
-        logger.warning(f"spaCy not available, falling back to regex: {e}")
-        _nlp = None
-
+    """Synchronous access to already-loaded model. Call _ensure_nlp() first."""
     return _nlp
+
+
+def _ensure_nlp(loop=None):
+    """
+    Start background load of spaCy model if not already started.
+    Must be called from async context (uses run_in_executor).
+    Returns immediately; model loads in background thread.
+    """
+    global _nlp, _nlp_load_attempted, _nlp_load_started
+    if _nlp_load_attempted:
+        return  # already tried
+
+    with _nlp_lock:
+        if _nlp_load_started:
+            return
+        _nlp_load_started = True
+        _nlp_load_attempted = True
+
+    def _load():
+        global _nlp
+        try:
+            # Run blocking spacy.load() in background thread
+            _nlp = _load_spacy_model()
+            logger.info("NER speaker identification: spaCy model loaded in background")
+        except (ImportError, OSError) as e:
+            logger.warning(f"spaCy not available, falling back to regex: {e}")
+            _nlp = None
+
+    # Submit to thread pool — fire and forget; callers use _get_nlp() which
+    # will return None until load completes, then returns the model
+    _nlp_executor.submit(_load)
+
+
+async def _get_nlp_async():
+    """
+    Async-safe model accessor.
+    Kicks off background load if needed, then returns the model
+    (blocks cooperatively until the background thread finishes loading).
+    """
+    _ensure_nlp()
+    loop = asyncio.get_event_loop()
+    # Wait for load thread to finish if it's still running
+    await loop.run_in_executor(_nlp_executor, lambda: None)
+    return _get_nlp()
 
 
 def detect_speaker_names_ner(text: str) -> List[Tuple[str, float]]:
@@ -64,6 +109,8 @@ def detect_speaker_names_ner(text: str) -> List[Tuple[str, float]]:
     Returns:
         List of (name_string, confidence_float) tuples.
     """
+    # Kick off background load if not yet started (safe to call repeatedly)
+    _ensure_nlp()
     nlp = _get_nlp()
     if nlp is None:
         # Fallback to regex
@@ -136,9 +183,11 @@ def _score_name_confidence(name: str, ent, doc, text: str) -> float:
     if name[0].isupper() and not name.isupper():
         score += 0.05
 
-    # Penalize: if name matches common nouns/adjectives that spaCy sometimes tags
+    # Reduce penalty: don't silently drop legitimate names
+    # spaCy PERSON tag from explicit self-introduction is strong signal;
+    # only apply a small penalty for genuinely ambiguous words
     if name.lower() in _AMBIGUOUS_WORDS:
-        score -= 0.3
+        score -= 0.1
 
     # Cap at 1.0
     return min(score, 1.0)

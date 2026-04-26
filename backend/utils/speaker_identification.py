@@ -16,6 +16,7 @@ from utils.other.storage import (
 from utils.speaker_sample import verify_and_transcribe_sample
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+from utils.ner_speaker_identification import detect_speaker_from_text_ner
 import logging
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,6 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
     """
     # Primary: NER-based detection (catches natural mentions)
     try:
-        from utils.ner_speaker_identification import detect_speaker_from_text_ner
         ner_result = detect_speaker_from_text_ner(text)
         if ner_result:
             return ner_result
