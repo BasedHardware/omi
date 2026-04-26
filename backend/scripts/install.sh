@@ -24,7 +24,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"

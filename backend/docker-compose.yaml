@@ -1,7 +1,7 @@
 # One-Click Omi Backend Deployment
 #
 # Usage:
-#   1. Copy .env.docker to .env and fill in your API keys
+#   1. Copy .env.example to .env and fill in your API keys
 #   2. docker compose up -d
 #   3. Visit http://localhost:8080/docs
 #
@@ -12,7 +12,7 @@
 #
 # Note: Firestore (Google Cloud) is the primary datastore.
 #       You must provide your own GCP service account credentials.
-#       See .env.docker for required environment variables.
+#       See .env.example for required environment variables.
 
 services:
   backend:
@@ -45,7 +45,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -58,7 +58,7 @@ services:
   typesense:
     image: typesense/typesense:27.1
     ports:
-      - "8108:8108"
+      - "127.0.0.1:8108:8108"
     environment:
       - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-omi_typesense_dev_key}
       - TYPESENSE_DATA_DIR=/data
