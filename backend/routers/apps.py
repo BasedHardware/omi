@@ -480,6 +480,9 @@ def get_all_unapproved_apps(secret_key: str = Header(..., alias='x-admin-key')):
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
+    # Without uid, the creator can't GET/PATCH/DELETE their own app (the
+    # ownership check at apps.py:892, 763, etc. compares app.uid to caller uid).
+    data['uid'] = uid
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
