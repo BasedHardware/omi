@@ -26,7 +26,9 @@ RUN git clone https://github.com/google/liblc3.git && \
 
 # Install Python requirements
 WORKDIR /opt/venv
-COPY backend/requirements.txt /tmp/requirements.txt
+# docker-compose.yml sets context: . (the backend/ dir), so requirements.txt
+# is at the context root — `backend/` prefix would resolve to backend/backend/.
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
 FROM python:3.11-slim
@@ -47,7 +49,7 @@ RUN ldconfig && \
     rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
-COPY backend/ .
+COPY . .
 
 EXPOSE 8080
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20"]
