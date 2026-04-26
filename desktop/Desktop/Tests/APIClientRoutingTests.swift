@@ -35,6 +35,37 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
         lock.unlock()
     }
 
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let readCount = stream.read(buffer, maxLength: bufferSize)
+            if readCount > 0 {
+                data.append(buffer, count: readCount)
+            } else if readCount < 0 {
+                return nil
+            } else {
+                break
+            }
+        }
+
+        return data.isEmpty ? nil : data
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
@@ -44,7 +75,7 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
                 url: url,
                 method: request.httpMethod ?? "GET",
                 headers: request.allHTTPHeaderFields ?? [:],
-                body: request.httpBody
+                body: Self.bodyData(from: request)
             ))
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
@@ -87,6 +118,59 @@ final class APIClientRoutingTests: XCTestCase {
         let client = APIClient()
         let url = await client.baseURL
         XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testBetaProductionBundleUsesDevelopmentPythonBackend() {
+        let url = DesktopBackendEnvironment.pythonBaseURL(
+            useDevelopmentBackends: true,
+            environmentValue: "https://api.omi.me"
+        )
+        XCTAssertEqual(url, "https://api.omiapi.com/")
+    }
+
+    func testStableProductionBundleKeepsProductionPythonBackend() {
+        let url = DesktopBackendEnvironment.pythonBaseURL(
+            useDevelopmentBackends: false,
+            environmentValue: "https://api.omi.me"
+        )
+        XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testBetaProductionBundleUsesDevelopmentRustBackend() {
+        let url = DesktopBackendEnvironment.rustBackendURL(
+            useDevelopmentBackends: true,
+            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
+            launchEnvironmentValue: nil
+        )
+        XCTAssertEqual(url, "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/")
+    }
+
+    func testStableProductionBundleKeepsConfiguredRustBackend() {
+        let url = DesktopBackendEnvironment.rustBackendURL(
+            useDevelopmentBackends: false,
+            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
+            launchEnvironmentValue: nil
+        )
+        XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
+    }
+
+    func testDevelopmentBackendSelectionOnlyAppliesToProductionBundleBetaChannel() {
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "beta"
+        ))
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "staging"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "stable"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.desktop-dev",
+            updateChannel: "beta"
+        ))
     }
 
     func testBaseURLReadsFromPythonEnvVar() async {

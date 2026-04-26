@@ -99,15 +99,10 @@ class TranscriptionService {
     private let streamingMode: StreamingMode
 
     /// Python backend base URL for transcription endpoints.
-    /// Resolution order: OMI_PYTHON_API_URL → https://api.omi.me/
+    /// Resolution order: beta release channel → OMI_PYTHON_API_URL → https://api.omi.me/
     /// NOTE: Do NOT fall back to OMI_API_URL — that points to the Rust desktop-backend
     /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
-    private static let pythonBackendBaseURL: String = {
-        if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
-        }
-        return "https://api.omi.me/"
-    }()
+    private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
 
     // Reconnection (internal for @testable import)
     var reconnectAttempts = 0
