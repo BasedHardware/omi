@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/services/auth_service.dart';
@@ -28,7 +29,6 @@ import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'phone_call_settings_page.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
 
@@ -371,25 +371,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
                   },
                 ),
-                Consumer<UsageProvider>(
-                  builder: (context, usageProvider, child) {
-                    if (!usageProvider.shouldShowPhoneCallsEntry) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildSettingsItem(
-                          title: 'Phone Calls',
-                          icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
-                          onTap: () {
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const PhoneCallSettingsPage()));
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
                   title: context.l10n.permissions,
@@ -499,8 +480,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             Navigator.of(ctx).pop();
                             await SharedPreferencesUtil().clear();
                             await AuthService.instance.signOut();
-                            if (context.mounted) {
-                              routeToPage(context, const AppShell(), replace: true);
+                            // The drawer's context is unmounted by the time we
+                            // get here (we popped it before opening the
+                            // confirm dialog), so routing through it is a
+                            // silent no-op. Use the root navigator instead so
+                            // we always land back on the auth screen.
+                            final rootCtx = globalNavigatorKey.currentContext;
+                            if (rootCtx != null && rootCtx.mounted) {
+                              routeToPage(rootCtx, const AppShell(), replace: true);
                             }
                           },
                           context.l10n.signOutQuestion,

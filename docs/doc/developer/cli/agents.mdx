@@ -1,0 +1,164 @@
+---
+title: "For agents"
+icon: "robot"
+description: "Stable agent contract — JSON output, exit codes, retry semantics."
+---
+
+`omi-cli` is built so an LLM-driven harness can drive it without a wrapper
+layer. This page documents the stable contract.
+
+## The JSON contract
+
+Pass `--json` (a **global** flag, before the subcommand) and the CLI behaves
+like a strict tool:
+
+- **stdout** receives a single JSON document and *only* a JSON document.
+  No spinners, no progress messages, no decorative output.
+- **stderr** receives any error as a JSON object: `{"error": "...", "detail": "..."}`.
+- **exit code** signals what happened.
+
+```bash
+omi --json memory list --limit 25 | jq '.[] | {id, content, category}'
+```
+
+## Exit codes
+
+| Code | Meaning                                                                 |
+| ---- | ----------------------------------------------------------------------- |
+| `0`  | Success.                                                                |
+| `1`  | Usage error — bad flag, missing arg, validation rejection.              |
+| `2`  | Auth error — no creds, expired token, insufficient scope.               |
+| `3`  | Server error — 5xx after retries exhausted, or connection failure.      |
+| `4`  | Rate limited — 429 after retries exhausted. `detail` includes the wait. |
+| `5`  | Not found — 404, or client-side scan came up empty.                     |
+
+These codes are **part of the contract** — they won't shift between minor
+versions. Branch on them in your harness without parsing English errors.
+
+## Authentication: API key vs browser OAuth
+
+The CLI supports both — but for **agents** specifically, the API-key path is
+almost always the right call:
+
+| Need                                | Use this                  |
+| ----------------------------------- | ------------------------- |
+| Headless / CI / container runtime   | `OMI_API_KEY` env var     |
+| Long-running unattended automation  | API key                   |
+| Scoped permissions                  | API key (granular scopes) |
+| Interactive use by a human          | `omi auth login --browser`|
+
+API keys are long-lived, scoped, and don't need a browser — perfect for
+agents. The browser OAuth flow exists for humans on a laptop and uses
+short-lived Firebase ID tokens that auto-refresh between calls.
+
+```bash
+export OMI_API_KEY=omi_dev_...
+```
+
+The on-disk config file is great for humans but a footgun in shared CI
+runners. The env var injection runs the same prefix validation as
+`omi auth login` so a malformed value still fails fast with exit `1`.
+
+## Retry behavior
+
+Transient failures are retried automatically before the CLI surfaces an error:
+
+- **5xx** — exponential backoff with jitter (initial 0.5s, cap 8s).
+- **429** — honors the server's `Retry-After` header when present (capped at
+  60s so a misconfigured upstream can't pin your agent forever); falls back to
+  jitter otherwise. The `Retry-After` cap means a 429 with a one-hour hint
+  becomes a one-minute wait — your agent gets exit `4` quickly enough to
+  decide whether to back off itself.
+- **Transport errors** (DNS failures, dropped TCP) — retried up to 4 attempts.
+
+After retries are exhausted, the CLI surfaces a structured error and the
+appropriate exit code. The `detail` field for rate-limit errors looks like:
+
+```json
+{"error": "Rate limited: dev:conversations (25/hr)", "detail": "Retry in 12s. ..."}
+```
+
+The policy name (`dev:conversations`, `dev:memories`, `dev:memories_batch`)
+matches the backend's rate-limit policy IDs so you can map them to your own
+backoff strategies.
+
+## Worked example: Python harness
+
+```python
+import json
+import subprocess
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+
+class OmiCliError(RuntimeError):
+    pass
+
+
+def omi(*args: str) -> Any:
+    """Invoke the omi CLI in JSON mode, raising on non-success exit codes."""
+    result = subprocess.run(
+        ["omi", "--json", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode == 0:
+        return json.loads(result.stdout) if result.stdout.strip() else None
+    # Errors come back as JSON on stderr in JSON mode.
+    try:
+        err = json.loads(result.stderr)
+    except json.JSONDecodeError:
+        err = {"error": result.stderr.strip()}
+    err["exit_code"] = result.returncode
+    raise OmiCliError(err)
+
+
+# Read all open action items and mark anything older than 30 days complete.
+cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+
+items = omi("action-item", "list", "--open") or []
+for item in items:
+    created = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+    if created < cutoff:
+        omi("action-item", "complete", item["id"])
+```
+
+## Handling rate limits in your harness
+
+```python
+import json
+import re
+import subprocess
+import time
+
+
+def omi_with_backoff(*args: str, max_attempts: int = 3) -> object:
+    for _ in range(max_attempts):
+        result = subprocess.run(
+            ["omi", "--json", *args],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return json.loads(result.stdout) if result.stdout.strip() else None
+        if result.returncode != 4:  # not a rate-limit error
+            raise RuntimeError(result.stderr)
+        # Pull "Retry in Ns" out of the detail message.
+        match = re.search(r"Retry in (\d+)s", result.stderr)
+        wait_s = int(match.group(1)) if match else 60
+        time.sleep(wait_s)
+    raise RuntimeError("rate-limited after retries")
+```
+
+## Tips
+
+- **One JSON document per invocation.** Don't try to stream — the CLI doesn't
+  emit incremental output. Run it again for the next page.
+- **Use `--profile` to isolate environments.** A staging profile + a prod
+  profile saves you from accidentally writing to prod with a test script.
+- **Use `--api-base http://localhost:8080`** for local backend testing.
+- **`--verbose` is safe in JSON mode.** Debug output goes to stderr, stdout
+  stays valid JSON.
+- **Pipe stdin with `--text -`** for `omi conversation create` — handy when
+  the content is generated by another tool and you don't want to shell-escape it.

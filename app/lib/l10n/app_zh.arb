@@ -733,6 +733,7 @@
     "slideToUpdate": "滑动以更新",
     "copiedToClipboard": "{title}已复制到剪贴板",
     "batteryLevel": "电池电量",
+    "charging": "充电中",
     "productUpdate": "产品更新",
     "offline": "离线",
     "available": "可用",
@@ -2673,6 +2674,8 @@
     "onTheCallEnterThisCode": "通话中输入此代码",
     "phoneAllow": "允许",
     "phoneCallSettingsTitle": "通话设置",
+    "showPhoneCallButtonTitle": "显示电话按钮",
+    "showPhoneCallButtonDesc": "在主屏幕上显示电话按钮",
     "phoneCallsSubtitle": "实时转录通话",
     "phoneCallsWithOmi": "使用 Omi 通话",
     "phoneContactsTab": "通讯录",
@@ -2999,5 +3002,12 @@
     "batteryHistory": "电池",
     "day": "日",
     "noBatteryDataYet": "暂无电池数据",
-    "week": "周"
+    "week": "周",
+    "voiceResponseAudio": "朗读 Omi 的回复",
+    "voiceResponseMode": "语音回复",
+    "voiceResponseModeTitle": "何时朗读回复",
+    "voiceResponseOff": "关闭",
+    "voiceResponseHeadphonesOnly": "仅耳机",
+    "voiceResponseAlways": "始终",
+    "agreeAndContinue": "同意并继续"
 }

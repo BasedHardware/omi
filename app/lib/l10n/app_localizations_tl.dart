@@ -2389,6 +2389,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get batteryLevel => 'Antas ng Baterya';
 
   @override
+  String get charging => 'Nagcha-charge';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -8363,6 +8366,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Ipakita ang button ng tawag';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Ipakita ang button ng tawag sa home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Ang Iyong Na-verify na Mga Numero';
 
   @override
@@ -9208,4 +9217,25 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.';
+
+  @override
+  String get voiceResponseAudio => 'Basahin nang malakas ang sagot ng Omi';
+
+  @override
+  String get voiceResponseMode => 'Tugon sa boses';
+
+  @override
+  String get voiceResponseModeTitle => 'Kailan bibigkasin ang tugon';
+
+  @override
+  String get voiceResponseOff => 'Naka-off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones lang';
+
+  @override
+  String get voiceResponseAlways => 'Palagi';
+
+  @override
+  String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
 }

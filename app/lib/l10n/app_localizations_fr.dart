@@ -2388,6 +2388,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get batteryLevel => 'Niveau de batterie';
 
   @override
+  String get charging => 'En charge';
+
+  @override
   String get productUpdate => 'Mise à jour du produit';
 
   @override
@@ -8365,6 +8368,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Parametres d\'appel';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afficher le bouton d\'appel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afficher le bouton d\'appel téléphonique sur l\'écran d\'accueil';
+
+  @override
   String get yourVerifiedNumbers => 'Vos numeros verifies';
 
   @override
@@ -9206,4 +9215,25 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Vous avez atteint votre limite mensuelle. Passez à un plan supérieur pour continuer à discuter avec Omi sans restrictions.';
+
+  @override
+  String get voiceResponseAudio => 'Lire la réponse d\'Omi à haute voix';
+
+  @override
+  String get voiceResponseMode => 'Réponse vocale';
+
+  @override
+  String get voiceResponseModeTitle => 'Quand énoncer les réponses';
+
+  @override
+  String get voiceResponseOff => 'Désactivé';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Casque uniquement';
+
+  @override
+  String get voiceResponseAlways => 'Toujours';
+
+  @override
+  String get agreeAndContinue => 'Accepter et continuer';
 }

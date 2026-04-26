@@ -43,15 +43,10 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Auth backend URL — must be set via OMI_AUTH_URL env var (in .env)
-    private let apiBaseURL: String = {
-        if let envURL = getenv("OMI_AUTH_URL") {
-            let url = String(cString: envURL)
-            if !url.isEmpty { return url.hasSuffix("/") ? url : url + "/" }
-        }
-        NSLog("OMI AUTH: OMI_AUTH_URL not set — OAuth sign-in will fail")
-        return ""
-    }()
+    // Auth uses the Python backend (OMI_PYTHON_API_URL) — same service that hosts Redis-backed OAuth
+    private var apiBaseURL: String {
+        DesktopBackendEnvironment.pythonBaseURL()
+    }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }

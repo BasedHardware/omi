@@ -732,6 +732,7 @@
     "slideToUpdate": "Llisca per actualitzar",
     "copiedToClipboard": "{title} copiat al portapapers",
     "batteryLevel": "Nivell de bateria",
+    "charging": "Carregant",
     "productUpdate": "Actualització del producte",
     "offline": "Fora de línia",
     "available": "Disponible",
@@ -2620,6 +2621,8 @@
     "onTheCallEnterThisCode": "A la trucada, introdueix aquest codi",
     "phoneAllow": "Permetre",
     "phoneCallSettingsTitle": "Configuracio de trucades",
+    "showPhoneCallButtonTitle": "Mostra el botó de trucada",
+    "showPhoneCallButtonDesc": "Mostra el botó de trucada telefònica a la pantalla d'inici",
     "phoneCallsSubtitle": "Fes trucades amb transcripcio en temps real",
     "phoneCallsWithOmi": "Trucades amb Omi",
     "phoneContactsTab": "Contactes",
@@ -2946,5 +2949,12 @@
     "batteryHistory": "Bateria",
     "day": "Dia",
     "noBatteryDataYet": "Encara no hi ha dades de bateria",
-    "week": "Setmana"
+    "week": "Setmana",
+    "voiceResponseAudio": "Llegeix la resposta d'Omi en veu alta",
+    "voiceResponseMode": "Resposta de veu",
+    "voiceResponseModeTitle": "Quan pronunciar les respostes",
+    "voiceResponseOff": "Desactivat",
+    "voiceResponseHeadphonesOnly": "Només auriculars",
+    "voiceResponseAlways": "Sempre",
+    "agreeAndContinue": "Accepto i continuo"
 }

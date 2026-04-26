@@ -42,6 +42,7 @@ import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -666,42 +667,45 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
-                              // Phone calls button - bottom left.
+                              // Phone calls button - bottom left
                               if (home.selectedIndex == 0 && context.watch<UsageProvider>().shouldShowPhoneCallsEntry)
-                                Positioned(
-                                  left: 20,
-                                  bottom: 100,
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      HapticFeedback.mediumImpact();
-                                      MixpanelManager().bottomNavigationTabClicked('Phone Calls');
-                                      var usageProvider = context.read<UsageProvider>();
-                                      if (usageProvider.subscription == null) {
-                                        await usageProvider.fetchSubscription();
-                                      }
-                                      if (!usageProvider.canAccessPhoneCalls) {
-                                        // Quota exhausted or feature disabled. Only surface the
-                                        // upsell when the paywall is allowed to appear; on
-                                        // hidden-paywall builds we silently swallow the tap.
-                                        if (!usageProvider.showSubscriptionUI) return;
-                                        MixpanelManager().phoneCallUpsellShown(source: 'home');
-                                        if (!context.mounted) return;
-                                        showPhoneCallsUpsell(context);
-                                        return;
-                                      }
-                                      if (!context.mounted) return;
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
-                                      );
-                                    },
-                                    child: Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
-                                      child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
-                                    ),
-                                  ),
+                                Consumer<DeveloperModeProvider>(
+                                  builder: (context, devProvider, _) {
+                                    if (!devProvider.showPhoneCallButton) return const SizedBox.shrink();
+                                    return Positioned(
+                                      left: 20,
+                                      bottom: 100,
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          HapticFeedback.mediumImpact();
+                                          MixpanelManager().bottomNavigationTabClicked('Phone Calls');
+                                          var usageProvider = context.read<UsageProvider>();
+                                          if (usageProvider.subscription == null) {
+                                            await usageProvider.fetchSubscription();
+                                          }
+                                          if (!usageProvider.canAccessPhoneCalls) {
+                                            if (!usageProvider.showSubscriptionUI) return;
+                                            MixpanelManager().phoneCallUpsellShown(source: 'home');
+                                            if (!context.mounted) return;
+                                            showPhoneCallsUpsell(context);
+                                            return;
+                                          }
+                                          if (!context.mounted) return;
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => const PhoneCallsPage()),
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration:
+                                              const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
+                                          child: const Icon(FontAwesomeIcons.phone, size: 22, color: Colors.white70),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               // Ask Omi button - bottom right
                               if (home.selectedIndex == 0)

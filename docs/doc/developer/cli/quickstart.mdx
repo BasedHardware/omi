@@ -1,0 +1,142 @@
+---
+title: "Quickstart"
+icon: "rocket"
+description: "Get from zero to your data — pick browser OAuth or paste a dev API key."
+---
+
+This guide assumes you've already [installed `omi-cli`](/doc/developer/cli/install).
+
+## 1. Log in
+
+`omi auth login` (with no flags) asks how you'd like to authenticate:
+
+```text
+$ omi auth login
+How would you like to log in?
+  1) Browser  — sign in with Google or Apple via OAuth (recommended for humans)
+  2) API key  — paste a developer key from app.omi.me (recommended for agents/CI)
+Choose 1 or 2 [1]: _
+```
+
+<Tabs>
+  <Tab title="Browser (humans)">
+    ```bash
+    omi auth login            # pick option 1
+    # or skip the prompt:
+    omi auth login --browser
+    ```
+
+    The CLI starts a localhost callback server on an ephemeral port, opens
+    your default browser to Omi's auth page, and waits for the callback.
+    Sign in with Google (or `--provider apple`) and you're back at the
+    terminal — no copying tokens around.
+
+    Tokens are stored at `~/.omi/config.toml` (file mode `0600`). The
+    short-lived Firebase ID token is auto-refreshed before each request
+    using the long-lived refresh token.
+  </Tab>
+  <Tab title="API key (agents, CI)">
+    ```bash
+    omi auth login --api-key omi_dev_...
+    ```
+
+    Or interactively (input is hidden — your token never lands in shell
+    history):
+
+    ```bash
+    omi auth login            # pick option 2
+    ```
+
+    Generate a dev API key in the Omi web app under **Developer → API Keys**.
+    Choose the scopes you want — `memories:read`, `memories:write`,
+    `conversations:read`, etc. The CLI validates the `omi_dev_` prefix
+    client-side so you fail fast on a typo.
+  </Tab>
+  <Tab title="Headless / CI">
+    ```bash
+    export OMI_API_KEY=omi_dev_...
+    ```
+
+    The env var takes effect immediately; no on-disk config needed. The same
+    prefix validation runs, so a malformed value fails with a clear error
+    rather than a cryptic 401. Pair with `--api-base` if you're targeting a
+    staging backend.
+  </Tab>
+  <Tab title="Stdin">
+    ```bash
+    omi auth login < /path/to/key.txt
+    ```
+
+    Useful when the key lives in a secret manager and you can pipe it in
+    without ever displaying it. (Browser flow doesn't work over stdin —
+    the CLI assumes piped input is an API key.)
+  </Tab>
+</Tabs>
+
+Confirm:
+
+```bash
+omi auth status
+```
+
+```text
+          omi auth status
+ profile               default
+ authenticated         ✓
+ auth_method           oauth
+ api_base              https://api.omi.me
+ credential            eyJhbG…1234
+ id_token_expires_at   1714142400.0
+```
+
+## 2. Read your data
+
+```bash
+omi memory list
+omi conversation list --limit 5
+omi action-item list --open
+omi goal list
+```
+
+Add `--json` (as a global flag, before the verb) for machine-readable output:
+
+```bash
+omi --json memory list --limit 25 | jq '.[] | {id, content, category}'
+```
+
+## 3. Make a change
+
+```bash
+# Create a memory:
+omi memory create "Prefers async over sync meetings" --category work --tag preferences
+
+# Mark an action item complete:
+omi action-item complete a1b2c3d4
+
+# Update goal progress:
+omi goal progress g_xyz 7
+```
+
+## Profiles
+
+Got more than one Omi account (e.g. personal + work)? Use named profiles:
+
+```bash
+omi config profile use work
+omi auth login                      # logs in the active profile
+omi --profile personal memory list  # one-off override
+```
+
+Each profile has its own auth method, credential, and API base. You can mix
+browser-OAuth in your personal profile with an API-key in a CI profile.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Command reference" icon="book" href="/doc/developer/cli/commands">
+    Every verb, every flag.
+  </Card>
+  <Card title="For agents" icon="robot" href="/doc/developer/cli/agents">
+    Stable JSON contract + exit codes for LLM use.
+  </Card>
+</CardGroup>

@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omi-cli"
+version = "0.2.0"
+description = "Command-line interface for Omi — talk to memories, conversations, action items, and goals from your terminal."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Omi Community", email = "support@omi.me" },
+]
+keywords = [
+    "omi",
+    "cli",
+    "agent",
+    "memory",
+    "wearable",
+    "ai",
+    "conversational-ai",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "typer>=0.12,<1.0",
+    "rich>=13.7,<15.0",
+    "httpx>=0.27,<1.0",
+    "tenacity>=8.2,<10.0",
+    "pydantic>=2.5,<3.0",
+    "tomli>=2.0; python_version < '3.11'",
+    "tomli-w>=1.0,<2.0",
+]
+
+[project.urls]
+Homepage = "https://www.omi.me/"
+Repository = "https://github.com/BasedHardware/omi"
+Documentation = "https://docs.omi.me"
+Issues = "https://github.com/BasedHardware/omi/issues"
+
+[project.scripts]
+# Wire the console script through ``main()`` (not the bare Typer ``app``) so
+# the SIGINT/EOF + last-resort exception handlers in main.py run for every
+# invocation. Going through ``app`` directly would leak raw tracebacks on
+# unexpected errors and emit Click's default Ctrl-C string.
+omi = "omi_cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-cov>=5.0,<7.0",
+    "respx>=0.21,<1.0",
+    "black>=24.0,<26.0",
+    "isort>=5.13,<7.0",
+    "mypy>=1.8,<2.0",
+    "build>=1.0,<2.0",
+    "twine>=5.0,<7.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["omi_cli*"]
+
+[tool.setuptools.package-data]
+omi_cli = ["py.typed"]
+
+[tool.black]
+line-length = 120
+skip-string-normalization = true
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-q --strict-markers"

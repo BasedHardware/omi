@@ -1832,13 +1832,12 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV_V2          — base64-encoded .env bundled into .app at build time
-  #                                     Contains:
-  #                                       OMI_API_URL=https://api.omi.me
-  #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
+  #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
+  #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
   #                                       MIXPANEL_PROJECT_TOKEN=<token>
-  #                                     NOTE: OMI_PYTHON_API_URL is set via workflow vars (not in this secret)
+  #                                     URLs are set via workflow vars (not in this secret):
+  #                                       OMI_DESKTOP_API_URL, OMI_PYTHON_API_URL
   #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
   #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
   #                                       GOOGLE_CALENDAR_API_KEY
@@ -1876,7 +1875,7 @@ workflows:
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
-        DESKTOP_BACKEND_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app"
+        OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
         OMI_PYTHON_API_URL: "https://api.omi.me"
         GCP_PROJECT: "based-hardware"
         GCP_REGION: "us-central1"
@@ -2274,13 +2273,14 @@ workflows:
           [ -f "Desktop/embedded.provisionprofile" ] && \
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
-          # Write runtime .env from OMI_DESKTOP_APP_ENV_V2 secret (base64-encoded, slimmed down)
-          # V2 contains: OMI_API_URL, OMI_AUTH_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
-          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
+          # Write runtime .env from OMI_DESKTOP_APP_ENV_V3 secret (base64-encoded, secrets only)
+          # V3 contains only: FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # URLs are appended from workflow vars below
+          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
-          echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
-          # Must point to api.omi.me, NOT the Rust desktop-backend
+          echo "$OMI_DESKTOP_APP_ENV_V3" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          # Append backend URLs from workflow vars
+          echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
@@ -2637,7 +2637,7 @@ workflows:
             -H "Content-Type: application/json" \
             -H "X-Release-Secret: $RELEASE_SECRET" \
             -d "$RELEASE_JSON" \
-            "$DESKTOP_BACKEND_URL/updates/releases")
+            "$OMI_DESKTOP_API_URL/updates/releases")
 
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" = "201" ]; then

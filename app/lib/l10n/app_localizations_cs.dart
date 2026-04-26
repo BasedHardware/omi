@@ -2371,6 +2371,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get batteryLevel => 'Stav baterie';
 
   @override
+  String get charging => 'Nabíjení';
+
+  @override
   String get productUpdate => 'Aktualizace produktu';
 
   @override
@@ -8283,6 +8286,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastaveni hovoru';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobrazit tlačítko telefonního hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobrazit tlačítko telefonního hovoru na domovské obrazovce';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overena cisla';
 
   @override
@@ -9119,4 +9128,25 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosáhli jste svého měsíčního limitu. Upgradujte, abyste mohli pokračovat v chatu s Omi bez omezení.';
+
+  @override
+  String get voiceResponseAudio => 'Přečíst odpověď Omi nahlas';
+
+  @override
+  String get voiceResponseMode => 'Hlasová odpověď';
+
+  @override
+  String get voiceResponseModeTitle => 'Kdy vyslovit odpovědi';
+
+  @override
+  String get voiceResponseOff => 'Vypnuto';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Pouze sluchátka';
+
+  @override
+  String get voiceResponseAlways => 'Vždy';
+
+  @override
+  String get agreeAndContinue => 'Souhlasím a pokračovat';
 }

@@ -45,6 +45,8 @@ class PushToTalkManager: ObservableObject {
   private var finalizeWorkItem: DispatchWorkItem?
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
+  private var currentContextSnapshot: PTTContextSnapshot?
+  private var contextCaptureTask: Task<Void, Never>?
 
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
@@ -217,6 +219,7 @@ class PushToTalkManager: ObservableObject {
     isCurrentSessionFollowUp = barState?.showingAIResponse == true
     transcriptSegments = []
     lastInterimText = ""
+    currentContextSnapshot = nil
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
 
@@ -229,10 +232,10 @@ class PushToTalkManager: ObservableObject {
 
     let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
+    let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
 
-
-    startAudioTranscription()
+    captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
   }
 
@@ -258,9 +261,9 @@ class PushToTalkManager: ObservableObject {
     if transcriptionService == nil {
       transcriptSegments = []
       lastInterimText = ""
-
-
-      startAudioTranscription()
+      currentContextSnapshot = nil
+      let preOverlayImage = ScreenCaptureManager.captureScreenImage()
+      captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     }
 
     updateBarState()
@@ -289,10 +292,13 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
     liveFinalizationTimeout?.cancel()
     liveFinalizationTimeout = nil
+    contextCaptureTask?.cancel()
+    contextCaptureTask = nil
     stopAudioTranscription()
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
+    currentContextSnapshot = nil
     batchAudioLock.lock()
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
@@ -352,27 +358,23 @@ class PushToTalkManager: ObservableObject {
 
       Task {
         do {
-          let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+          await self.contextCaptureTask?.value
+          let language = self.pttBatchTranscriptionLanguage()
           let audioSeconds = Double(audioData.count) / (16000.0 * 2.0)
-          log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), language=\(language)")
+          log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), pttLanguage=\(language), selectedLanguage=\(AssistantSettings.shared.transcriptionLanguage), autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect)")
 
-          // First attempt with the user's effective language (usually "multi")
           var transcript = try await TranscriptionService.batchTranscribe(
             audioData: audioData,
-            language: language
+            language: language,
+            contextKeywords: self.currentContextSnapshot?.keywords ?? []
           )
 
-          // If multi-language detection returned empty on short audio (<5s),
-          // retry with the user's explicit language — Deepgram's language
-          // detection needs more context and often fails on short clips.
-          if (transcript == nil || transcript?.isEmpty == true)
-              && language == "multi" && audioSeconds < 5.0 {
-            let fallback = AssistantSettings.shared.transcriptionLanguage
-            let retryLang = (fallback.isEmpty || fallback == "multi") ? "en" : fallback
-            log("PushToTalkManager: multi returned empty on short audio, retrying with '\(retryLang)'")
+          if (transcript == nil || transcript?.isEmpty == true) && language != "en" && audioSeconds < 5.0 {
+            log("PushToTalkManager: selected language returned empty on short audio, retrying with 'en'")
             transcript = try await TranscriptionService.batchTranscribe(
               audioData: audioData,
-              language: retryLang
+              language: "en",
+              contextKeywords: self.currentContextSnapshot?.keywords ?? []
             )
           }
 
@@ -408,6 +410,15 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  private func pttBatchTranscriptionLanguage() -> String {
+    let selected = AssistantSettings.shared.transcriptionLanguage
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    if selected.isEmpty || selected == "multi" || selected == "auto" {
+      return "en"
+    }
+    return selected
+  }
+
   private func sendTranscript() {
     stopAudioTranscription()
 
@@ -416,6 +427,10 @@ class PushToTalkManager: ObservableObject {
       in: .whitespacesAndNewlines)
     if query.isEmpty {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    let contextKeywords = currentContextSnapshot?.keywords ?? []
+    if !query.isEmpty {
+      query = PTTTranscriptContextualCorrector.correct(query, keywords: contextKeywords)
     }
     let hasQuery = !query.isEmpty
     let wasFollowUp = isCurrentSessionFollowUp
@@ -434,6 +449,7 @@ class PushToTalkManager: ObservableObject {
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
+    currentContextSnapshot = nil
     updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
@@ -441,6 +457,15 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
+    Task { [weak self, query, contextKeywords, wasFollowUp] in
+      let cleanedQuery = await PTTTranscriptCleanupService.shared.cleanup(query, keywords: contextKeywords)
+      await MainActor.run {
+        self?.sendQuery(cleanedQuery, wasFollowUp: wasFollowUp)
+      }
+    }
+  }
+
+  private func sendQuery(_ query: String, wasFollowUp: Bool) {
     if wasFollowUp {
       log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
       FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
@@ -451,6 +476,20 @@ class PushToTalkManager: ObservableObject {
   }
 
   // MARK: - Audio Transcription (Dedicated Session)
+
+  private func captureContextAndStartAudio(preOverlayImage: CGImage? = nil) {
+    contextCaptureTask?.cancel()
+    startAudioTranscription()
+    let captureStartedAt = Date()
+    contextCaptureTask = Task { [weak self] in
+      let snapshot = await PTTContextVocabularyProvider.capture(at: captureStartedAt, preOverlayImage: preOverlayImage)
+      await MainActor.run {
+        guard let self, !Task.isCancelled else { return }
+        guard self.state == .listening || self.state == .lockedListening || self.state == .finalizing else { return }
+        self.currentContextSnapshot = snapshot
+      }
+    }
+  }
 
   private func startAudioTranscription() {
     // Always re-check permission (it can be granted at any time via System Settings)
@@ -486,7 +525,11 @@ class PushToTalkManager: ObservableObject {
 
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let service = try TranscriptionService(language: language, channels: 1)
+        let service = try TranscriptionService(
+          language: language,
+          channels: 1,
+          contextKeywords: currentContextSnapshot?.keywords ?? []
+        )
         transcriptionService = service
 
         service.start(
@@ -592,14 +635,6 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments.append(segment.text)
     }
     lastInterimText = ""
-
-    if state == .listening || state == .lockedListening {
-      let liveText = transcriptSegments.joined(separator: " ")
-      barState?.voiceTranscript = liveText
-      if isCurrentSessionFollowUp {
-        barState?.voiceFollowUpTranscript = liveText
-      }
-    }
 
     // In finalizing state, segments mean backend is done — send immediately
     if state == .finalizing {

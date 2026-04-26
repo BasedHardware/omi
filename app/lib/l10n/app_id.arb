@@ -732,6 +732,7 @@
     "slideToUpdate": "Geser untuk memperbarui",
     "copiedToClipboard": "{title} disalin ke papan klip",
     "batteryLevel": "Level Baterai",
+    "charging": "Mengisi daya",
     "productUpdate": "Pembaruan Produk",
     "offline": "Luring",
     "available": "Tersedia",
@@ -2693,6 +2694,8 @@
     "onTheCallEnterThisCode": "Saat panggilan, masukkan kode ini",
     "phoneAllow": "Izinkan",
     "phoneCallSettingsTitle": "Pengaturan panggilan",
+    "showPhoneCallButtonTitle": "Tampilkan Tombol Panggilan",
+    "showPhoneCallButtonDesc": "Tampilkan tombol panggilan telepon di layar utama",
     "phoneCallsSubtitle": "Telepon dengan transkripsi real-time",
     "phoneCallsWithOmi": "Panggilan dengan Omi",
     "phoneContactsTab": "Kontak",
@@ -3019,5 +3022,12 @@
     "batteryHistory": "Baterai",
     "day": "Hari",
     "noBatteryDataYet": "Belum ada data baterai",
-    "week": "Minggu"
+    "week": "Minggu",
+    "voiceResponseAudio": "Bacakan respons Omi",
+    "voiceResponseMode": "Respons suara",
+    "voiceResponseModeTitle": "Kapan respons diucapkan",
+    "voiceResponseOff": "Mati",
+    "voiceResponseHeadphonesOnly": "Hanya headphone",
+    "voiceResponseAlways": "Selalu",
+    "agreeAndContinue": "Setuju & Lanjutkan"
 }

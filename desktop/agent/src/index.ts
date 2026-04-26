@@ -72,7 +72,13 @@ function send(msg: OutboundMessage): void {
 }
 
 function logErr(msg: string): void {
-  process.stderr.write(`[agent] ${msg}\n`);
+  // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
+  // doesn't bubble out as an uncaughtException and re-enter our handlers.
+  try {
+    process.stderr.write(`[agent] ${msg}\n`);
+  } catch {
+    // ignore — parent pipe is gone; we'll exit shortly anyway
+  }
 }
 
 // --- OMI tools relay via Unix socket ---
@@ -1066,8 +1072,17 @@ function handleSessionUpdate(
 
 // --- Error handling ---
 
-/** Write to /tmp/agent-crash.log as fallback when stderr might be lost */
+/**
+ * Write to /tmp/agent-crash.log as fallback when stderr might be lost.
+ * Hard-capped at CRASH_LOG_MAX_LINES per process to prevent runaway disk
+ * fill (we shipped a build that wrote 100s of GBs into this file in a tight
+ * EPIPE re-entry loop).
+ */
+const CRASH_LOG_MAX_LINES = 100;
+let crashLogLineCount = 0;
 function logCrash(msg: string): void {
+  if (crashLogLineCount >= CRASH_LOG_MAX_LINES) return;
+  crashLogLineCount += 1;
   try {
     const ts = new Date().toISOString();
     appendFileSync("/tmp/agent-crash.log", `[${ts}] ${msg}\n`);
@@ -1076,32 +1091,68 @@ function logCrash(msg: string): void {
   }
 }
 
+// Once we've decided to bail because the parent pipe is gone, suppress all
+// further error handling so logErr/logCrash don't keep re-entering on
+// every subsequent failed write while the runtime tears down.
+let shuttingDown = false;
+function bailOnBrokenPipe(reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logErr(reason);
+  logCrash(reason);
+  process.exit(0);
+}
+
 process.on("unhandledRejection", (reason) => {
+  if (shuttingDown) return;
+  const code = (reason as NodeJS.ErrnoException | undefined)?.code;
+  if (code === "EPIPE" || code === "ERR_STREAM_DESTROYED") {
+    bailOnBrokenPipe(`Unhandled rejection (${code}, pipe closed)`);
+    return;
+  }
   logErr(`Unhandled rejection: ${reason}`);
   logCrash(`Unhandled rejection: ${reason}`);
 });
 
 process.on("uncaughtException", (err) => {
+  if (shuttingDown) return;
   const code = (err as NodeJS.ErrnoException).code;
   if (code === "EPIPE" || code === "ERR_STREAM_DESTROYED") {
-    logErr(`Caught ${code} in uncaughtException (subprocess pipe closed)`);
-    logCrash(`Caught ${code} (pipe closed)`);
+    // Parent has gone away; staying alive without a pipe just produces
+    // more EPIPEs. Exit cleanly instead of returning (the previous
+    // `return` left the process running and looping on every retry).
+    bailOnBrokenPipe(`Caught ${code} in uncaughtException (pipe closed)`);
     return;
   }
   logErr(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
   logCrash(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
-  send({ type: "error", message: `Uncaught: ${err.message}` });
+  try {
+    send({ type: "error", message: `Uncaught: ${err.message}` });
+  } catch {
+    // already broken
+  }
   process.exit(1);
 });
 
 process.stdout.on("error", (err) => {
   if ((err as NodeJS.ErrnoException).code === "EPIPE") {
-    logErr("stdout pipe closed (parent process disconnected)");
-    logCrash("stdout EPIPE — parent disconnected");
-    process.exit(0);
+    bailOnBrokenPipe("stdout EPIPE — parent disconnected");
+    return;
   }
   logErr(`stdout error: ${err.message}`);
   logCrash(`stdout error: ${err.message}`);
+});
+
+process.stderr.on("error", (err) => {
+  // If stderr is also gone, we have nothing to write to. Bail silently.
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "EPIPE" || code === "ERR_STREAM_DESTROYED") {
+    if (!shuttingDown) {
+      shuttingDown = true;
+      logCrash("stderr EPIPE — parent disconnected");
+      process.exit(0);
+    }
+  }
 });
 
 // --- Pi-mono mode ---

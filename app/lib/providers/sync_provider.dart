@@ -92,6 +92,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // Track WAL processing progress
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
+  Timer? _autoUploadTimer;
+  bool _isDisposed = false;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -144,15 +146,24 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _initializeProvider() async {
     await refreshWals();
-    _autoUploadPendingPhoneFiles();
+    if (_isDisposed) return;
+    _scheduleAutoUploadPendingPhoneFiles();
   }
 
   bool _isAutoUploading = false;
 
   /// Auto-upload phone WALs to cloud on app open when device is not connected
   /// and no sync is already in progress.
+  void _scheduleAutoUploadPendingPhoneFiles() {
+    _autoUploadTimer?.cancel();
+    _autoUploadTimer = Timer(const Duration(seconds: 3), () {
+      _autoUploadTimer = null;
+      _autoUploadPendingPhoneFiles();
+    });
+  }
+
   void _autoUploadPendingPhoneFiles() async {
-    await Future.delayed(const Duration(seconds: 3));
+    if (_isDisposed) return;
     if (_syncState.isProcessing) return;
     if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
     final phoneWals = _allWals
@@ -431,22 +442,27 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSyncedProgress(double percentage,
-      {double? speedKBps,
-      SyncPhase? phase,
-      int? currentFile,
-      int? totalFiles,
-      int? uploadedBytes,
-      int? totalBytesToUpload}) {
+  void onWalSyncedProgress(
+    double percentage, {
+    double? speedKBps,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
+  }) {
     if (_syncState.isSyncing) {
-      _updateSyncState(_syncState.toSyncing(
+      _updateSyncState(
+        _syncState.toSyncing(
           progress: percentage,
           speedKBps: speedKBps,
           phase: phase,
           currentFile: currentFile,
           totalFiles: totalFiles,
           uploadedBytes: uploadedBytes,
-          totalBytesToUpload: totalBytesToUpload));
+          totalBytesToUpload: totalBytesToUpload,
+        ),
+      );
     }
   }
 
@@ -508,6 +524,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _autoUploadTimer?.cancel();
+    _autoUploadTimer = null;
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);

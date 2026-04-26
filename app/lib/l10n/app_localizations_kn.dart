@@ -2381,6 +2381,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get batteryLevel => 'ಬ್ಯಾಟರಿ ಸ್ತರ';
 
   @override
+  String get charging => 'ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ';
+
+  @override
   String get productUpdate => 'ಉತ್ಪನ್ನ ನವೀಕರಣ';
 
   @override
@@ -8318,6 +8321,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
+  String get showPhoneCallButtonTitle => 'ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ';
+
+  @override
   String get yourVerifiedNumbers => 'ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು';
 
   @override
@@ -9155,4 +9164,25 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿರ್ಬಂಧಗಳಿಲ್ಲದೆ Omi ಜೊತೆ ಚಾಟ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+
+  @override
+  String get voiceResponseAudio => 'Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ';
+
+  @override
+  String get voiceResponseMode => 'ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ';
+
+  @override
+  String get voiceResponseModeTitle => 'ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ';
+
+  @override
+  String get voiceResponseOff => 'ಆಫ್';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ';
+
+  @override
+  String get voiceResponseAlways => 'ಯಾವಾಗಲೂ';
+
+  @override
+  String get agreeAndContinue => 'ಒಪ್ಪಿಗೆ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ';
 }

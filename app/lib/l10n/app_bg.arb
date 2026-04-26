@@ -732,6 +732,7 @@
     "slideToUpdate": "Плъзнете за актуализация",
     "copiedToClipboard": "{title} копирано в клипборда",
     "batteryLevel": "Ниво на батерията",
+    "charging": "Зареждане",
     "productUpdate": "Актуализация на продукта",
     "offline": "Офлайн",
     "available": "Наличен",
@@ -2644,6 +2645,8 @@
     "phoneSpeaker": "Високоговорител",
     "phoneEndCall": "Край",
     "phoneCallSettingsTitle": "Настройки на телефонните обаждания",
+    "showPhoneCallButtonTitle": "Показване на бутона за телефонно обаждане",
+    "showPhoneCallButtonDesc": "Показване на бутона за телефонно обаждане на началния екран",
     "yourVerifiedNumbers": "Вашите потвърдени номера",
     "verifiedNumbersDescription": "Когато се обадите на някого, той ще види този номер на телефона си",
     "noVerifiedNumbers": "Няма потвърдени номера",
@@ -2946,5 +2949,12 @@
     "batteryHistory": "Батерия",
     "day": "Ден",
     "noBatteryDataYet": "Все още няма данни за батерията",
-    "week": "Седмица"
+    "week": "Седмица",
+    "voiceResponseAudio": "Прочитай отговора на Omi на глас",
+    "voiceResponseMode": "Гласов отговор",
+    "voiceResponseModeTitle": "Кога да се произнасят отговорите",
+    "voiceResponseOff": "Изкл",
+    "voiceResponseHeadphonesOnly": "Само слушалки",
+    "voiceResponseAlways": "Винаги",
+    "agreeAndContinue": "Приемам и продължавам"
 }

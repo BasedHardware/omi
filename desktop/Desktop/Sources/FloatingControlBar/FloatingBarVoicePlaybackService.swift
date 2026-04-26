@@ -147,7 +147,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private func resolvePlaybackMode() -> PlaybackMode {
     // TTS is now proxied through the backend — no client-side API key needed.
     // Fall back to system voice only if the backend URL is not configured.
-    guard getenv("OMI_API_URL") != nil else {
+    guard getenv("OMI_DESKTOP_API_URL") != nil else {
       return .systemFallback
     }
     let voiceID = ShortcutSettings.shared.selectedVoiceID
@@ -247,7 +247,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
     // Without the backend URL the service falls back to the system voice, which
     // wouldn't demo the ElevenLabs voice anyway.
-    guard getenv("OMI_API_URL") != nil else {
+    guard getenv("OMI_DESKTOP_API_URL") != nil else {
       enqueueSystemSpeech(phrase)
       return
     }
@@ -268,6 +268,34 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
           "FloatingBarVoicePlaybackService: voice sample failed: \(error.localizedDescription)"
         )
       }
+    }
+  }
+
+  /// Synthesize and play a single short phrase via ElevenLabs (or fall back to
+  /// the system voice). Used by agent pills to speak a short acknowledgement
+  /// like "On it" before the agent kicks off.
+  func speakOneShot(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+    switch mode {
+    case .elevenLabs(let voiceID):
+      Task { [weak self] in
+        do {
+          let audio = try await Self.synthesizeSpeech(text: trimmed, voiceID: voiceID)
+          await MainActor.run {
+            self?.startPlayback(audio)
+          }
+        } catch {
+          // Network/API error — fall back to system voice on the main thread.
+          await MainActor.run {
+            self?.enqueueSystemSpeech(trimmed)
+          }
+        }
+      }
+    case .systemFallback:
+      enqueueSystemSpeech(trimmed)
     }
   }
 

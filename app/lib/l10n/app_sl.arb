@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Raven baterije",
+    "charging": "Polnjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "Zvočnik",
     "phoneEndCall": "Konec",
     "phoneCallSettingsTitle": "Nastavitve telefonskih klicev",
+    "showPhoneCallButtonTitle": "Pokaži gumb za klic",
+    "showPhoneCallButtonDesc": "Prikaži gumb za telefonski klic na domačem zaslonu",
     "yourVerifiedNumbers": "Tvoje preverjene številke",
     "verifiedNumbersDescription": "Ko nekoga pokličeš, bo videl to številko na svojem telefonu",
     "noVerifiedNumbers": "Nima preverjenih številk",
@@ -10685,5 +10688,12 @@
     "batteryHistory": "Baterija",
     "day": "Dan",
     "noBatteryDataYet": "Še ni podatkov o bateriji",
-    "week": "Teden"
+    "week": "Teden",
+    "voiceResponseAudio": "Preberi odgovor Omi na glas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kdaj prebrati odgovore",
+    "voiceResponseOff": "Izklop",
+    "voiceResponseHeadphonesOnly": "Samo slušalke",
+    "voiceResponseAlways": "Vedno",
+    "agreeAndContinue": "Strinjam se in nadaljuj"
 }

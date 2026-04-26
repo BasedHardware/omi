@@ -1,64 +1,55 @@
 // Routes module
 
+// ── Active routes (have real traffic) ─────────────────────────────────────────
+pub mod agent;
+pub mod auth;
+pub mod chat_completions;
+pub mod config;
+pub mod crisp;
+pub mod health;
+pub mod proxy;
+pub mod rate_limit;
+pub mod screen_activity;
+pub mod tts;
+pub mod updates;
+pub mod webhooks;
+
+// ── Deprecated route stubs (return 410 Gone) ────────────────────────────────
+// Current desktop app routes all data CRUD to Python (api.omi.me).
+// deprecated.rs returns 410 for all non-active paths.
+pub mod deprecated;
+
+// ── Deprecated modules (source files retained for reference) ─────────────────
 pub mod action_items;
 pub mod advice;
-pub mod agent;
 pub mod apps;
-pub mod auth;
 pub mod chat;
-pub mod chat_completions;
 pub mod chat_sessions;
-pub mod config;
 pub mod conversations;
-pub mod crisp;
 pub mod daily_score;
 pub mod focus_sessions;
 pub mod folders;
 pub mod goals;
-pub mod health;
 pub mod knowledge_graph;
 pub mod llm_usage;
 pub mod memories;
 pub mod messages;
 pub mod people;
 pub mod personas;
-pub mod updates;
 pub mod staged_tasks;
 pub mod stats;
 pub mod users;
-pub mod webhooks;
-pub mod proxy;
-pub mod rate_limit;
-pub mod screen_activity;
-pub mod tts;
 
-pub use action_items::action_items_routes;
-pub use advice::advice_routes;
+// ── Active re-exports ─────────────────────────────────────────────────────────
 pub use agent::agent_routes;
-pub use apps::apps_routes;
-pub use config::config_routes;
 pub use auth::auth_routes;
-pub use chat::chat_routes;
 pub use chat_completions::chat_completions_routes;
-pub use chat_sessions::chat_sessions_routes;
-pub use conversations::conversations_routes;
+pub use config::config_routes;
 pub use crisp::crisp_routes;
-pub use daily_score::daily_score_routes;
-pub use focus_sessions::focus_sessions_routes;
-pub use folders::folder_routes;
-pub use goals::goals_routes;
+pub use deprecated::deprecated_routes;
 pub use health::health_routes;
-pub use knowledge_graph::knowledge_graph_routes;
-pub use llm_usage::llm_usage_routes;
-pub use memories::memories_routes;
-pub use messages::messages_routes;
-pub use people::people_routes;
-pub use personas::personas_routes;
-pub use staged_tasks::staged_tasks_routes;
-pub use stats::stats_routes;
-pub use updates::updates_routes;
-pub use users::users_routes;
-pub use webhooks::webhook_routes;
 pub use proxy::proxy_routes;
 pub use screen_activity::screen_activity_routes;
 pub use tts::tts_routes;
+pub use updates::updates_routes;
+pub use webhooks::webhook_routes;

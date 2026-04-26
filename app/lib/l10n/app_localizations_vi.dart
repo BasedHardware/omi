@@ -2372,6 +2372,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get batteryLevel => 'Mức Pin';
 
   @override
+  String get charging => 'Đang sạc';
+
+  @override
   String get productUpdate => 'Cập Nhật Sản Phẩm';
 
   @override
@@ -8289,6 +8292,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Hiển thị nút gọi điện';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Hiển thị nút gọi điện trên màn hình chính';
+
+  @override
   String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
 
   @override
@@ -9123,4 +9132,25 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Bạn đã đạt giới hạn hàng tháng. Nâng cấp để tiếp tục trò chuyện với Omi không giới hạn.';
+
+  @override
+  String get voiceResponseAudio => 'Đọc to phản hồi của Omi';
+
+  @override
+  String get voiceResponseMode => 'Phản hồi bằng giọng nói';
+
+  @override
+  String get voiceResponseModeTitle => 'Khi nào đọc phản hồi';
+
+  @override
+  String get voiceResponseOff => 'Tắt';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Chỉ tai nghe';
+
+  @override
+  String get voiceResponseAlways => 'Luôn luôn';
+
+  @override
+  String get agreeAndContinue => 'Đồng ý và tiếp tục';
 }

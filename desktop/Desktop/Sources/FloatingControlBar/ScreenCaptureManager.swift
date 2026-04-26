@@ -2,30 +2,26 @@ import AppKit
 import CWebP
 
 class ScreenCaptureManager {
-    /// Returns WebP data for the screen under the mouse cursor at full Retina
-    /// resolution, compressed in memory via libwebp. No disk I/O.
-    static func captureScreenData() -> Data? {
+    /// Returns a CGImage for the screen under the mouse cursor.
+    static func captureScreenImage() -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else {
             log("ScreenCaptureManager: Screen recording permission not granted, skipping capture")
             return nil
         }
 
-        // Capture the screen where the mouse cursor is, not just the primary display
-        let displayID: CGDirectDisplayID = {
-            let mouseLocation = NSEvent.mouseLocation
-            for screen in NSScreen.screens {
-                if screen.frame.contains(mouseLocation),
-                   let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
-                    return screenNumber
-                }
-            }
-            return CGMainDisplayID()
-        }()
-
+        let displayID = displayIDUnderMouse()
         guard let image = CGDisplayCreateImage(displayID) else {
             log("ScreenCaptureManager: Could not capture screen (display \(displayID))")
             return nil
         }
+
+        return image
+    }
+
+    /// Returns WebP data for the screen under the mouse cursor at full Retina
+    /// resolution, compressed in memory via libwebp. No disk I/O.
+    static func captureScreenData() -> Data? {
+        guard let image = captureScreenImage() else { return nil }
 
         let width = image.width
         let height = image.height
@@ -65,6 +61,17 @@ class ScreenCaptureManager {
 
         log("ScreenCaptureManager: Screenshot captured \(width)x\(height), WebP \(data.count / 1024) KB")
         return data
+    }
+
+    private static func displayIDUnderMouse() -> CGDirectDisplayID {
+        let mouseLocation = NSEvent.mouseLocation
+        for screen in NSScreen.screens {
+            if screen.frame.contains(mouseLocation),
+               let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+                return screenNumber
+            }
+        }
+        return CGMainDisplayID()
     }
 
     /// Legacy file-based capture (kept for callers that need a URL).

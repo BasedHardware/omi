@@ -560,7 +560,7 @@ class TestVoiceMessageTranscribeEndpoint:
         client, module, saved = _make_chat_client()
         try:
             resp = client.post(
-                '/v2/voice-message/transcribe',
+                '/v2/voice-message/transcribe?keywords=Aarav,Ansh,Aarav',
                 content=b'\x00' * 3200,
                 headers={'Content-Type': 'application/octet-stream'},
             )
@@ -568,6 +568,7 @@ class TestVoiceMessageTranscribeEndpoint:
             data = resp.json()
             assert data['transcript'] == 'Hello world'
             assert data['language'] == 'en'
+            assert mock_transcribe.call_args.kwargs['keywords'] == ['Aarav', 'Ansh']
         finally:
             _cleanup_chat_client(saved)
 

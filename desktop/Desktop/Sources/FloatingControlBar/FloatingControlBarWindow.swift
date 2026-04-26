@@ -849,11 +849,16 @@ class FloatingControlBarManager {
 
     private var window: FloatingControlBarWindow?
     private var snoozeTimer: Timer?
+    private var pillsWindow: AgentPillsWindow?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var historyChatProvider: ChatProvider?
     private var floatingChatProvider: ChatProvider?
+
+    /// Public read-only access to the floating bar's chat provider so the
+    /// agent pills manager can inherit the working directory / model.
+    var sharedFloatingProvider: ChatProvider? { floatingChatProvider }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -985,6 +990,18 @@ class FloatingControlBarManager {
 
         barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
+            // Route action-like queries to an agent pill (no inline chat). Quick
+            // questions still flow through the inline conversation.
+            if AgentPillsManager.looksLikeAction(message) {
+                let model = ShortcutSettings.shared.selectedModel.isEmpty
+                    ? "claude-sonnet-4-6"
+                    : ShortcutSettings.shared.selectedModel
+                _ = AgentPillsManager.shared.spawnFromUserQuery(message, model: model)
+                // Collapse the input so the pill is the only visible result.
+                barWindow.state.aiInputText = ""
+                barWindow.closeAIConversation()
+                return
+            }
             Task { @MainActor in
                 await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
             }
@@ -1061,6 +1078,26 @@ class FloatingControlBarManager {
             scheduleSnoozeTimer()
         } else if snoozedUntil != nil {
             snoozedUntil = nil
+        }
+
+        // Create the agent pills overlay window and anchor it under the bar.
+        let pills = AgentPillsWindow()
+        pills.attach(to: barWindow)
+        self.pillsWindow = pills
+
+        // Listen for "open in chat" requests from a pill so the user can
+        // continue an agent's task inline if they want.
+        NotificationCenter.default.addObserver(
+            forName: .agentPillRequestedChat, object: nil, queue: .main
+        ) { [weak barWindow] note in
+            guard let barWindow = barWindow else { return }
+            Task { @MainActor in
+                let query = (note.userInfo?["query"] as? String) ?? ""
+                barWindow.showAIConversation()
+                if !query.isEmpty {
+                    barWindow.state.aiInputText = query
+                }
+            }
         }
     }
 
@@ -1259,6 +1296,15 @@ class FloatingControlBarManager {
         // Re-wire the onSendQuery to use the isolated floating-bar provider
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
+            if AgentPillsManager.looksLikeAction(message) {
+                let model = ShortcutSettings.shared.selectedModel.isEmpty
+                    ? "claude-sonnet-4-6"
+                    : ShortcutSettings.shared.selectedModel
+                _ = AgentPillsManager.shared.spawnFromUserQuery(message, model: model)
+                window.state.aiInputText = ""
+                window.closeAIConversation()
+                return
+            }
             Task { @MainActor in
                 await self.sendAIQuery(message, barWindow: window, provider: provider)
             }
@@ -1284,7 +1330,17 @@ class FloatingControlBarManager {
         window.state.currentQueryFromVoice = fromVoice
         window.orderFrontRegardless()
 
-        // Auto-send the query
+        // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
+        // we need to apply the same pill-routing rule here ourselves.
+        if AgentPillsManager.looksLikeAction(query) {
+            let model = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6"
+                : ShortcutSettings.shared.selectedModel
+            _ = AgentPillsManager.shared.spawnFromUserQuery(query, model: model, fromVoice: fromVoice)
+            window.state.aiInputText = ""
+            window.closeAIConversation()
+            return
+        }
         Task { @MainActor in
             await self.sendAIQuery(query, barWindow: window, provider: provider)
         }

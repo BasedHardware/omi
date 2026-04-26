@@ -2368,6 +2368,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get batteryLevel => 'Baterijos lygis';
 
   @override
+  String get charging => 'Kraunama';
+
+  @override
   String get productUpdate => 'Produkto atnaujinimas';
 
   @override
@@ -8296,6 +8299,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Skambuciu nustatymai';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rodyti skambučio mygtuką';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rodyti telefono skambučio mygtuką pradiniame ekrane';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu patvirtinti numeriai';
 
   @override
@@ -9132,4 +9141,25 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Pasiekėte savo mėnesinį limitą. Atnaujinkite, kad galėtumėte toliau bendrauti su Omi be apribojimų.';
+
+  @override
+  String get voiceResponseAudio => 'Skaityti Omi atsakymą garsiai';
+
+  @override
+  String get voiceResponseMode => 'Balso atsakymas';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada įgarsinti atsakymus';
+
+  @override
+  String get voiceResponseOff => 'Išjungta';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Tik ausinėmis';
+
+  @override
+  String get voiceResponseAlways => 'Visada';
+
+  @override
+  String get agreeAndContinue => 'Sutinku ir tęsti';
 }

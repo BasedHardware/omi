@@ -5,7 +5,7 @@ import hashlib
 import time
 import jwt
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
@@ -30,6 +30,114 @@ templates_path = pathlib.Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(templates_path))
 
 
+# Loopback hosts permitted for CLI/native-app OAuth flows per RFC 8252 §7.3.
+_LOOPBACK_HOSTNAMES = {"localhost", "127.0.0.1", "::1"}
+_DEFAULT_MOBILE_REDIRECT = "omi://auth/callback"
+
+# Schemes that must NOT receive an OAuth code:
+#   - ``https``: would leak the code to an arbitrary remote host. (Loopback OAuth
+#     is HTTP, not HTTPS, per RFC 8252.)
+#   - ``javascript``, ``data``, ``vbscript``: browser-executable URLs. A code
+#     leaked into one of these would be exfiltrated by the rendered page.
+#   - ``file``: local file URL — could end up read by another process.
+#   - ``blob``, ``filesystem``, ``about``: browser-internal pseudo-schemes.
+_FORBIDDEN_REDIRECT_SCHEMES = {
+    "https",
+    "javascript",
+    "data",
+    "vbscript",
+    "file",
+    "blob",
+    "filesystem",
+    "about",
+}
+
+
+def _validate_redirect_uri(redirect_uri: str) -> None:
+    """Reject redirect URIs that could deliver the OAuth code to an attacker.
+
+    Allow:
+
+    * **Custom app schemes** (``omi://``, ``omi-computer://``,
+      ``omi-computer-dev://``, ``omi-fix-rewind://``, ``com.omi.app://``,
+      etc.). The Omi mobile app, the macOS desktop app, and per-bundle
+      developer test builds register their own URL schemes with the OS
+      via ``CFBundleURLSchemes`` / Android intent filters; this is the
+      standard native-app OAuth callback mechanism per RFC 8252.
+
+    * **HTTP loopback** (``http://localhost[:PORT]/...``,
+      ``http://127.0.0.1[:PORT]/...``, ``http://[::1][:PORT]/...``) for the
+      CLI's loopback callback server.
+
+    Reject:
+
+    * **https://** and any other web-fetchable scheme — they could exfiltrate
+      the auth code off-device.
+    * **http://** to anything other than loopback.
+    * Browser-executable schemes (``javascript:``, ``data:``, etc.).
+    * Empty / unparseable input.
+
+    Security note: the auth ``code`` is a one-time secret. If we accepted
+    arbitrary URLs, an attacker who induced a user to start a flow could
+    harvest the code at their own host. Restricting to native-app custom
+    schemes + loopback is the RFC 8252 §7 mitigation.
+    """
+    if not redirect_uri:
+        raise HTTPException(status_code=400, detail="redirect_uri is required")
+
+    parsed = urlparse(redirect_uri)
+    scheme = (parsed.scheme or "").strip().lower()
+
+    if not scheme:
+        raise HTTPException(status_code=400, detail="redirect_uri must include a scheme")
+
+    if scheme == "http":
+        hostname = (parsed.hostname or "").strip().lower()
+        if hostname not in _LOOPBACK_HOSTNAMES:
+            raise HTTPException(
+                status_code=400,
+                detail="HTTP redirect_uri must point at loopback (localhost, 127.0.0.1, or ::1)",
+            )
+        return
+
+    if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"redirect_uri scheme '{scheme}' is not permitted",
+        )
+
+    # Custom app scheme. Per RFC 3986, a scheme is
+    # ``ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )``. Be a little stricter
+    # than urllib here — require the scheme to start with a letter and contain
+    # only the RFC-allowed characters, so we don't accept garbage like ``://x``.
+    if not _is_valid_scheme(scheme):
+        raise HTTPException(
+            status_code=400,
+            detail=f"redirect_uri scheme '{scheme}' is malformed",
+        )
+
+    return
+
+
+_ASCII_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyz")
+_ASCII_ALNUM = _ASCII_LETTERS | frozenset("0123456789")
+
+
+def _is_valid_scheme(scheme: str) -> bool:
+    """RFC 3986 scheme validity check: ASCII ALPHA, then ASCII ALPHA/DIGIT/+/-/.
+
+    We deliberately use explicit ASCII sets instead of ``str.isalpha`` /
+    ``str.isalnum`` — those are Unicode-aware and would happily accept
+    non-ASCII letters (``ñ``, ``й``, etc.) that RFC 3986 forbids in scheme names.
+    """
+    if not scheme:
+        return False
+    lowered = scheme.lower()
+    if lowered[0] not in _ASCII_LETTERS:
+        return False
+    return all(c in _ASCII_ALNUM or c in "+-." for c in lowered)
+
+
 @router.get("/authorize")
 async def auth_authorize(
     request: Request,
@@ -43,6 +151,9 @@ async def auth_authorize(
     """
     if provider not in ['google', 'apple']:
         raise HTTPException(status_code=400, detail="Unsupported provider")
+
+    # Strict allowlist on where we'll deliver the auth code post-callback.
+    _validate_redirect_uri(redirect_uri)
 
     # Store session for auth flow
     session_id = str(uuid.uuid4())
@@ -84,18 +195,22 @@ async def auth_callback_google(
     # Exchange code for OAuth credentials
     oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', code, session_data)
 
-    # Create temporary auth code
+    # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
-    set_auth_code(auth_code, oauth_credentials, 300)
+    app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
+    code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
+    set_auth_code(auth_code, code_data, 300)
 
-    # Redirect to HTML page that will handle custom scheme redirect
-    # This avoids browser security issues with backend->custom scheme redirects
+    # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
+    # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
+    # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
         "auth_callback.html",
         {
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": app_redirect_uri,
         },
     )
 
@@ -122,18 +237,22 @@ async def auth_callback_apple_post(
     # Exchange code for OAuth credentials
     oauth_credentials = await _exchange_provider_code_for_oauth_credentials('apple', code, session_data)
 
-    # Create temporary auth code
+    # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
-    set_auth_code(auth_code, oauth_credentials, 300)
+    app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
+    code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
+    set_auth_code(auth_code, code_data, 300)
 
-    # Redirect to HTML page that will handle custom scheme redirect
-    # This avoids browser security issues with backend->custom scheme redirects
+    # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
+    # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
+    # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
         "auth_callback.html",
         {
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": app_redirect_uri,
         },
     )
 
@@ -156,16 +275,39 @@ async def auth_token(
     if grant_type != 'authorization_code':
         raise HTTPException(status_code=400, detail="Unsupported grant type")
 
-    # Get OAuth credentials from Redis
-    oauth_credentials_json = get_auth_code(code)
-    if not oauth_credentials_json:
+    # Get auth code data from Redis
+    raw_code_data = get_auth_code(code)
+    if not raw_code_data:
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     # Clean up used code
     delete_auth_code(code)
 
     try:
-        oauth_credentials = json.loads(oauth_credentials_json)
+        code_data = json.loads(raw_code_data)
+
+        # Support both new format (with redirect_uri binding) and legacy format
+        if 'credentials' in code_data:
+            # New format: auth code bound to redirect_uri — fail closed if redirect_uri missing
+            stored_redirect_uri = code_data.get('redirect_uri')
+            if not stored_redirect_uri:
+                logger.error("auth code in new format but missing redirect_uri — rejecting (fail closed)")
+                raise HTTPException(status_code=400, detail="malformed auth code")
+            if redirect_uri != stored_redirect_uri:
+                logger.warning(
+                    f"redirect_uri mismatch: expected={sanitize(stored_redirect_uri)}, got={sanitize(redirect_uri)}"
+                )
+                raise HTTPException(status_code=400, detail="redirect_uri mismatch")
+            oauth_credentials_json = code_data['credentials']
+            oauth_credentials = (
+                json.loads(oauth_credentials_json)
+                if isinstance(oauth_credentials_json, str)
+                else oauth_credentials_json
+            )
+        else:
+            # Legacy format: raw OAuth credentials (backwards compatible)
+            oauth_credentials = code_data
+
         provider = oauth_credentials.get('provider')
         id_token = oauth_credentials.get('id_token')
         access_token = oauth_credentials.get('access_token')
@@ -190,6 +332,8 @@ async def auth_token(
 
         return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error parsing OAuth credentials: {e}")
         raise HTTPException(status_code=400, detail="Invalid OAuth credentials")

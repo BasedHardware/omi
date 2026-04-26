@@ -4,6 +4,36 @@
   ],
   "releases": [
     {
+      "version": "0.11.364",
+      "date": "2026-04-26",
+      "changes": [
+        "Added agent pills: action-y Ask Omi requests (typed or voice) now spawn small floating-bar agents that run in parallel; hover any pill to see live progress and open in chat",
+        "Added Execute button on floating-bar notification cards and task rows \u2014 one click spawns an agent that handles the item end-to-end"
+      ]
+    },
+    {
+      "version": "0.11.363",
+      "date": "2026-04-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.362",
+      "date": "2026-04-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.361",
+      "date": "2026-04-26",
+      "changes": [
+        "Proactive notifications now only appear in the floating bar, not as macOS system banners",
+        "Made the entire floating bar notification clickable (previously only the text opened the chat)"
+      ]
+    },
+    {
       "version": "0.11.358",
       "date": "2026-04-23",
       "changes": [

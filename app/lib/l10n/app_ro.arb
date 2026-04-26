@@ -732,6 +732,7 @@
     "slideToUpdate": "Glisați pentru a actualiza",
     "copiedToClipboard": "{title} copiat în clipboard",
     "batteryLevel": "Nivel baterie",
+    "charging": "Se încarcă",
     "productUpdate": "Actualizare produs",
     "offline": "Offline",
     "available": "Disponibil",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "In timpul apelului, introduceti acest cod",
     "phoneAllow": "Permite",
     "phoneCallSettingsTitle": "Setari apeluri",
+    "showPhoneCallButtonTitle": "Afișați butonul de apel",
+    "showPhoneCallButtonDesc": "Afișați butonul de apel telefonic pe ecranul de pornire",
     "phoneCallsSubtitle": "Apelati cu transcriere in timp real",
     "phoneCallsWithOmi": "Apeluri cu Omi",
     "phoneContactsTab": "Contacte",
@@ -2977,5 +2980,12 @@
     "batteryHistory": "Baterie",
     "day": "Zi",
     "noBatteryDataYet": "Încă nu există date despre baterie",
-    "week": "Săptămână"
+    "week": "Săptămână",
+    "voiceResponseAudio": "Citește răspunsul Omi cu voce tare",
+    "voiceResponseMode": "Răspuns vocal",
+    "voiceResponseModeTitle": "Când să rostească răspunsurile",
+    "voiceResponseOff": "Oprit",
+    "voiceResponseHeadphonesOnly": "Doar căști",
+    "voiceResponseAlways": "Întotdeauna",
+    "agreeAndContinue": "Accept și continuă"
 }

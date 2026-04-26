@@ -296,6 +296,7 @@
     "basicPlanDescription": "1 200 premium minučių + neribota įrenginyje",
     "batteryDrainSignificantly": "Baterijos išsikrovimas žymiai padidės.",
     "batteryLevel": "Baterijos lygis",
+    "charging": "Kraunama",
     "batteryUsageHigher": "Baterijos naudojimas bus didesnis nei debesies transkripcijos.",
     "beforeUpdateMakeSure": "Prieš atnaujinant įsitikinkite:",
     "bestInClassTranscription": "Geriausia klasės transkripcija be jokio nustatymo",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "Skambuchio metu iveskite si koda",
     "phoneAllow": "Leisti",
     "phoneCallSettingsTitle": "Skambuciu nustatymai",
+    "showPhoneCallButtonTitle": "Rodyti skambučio mygtuką",
+    "showPhoneCallButtonDesc": "Rodyti telefono skambučio mygtuką pradiniame ekrane",
     "phoneCallsSubtitle": "Skambinkite su transkripcija realiu laiku",
     "phoneCallsWithOmi": "Skambuciai su Omi",
     "phoneContactsTab": "Kontaktai",
@@ -2977,5 +2980,12 @@
     "batteryHistory": "Baterija",
     "day": "Diena",
     "noBatteryDataYet": "Kol kas nėra baterijos duomenų",
-    "week": "Savaitė"
+    "week": "Savaitė",
+    "voiceResponseAudio": "Skaityti Omi atsakymą garsiai",
+    "voiceResponseMode": "Balso atsakymas",
+    "voiceResponseModeTitle": "Kada įgarsinti atsakymus",
+    "voiceResponseOff": "Išjungta",
+    "voiceResponseHeadphonesOnly": "Tik ausinėmis",
+    "voiceResponseAlways": "Visada",
+    "agreeAndContinue": "Sutinku ir tęsti"
 }

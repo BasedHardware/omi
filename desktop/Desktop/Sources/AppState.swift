@@ -230,6 +230,9 @@ class AppState: ObservableObject {
     // Register as the current instance so background services can check recording state
     AppState.current = self
 
+    // Resolve beta/stable before loading backend URLs so beta releases use dev services.
+    AppBuild.prepareUpdateChannelForBackendRouting()
+
     // Load API key from environment or .env file
     loadEnvironment()
 
@@ -482,6 +485,8 @@ class AppState: ObservableObject {
         // Don't break - load all .env files to merge keys
       }
     }
+
+    DesktopBackendEnvironment.applyReleaseChannelDefaults()
 
     log("Environment loaded (API keys will be fetched from backend after auth)")
   }

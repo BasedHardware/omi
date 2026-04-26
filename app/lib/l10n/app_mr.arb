@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "बॅटरी स्तर",
+    "charging": "चार्ज होत आहे",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "स्पीकर",
     "phoneEndCall": "संपला",
     "phoneCallSettingsTitle": "फोन कॉल सेटिंग्ज",
+    "showPhoneCallButtonTitle": "फोन कॉल बटण दाखवा",
+    "showPhoneCallButtonDesc": "मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा",
     "yourVerifiedNumbers": "तुमचे सत्यापित नंबर",
     "verifiedNumbersDescription": "तू कोणाला कॉल करतोस तेव्हा त्यांना त्यांच्या फोनवर हा नंबर दिसेल",
     "noVerifiedNumbers": "कोणतेही सत्यापित नंबर नाही",
@@ -10685,5 +10688,12 @@
     "batteryHistory": "बॅटरी",
     "day": "दिवस",
     "noBatteryDataYet": "अजून बॅटरी डेटा नाही",
-    "week": "आठवडा"
+    "week": "आठवडा",
+    "voiceResponseAudio": "Omi चे उत्तर मोठ्याने वाचा",
+    "voiceResponseMode": "व्हॉइस प्रतिसाद",
+    "voiceResponseModeTitle": "प्रतिसाद केव्हा बोलायचा",
+    "voiceResponseOff": "बंद",
+    "voiceResponseHeadphonesOnly": "फक्त हेडफोन",
+    "voiceResponseAlways": "नेहमी",
+    "agreeAndContinue": "सहमत व्हा आणि सुरू ठेवा"
 }

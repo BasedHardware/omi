@@ -18,7 +18,6 @@ import {
   Megaphone,
   Truck,
   Bell,
-  BarChart3,
   ShieldAlert,
   FlaskConical,
   Rocket,
@@ -97,11 +96,6 @@ export function DashboardSidebar() {
       title: "Notifications",
       href: "/dashboard/notifications",
       icon: Bell,
-    },
-    {
-      title: "Analytics",
-      href: "/dashboard/analytics",
-      icon: BarChart3,
     },
     {
       title: "Releases",

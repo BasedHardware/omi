@@ -115,6 +115,7 @@ def transcribe_pcm_bytes(
     encoding: str = 'linear16',
     sample_rate: int = 16000,
     channels: int = 1,
+    keywords: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Transcribe raw PCM audio bytes directly via Deepgram pre-recorded API.
 
@@ -138,6 +139,7 @@ def transcribe_pcm_bytes(
             language=stt_language,
             model=stt_model,
             return_language=True,
+            keywords=keywords,
         )
         words, detected_language = result
     else:
@@ -149,6 +151,7 @@ def transcribe_pcm_bytes(
             channels=channels,
             language=stt_language,
             model=stt_model,
+            keywords=keywords,
         )
         detected_language = stt_language
 

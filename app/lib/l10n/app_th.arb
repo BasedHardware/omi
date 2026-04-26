@@ -732,6 +732,7 @@
     "slideToUpdate": "เลื่อนเพื่ออัปเดต",
     "copiedToClipboard": "คัดลอก {title} ไปยังคลิปบอร์ดแล้ว",
     "batteryLevel": "ระดับแบตเตอรี่",
+    "charging": "กำลังชาร์จ",
     "productUpdate": "การอัปเดตผลิตภัณฑ์",
     "offline": "ออฟไลน์",
     "available": "พร้อมใช้งาน",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "ขณะโทร ป้อนรหัสนี้",
     "phoneAllow": "อนุญาต",
     "phoneCallSettingsTitle": "ตั้งค่าการโทร",
+    "showPhoneCallButtonTitle": "แสดงปุ่มโทรศัพท์",
+    "showPhoneCallButtonDesc": "แสดงปุ่มโทรศัพท์บนหน้าจอหลัก",
     "phoneCallsSubtitle": "โทรพร้อมถอดความแบบเรียลไทม์",
     "phoneCallsWithOmi": "โทรกับ Omi",
     "phoneContactsTab": "รายชื่อ",
@@ -2977,5 +2980,12 @@
     "batteryHistory": "แบตเตอรี่",
     "day": "วัน",
     "noBatteryDataYet": "ยังไม่มีข้อมูลแบตเตอรี่",
-    "week": "สัปดาห์"
+    "week": "สัปดาห์",
+    "voiceResponseAudio": "อ่านคำตอบของ Omi ออกเสียง",
+    "voiceResponseMode": "ตอบกลับด้วยเสียง",
+    "voiceResponseModeTitle": "เมื่อใดจึงจะอ่านคำตอบ",
+    "voiceResponseOff": "ปิด",
+    "voiceResponseHeadphonesOnly": "หูฟังเท่านั้น",
+    "voiceResponseAlways": "เสมอ",
+    "agreeAndContinue": "ยอมรับและดำเนินการต่อ"
 }

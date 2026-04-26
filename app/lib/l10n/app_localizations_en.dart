@@ -2373,6 +2373,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryLevel => 'Battery Level';
 
   @override
+  String get charging => 'Charging';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -5091,7 +5094,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services (including Deepgram for transcription and OpenAI for analysis) to provide you with AI-powered insights and enable all app features.';
+      'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.';
 
   @override
   String get tasksEmptyStateMessage => 'Tasks from your conversations will appear here.\nTap + to create one manually.';
@@ -8284,6 +8287,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Show Phone Call Button';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Display phone call button on home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Your Verified Numbers';
 
   @override
@@ -9120,4 +9129,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.';
+
+  @override
+  String get voiceResponseAudio => 'Speak Omi responses aloud';
+
+  @override
+  String get voiceResponseMode => 'Voice response';
+
+  @override
+  String get voiceResponseModeTitle => 'When to speak responses';
+
+  @override
+  String get voiceResponseOff => 'Off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones only';
+
+  @override
+  String get voiceResponseAlways => 'Always';
+
+  @override
+  String get agreeAndContinue => 'Agree & Continue';
 }

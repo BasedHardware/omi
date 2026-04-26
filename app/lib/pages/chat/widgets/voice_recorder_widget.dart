@@ -153,7 +153,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                   Row(
                     children: [
                       GestureDetector(
-                        onTap: provider.retry,
+                        onTap: () => provider.retry(),
                         child: Container(
                           padding: const EdgeInsets.all(4),
                           margin: const EdgeInsets.only(left: 10, right: 0, top: 10, bottom: 10),
@@ -194,8 +194,7 @@ class AudioWavePainter extends CustomPainter {
 
     final paint = Paint()
       ..color = Colors.white
-      ..strokeWidth =
-          4 // Slightly thicker for better visibility
+      ..strokeWidth = 4 // Slightly thicker for better visibility
       ..strokeCap = StrokeCap.round;
 
     final width = size.width;

@@ -732,6 +732,7 @@
     "slideToUpdate": "Przesuń, aby zaktualizować",
     "copiedToClipboard": "{title} skopiowano do schowka",
     "batteryLevel": "Poziom baterii",
+    "charging": "Ładowanie",
     "productUpdate": "Aktualizacja produktu",
     "offline": "Offline",
     "available": "Dostępne",
@@ -2686,6 +2687,8 @@
     "onTheCallEnterThisCode": "Podczas rozmowy wpisz ten kod",
     "phoneAllow": "Zezwol",
     "phoneCallSettingsTitle": "Ustawienia polaczen",
+    "showPhoneCallButtonTitle": "Pokaż przycisk połączenia",
+    "showPhoneCallButtonDesc": "Wyświetl przycisk połączenia telefonicznego na ekranie głównym",
     "phoneCallsSubtitle": "Dzwon z transkrypcja w czasie rzeczywistym",
     "phoneCallsWithOmi": "Polaczenia z Omi",
     "phoneContactsTab": "Kontakty",
@@ -3012,5 +3015,12 @@
     "batteryHistory": "Bateria",
     "day": "Dzień",
     "noBatteryDataYet": "Brak danych o baterii",
-    "week": "Tydzień"
+    "week": "Tydzień",
+    "voiceResponseAudio": "Odczytaj odpowiedź Omi na głos",
+    "voiceResponseMode": "Odpowiedź głosowa",
+    "voiceResponseModeTitle": "Kiedy odczytywać odpowiedzi",
+    "voiceResponseOff": "Wył.",
+    "voiceResponseHeadphonesOnly": "Tylko słuchawki",
+    "voiceResponseAlways": "Zawsze",
+    "agreeAndContinue": "Akceptuję i kontynuuj"
 }

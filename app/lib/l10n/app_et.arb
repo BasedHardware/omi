@@ -732,6 +732,7 @@
     "slideToUpdate": "Värskendamiseks libistage",
     "copiedToClipboard": "{title} kopeeritud lõikelauale",
     "batteryLevel": "Aku tase",
+    "charging": "Laadimine",
     "productUpdate": "Toote värskendus",
     "offline": "Ühenduseta",
     "available": "Saadaval",
@@ -2651,6 +2652,8 @@
     "onTheCallEnterThisCode": "Kone ajal sisestage see kood",
     "phoneAllow": "Luba",
     "phoneCallSettingsTitle": "Kone seaded",
+    "showPhoneCallButtonTitle": "Kuva kõnenuppu",
+    "showPhoneCallButtonDesc": "Kuva telefonikõne nupp avakuval",
     "phoneCallsSubtitle": "Helistage reaalajas transkriptsiooniga",
     "phoneCallsWithOmi": "Koned Omiga",
     "phoneContactsTab": "Kontaktid",
@@ -2977,5 +2980,12 @@
     "batteryHistory": "Aku",
     "day": "Päev",
     "noBatteryDataYet": "Aku andmed puuduvad",
-    "week": "Nädal"
+    "week": "Nädal",
+    "voiceResponseAudio": "Loe Omi vastus ette",
+    "voiceResponseMode": "Hääleline vastus",
+    "voiceResponseModeTitle": "Millal vastuseid ette lugeda",
+    "voiceResponseOff": "Väljas",
+    "voiceResponseHeadphonesOnly": "Ainult kõrvaklapid",
+    "voiceResponseAlways": "Alati",
+    "agreeAndContinue": "Nõustun ja jätka"
 }

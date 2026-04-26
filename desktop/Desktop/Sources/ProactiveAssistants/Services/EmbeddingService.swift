@@ -16,9 +16,9 @@ actor EmbeddingService {
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
 
-  /// Backend proxy base URL (from OMI_API_URL env var)
+  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return ""

@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Узровень батарэі",
+    "charging": "Зарадка",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "Спікер",
     "phoneEndCall": "Завершыць",
     "phoneCallSettingsTitle": "Параметры тэлефонных вызваў",
+    "showPhoneCallButtonTitle": "Паказаць кнопку тэлефоннага выкліку",
+    "showPhoneCallButtonDesc": "Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране",
     "yourVerifiedNumbers": "Ваш параўныя нумары",
     "verifiedNumbersDescription": "Калі вы звяжэцца з кім-небудзь, яны паўідяць гэты нумар на сваім тэлефоне",
     "noVerifiedNumbers": "Няма параўныш нумараў",
@@ -10685,5 +10688,12 @@
     "batteryHistory": "Батарэя",
     "day": "Дзень",
     "noBatteryDataYet": "Даных пра батарэю яшчэ няма",
-    "week": "Тыдзень"
+    "week": "Тыдзень",
+    "voiceResponseAudio": "Чытаць адказ Omi уголас",
+    "voiceResponseMode": "Галасавы адказ",
+    "voiceResponseModeTitle": "Калі агучваць адказы",
+    "voiceResponseOff": "Выкл",
+    "voiceResponseHeadphonesOnly": "Толькі навушнікі",
+    "voiceResponseAlways": "Заўсёды",
+    "agreeAndContinue": "Прыняць і працягнуць"
 }

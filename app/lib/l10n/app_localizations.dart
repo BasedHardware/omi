@@ -4581,6 +4581,12 @@ abstract class AppLocalizations {
   /// **'Battery Level'**
   String get batteryLevel;
 
+  /// No description provided for @charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Charging'**
+  String get charging;
+
   /// Menu item for product/firmware update
   ///
   /// In en, this message translates to:
@@ -9648,7 +9654,7 @@ abstract class AppLocalizations {
   /// Consent message explaining how user data will be stored and used
   ///
   /// In en, this message translates to:
-  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services (including Deepgram for transcription and OpenAI for analysis) to provide you with AI-powered insights and enable all app features.'**
+  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
   String get consentDataMessage;
 
   /// Empty state message shown when there are no tasks, with instruction to tap + button
@@ -15513,6 +15519,18 @@ abstract class AppLocalizations {
   /// **'Phone Call Settings'**
   String get phoneCallSettingsTitle;
 
+  /// No description provided for @showPhoneCallButtonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Phone Call Button'**
+  String get showPhoneCallButtonTitle;
+
+  /// No description provided for @showPhoneCallButtonDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Display phone call button on home screen'**
+  String get showPhoneCallButtonDesc;
+
   /// No description provided for @yourVerifiedNumbers.
   ///
   /// In en, this message translates to:
@@ -17024,6 +17042,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.'**
   String get chatQuotaExceededReply;
+
+  /// Voice response audio feature title
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Omi responses aloud'**
+  String get voiceResponseAudio;
+
+  /// Voice response mode setting row title
+  ///
+  /// In en, this message translates to:
+  /// **'Voice response'**
+  String get voiceResponseMode;
+
+  /// Bottom sheet title for voice response mode selector
+  ///
+  /// In en, this message translates to:
+  /// **'When to speak responses'**
+  String get voiceResponseModeTitle;
+
+  /// Voice response mode: off
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get voiceResponseOff;
+
+  /// Voice response mode: only when headphones connected
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones only'**
+  String get voiceResponseHeadphonesOnly;
+
+  /// Voice response mode: always, including phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get voiceResponseAlways;
+
+  /// Button label on the data and AI consent screen — explicit consent action.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree & Continue'**
+  String get agreeAndContinue;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

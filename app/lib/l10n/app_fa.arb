@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "سطح باتری",
+    "charging": "در حال شارژ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9996,8 @@
     "phoneSpeaker": "بلندگو",
     "phoneEndCall": "پایان",
     "phoneCallSettingsTitle": "تنظیمات تماس تلفنی",
+    "showPhoneCallButtonTitle": "نمایش دکمه تماس",
+    "showPhoneCallButtonDesc": "نمایش دکمه تماس تلفنی در صفحه اصلی",
     "yourVerifiedNumbers": "شماره‌های تأیید شده شما",
     "verifiedNumbersDescription": "هنگامی که شما تماس می‌گیرید، طرف مقابل این شماره را روی تلفن خود خواهد دید",
     "noVerifiedNumbers": "بدون شماره تأیید شده",
@@ -10685,5 +10688,12 @@
     "batteryHistory": "باتری",
     "day": "روز",
     "noBatteryDataYet": "هنوز داده‌ای از باتری موجود نیست",
-    "week": "هفته"
+    "week": "هفته",
+    "voiceResponseAudio": "خواندن پاسخ Omi با صدای بلند",
+    "voiceResponseMode": "پاسخ صوتی",
+    "voiceResponseModeTitle": "چه زمانی پاسخ‌ها خوانده شوند",
+    "voiceResponseOff": "خاموش",
+    "voiceResponseHeadphonesOnly": "فقط هدفون",
+    "voiceResponseAlways": "همیشه",
+    "agreeAndContinue": "موافقم و ادامه"
 }
