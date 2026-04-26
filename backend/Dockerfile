@@ -38,10 +38,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --index-url ${TORCH_INDEX_URL} \
     torch==2.4.0+cpu torchaudio==2.4.0+cpu torchvision==0.19.0+cpu
 
-# Install remaining requirements (exclude lc3py and torch - built separately)
+# Install remaining requirements (exclude lc3py and torch - built separately).
+# Then re-pin CPU torch: `--upgrade` above lets transitive deps (torch-audiomentations,
+# torch-pitch-shift, silero-vad, etc.) pull torch/torchaudio from default PyPI as
+# CUDA wheels, which then crash at runtime with "libcudart.so.13: cannot open
+# shared object file". The `--reinstall` below restores +cpu wheels last.
 RUN --mount=type=cache,target=/root/.cache/uv \
     grep -vE 'lc3py|^torch==|^torchaudio==|^torchvision==' /tmp/requirements.txt > /tmp/requirements_filtered.txt && \
-    uv pip install --upgrade -r /tmp/requirements_filtered.txt
+    uv pip install --upgrade -r /tmp/requirements_filtered.txt && \
+    uv pip install --reinstall --index-url ${TORCH_INDEX_URL} \
+        torch==2.4.0+cpu torchaudio==2.4.0+cpu torchvision==0.19.0+cpu
 
 FROM python:3.11-slim
 
