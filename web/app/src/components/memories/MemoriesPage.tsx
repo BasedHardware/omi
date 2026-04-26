@@ -300,10 +300,12 @@ export function MemoriesPage() {
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      await removeMemories(selectedIds);
-      setSelectedIds([]);
-      setIsSelectMode(false);
-      setShowDeleteConfirm(false);
+      const success = await removeMemories(selectedIds);
+      if (success) {
+        setSelectedIds([]);
+        setIsSelectMode(false);
+        setShowDeleteConfirm(false);
+      }
     } finally {
       setIsDeleting(false);
     }

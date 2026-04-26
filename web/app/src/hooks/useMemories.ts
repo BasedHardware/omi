@@ -398,13 +398,16 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     }
   }, [activeCategories]);
 
-  // Remove multiple memories via batch API
+  // Remove multiple memories via batch API (chunks of 100 to respect server limit)
   const removeMemories = useCallback(async (ids: string[]): Promise<boolean> => {
     if (ids.length === 0) return true;
     const key = getCacheKey(activeCategories);
+    const CHUNK_SIZE = 100;
     try {
       const idSet = new Set(ids);
-      await deleteMemoriesBatch(ids);
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        await deleteMemoriesBatch(ids.slice(i, i + CHUNK_SIZE));
+      }
       const updater = (prev: Memory[]) => prev.filter((m) => !idSet.has(m.id));
       setMemories(updater);
       updateCacheMemories(key, updater);
