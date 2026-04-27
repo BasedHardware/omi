@@ -706,6 +706,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.image = icon
       }
     }
+    applyMenuBarPrivacyShield()
     // Safety net: verify again after a short delay
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
       let button = self?.statusBarItem?.button
@@ -718,6 +719,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
     log("AppDelegate: [MENUBAR] Refreshed status bar item after policy change")
+  }
+
+  /// Apply or clear the EU Privacy Mode shield indicator next to the menu
+  /// bar icon. Cheap to call; idempotent. Only mutates when the privacy
+  /// state changed since the last call.
+  @MainActor private func applyMenuBarPrivacyShield() {
+    guard let button = statusBarItem?.button else { return }
+    let displayName =
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+    let baseTooltip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
+    if APIKeyService.isEUPrivacyModeEnabled {
+      // U+1F6E1 SHIELD as a tiny suffix character; stays subtle next to the
+      // Omi text logo. .imageLeft so the shield text shows after the icon.
+      button.title = "  🛡"
+      button.imagePosition = .imageLeft
+      button.toolTip = "\(baseTooltip) — EU Privacy Mode on"
+    } else {
+      button.title = ""
+      button.imagePosition = .imageOnly
+      button.toolTip = baseTooltip
+    }
   }
 
   /// Set up menu bar icon using NSStatusBar (more reliable than SwiftUI MenuBarExtra)
@@ -785,8 +807,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
+      applyMenuBarPrivacyShield()
     } else {
       log("AppDelegate: [MENUBAR] WARNING - statusBarItem.button is nil")
+    }
+
+    // React to EU Privacy Mode toggle changes from Settings — without this the
+    // shield indicator only refreshes on app focus events.
+    NotificationCenter.default.addObserver(
+      forName: UserDefaults.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.applyMenuBarPrivacyShield() }
     }
 
     // Create menu
