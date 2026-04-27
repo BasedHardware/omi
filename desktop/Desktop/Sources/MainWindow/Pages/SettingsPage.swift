@@ -218,6 +218,7 @@ struct SettingsContentView: View {
   // APIClient attaches X-Privacy-Mode: on so the backend routes LLM work
   // through regolo.ai (Italy, zero retention).
   @State private var euPrivacyModeEnabled: Bool = APIKeyService.isEUPrivacyModeEnabled
+  @ObservedObject private var fallbackObserver = PrivacyModeFallbackObserver.shared
 
   // Transcription settings (from backend)
   @State private var singleLanguageMode: Bool = false
@@ -382,6 +383,7 @@ struct SettingsContentView: View {
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
   @AppStorage("dev_openai_api_key") private var devOpenAIKey: String = ""
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+  @AppStorage("dev_regolo_api_key") private var devRegoloKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
 
@@ -1638,6 +1640,25 @@ struct SettingsContentView: View {
               .onChange(of: euPrivacyModeEnabled) { _, newValue in
                 APIKeyService.isEUPrivacyModeEnabled = newValue
               }
+          }
+
+          // Rolling 7-day count of fallback events (requests that left the EU
+          // because regolo couldn't serve them). Surfaced only when EU
+          // Privacy Mode is on AND there has been at least one fallback —
+          // otherwise this row is silent.
+          if euPrivacyModeEnabled, fallbackObserver.weeklyFallbackCount > 0 {
+            HStack(spacing: 8) {
+              Image(systemName: "exclamationmark.triangle")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.warning)
+              Text(
+                "\(fallbackObserver.weeklyFallbackCount) request\(fallbackObserver.weeklyFallbackCount == 1 ? "" : "s") fell back this week."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              Spacer(minLength: 0)
+            }
+            .padding(.leading, 32)  // align with toggle text
           }
         }
       }
@@ -5237,6 +5258,14 @@ struct SettingsContentView: View {
         subtitle: "For live transcription.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
+      )
+
+      developerKeyField(
+        provider: .regolo,
+        title: "Regolo API Key",
+        subtitle: "For EU Privacy Mode (Italy-hosted, zero retention). Optional.",
+        settingId: "advanced.devkeys.regolo",
+        value: $devRegoloKey
       )
 
       if let byokActivationError {
