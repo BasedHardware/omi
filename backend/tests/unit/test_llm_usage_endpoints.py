@@ -58,6 +58,17 @@ for attr in [
 ]:
     setattr(redis_mod, attr, MagicMock())
 
+
+# try_catch_decorator is used by database.phone_call_usage — provide a passthrough.
+def _passthrough_decorator(func):
+    return func
+
+
+redis_mod.try_catch_decorator = _passthrough_decorator
+
+cache_mod = sys.modules["database.cache"]
+cache_mod.get_memory_cache = MagicMock(return_value=None)
+
 users_mod = sys.modules["database.users"]
 users_mod.get_user_transcription_preferences = MagicMock()
 users_mod.set_user_transcription_preferences = MagicMock()
@@ -78,15 +89,28 @@ for name in [
     "utils.llm.external_integrations",
     "utils.webhooks",
     "utils.other.storage",
+    "utils.phone_calls",
+    "database.phone_call_usage",
+    "database.phone_call_config",
 ]:
     sys.modules[name] = types.ModuleType(name)
 
 sys.modules["utils.apps"].get_available_app_by_id = MagicMock()
 subscription_mod = sys.modules["utils.subscription"]
-subscription_mod.get_plan_limits = MagicMock()
-subscription_mod.get_plan_features = MagicMock()
-subscription_mod.get_monthly_usage_for_subscription = MagicMock()
-subscription_mod.reconcile_basic_plan_with_stripe = MagicMock()
+for attr in [
+    "get_plan_limits",
+    "get_plan_features",
+    "get_monthly_usage_for_subscription",
+    "reconcile_basic_plan_with_stripe",
+    "get_chat_quota_snapshot",
+    "get_plan_display_name",
+    "filter_plans_for_user",
+    "should_show_new_plans",
+    "adapt_plans_for_legacy_client",
+    "legacy_plan_features",
+    "is_paid_plan",
+]:
+    setattr(subscription_mod, attr, MagicMock())
 subscription_mod.get_paid_plan_definitions = MagicMock(return_value=[])
 
 sys.modules["utils.llm.followup"].followup_question_prompt = MagicMock()
@@ -98,6 +122,9 @@ sys.modules["utils.llm.external_integrations"].generate_comprehensive_daily_summ
 
 sys.modules["utils.webhooks"].webhook_first_time_setup = MagicMock()
 
+phone_calls_mod = sys.modules["utils.phone_calls"]
+phone_calls_mod.get_quota_snapshot = MagicMock()
+
 storage_mod = sys.modules["utils.other.storage"]
 storage_mod.delete_all_conversation_recordings = MagicMock()
 storage_mod.get_speech_sample_signed_urls = MagicMock()
@@ -106,6 +133,7 @@ storage_mod.delete_user_person_speech_sample = MagicMock()
 
 endpoints_module = types.ModuleType("utils.other.endpoints")
 endpoints_module.get_current_user_uid = lambda: "test-user"
+endpoints_module.get_current_user_uid_no_byok_validation = lambda: "test-user"
 sys.modules["utils.other.endpoints"] = endpoints_module
 
 from fastapi import FastAPI

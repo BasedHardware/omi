@@ -56,6 +56,17 @@ for sub in [
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
 
+# Stub vector_db functions used by routers.action_items
+vector_db_mod = sys.modules["database.vector_db"]
+for attr in [
+    "upsert_action_item_vector",
+    "upsert_action_item_vectors_batch",
+    "delete_action_item_vector",
+    "delete_action_item_vectors_batch",
+    "search_action_items_by_vector",
+]:
+    setattr(vector_db_mod, attr, MagicMock())
+
 # Stub LLM clients to avoid OpenAI API key requirement
 clients_mod = _stub_module("utils.llm.clients")
 clients_mod.llm_mini = MagicMock()
