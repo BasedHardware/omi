@@ -113,8 +113,30 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
 
             page += 1
 
-    # Cache for 5 minutes (even if empty, to avoid hammering GitHub)
-    set_generic_cache(cache_key, collected, ttl=300)
+        # Resilience fallback: when the unfiltered list endpoint returns empty,
+        # fetch /releases/latest as a single-release fallback. The list endpoint
+        # has historically gone soft-empty (HTTP 200 with []) during partial
+        # GitHub outages while single-release endpoints stayed up.
+        if not collected and not tag_filter:
+            try:
+                latest_url = "https://api.github.com/repos/BasedHardware/omi/releases/latest"
+                latest_resp = await client.get(latest_url, headers=headers)
+                if latest_resp.status_code == 200:
+                    collected = [latest_resp.json()]
+                    logger.warning("GitHub releases list returned empty; using /releases/latest fallback")
+                else:
+                    logger.warning(
+                        "GitHub /releases/latest fallback returned %d: %s",
+                        latest_resp.status_code,
+                        sanitize(latest_resp.text),
+                    )
+            except Exception as e:
+                logger.warning("GitHub /releases/latest fallback failed: %s: %s", type(e).__name__, e)
+
+    # Cache successful fetches for 5 minutes; cache empty results briefly so
+    # we recover quickly when GitHub heals without hammering the API.
+    ttl = 300 if collected else 30
+    set_generic_cache(cache_key, collected, ttl=ttl)
     return collected
 
 
