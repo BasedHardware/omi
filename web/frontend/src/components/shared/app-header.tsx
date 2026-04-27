@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
+import PrivacyModeShield from './privacy-mode-shield';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -221,6 +222,7 @@ export default function AppHeader({
         </h1>
 
         <nav className="hidden items-center space-x-4 md:flex">
+          <PrivacyModeShield />
           {navItems.map((item) => (
             <button
               key={item.label}
