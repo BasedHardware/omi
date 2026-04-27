@@ -55,9 +55,20 @@ final class PrivacyModeFallbackObserver: ObservableObject {
 
   @Published private(set) var currentEvent: Event?
 
+  /// Rolling 7-day count of fallback events, surfaced in Settings as
+  /// "N requests fell back this week". Persisted across app restarts via
+  /// UserDefaults; auto-resets when the 7-day window rolls over.
+  @Published private(set) var weeklyFallbackCount: Int = 0
+
+  private static let weeklyCountKey = "eu_privacy_fallback_count_week"
+  private static let weeklyCountResetAtKey = "eu_privacy_fallback_count_week_reset_at"
+  private static let weekSeconds: TimeInterval = 7 * 24 * 60 * 60
+
   private var dismissTask: Task<Void, Never>?
 
-  private init() {}
+  private init() {
+    weeklyFallbackCount = Self.loadCounterRollingOverIfStale()
+  }
 
   /// Call from APIClient when the backend sends X-Privacy-Mode-Fallback.
   /// Nothing happens if the user has Privacy Mode disabled — nothing to warn
@@ -66,7 +77,31 @@ final class PrivacyModeFallbackObserver: ObservableObject {
     guard APIKeyService.isEUPrivacyModeEnabled else { return }
     let reason = Reason(rawValueOrOther: rawReason)
     currentEvent = Event(reason: reason, seenAt: Date())
+    weeklyFallbackCount = Self.bumpCounter()
     scheduleAutoDismiss()
+  }
+
+  // MARK: - Weekly counter persistence
+
+  /// Read the persisted weekly counter, resetting if the 7-day window expired.
+  private static func loadCounterRollingOverIfStale() -> Int {
+    let defaults = UserDefaults.standard
+    let resetAt = defaults.double(forKey: weeklyCountResetAtKey)
+    let now = Date().timeIntervalSince1970
+    if resetAt == 0 || now - resetAt >= weekSeconds {
+      defaults.set(0, forKey: weeklyCountKey)
+      defaults.set(now, forKey: weeklyCountResetAtKey)
+      return 0
+    }
+    return defaults.integer(forKey: weeklyCountKey)
+  }
+
+  /// Increment the weekly counter, rolling over the window first if stale.
+  private static func bumpCounter() -> Int {
+    let defaults = UserDefaults.standard
+    let next = loadCounterRollingOverIfStale() + 1
+    defaults.set(next, forKey: weeklyCountKey)
+    return next
   }
 
   /// User-initiated dismissal (tap the banner).
