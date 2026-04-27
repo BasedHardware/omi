@@ -15,10 +15,52 @@ if os.getenv('PINECONE_API_KEY') is not None:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
     index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
 else:
+    pc = None
     index = None
 
 
-def _get_data(uid: str, conversation_id: str, vector: List[float]):
+# M2.5: provider-aware index selector. The legacy `index` (3072-dim, OpenAI
+# text-embedding-3-large + Gemini embedding-001) stays as the default. When
+# `PINECONE_INDEX_NAME_EU` is set in the deploy, EU Privacy Mode workloads
+# write/read against a parallel 4096-dim Qwen3-Embedding-8B index — keeping
+# the dimensionalities physically separated so cosine math doesn't degrade.
+_EU_INDEX = None
+if pc is not None and os.getenv('PINECONE_INDEX_NAME_EU', '').strip():
+    _EU_INDEX = pc.Index(os.getenv('PINECONE_INDEX_NAME_EU', '').strip())
+
+
+def _get_index_for_provider(provider: str = None):
+    """Return the Pinecone handle for an embedding provider.
+
+    `provider='regolo'` → EU 4096-dim index when provisioned, else None
+    (caller must handle gracefully — embedding-dependent features are
+    HARD_BLOCKED in EU mode by `eu_privacy.resolve_feature_model` until
+    the env var is set).
+
+    Anything else → the legacy 3072-dim index.
+    """
+    if provider == 'regolo':
+        return _EU_INDEX
+    return index
+
+
+# Legacy schema attribution for vectors written before M2.5. Used by the
+# §3 backfill migration and as the default tag when callers don't pass
+# explicit provider/model/dim.
+_LEGACY_PROVIDER = 'openai'
+_LEGACY_MODEL = 'text-embedding-3-large'
+_LEGACY_DIM = 3072
+
+
+def _get_data(
+    uid: str,
+    conversation_id: str,
+    vector: List[float],
+    *,
+    provider: str = _LEGACY_PROVIDER,
+    model: str = _LEGACY_MODEL,
+    dim: int = _LEGACY_DIM,
+):
     return {
         "id": f'{uid}-{conversation_id}',
         "values": vector,
@@ -26,6 +68,13 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
             'uid': uid,
             'memory_id': conversation_id,
             'created_at': int(datetime.now(timezone.utc).timestamp()),
+            # M2.5 additive attribution. Non-breaking — Pinecone ignores
+            # unknown metadata fields and existing readers don't filter on
+            # these keys. The §3 backfill tags pre-M2.5 vectors with the
+            # legacy values above so every vector eventually carries them.
+            'provider': provider,
+            'model': model,
+            'dim': dim,
         },
     }
 
