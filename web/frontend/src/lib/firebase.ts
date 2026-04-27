@@ -8,6 +8,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -25,6 +26,11 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Auth and get a reference to the service
 export const auth = getAuth(app);
+
+// Firestore handle — used by web/frontend/src/lib/firestore/* for the user-
+// settings store (M4.1 onward). Same Firebase project as Auth so the security
+// rules can pin reads/writes to `request.auth.uid`.
+export const db = getFirestore(app);
 
 // Initialize Google Auth Provider
 const googleProvider = new GoogleAuthProvider();
