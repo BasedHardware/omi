@@ -102,6 +102,34 @@ def get_folder(uid: str, folder_id: str) -> Optional[dict]:
     return None
 
 
+def get_folders_by_ids(uid: str, folder_ids: List[str]) -> List[dict]:
+    """Batch-fetch only the folders the caller actually needs, in a single
+    Firestore round trip via ``db.get_all`` regardless of how many ids are
+    requested. Missing ids are silently dropped — the returned list contains
+    only the folders that exist (caller can detect omissions by comparing
+    returned ids against the input set).
+
+    Use this over ``get_folder`` in a loop whenever the set of needed ids is
+    known up front (e.g. enrichment from a webhook or list payload), and
+    over ``get_folders`` whenever you only need a small subset of the user's
+    full folder collection.
+    """
+    if not folder_ids:
+        return []
+
+    user_ref = db.collection('users').document(uid)
+    folders_collection = user_ref.collection('folders')
+    refs = [folders_collection.document(folder_id) for folder_id in folder_ids]
+
+    folders = []
+    for doc in db.get_all(refs):
+        if doc.exists:
+            folder_data = doc.to_dict()
+            folder_data['id'] = doc.id
+            folders.append(folder_data)
+    return folders
+
+
 def create_folder(
     uid: str,
     name: str,
