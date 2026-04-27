@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Mulish } from 'next/font/google';
+import { Toaster } from 'sonner';
 import './globals.css';
 import AppHeader from '../components/shared/app-header';
 import ConditionalFooter from '../components/shared/conditional-footer';
@@ -43,6 +44,9 @@ export default function RootLayout({
           <div className="w-full flex-grow">{children}</div>
         </main>
         <ConditionalFooter />
+        {/* Toast surface for privacy-mode fallback events + future client-side
+            notifications. Mirrors the desktop's PrivacyModeFallbackBanner. */}
+        <Toaster richColors position="top-center" />
       </body>
       <GleapInit />
       <GoogleAnalytics />
