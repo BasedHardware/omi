@@ -49,9 +49,11 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
 def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
     """Add folder_name to conversations based on folder_id mappings.
 
-    Mutates conversation dicts in-place. Issues one folders_db.get_folder
-    lookup per distinct folder_id referenced by the input — bounded by the
-    number of distinct ids in the payload (typically 1 for webhooks).
+    Mutates conversation dicts in-place. Issues a single
+    ``folders_db.get_folders_by_ids`` batch fetch for the distinct folder
+    ids referenced by the input — one Firestore round trip regardless of
+    how many distinct ids are present, instead of an O(distinct_ids) loop
+    of per-id lookups.
     """
     folder_ids = set()
     for conv in conversations:
@@ -63,15 +65,8 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
             conv['folder_name'] = None
         return
 
-    # Fetch only the folder docs we actually need. Webhook callers typically
-    # render 1 conversation with 1 folder_id — pulling the user's full folder
-    # list (folders_db.get_folders) was O(total folders) per webhook, even
-    # for a single-conversation payload.
-    folder_map = {}
-    for folder_id in folder_ids:
-        folder = folders_db.get_folder(uid, folder_id)
-        if folder:
-            folder_map[folder['id']] = folder['name']
+    folders = folders_db.get_folders_by_ids(uid, list(folder_ids))
+    folder_map = {f['id']: f['name'] for f in folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
