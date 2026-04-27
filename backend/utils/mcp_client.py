@@ -741,6 +741,21 @@ def _get_state_signing_secret() -> bytes:
     return secret.encode("utf-8")
 
 
+MCP_OAUTH_STATE_VERSION = "v1"
+MCP_OAUTH_STATE_MAX_AGE_SECONDS = 15 * 60
+
+
+def _base64url_encode(value: str) -> str:
+    return (
+        base64.urlsafe_b64encode(value.encode("utf-8")).rstrip(b"=").decode("ascii")
+    )
+
+
+def _base64url_decode(value: str) -> str:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}").decode("utf-8")
+
+
 def _sign_state_payload(payload: str) -> str:
     digest = hmac.new(
         _get_state_signing_secret(), payload.encode("utf-8"), hashlib.sha256
@@ -750,8 +765,17 @@ def _sign_state_payload(payload: str) -> str:
 
 def generate_state_token(app_id: str, uid: str) -> str:
     """Generate an authenticated state parameter for an MCP OAuth flow."""
+    issued_at = str(int(time.time()))
     nonce = secrets.token_urlsafe(16)
-    payload = f"{app_id}:{uid}:{nonce}"
+    payload = ":".join(
+        [
+            MCP_OAUTH_STATE_VERSION,
+            _base64url_encode(app_id),
+            _base64url_encode(uid),
+            issued_at,
+            nonce,
+        ]
+    )
     signature = _sign_state_payload(payload)
     return f"{payload}:{signature}"
 
@@ -759,20 +783,26 @@ def generate_state_token(app_id: str, uid: str) -> str:
 def parse_state_token(state: str) -> tuple[str, str]:
     """Parse and verify app_id and uid from an OAuth state parameter."""
     parts = state.split(":")
-    if len(parts) == 4:
-        payload = ":".join(parts[:3])
-        expected_signature = _sign_state_payload(payload)
-        if not hmac.compare_digest(parts[3], expected_signature):
-            raise ValueError("Invalid state token signature")
-        return parts[0], parts[1]
+    if len(parts) != 6 or parts[0] != MCP_OAUTH_STATE_VERSION:
+        raise ValueError("Invalid state token")
 
-    # Preserve compatibility with already-issued state values while the callback
-    # also checks that the parsed uid matches the stored app owner before it can
-    # enable the app for any account.
-    if len(parts) == 3:
-        return parts[0], parts[1]
+    payload = ":".join(parts[:5])
+    expected_signature = _sign_state_payload(payload)
+    if not hmac.compare_digest(parts[5], expected_signature):
+        raise ValueError("Invalid state token signature")
 
-    raise ValueError("Invalid state token")
+    try:
+        issued_at = int(parts[3])
+    except ValueError as exc:
+        raise ValueError("Invalid state token timestamp") from exc
+
+    if int(time.time()) - issued_at > MCP_OAUTH_STATE_MAX_AGE_SECONDS:
+        raise ValueError("Expired state token")
+
+    try:
+        return _base64url_decode(parts[1]), _base64url_decode(parts[2])
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ValueError("Invalid state token encoding") from exc
 
 
 def validate_mcp_oauth_state_subject(app_data: dict, uid: str) -> None:
