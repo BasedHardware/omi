@@ -219,6 +219,7 @@ struct SettingsContentView: View {
   // through regolo.ai (Italy, zero retention).
   @State private var euPrivacyModeEnabled: Bool = APIKeyService.isEUPrivacyModeEnabled
   @ObservedObject private var fallbackObserver = PrivacyModeFallbackObserver.shared
+  @AppStorage("eu_privacy_first_run_seen") private var euPrivacyFirstRunSeen: Bool = false
 
   // Transcription settings (from backend)
   @State private var singleLanguageMode: Bool = false
@@ -1609,6 +1610,44 @@ struct SettingsContentView: View {
         }
       }
 
+      // First-run intro for EU Privacy Mode — shown once when the user first
+      // visits this section AND the toggle is still off. Dismissible. Per
+      // desktop/docs/REGOLO_INTEGRATION.md Settings UX guidance: "First-run
+      // prompt only surfaces for EU-locale users or users who open Privacy
+      // settings — avoid evangelism." This card covers the second clause.
+      if !euPrivacyFirstRunSeen, !euPrivacyModeEnabled {
+        settingsCard(settingId: "privacy.eumode.firstrun") {
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "sparkles")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.purplePrimary)
+              .frame(width: 20, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 6) {
+              Text("New: EU Privacy Mode")
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Route AI traffic through regolo.ai in Italy — GDPR-compliant, zero data retention. Bring your own Regolo key. Toggle below to enable."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: { euPrivacyFirstRunSeen = true }) {
+              Image(systemName: "xmark")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+          }
+        }
+      }
+
       // EU Privacy Mode — routes LLM work through regolo.ai (Italy, zero retention)
       settingsCard(settingId: "privacy.eumode") {
         VStack(alignment: .leading, spacing: 10) {
@@ -1639,6 +1678,9 @@ struct SettingsContentView: View {
               .controlSize(.small)
               .onChange(of: euPrivacyModeEnabled) { _, newValue in
                 APIKeyService.isEUPrivacyModeEnabled = newValue
+                // Toggling on counts as having seen the intro — no need to
+                // surface the first-run card if the user already engaged.
+                if newValue { euPrivacyFirstRunSeen = true }
               }
           }
 
