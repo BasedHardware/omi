@@ -217,24 +217,33 @@ class AuthenticationProvider extends BaseProvider {
       }
     } catch (e) {
       if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-        final existingCred = e.credential;
-        final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-        final oldAuthToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+        try {
+          final existingCred = e.credential;
+          final oldUserId = FirebaseAuth.instance.currentUser?.uid;
+          final oldAuthToken = await FirebaseAuth.instance.currentUser?.getIdToken();
 
-        await FirebaseAuth.instance.signOut();
-        await FirebaseAuth.instance.signInWithCredential(existingCred!);
-        final newUserId = FirebaseAuth.instance.currentUser?.uid;
-        await AuthService.instance.getIdToken();
+          await FirebaseAuth.instance.signOut();
+          await FirebaseAuth.instance.signInWithCredential(existingCred!);
+          final newUserId = FirebaseAuth.instance.currentUser?.uid;
+          await AuthService.instance.getIdToken();
 
-        SharedPreferencesUtil().onboardingCompleted = false;
-        SharedPreferencesUtil().uid = newUserId ?? '';
-        SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-        SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
+          SharedPreferencesUtil().onboardingCompleted = false;
+          SharedPreferencesUtil().uid = newUserId ?? '';
+          SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
+          SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
 
-        if (oldUserId != null && newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
-          await migrateAppOwnerId(oldUserId, oldAuthToken);
+          if (oldUserId != null && newUserId != null && oldAuthToken != null && oldAuthToken.isNotEmpty) {
+            await migrateAppOwnerId(oldUserId, oldAuthToken);
+          }
+          return;
+        } catch (linkError) {
+          Logger.debug('Error linking with existing Google credential: $linkError');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
+                'Failed to link with Google, please try again.',
+          );
+          rethrow;
         }
-        return;
       }
       AppSnackbar.showSnackbarError(
         globalNavigatorKey.currentContext?.l10n.authFailedToLinkGoogle ??
