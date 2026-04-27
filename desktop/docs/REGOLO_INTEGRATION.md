@@ -26,16 +26,19 @@ Adds [regolo.ai](https://regolo.ai) as a third LLM provider path alongside the e
 
 ## Research context
 
-Regolo.ai exposes OpenAI-compatible endpoints at `https://api.regolo.ai/v1` and hosts ~19 open-source models. Live probes against the production API confirmed:
+Regolo.ai exposes OpenAI-compatible endpoints at `https://api.regolo.ai/v1` and hosts 20 open-source models on PAYG (Apr 2026 catalog). The full `/v1/models` listing and the empirical multi-sample latency/consistency data behind every model pick below are in [`regolo-probes.md`](./regolo-probes.md). Headline findings:
 
 | Capability | Model | Result |
 |---|---|---|
-| Auth + models list | `GET /v1/models` | ✓ |
-| Tool calling | `Llama-3.3-70B-Instruct` | ✓ clean OpenAI-compat `tool_calls`, bonus `reasoning_content` field |
+| Auth + models list | `GET /v1/models` | ✓ — 20 models on PAYG |
+| Tool calling | `Llama-3.3-70B-Instruct` (default), uniform across all probed mid/large chat models | ✓ clean OpenAI-compat `tool_calls` |
+| Streaming tool-call deltas | `Llama-3.3-70B-Instruct` | ✓ OpenAI-standard SSE — `langchain_openai.ChatOpenAI` accumulates natively (fixture: `backend/tests/fixtures/regolo_tool_call_stream.json`) |
 | Embeddings | `Qwen3-Embedding-8B` | ✓ 4096-dim |
-| Chat (thinking model) | `minimax-m2.5` | ✓ **requires** `chat_template_kwargs:{enable_thinking:false}`; else `content:null, finish_reason:length` |
-| Structured JSON extraction | `qwen3.5-122b` | ✓ same thinking caveat; clean JSON with thinking off |
-| Vision | `qwen3-vl-32b` | ⚠️ listed in some tiers only — availability uncertain on PAYG |
+| Chat — thinking-model knob | `qwen3.5-9b/122b`, `qwen3.6-27b`, `minimax-m2.5` | **require** `chat_template_kwargs:{enable_thinking:false}`; else `content:null, finish_reason:length`. **No-op** on Llama / Mistral / gpt-oss / gemma / apertus families. |
+| `reasoning_content` leakage | `minimax-m2.5` only | always emitted — `strip_reasoning_content()` mandatory before persistence |
+| Structured JSON extraction | every probed chat model | ✓ clean JSON via prompt-engineered output; `response_format:json_object` strict mode untested (P9) |
+| Latency × consistency winner | `mistral-small-4-119b` (n=5, p50 0.43s, p90 0.44s, ±2%) | beats Llama-3.3-70B (0.83s) and qwen3.5-122b (bimodal, p90 2.25s); minimax-m2.5 timed out 3/5 calls |
+| Vision | `qwen3-vl-32b` | ✗ **HARD-BLOCKED** — not in PAYG `/v1/models`. Vision falls back to Gemini with red banner. |
 
 **Pricing (Apr 2026):** per 1M tokens input/output — `minimax-m2.5` €0.60/€3.80, `Llama-3.3-70B-Instruct` €0.60/€2.70, `qwen3.5-122b` €1.00/€4.20, `qwen3.5-9b` €0.07/€0.35. Roughly 15–25 % of Claude Sonnet's rate for equivalent workloads.
 
@@ -163,10 +166,11 @@ graph LR
 | Privacy Mode | Workload | Regolo supports? | Route → | Banner? |
 |---|---|---|---|---|
 | OFF | any | — | existing Claude/Gemini | no |
-| ON | chat | ✓ | `regolo: minimax-m2.5` | no |
-| ON | synthesis | ✓ | `regolo: Llama-3.3-70B-Instruct` | no |
+| ON | chat | ✓ | `regolo: mistral-small-4-119b` (was `minimax-m2.5` in the original spec — replaced after P6 latency probe found 3/5 calls timed out at 60s) | no |
+| ON | synthesis | ✓ | `regolo: mistral-small-4-119b` (default) or `Llama-3.3-70B-Instruct` (where Llama's longer instruction-following helps) | no |
 | ON | tool_call | ✓ | `regolo: Llama-3.3-70B-Instruct` | no |
-| ON | ChatLab grade | ✓ | `regolo: qwen3.5-9b` | no |
+| ON | nano-tier classification | ✓ | `regolo: Llama-3.1-8B-Instruct` (€0.05/€0.25 per 1M, 0.62s p50) | no |
+| ON | ChatLab grade | ✓ (operator override only — bimodal latency) | `regolo: qwen3.5-9b` via `MODEL_QOS_*` env var | no |
 | ON | embedding | ✓ | `regolo: Qwen3-Embedding-8B` | no |
 | ON | vision | ✗ (no qwen3-vl on PAYG) | `gemini: gemini-3-flash-preview` | ⚠️ left EU |
 | ON | regolo 5xx (after 1 retry) | temp no | fall back to Claude/Gemini | ⚠️ outage, left EU |
@@ -201,8 +205,8 @@ sequenceDiagram
 | F1 | Add `.regolo` case to `BYOKProvider` in `APIKeyService.swift` with `X-BYOK-Regolo` header + `dev_regolo_api_key` storage key |
 | F2 | Extend `BYOKValidator.swift` to ping `GET https://api.regolo.ai/v1/models` with `Authorization: Bearer <key>` |
 | F3 | Backend accepts `X-BYOK-Regolo` and routes via `OSSProvider` client (`base_url=https://api.regolo.ai/v1`) |
-| F4 | Day-1 model map: `chat → minimax-m2.5`, `synthesis → Llama-3.3-70B-Instruct`, `chatLabGrade → qwen3.5-9b`, `embedding → Qwen3-Embedding-8B` |
-| F5 | All non-reasoning calls inject `chat_template_kwargs:{"enable_thinking":false}` |
+| F4 | Day-1 model map (post-P6 corrections): `chat → mistral-small-4-119b`, `synthesis → mistral-small-4-119b`, `tool_call → Llama-3.3-70B-Instruct`, `nano → Llama-3.1-8B-Instruct`, `embedding → Qwen3-Embedding-8B` (Phase 2). The `_REGOLO_THINKING_MODELS` set in `backend/utils/llm/clients.py` enumerates models still reachable via operator override (`MODEL_QOS_<FEATURE>=regolo/...`). |
+| F5 | Auto-inject `chat_template_kwargs:{"enable_thinking":false}` ONLY for models in `_REGOLO_THINKING_MODELS` (Qwen3.5-9b/122b, Qwen3.6-27b, MiniMax-m2.5). On Llama / Mistral / gpt-oss / gemma / apertus the flag is a no-op and is not sent. |
 | F6 | Tool-call responses normalize to the existing internal shape; `reasoning_content` stripped before persistence |
 | F7 | Embedding responses normalize to the existing interface (4096-dim) |
 | F8 | Existing Claude/Gemini/OpenAI/Deepgram BYOK paths unchanged — zero regressions |
@@ -270,15 +274,15 @@ sequenceDiagram
 
 | # | Question | Status |
 |---|---|---|
-| 1 | Regolo tools schema matches OpenAI strict? | ✓ Resolved via live probe — Llama-3.3 returns standard `tool_calls`. |
-| 2 | Is `qwen3-vl-32b` production-available? | ⚠️ Open — missing from PAYG `/v1/models`. Need regolo support ticket / plan-tier confirmation. Day 1 ships without vision on regolo. |
-| 3 | Vision endpoint shape | Deferred to Phase 2. |
-| 4 | Embedding dimensionality | ✓ 4096 (live probe). DB schema must support variable `embedding_dim`. |
-| 5 | Is `enable_thinking` in body or header? | ✓ Body, under `chat_template_kwargs.enable_thinking`. |
+| 1 | Regolo tools schema matches OpenAI strict? | ✓ Resolved (P3) — uniform OpenAI-compat across Llama 8B/70B, Mistral 3.2/119B, gpt-oss-120B, qwen3.5-122b, minimax-m2.5. |
+| 2 | Is `qwen3-vl-32b` production-available? | ✗ **No on PAYG (P8).** HARD-BLOCKED in Phase 1. Vision falls back to Gemini with banner. To unblock: support ticket or plan upgrade. |
+| 3 | Vision endpoint shape | Deferred to Phase 2; not on Phase-1 critical path. |
+| 4 | Embedding dimensionality | ✓ Resolved (P7) — Qwen3-Embedding-8B is 4096-dim. Vector store keyed `(provider, model, dim)`. See `EMBEDDING_MIGRATION.md`. |
+| 5 | Is `enable_thinking` in body or header? | ✓ Resolved (P4) — body, under `chat_template_kwargs.enable_thinking`. **Per-model**: only the `_REGOLO_THINKING_MODELS` set requires it. The unrelated top-level `"thinking":true,"reasoning_effort":...` opt-in (Regolo docs, `gpt-oss-120b`) is not used in Phase 1 (P10). |
 | 6 | Privacy Mode forces or defaults? | ✓ **Forces** all supported workloads; per-workload overrides disabled while on. |
 | 7 | Fallback allowed while Privacy Mode on? | ✓ **Yes, with visible red banner** per request. Preferred-by-default, not airlocked. |
-| 8 | Rate-limit tuning vs plan tier | Open — instrument telemetry in Phase 1; revisit plan choice with real usage data. |
-| 9 | Streaming parity for tool-call deltas | Open — first Phase 1 dev task is a live probe of regolo's streaming delta shape. |
+| 8 | Rate-limit tuning vs plan tier | Deferred (P11) — instrument telemetry in M1; revisit plan choice with real usage data in M5. |
+| 9 | Streaming parity for tool-call deltas | ✓ Resolved (P2) — OpenAI-standard SSE. Fixture committed at `backend/tests/fixtures/regolo_tool_call_stream.json`. `langchain_openai.ChatOpenAI` accumulates natively; no custom accumulator needed. |
 
 ## Files touched (revised estimate after scaffolding)
 
