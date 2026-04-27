@@ -219,6 +219,12 @@ class CaptureProvider extends ChangeNotifier
     _phoneMicRestartInFlight = true;
     try {
       ServiceManager.instance().mic.stop();
+      // mic.stop() fires _onStop → updateRecordingState(stop). Re-assert
+      // interrupted so the guard below can distinguish this internal stop from
+      // a user-tapped stop — without this, streamRecording() is never reached.
+      if (recordingState == RecordingState.stop) {
+        updateRecordingState(RecordingState.interrupted);
+      }
       // Let iOS fully release the session before we re-activate it.
       await Future.delayed(const Duration(milliseconds: 250));
       // Re-check state after the await: the user may have tapped stop during
@@ -1213,13 +1219,17 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
-    // Socket is back up. If we had flipped to `interrupted` solely because the
-    // transcription socket dropped, restore the optimistic `record` state. If
-    // the mic is still actually silent, the stall heartbeat will re-flag it.
-    // `interrupted` is only set from phone-mic code paths (onClosed/onMicStalled
-    // /interruption observer) so no source-type guard is needed here.
+    // Socket is back up. If we had flipped to `interrupted` because of a mic
+    // stall or audio session interruption, restart the phone mic so the
+    // MicRecorderService gets a fresh instance with _stallReported = false.
+    // Flipping state directly (without restart) leaves _stallReported = true on
+    // the live service, permanently blinding the stall heartbeat.
     if (recordingState == RecordingState.interrupted) {
-      updateRecordingState(RecordingState.record);
+      if (_activeSource is PhoneMicSource) {
+        _restartPhoneMicRecording();
+      } else {
+        updateRecordingState(RecordingState.record);
+      }
     }
     notifyListeners();
   }
