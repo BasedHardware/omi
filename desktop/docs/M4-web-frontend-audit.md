@@ -96,20 +96,20 @@ Used by M4.3's chat refactor and any other future backend-routed call.
 
 ## Dependencies that need a decision before code
 
-| Question | Owner | Decide by |
+| Question | Owner | Status |
 |---|---|---|
-| BYOK key encryption-at-rest mechanism (Firebase KMS / GCP KMS / env-var pepper) | Infra + Web | M4.1 start |
-| Backend `/v1/chat` endpoint contract — does it accept the same body shape as `chat-with-memory.ts` currently sends to OpenAI, or does it want omi's internal format? | Backend | M4.3 start |
-| Whether `/v1/byok/validate` exists today; if not, what desktop's BYOKValidator hits today | Backend | M4.2 start |
-| Whether the navbar component is a server or client component (affects how the shield reactively updates) | Web | M4.5 start |
+| BYOK key encryption-at-rest mechanism | Infra + Web | ✅ **Resolved** — env-var pepper + HKDF-derived per-user key. See `M4-decisions.md` § Decision 1. |
+| Backend `/v1/chat` endpoint contract | Backend | ✅ **Resolved** — reuse desktop's existing endpoint + headers. See `M4-decisions.md` § Decision 2. |
+| Whether `/v1/byok/validate` exists today; if not, what desktop's BYOKValidator hits today | Backend | ✅ **Resolved** — desktop pings provider URLs directly; web mirrors via Server Action. See `M4-decisions.md` § Decision 3. |
+| Whether the navbar component is a server or client component (affects how the shield reactively updates) | Web | Defer — answered when M4.5 starts touching the file |
 
 ## Estimated total — ~700 LOC + sonner dep + Firestore schema + 1 KMS decision
 
 Calendar: 3 days for one full-stack engineer, or 2 days with one Web + one Backend in parallel after M4.1 lands.
 
-## Decision: ship audit doc, no code
+## Decision: ship audit doc + decision record, no code
 
-Same rationale as M2 audit: the natural first patch (M4.1 Firestore preferences) requires a KMS decision that isn't in scope for this session. Better to ship the audit + sequencing plan and let an actual M4.1 develop pass kick off after the encryption-at-rest decision is made.
+Audit + sequencing plan is one half. The blocking KMS decision is now resolved in `M4-decisions.md` (env-var pepper + HKDF-derived per-user key). M4.1 is unblocked and can be the next concrete code milestone.
 
 ## Files touched
 
