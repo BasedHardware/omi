@@ -32,7 +32,7 @@ Regolo.ai exposes OpenAI-compatible endpoints at `https://api.regolo.ai/v1` and 
 |---|---|---|
 | Auth + models list | `GET /v1/models` | ✓ — 20 models on PAYG |
 | Tool calling | `Llama-3.3-70B-Instruct` (default), uniform across all probed mid/large chat models | ✓ clean OpenAI-compat `tool_calls` |
-| Streaming tool-call deltas | `Llama-3.3-70B-Instruct` | ✓ OpenAI-standard SSE — `langchain_openai.ChatOpenAI` accumulates natively (fixture: `backend/tests/fixtures/regolo_tool_call_stream.json`) |
+| Streaming tool-call deltas | `Llama-3.3-70B-Instruct` | ✓ OpenAI-standard SSE — `langchain_openai.ChatOpenAI` accumulates natively (fixture in sister repo: `/opt/projects/omi-regolo-integration/backend/tests/fixtures/regolo_tool_call_stream.json`; M1 task to port into this branch) |
 | Embeddings | `Qwen3-Embedding-8B` | ✓ 4096-dim |
 | Chat — thinking-model knob | `qwen3.5-9b/122b`, `qwen3.6-27b`, `minimax-m2.5` | **require** `chat_template_kwargs:{enable_thinking:false}`; else `content:null, finish_reason:length`. **No-op** on Llama / Mistral / gpt-oss / gemma / apertus families. |
 | `reasoning_content` leakage | `minimax-m2.5` only | always emitted — `strip_reasoning_content()` mandatory before persistence |
@@ -205,8 +205,8 @@ sequenceDiagram
 | F1 | Add `.regolo` case to `BYOKProvider` in `APIKeyService.swift` with `X-BYOK-Regolo` header + `dev_regolo_api_key` storage key |
 | F2 | Extend `BYOKValidator.swift` to ping `GET https://api.regolo.ai/v1/models` with `Authorization: Bearer <key>` |
 | F3 | Backend accepts `X-BYOK-Regolo` and routes via `OSSProvider` client (`base_url=https://api.regolo.ai/v1`) |
-| F4 | Day-1 model map (post-P6 corrections): `chat → mistral-small-4-119b`, `synthesis → mistral-small-4-119b`, `tool_call → Llama-3.3-70B-Instruct`, `nano → Llama-3.1-8B-Instruct`, `embedding → Qwen3-Embedding-8B` (Phase 2). The `_REGOLO_THINKING_MODELS` set in `backend/utils/llm/clients.py` enumerates models still reachable via operator override (`MODEL_QOS_<FEATURE>=regolo/...`). |
-| F5 | Auto-inject `chat_template_kwargs:{"enable_thinking":false}` ONLY for models in `_REGOLO_THINKING_MODELS` (Qwen3.5-9b/122b, Qwen3.6-27b, MiniMax-m2.5). On Llama / Mistral / gpt-oss / gemma / apertus the flag is a no-op and is not sent. |
+| F4 | Day-1 model map (post-P6 corrections): `chat → mistral-small-4-119b`, `synthesis → mistral-small-4-119b`, `tool_call → Llama-3.3-70B-Instruct`, `nano → Llama-3.1-8B-Instruct`, `embedding → Qwen3-Embedding-8B` (Phase 2). Thinking models (Qwen3.5-9b/122b, Qwen3.6-27b, MiniMax-m2.5) remain reachable via operator override (`MODEL_QOS_<FEATURE>=regolo/...`). |
+| F5 | Inject `chat_template_kwargs:{"enable_thinking":false}` via the `REGOLO_DISABLE_THINKING_EXTRA_BODY` constant (`backend/utils/llm/clients.py`) so OSS thinking models (MiniMax M2.5, Qwen3.x) don't return `content:null, finish_reason:length`. M1 follow-up: gate the injection on a `_REGOLO_THINKING_MODELS` set so the no-op flag isn't sent to Llama / Mistral / gpt-oss / gemma / apertus. |
 | F6 | Tool-call responses normalize to the existing internal shape; `reasoning_content` stripped before persistence |
 | F7 | Embedding responses normalize to the existing interface (4096-dim) |
 | F8 | Existing Claude/Gemini/OpenAI/Deepgram BYOK paths unchanged — zero regressions |
@@ -260,8 +260,8 @@ sequenceDiagram
 ## Acceptance criteria (QA-observable)
 
 1. Desktop settings shows regolo provider row with key field, "Test connection" button, and test result (✓ / ✗ with error reason).
-2. Flipping "EU Privacy Mode" on routes chat messages to `minimax-m2.5` — verified by telemetry showing `provider=regolo, model=minimax-m2.5`.
-3. Synthesis workload (e.g. Gmail summary) produces valid JSON output using `Llama-3.3-70B-Instruct`.
+2. Flipping "EU Privacy Mode" on routes chat messages to `mistral-small-4-119b` — verified by telemetry showing `provider=regolo, model=mistral-small-4-119b`.
+3. Synthesis workload (e.g. Gmail summary) produces valid JSON output using `mistral-small-4-119b` (default) or `Llama-3.3-70B-Instruct` (operator override).
 4. Tool-call flow ("create a reminder for tomorrow at 3pm") triggers `tools` with `tool_choice:auto`, receives a valid `tool_calls` response, and executes the reminder.
 5. Memory embedding + retrieval works end-to-end with `Qwen3-Embedding-8B` (4096-dim).
 6. With Privacy Mode ON, network capture confirms zero traffic to `anthropic.com` / `googleapis.com` / `openai.com` **except** for explicit fallback cases which emit the banner.
@@ -278,11 +278,11 @@ sequenceDiagram
 | 2 | Is `qwen3-vl-32b` production-available? | ✗ **No on PAYG (P8).** HARD-BLOCKED in Phase 1. Vision falls back to Gemini with banner. To unblock: support ticket or plan upgrade. |
 | 3 | Vision endpoint shape | Deferred to Phase 2; not on Phase-1 critical path. |
 | 4 | Embedding dimensionality | ✓ Resolved (P7) — Qwen3-Embedding-8B is 4096-dim. Vector store keyed `(provider, model, dim)`. See `EMBEDDING_MIGRATION.md`. |
-| 5 | Is `enable_thinking` in body or header? | ✓ Resolved (P4) — body, under `chat_template_kwargs.enable_thinking`. **Per-model**: only the `_REGOLO_THINKING_MODELS` set requires it. The unrelated top-level `"thinking":true,"reasoning_effort":...` opt-in (Regolo docs, `gpt-oss-120b`) is not used in Phase 1 (P10). |
+| 5 | Is `enable_thinking` in body or header? | ✓ Resolved (P4) — body, under `chat_template_kwargs.enable_thinking`. **Per-model**: only the Qwen3.x family + MiniMax-m2.5 require it; this branch carries `REGOLO_DISABLE_THINKING_EXTRA_BODY` (`backend/utils/llm/clients.py:160`). M1 ports the per-model gating set from the sister repo. The unrelated top-level `"thinking":true,"reasoning_effort":...` opt-in (Regolo docs, `gpt-oss-120b`) is not used in Phase 1 (P10). |
 | 6 | Privacy Mode forces or defaults? | ✓ **Forces** all supported workloads; per-workload overrides disabled while on. |
 | 7 | Fallback allowed while Privacy Mode on? | ✓ **Yes, with visible red banner** per request. Preferred-by-default, not airlocked. |
 | 8 | Rate-limit tuning vs plan tier | Deferred (P11) — instrument telemetry in M1; revisit plan choice with real usage data in M5. |
-| 9 | Streaming parity for tool-call deltas | ✓ Resolved (P2) — OpenAI-standard SSE. Fixture committed at `backend/tests/fixtures/regolo_tool_call_stream.json`. `langchain_openai.ChatOpenAI` accumulates natively; no custom accumulator needed. |
+| 9 | Streaming parity for tool-call deltas | ✓ Resolved (P2) — OpenAI-standard SSE. Fixture in sister repo `/opt/projects/omi-regolo-integration/backend/tests/fixtures/regolo_tool_call_stream.json`; M1 ports it into this branch. `langchain_openai.ChatOpenAI` accumulates natively; no custom accumulator needed. |
 
 ## Files touched (revised estimate after scaffolding)
 

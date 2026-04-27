@@ -9,7 +9,7 @@ Single source of truth for what we have empirically verified about `api.regolo.a
 | # | What | Status | Artifact |
 |---|---|---|---|
 | P1 | Auth + model catalog (`GET /v1/models`) | ✓ resolved | inline below |
-| P2 | Streaming tool-call delta shape on Llama-3.3-70B | ✓ resolved | `backend/tests/fixtures/regolo_tool_call_stream.json` (sister repo) |
+| P2 | Streaming tool-call delta shape on Llama-3.3-70B | ✓ resolved | `regolo_tool_call_stream.json` — captured in the sister Euraika repo (`/opt/projects/omi-regolo-integration/backend/tests/fixtures/`); not yet ported into this branch (M1 task) |
 | P3 | Tool-calling parity across mid/large models | ✓ resolved | inline below |
 | P4 | `chat_template_kwargs.enable_thinking:false` knob — which models require it | ✓ resolved | inline below |
 | P5 | `reasoning_content` field — which models emit it | ✓ resolved | inline below |
@@ -30,7 +30,7 @@ Single source of truth for what we have empirically verified about `api.regolo.a
 
 ## P2 — Streaming tool-call delta shape
 
-Captured fixture: `backend/tests/fixtures/regolo_tool_call_stream.json` (5 chunks, real model response from `Llama-3.3-70B-Instruct` answering `"What is the weather in Paris right now?"` with a `get_weather(city)` tool).
+Captured fixture: `regolo_tool_call_stream.json` — lives in the sister Euraika repo at `/opt/projects/omi-regolo-integration/backend/tests/fixtures/regolo_tool_call_stream.json` (5 chunks, real model response from `Llama-3.3-70B-Instruct` answering `"What is the weather in Paris right now?"` with a `get_weather(city)` tool). Porting it into this branch's `backend/tests/fixtures/` is an M1 follow-up so the replay test can run from CI.
 
 **Verdict:** OpenAI-standard. The deltas concatenate to a valid tool call:
 
@@ -42,7 +42,7 @@ chunk 4  finish_reason: "tool_calls", delta: {}
 chunk 5  [DONE]
 ```
 
-**Implication for backend:** `langchain_openai.ChatOpenAI` accumulates these natively. The custom streaming-tool-call accumulator the original design doc planned for `regolo_client.py` is **not needed** — confirmed by code review of the `_RegoloOpenAIProxy` class on this branch.
+**Implication for backend:** `langchain_openai.ChatOpenAI` accumulates these natively. The custom streaming-tool-call accumulator the original design doc planned for `regolo_client.py` is **not needed** — confirmed by code review of the `_RegoloOpenAIProxy` class in `backend/utils/llm/clients.py` on this branch.
 
 ## P3 — Tool-calling parity across models
 
@@ -76,7 +76,7 @@ Probe protocol: send a JSON-extraction prompt, `max_tokens=256`, no thinking fla
 | `gemma4-31b` | clean JSON | clean JSON (no-op) |
 | `apertus-70b` | clean JSON | clean JSON (no-op) |
 
-**Implication:** the flag is **per-model, opt-out for thinking models only**. The opt-in path (top-level `"thinking":true, "reasoning_effort":"medium"` from `docs.regolo.ai/models/features/thinking`) is documented for `gpt-oss-120b` but is a *different* feature — Phase 1 does not enable thinking. The `_REGOLO_THINKING_MODELS` constant in `backend/utils/llm/clients.py` enumerates the set requiring auto-injection of `enable_thinking:false`.
+**Implication:** the flag is **per-model, opt-out for thinking models only**. The opt-in path (top-level `"thinking":true, "reasoning_effort":"medium"` from `docs.regolo.ai/models/features/thinking`) is documented for `gpt-oss-120b` but is a *different* feature — Phase 1 does not enable thinking. On this branch, `REGOLO_DISABLE_THINKING_EXTRA_BODY` in `backend/utils/llm/clients.py:160` carries the body extension. M1 follow-up: gate the injection behind a `_REGOLO_THINKING_MODELS = frozenset(...)` (already implemented in the sister Euraika repo) so the no-op flag isn't sent to non-thinking models.
 
 ## P5 — `reasoning_content` field
 
@@ -103,7 +103,7 @@ Single-shot p50/p90 against `/v1/chat/completions` with a structured-extraction 
 
 **Implication:** the original design's `minimax-m2.5` chat pick is **wrong**. Empirical default for chat workloads is `mistral-small-4-119b` — 2× faster than Llama-3.3-70B, 6× more consistent than `qwen3.5-122b`, equally good on tools and JSON. See the "Dispatcher decision table" patch in `REGOLO_INTEGRATION.md` for the corrected mapping.
 
-The thinking models (Qwen3.x family + MiniMax) remain in `_REGOLO_THINKING_MODELS` so the knob is auto-injected when an operator picks them via `MODEL_QOS_<FEATURE>=regolo/qwen3.5-9b`, but they are NOT defaults.
+The thinking models (Qwen3.x family + MiniMax) remain reachable via operator override (`MODEL_QOS_<FEATURE>=regolo/qwen3.5-9b`) — when picked, the `REGOLO_DISABLE_THINKING_EXTRA_BODY` injection auto-disables their thinking-on default — but they are NOT defaults.
 
 ## P7 — Embeddings
 
@@ -138,13 +138,15 @@ To unblock: open a Regolo support ticket asking for `qwen3-vl-32b` PAYG availabi
 
 ## How to re-run the probes
 
-The streaming tool-call probe is reproducible:
+The streaming tool-call probe is reproducible from the sister Euraika repo (which contains both the capture script and the committed fixture):
 
 ```bash
-cd backend/tests/fixtures
+cd /opt/projects/omi-regolo-integration/backend/tests/fixtures
 REGOLO_API_KEY=<your_key> bash capture_regolo_tool_call_stream.sh
 diff regolo_tool_call_stream.json /tmp/replay-fixture.json
 ```
+
+Porting this script + fixture into this branch's `backend/tests/fixtures/` is an M1 follow-up so the replay test can run from CI without depending on the sister repo's filesystem layout.
 
 The chat / latency / thinking-knob probes ran as one-off Python scripts driven by `urllib.request`. Re-run after any Regolo catalog change to verify our model picks remain optimal. Pseudocode:
 
@@ -161,5 +163,5 @@ for model in CATALOG:
 ## Cross-references
 
 - Empirical model→feature mapping derived from these probes lives in the sister repo's `docs/04-model-mapping.md` (Euraika `omi-regolo-integration` GitLab project).
-- The Phase 1 implementation in this branch (`worktree-omi-regolo-integration`) reflects the corrected picks: `_REGOLO_THINKING_MODELS` + `strip_reasoning_content()` in `backend/utils/llm/clients.py`.
+- The Phase 1 implementation in this branch (`worktree-omi-regolo-integration`) carries `REGOLO_DISABLE_THINKING_EXTRA_BODY` and the `_RegoloOpenAIProxy` class in `backend/utils/llm/clients.py`. M1 ports the `_REGOLO_THINKING_MODELS` set + `strip_reasoning_content()` helper from the sister repo.
 - Open Questions #1, #2 (status), #3 (deferred), #4, #5, #9 in `REGOLO_INTEGRATION.md` are resolved by these probes.
