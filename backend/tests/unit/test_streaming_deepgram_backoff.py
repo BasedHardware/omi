@@ -41,7 +41,7 @@ if 'deepgram' in _mock_modules:
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
-from utils.stt.streaming import get_stt_service_for_language, STTService  # noqa: E402
+from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -1231,3 +1231,31 @@ class TestFillerWordsLanguageBehavior:
     def test_chinese_preserves_fillers(self):
         """Chinese ('zh') should preserve filler words."""
         assert self._get_filler_words_option('zh') is True
+
+
+class TestShouldPreserveFillerWords:
+    """Direct tests for the should_preserve_filler_words helper (#6575)."""
+
+    def test_english_false(self):
+        assert should_preserve_filler_words('en') is False
+
+    def test_english_us_false(self):
+        assert should_preserve_filler_words('en-US') is False
+
+    def test_english_gb_false(self):
+        assert should_preserve_filler_words('en-GB') is False
+
+    def test_multi_true(self):
+        assert should_preserve_filler_words('multi') is True
+
+    def test_portuguese_true(self):
+        assert should_preserve_filler_words('pt') is True
+
+    def test_portuguese_br_true(self):
+        assert should_preserve_filler_words('pt-BR') is True
+
+    def test_spanish_true(self):
+        assert should_preserve_filler_words('es') is True
+
+    def test_arabic_true(self):
+        assert should_preserve_filler_words('ar') is True
