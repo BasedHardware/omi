@@ -106,6 +106,12 @@ struct OMIApp: App {
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
         .withFontScaling()
+        .safeAreaInset(edge: .top, spacing: 0) {
+          // Renders the EU-Privacy-Mode fallback banner when the backend
+          // signals X-Privacy-Mode-Fallback. Empty when no event is active —
+          // the View body returns no content for nil currentEvent.
+          PrivacyModeFallbackBanner()
+        }
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
