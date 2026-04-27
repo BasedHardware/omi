@@ -1,0 +1,107 @@
+[
+  {
+    "id": "chatcmpl-a6d3f6c8a0650619",
+    "created": 1777282023,
+    "model": "Llama-3.3-70B-Instruct",
+    "object": "chat.completion.chunk",
+    "choices": [
+      {
+        "index": 0,
+        "delta": {
+          "role": "assistant",
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-90e8b3536b0430f6",
+              "function": {
+                "arguments": "",
+                "name": "get_weather"
+              },
+              "type": "function",
+              "index": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "chatcmpl-a6d3f6c8a0650619",
+    "created": 1777282023,
+    "model": "Llama-3.3-70B-Instruct",
+    "object": "chat.completion.chunk",
+    "choices": [
+      {
+        "index": 0,
+        "delta": {
+          "tool_calls": [
+            {
+              "function": {
+                "arguments": "{\"city\": \""
+              },
+              "type": "function",
+              "index": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "chatcmpl-a6d3f6c8a0650619",
+    "created": 1777282023,
+    "model": "Llama-3.3-70B-Instruct",
+    "object": "chat.completion.chunk",
+    "choices": [
+      {
+        "index": 0,
+        "delta": {
+          "tool_calls": [
+            {
+              "function": {
+                "arguments": "Paris\"}"
+              },
+              "type": "function",
+              "index": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "chatcmpl-a6d3f6c8a0650619",
+    "created": 1777282023,
+    "model": "Llama-3.3-70B-Instruct",
+    "object": "chat.completion.chunk",
+    "choices": [
+      {
+        "stop_reason": 128008,
+        "index": 0,
+        "delta": {
+          "tool_calls": [
+            {
+              "function": {
+                "arguments": ""
+              },
+              "type": "function",
+              "index": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "chatcmpl-a6d3f6c8a0650619",
+    "created": 1777282023,
+    "model": "Llama-3.3-70B-Instruct",
+    "object": "chat.completion.chunk",
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "index": 0,
+        "delta": {}
+      }
+    ]
+  }
+]
