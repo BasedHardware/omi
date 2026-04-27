@@ -11,7 +11,9 @@ Handles:
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
+import os
 import secrets
 import time
 from typing import Optional
@@ -731,15 +733,50 @@ async def fetch_brandfetch_logo(domain: str) -> Optional[str]:
     return f"https://cdn.brandfetch.io/domain/{root_domain}?c=1idiDEee8WtzJbSEuuW"
 
 
+def _get_state_signing_secret() -> bytes:
+    """Return the shared secret used to authenticate MCP OAuth state."""
+    secret = os.getenv("ENCRYPTION_SECRET")
+    if not secret:
+        raise RuntimeError("ENCRYPTION_SECRET must be configured for MCP OAuth state signing")
+    return secret.encode("utf-8")
+
+
+def _sign_state_payload(payload: str) -> str:
+    digest = hmac.new(
+        _get_state_signing_secret(), payload.encode("utf-8"), hashlib.sha256
+    ).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
 def generate_state_token(app_id: str, uid: str) -> str:
-    """Generate a state parameter for OAuth that encodes app_id and uid."""
+    """Generate an authenticated state parameter for an MCP OAuth flow."""
     nonce = secrets.token_urlsafe(16)
-    return f"{app_id}:{uid}:{nonce}"
+    payload = f"{app_id}:{uid}:{nonce}"
+    signature = _sign_state_payload(payload)
+    return f"{payload}:{signature}"
 
 
 def parse_state_token(state: str) -> tuple[str, str]:
-    """Parse app_id and uid from an OAuth state parameter."""
-    parts = state.split(":", 2)
-    if len(parts) < 2:
-        raise ValueError("Invalid state token")
-    return parts[0], parts[1]
+    """Parse and verify app_id and uid from an OAuth state parameter."""
+    parts = state.split(":")
+    if len(parts) == 4:
+        payload = ":".join(parts[:3])
+        expected_signature = _sign_state_payload(payload)
+        if not hmac.compare_digest(parts[3], expected_signature):
+            raise ValueError("Invalid state token signature")
+        return parts[0], parts[1]
+
+    # Preserve compatibility with already-issued state values while the callback
+    # also checks that the parsed uid matches the stored app owner before it can
+    # enable the app for any account.
+    if len(parts) == 3:
+        return parts[0], parts[1]
+
+    raise ValueError("Invalid state token")
+
+
+def validate_mcp_oauth_state_subject(app_data: dict, uid: str) -> None:
+    """Ensure OAuth state cannot target a user other than the app owner."""
+    owner_uid = app_data.get("uid")
+    if not owner_uid or not hmac.compare_digest(str(owner_uid), str(uid)):
+        raise ValueError("OAuth state user does not match app owner")

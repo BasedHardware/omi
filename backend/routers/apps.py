@@ -23,6 +23,7 @@ from utils.mcp_client import (
     fetch_brandfetch_logo,
     generate_state_token,
     parse_state_token,
+    validate_mcp_oauth_state_subject,
     generate_pkce_pair,
 )
 
@@ -1589,6 +1590,11 @@ async def mcp_oauth_callback(code: str, state: str):
     app_data = get_app_by_id_db(app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+
+    try:
+        validate_mcp_oauth_state_subject(app_data, uid)
+    except ValueError:
+        return HTMLResponse('<html><body><h1>OAuth state does not match app owner</h1></body></html>', status_code=403)
 
     ext = app_data.get('external_integration', {})
     oauth_tokens = ext.get('mcp_oauth_tokens', {})
