@@ -68,6 +68,7 @@ BYOK_HEADERS = {
     'anthropic': 'x-byok-anthropic',
     'gemini': 'x-byok-gemini',
     'deepgram': 'x-byok-deepgram',
+    'regolo': 'x-byok-regolo',
 }
 
 # Keys for the current request, if the client supplied them.
