@@ -43,6 +43,7 @@
     "react-instantsearch": "^7.13.0",
     "redis": "^4.7.0",
     "sharp": "^0.33.5",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.1"
