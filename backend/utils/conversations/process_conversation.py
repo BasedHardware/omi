@@ -65,7 +65,8 @@ from utils.llm.chat import (
     obtain_emotional_message,
 )
 from utils.llm.external_integrations import get_message_structure
-from utils.llm.clients import generate_embedding
+from utils.llm.clients import generate_embedding, generate_regolo_embedding
+from utils.llm.eu_privacy import resolve_feature_model, FeatureRouteKind
 from utils.notifications import send_notification
 from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
@@ -577,7 +578,23 @@ def _save_action_items(uid: str, conversation: Conversation):
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
-    vector = generate_embedding(str(conversation.structured)) if not update_only else None
+    # M2.5 — privacy-mode-aware embedding write. Resolve once per call;
+    # HARD_BLOCK means EU mode is on but the EU 4096-dim Pinecone index is
+    # not provisioned — skip the write rather than corrupt the legacy index
+    # with a partial 3072-dim vector that bypasses the user's privacy
+    # preference.
+    vector = None
+    if not update_only:
+        route = resolve_feature_model(uid, 'memory_search')
+        if route.kind is FeatureRouteKind.HARD_BLOCK:
+            logger.info(
+                'save_structured_vector: HARD_BLOCK for uid=%s (EU mode on, EU index not provisioned) — skipping',
+                uid,
+            )
+        elif route.kind is FeatureRouteKind.REGOLO:
+            vector = generate_regolo_embedding(str(conversation.structured))
+        else:
+            vector = generate_embedding(str(conversation.structured))
     tz = notification_db.get_user_time_zone(uid)
 
     metadata = {}
