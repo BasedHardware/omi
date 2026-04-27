@@ -131,7 +131,7 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
                         sanitize(latest_resp.text),
                     )
             except Exception as e:
-                logger.warning("GitHub /releases/latest fallback failed: %s", type(e).__name__)
+                logger.warning("GitHub /releases/latest fallback failed: %s: %s", type(e).__name__, e)
 
     # Cache successful fetches for 5 minutes; cache empty results briefly so
     # we recover quickly when GitHub heals without hammering the API.
