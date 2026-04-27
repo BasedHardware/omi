@@ -190,23 +190,27 @@ class CaptureProvider extends ChangeNotifier
 
   void _onAudioInterruptionBegan() {
     Logger.debug('[CaptureProvider] iOS audio session interruption began');
-    // Include `initialising`: if a call arrives while the recorder is still
-    // coming up (permission prompt, session setup), the state was otherwise
-    // stuck at initialising with no signal of the broken pipeline and the
-    // .ended path could not recover it.
-    if (recordingState == RecordingState.record || recordingState == RecordingState.initialising) {
+    if (_activeSource is! PhoneMicSource) return;
+    // Also handle `stop`: flutter_sound fires its own _onStop callback when the
+    // AVAudioEngine is paused by iOS, which changes state to stop before this
+    // handler arrives (it is dispatched async via DispatchQueue.main.async).
+    // _activeSource still being PhoneMicSource means the user hasn't tapped stop.
+    if (recordingState == RecordingState.record ||
+        recordingState == RecordingState.initialising ||
+        recordingState == RecordingState.stop) {
       updateRecordingState(RecordingState.interrupted);
     }
   }
 
   void _onAudioInterruptionEnded() {
     Logger.debug('[CaptureProvider] iOS audio session interruption ended');
-    // Only attempt a restart if we are mid-session on the phone mic. Device
-    // recording is unaffected by phone-side audio session interruption.
     if (_activeSource is! PhoneMicSource) return;
+    // Accept `stop` for the same reason as _onAudioInterruptionBegan: flutter_sound
+    // may have fired onStop before our .began handler ran, leaving state at stop.
     if (recordingState != RecordingState.interrupted &&
         recordingState != RecordingState.record &&
-        recordingState != RecordingState.initialising) {
+        recordingState != RecordingState.initialising &&
+        recordingState != RecordingState.stop) {
       return;
     }
     _restartPhoneMicRecording();
@@ -219,17 +223,16 @@ class CaptureProvider extends ChangeNotifier
     _phoneMicRestartInFlight = true;
     try {
       ServiceManager.instance().mic.stop();
-      // mic.stop() fires _onStop → updateRecordingState(stop). Re-assert
-      // interrupted so the guard below can distinguish this internal stop from
-      // a user-tapped stop — without this, streamRecording() is never reached.
-      if (recordingState == RecordingState.stop) {
-        updateRecordingState(RecordingState.interrupted);
-      }
+      // Unconditionally re-assert interrupted: mic.stop() may fire _onStop →
+      // state = stop (if not already stopped), and we need the guard below to
+      // be able to tell an internal restart stop from a user-tapped stop.
+      // _activeSource is still PhoneMicSource here, so this is safe.
+      updateRecordingState(RecordingState.interrupted);
       // Let iOS fully release the session before we re-activate it.
       await Future.delayed(const Duration(milliseconds: 250));
-      // Re-check state after the await: the user may have tapped stop during
-      // the delay window. Without this guard we would restart recording
-      // against the user's intent.
+      // Re-check state after the await: user tapping stop flips _activeSource
+      // to null via _cleanupCurrentState, which changes state to stop. If that
+      // happened during the delay, bail to respect the user's intent.
       if (recordingState != RecordingState.interrupted &&
           recordingState != RecordingState.record &&
           recordingState != RecordingState.initialising) {
@@ -244,17 +247,13 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _onMicStalled() {
-    // The byte stream from the native recorder has gone silent for longer than
-    // the stall threshold. On iOS this is the fingerprint of an AVAudioSession
-    // interruption that the .ended observer did not fire for (e.g., the user
-    // was already in a call when recording started). Reflect it in UI state.
     Logger.debug('[CaptureProvider] phone mic byte stream stalled');
     if (_activeSource is! PhoneMicSource) return;
-    // Covers `initialising` as well: the heartbeat timer starts inside
-    // MicRecorderService.start once the recorder's stream is wired up, so a
-    // stall can fire before the onRecording callback has flipped us to
-    // `record`.
-    if (recordingState == RecordingState.record || recordingState == RecordingState.initialising) {
+    // Also handle `stop`: flutter_sound may have fired onStop before the stall
+    // timer fired, or the interruption notification beat the stall check.
+    if (recordingState == RecordingState.record ||
+        recordingState == RecordingState.initialising ||
+        recordingState == RecordingState.stop) {
       updateRecordingState(RecordingState.interrupted);
     }
   }
