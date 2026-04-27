@@ -183,12 +183,14 @@ class TestCacheBehavior:
     @pytest.mark.asyncio
     async def test_cache_none_triggers_fetch(self):
         """None from cache means cache miss — should fetch from GitHub."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = []
+        list_response = MagicMock(status_code=200)
+        list_response.json.return_value = []
+
+        # /releases/latest fallback is also empty (404)
+        latest_response = MagicMock(status_code=404, text="not found")
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.get = AsyncMock(side_effect=[list_response, latest_response])
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -201,4 +203,109 @@ class TestCacheBehavior:
             result = await get_omi_github_releases("test_key")
 
         assert result == []
-        mock_set.assert_called_once_with("test_key", [], ttl=300)
+        # Empty results cache briefly so we recover quickly when GitHub heals.
+        mock_set.assert_called_once_with("test_key", [], ttl=30)
+
+
+class TestEmptyListFallback:
+    """Test the /releases/latest fallback when the list endpoint returns empty."""
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_latest_when_list_empty(self):
+        """When GitHub list returns [] without a tag_filter, use /releases/latest."""
+        list_response = MagicMock(status_code=200)
+        list_response.json.return_value = []
+
+        latest_release = _make_release("v0.11.368+11368-macos")
+        latest_response = MagicMock(status_code=200)
+        latest_response.json.return_value = latest_release
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[list_response, latest_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == [latest_release]
+        # Successful fallback caches at the normal TTL.
+        mock_set.assert_called_once_with("test_key", [latest_release], ttl=300)
+        # Confirm /releases/latest was actually called as the second request.
+        assert mock_client.get.call_count == 2
+        latest_call_url = mock_client.get.call_args_list[1].args[0]
+        assert latest_call_url.endswith("/releases/latest")
+
+    @pytest.mark.asyncio
+    async def test_no_fallback_when_tag_filter_present(self):
+        """Firmware path (with tag_filter) should not invoke the latest fallback."""
+        list_response = MagicMock(status_code=200)
+        list_response.json.return_value = []
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=list_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key", tag_filter=FIRMWARE_TAG_PATTERN)
+
+        assert result == []
+        # Only the list endpoint is called — no fallback for firmware.
+        assert mock_client.get.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_no_fallback_when_list_returned_data(self):
+        """If the list endpoint returned anything, /releases/latest is not called."""
+        full_page = _desktop_releases(3)
+
+        list_response = MagicMock(status_code=200)
+        list_response.json.return_value = full_page
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=list_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert len(result) == 3
+        assert mock_client.get.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fallback_swallows_exception(self):
+        """If /releases/latest raises, we still return the empty list (no 500)."""
+        list_response = MagicMock(status_code=200)
+        list_response.json.return_value = []
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[list_response, RuntimeError("boom")])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == []
+        mock_set.assert_called_once_with("test_key", [], ttl=30)
