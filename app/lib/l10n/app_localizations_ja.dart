@@ -2327,6 +2327,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryLevel => 'バッテリー残量';
 
   @override
+  String get charging => '充電中';
+
+  @override
   String get productUpdate => '製品アップデート';
 
   @override
@@ -2453,12 +2456,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflection => 'デイリー振り返り';
-
-  @override
-  String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'アクションアイテムの説明を空にすることはできません';
@@ -3852,9 +3849,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trackPersonalGoals => 'ホームページで個人目標を追跡';
 
   @override
-  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
-
-  @override
   String get endpointURL => 'エンドポイント URL';
 
   @override
@@ -4483,7 +4477,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToLoadPlans => 'プランを読み込めません';
 
   @override
-  String get checkConnectionTryAgain => '接続を確認してもう一度お試しください';
+  String get checkConnectionTryAgain => '接続を確認して再試行してください';
 
   @override
   String get useFreePlan => '無料プランを使用';
@@ -5001,7 +4995,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      '続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。';
+      '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
   String get tasksEmptyStateMessage => '会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。';
@@ -7057,12 +7051,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
-
-  @override
-  String get dailyReflectionNotificationBody => '今日のことを教えてください';
-
-  @override
   String get actionItemReminderTitle => 'Omiリマインダー';
 
   @override
@@ -8163,6 +8151,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8681,6 +8675,18 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'バッテリー';
+
+  @override
+  String get noBatteryDataYet => 'バッテリーデータはまだありません';
+
+  @override
+  String get day => '日';
+
+  @override
+  String get week => '週';
+
+  @override
   String get rollbackToStableFirmware => '安定版ファームウェアに戻す';
 
   @override
@@ -8859,4 +8865,152 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'アカウントを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get planUpdate => 'プラン更新';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
+
+  @override
+  String get upgradeYourPlan => 'プランをアップグレード';
+
+  @override
+  String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get chatTitle => 'チャット';
+
+  @override
+  String get chatMessages => 'メッセージ';
+
+  @override
+  String get unlimitedChatThisMonth => '今月のチャットメッセージは無制限です';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit のコンピュート予算を使用';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '今月 $used / $limit メッセージ使用済み';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit 使用済み';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'チャット上限に達しました。アップグレードしてください。';
+
+  @override
+  String get chatLimitReachedTitle => 'チャット上限に達しました';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$planプランで$limitDisplayのうち$usedを使用しました。';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count日後にリセット';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count時間後にリセット';
+  }
+
+  @override
+  String get resetsSoon => 'まもなくリセット';
+
+  @override
+  String get upgradePlan => 'プランをアップグレード';
+
+  @override
+  String get billingMonthly => '月額';
+
+  @override
+  String get billingYearly => '年額';
+
+  @override
+  String get savePercent => '約17%お得';
+
+  @override
+  String get popular => '人気';
+
+  @override
+  String get currentPlan => '現在';
+
+  @override
+  String neoSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String get architectSubtitle => 'パワーユーザーAI — 数千のチャット + エージェント自動化';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'チャット: \$$used / \$$limit 今月の使用量';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'チャット: \$$used 今月の使用量';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'チャット: $used / $limit 件の今月のメッセージ';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'チャット: $used 件の今月のメッセージ';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
+
+  @override
+  String get voiceResponseAudio => 'Omiの応答を音声で再生';
+
+  @override
+  String get voiceResponseMode => '音声応答';
+
+  @override
+  String get voiceResponseModeTitle => '応答を読み上げるタイミング';
+
+  @override
+  String get voiceResponseOff => 'オフ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ヘッドフォンのみ';
+
+  @override
+  String get voiceResponseAlways => '常に';
+
+  @override
+  String get agreeAndContinue => '同意して続ける';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

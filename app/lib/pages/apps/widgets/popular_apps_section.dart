@@ -35,7 +35,7 @@ class PopularAppsSection extends StatelessWidget {
       children: [
         // Section header - Apple style
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Row(
             children: [
               Text(
@@ -190,7 +190,7 @@ class PopularAppsSection extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          app.enabled ? context.l10n.open : context.l10n.getButton,
+                          app.enabled ? context.l10n.open : 'Enable',
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                       ),

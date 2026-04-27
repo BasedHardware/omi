@@ -1,0 +1,8 @@
+# GPU services requirements — extends backend deps with torch/pyannote/speechbrain
+-r ../requirements.txt
+torch==2.3.1
+torchaudio==2.3.1
+pyannote.audio==3.3.1
+speechbrain==0.5.16
+pandas==2.2.2
+matplotlib==3.9.1

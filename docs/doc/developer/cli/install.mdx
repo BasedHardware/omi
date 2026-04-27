@@ -1,0 +1,77 @@
+---
+title: "Install"
+icon: "download"
+description: "Install omi-cli and confirm the binary is on your PATH."
+---
+
+`omi-cli` is published on PyPI: [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/).
+Source lives in the [Omi monorepo](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli).
+
+## Install
+
+<Tabs>
+  <Tab title="pipx (recommended)">
+    ```bash
+    pipx install omi-cli
+    ```
+
+    `pipx` keeps `omi-cli` in its own isolated virtualenv so it can't conflict
+    with anything else on your system. If you don't have pipx yet:
+
+    ```bash
+    brew install pipx        # macOS
+    apt install pipx         # Debian/Ubuntu
+    pipx ensurepath
+    ```
+  </Tab>
+  <Tab title="pip">
+    ```bash
+    pip install omi-cli
+    ```
+
+    Suitable if you're already inside a virtualenv or you want the package
+    available alongside the rest of your project's deps.
+  </Tab>
+  <Tab title="From source">
+    ```bash
+    git clone https://github.com/BasedHardware/omi
+    cd omi/sdks/python-cli
+    pip install -e ".[dev]"
+    ```
+
+    Useful if you want to hack on the CLI itself. The `[dev]` extra brings in
+    `pytest`, `respx`, `black`, `mypy`, `isort`, and the build tooling.
+  </Tab>
+</Tabs>
+
+<Note>
+  The PyPI distribution name is `omi-cli` because the bare `omi` slot belongs
+  to an unrelated package. The console command is **`omi`** regardless.
+</Note>
+
+## Verify
+
+```bash
+omi --version
+# omi-cli 0.2.0
+
+omi --help
+```
+
+You should see the full command tree (`auth`, `config`, `memory`,
+`conversation`, `action-item`, `goal`).
+
+## Requirements
+
+- **Python 3.10+** — the package is tested on 3.10, 3.11, and 3.12.
+- **A network path to `https://api.omi.me`** — overridable via `--api-base` or
+  `$OMI_API_BASE` for staging or local environments.
+- **A way to authenticate** — either a Google/Apple account (browser OAuth)
+  or a developer API key from the Omi web app. The
+  [Quickstart](/doc/developer/cli/quickstart) walks through both.
+
+## Where state lives
+
+`omi-cli` stores its config and credentials at `~/.omi/config.toml` (file
+permissions `0600`, parent dir `0700`). You can override the location with the
+`OMI_CONFIG` environment variable.

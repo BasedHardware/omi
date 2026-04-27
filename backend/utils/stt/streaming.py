@@ -8,6 +8,7 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
+from utils.byok import get_byok_key
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
@@ -321,11 +322,26 @@ def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
     return options
 
 
+def _deepgram_client_for_request() -> DeepgramClient:
+    """Return a Deepgram client keyed to the current request's BYOK Deepgram key.
+
+    BYOK users pay Deepgram directly — we don't want to rack up minutes on the
+    Omi Deepgram account for them. Self-hosted Deepgram ignores BYOK since
+    there's no per-user billing concept there.
+    """
+    if is_dg_self_hosted:
+        return deepgram
+    byok = get_byok_key('deepgram')
+    if byok:
+        return DeepgramClient(byok, deepgram_cloud_options)
+    return deepgram
+
+
 def connect_to_deepgram(
     on_message, on_error, language: str, sample_rate: int, channels: int, model: str, keywords: List[str] = []
 ):
     try:
-        dg_connection = deepgram.listen.websocket.v("1")
+        dg_connection = _deepgram_client_for_request().listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
         dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 

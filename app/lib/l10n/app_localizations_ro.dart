@@ -1804,7 +1804,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get rateOnGooglePlay => 'Evaluează pe Google Play';
 
   @override
-  String get maybeLater => 'Poate Mai Târziu';
+  String get maybeLater => 'Poate mai târziu';
 
   @override
   String get speechProfileIntro => 'Omi trebuie să învețe obiectivele și vocea ta. Vei putea să o modifici mai târziu.';
@@ -2380,6 +2380,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get batteryLevel => 'Nivel baterie';
 
   @override
+  String get charging => 'Se încarcă';
+
+  @override
   String get productUpdate => 'Actualizare produs';
 
   @override
@@ -2506,12 +2509,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Urmărește-ți obiectivele personale pe pagina principală';
-
-  @override
-  String get dailyReflection => 'Reflecție zilnică';
-
-  @override
-  String get get9PmReminderToReflect => 'Primește o reamintire la ora 21 pentru a reflecta asupra zilei tale';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Descrierea elementului de acțiune nu poate fi goală';
@@ -3940,10 +3937,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get trackPersonalGoals => 'Urmăriți obiective personale pe pagina de pornire';
 
   @override
-  String get dailyReflectionDescription =>
-      'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
-
-  @override
   String get endpointURL => 'URL punct final';
 
   @override
@@ -4586,7 +4579,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get alreadyBestValuePlan => 'Aveți deja planul cu cea mai bună valoare. Nu sunt necesare modificări.';
 
   @override
-  String get unableToLoadPlans => 'Nu se pot încărca planurile';
+  String get unableToLoadPlans => 'Nu s-au putut încărca planurile';
 
   @override
   String get checkConnectionTryAgain => 'Verificați conexiunea și încercați din nou';
@@ -5125,7 +5118,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației.';
+      'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7217,12 +7210,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'E timpul pentru reflecție zilnică';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Povestește-mi despre ziua ta';
-
-  @override
   String get actionItemReminderTitle => 'Memento Omi';
 
   @override
@@ -8345,6 +8332,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Setari apeluri';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afișați butonul de apel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afișați butonul de apel telefonic pe ecranul de pornire';
+
+  @override
   String get yourVerifiedNumbers => 'Numerele dvs. verificate';
 
   @override
@@ -8872,6 +8865,18 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Baterie';
+
+  @override
+  String get noBatteryDataYet => 'Încă nu există date despre baterie';
+
+  @override
+  String get day => 'Zi';
+
+  @override
+  String get week => 'Săptămână';
+
+  @override
   String get rollbackToStableFirmware => 'Revenire la firmware-ul stabil';
 
   @override
@@ -9051,4 +9056,153 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Nu am putut șterge contul tău. Încearcă din nou.';
+
+  @override
+  String get planUpdate => 'Actualizare plan';
+
+  @override
+  String get planDeprecationMessage =>
+      'Planul dvs. Unlimited este retras. Treceți la planul Operator — aceleași funcții excelente la \$49/lună. Planul dvs. actual va continua să funcționeze între timp.';
+
+  @override
+  String get upgradeYourPlan => 'Îmbunătățește-ți planul';
+
+  @override
+  String get youAreOnAPaidPlan => 'Ești pe un plan plătit.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'mesaje';
+
+  @override
+  String get unlimitedChatThisMonth => 'Mesaje de chat nelimitate luna aceasta';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used din $limit buget de calcul utilizat';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used din $limit mesaje utilizate luna aceasta';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit utilizat';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Limita de chat atinsă. Actualizați pentru mai multe mesaje.';
+
+  @override
+  String get chatLimitReachedTitle => 'Limita de chat atinsă';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Ați utilizat $used din $limitDisplay pe planul $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Se resetează în $count zile';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Se resetează în $count ore';
+  }
+
+  @override
+  String get resetsSoon => 'Se resetează curând';
+
+  @override
+  String get upgradePlan => 'Actualizare plan';
+
+  @override
+  String get billingMonthly => 'Lunar';
+
+  @override
+  String get billingYearly => 'Anual';
+
+  @override
+  String get savePercent => 'Economisiți ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Curent';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count întrebări pe lună';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count întrebări pe lună';
+  }
+
+  @override
+  String get architectSubtitle => 'AI avansat — mii de conversații + automatizare agent';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit utilizat luna aceasta';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used utilizat luna aceasta';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit mesaje luna aceasta';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used mesaje luna aceasta';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Ai atins limita lunară. Fă upgrade pentru a continua să discuți cu Omi fără restricții.';
+
+  @override
+  String get voiceResponseAudio => 'Citește răspunsul Omi cu voce tare';
+
+  @override
+  String get voiceResponseMode => 'Răspuns vocal';
+
+  @override
+  String get voiceResponseModeTitle => 'Când să rostească răspunsurile';
+
+  @override
+  String get voiceResponseOff => 'Oprit';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Doar căști';
+
+  @override
+  String get voiceResponseAlways => 'Întotdeauna';
+
+  @override
+  String get agreeAndContinue => 'Accept și continuă';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

@@ -4581,6 +4581,12 @@ abstract class AppLocalizations {
   /// **'Battery Level'**
   String get batteryLevel;
 
+  /// No description provided for @charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Charging'**
+  String get charging;
+
   /// Menu item for product/firmware update
   ///
   /// In en, this message translates to:
@@ -4826,18 +4832,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Track your personal goals on homepage'**
   String get trackPersonalGoalsOnHomepage;
-
-  /// Section header for daily reflection settings
-  ///
-  /// In en, this message translates to:
-  /// **'Daily Reflection'**
-  String get dailyReflection;
-
-  /// Description for daily reflection
-  ///
-  /// In en, this message translates to:
-  /// **'Get a 9 PM reminder to reflect on your day'**
-  String get get9PmReminderToReflect;
 
   /// Error message when action item description is empty
   ///
@@ -7545,12 +7539,6 @@ abstract class AppLocalizations {
   /// **'Track personal goals on homepage'**
   String get trackPersonalGoals;
 
-  /// Description text for daily reflection section
-  ///
-  /// In en, this message translates to:
-  /// **'Get a reminder at 9 PM to reflect on your day and capture your thoughts.'**
-  String get dailyReflectionDescription;
-
   /// No description provided for @endpointURL.
   ///
   /// In en, this message translates to:
@@ -8733,10 +8721,10 @@ abstract class AppLocalizations {
   /// **'Cancel Subscription'**
   String get cancelSubscription;
 
-  /// Shows end date
+  /// No description provided for @endsOnDate.
   ///
   /// In en, this message translates to:
-  /// **'Ends on {date}'**
+  /// **'Ends {date}'**
   String endsOnDate(String date);
 
   /// Status label for active
@@ -9666,7 +9654,7 @@ abstract class AppLocalizations {
   /// Consent message explaining how user data will be stored and used
   ///
   /// In en, this message translates to:
-  /// **'By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.'**
+  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
   String get consentDataMessage;
 
   /// Empty state message shown when there are no tasks, with instruction to tap + button
@@ -13515,18 +13503,6 @@ abstract class AppLocalizations {
   /// **'{count} conversations have been merged successfully'**
   String mergeConversationsSuccessBody(int count);
 
-  /// Title for the daily reflection notification shown at 9 PM
-  ///
-  /// In en, this message translates to:
-  /// **'Time for Daily Reflection'**
-  String get dailyReflectionNotificationTitle;
-
-  /// Body text for the daily reflection notification
-  ///
-  /// In en, this message translates to:
-  /// **'Tell me about your day'**
-  String get dailyReflectionNotificationBody;
-
   /// Title for action item reminder notifications
   ///
   /// In en, this message translates to:
@@ -14550,7 +14526,7 @@ abstract class AppLocalizations {
   /// No description provided for @capabilityNotification.
   ///
   /// In en, this message translates to:
-  /// **'Notification'**
+  /// **'Smart Notifications'**
   String get capabilityNotification;
 
   /// No description provided for @triggerAudioBytes.
@@ -15543,6 +15519,18 @@ abstract class AppLocalizations {
   /// **'Phone Call Settings'**
   String get phoneCallSettingsTitle;
 
+  /// No description provided for @showPhoneCallButtonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Phone Call Button'**
+  String get showPhoneCallButtonTitle;
+
+  /// No description provided for @showPhoneCallButtonDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Display phone call button on home screen'**
+  String get showPhoneCallButtonDesc;
+
   /// No description provided for @yourVerifiedNumbers.
   ///
   /// In en, this message translates to:
@@ -16503,6 +16491,30 @@ abstract class AppLocalizations {
   /// **'GATT error ({code})'**
   String gattError(String code);
 
+  /// No description provided for @batteryHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get batteryHistory;
+
+  /// No description provided for @noBatteryDataYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No battery data yet'**
+  String get noBatteryDataYet;
+
+  /// No description provided for @day.
+  ///
+  /// In en, this message translates to:
+  /// **'Day'**
+  String get day;
+
+  /// No description provided for @week.
+  ///
+  /// In en, this message translates to:
+  /// **'Week'**
+  String get week;
+
   /// Action item title for rolling back to the latest stable firmware version
   ///
   /// In en, this message translates to:
@@ -16844,6 +16856,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete your account. Please try again.'**
   String get deleteAccountFailed;
+
+  /// Header for plan deprecation notice
+  ///
+  /// In en, this message translates to:
+  /// **'Plan Update'**
+  String get planUpdate;
+
+  /// Deprecation notice for legacy Unlimited subscribers
+  ///
+  /// In en, this message translates to:
+  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
+  String get planDeprecationMessage;
+
+  /// Header for plan upgrade screen for non-paid users
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Your Plan'**
+  String get upgradeYourPlan;
+
+  /// Subtitle for paid plan users on plans sheet
+  ///
+  /// In en, this message translates to:
+  /// **'You are on a paid plan.'**
+  String get youAreOnAPaidPlan;
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'messages'**
+  String get chatMessages;
+
+  /// No description provided for @unlimitedChatThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited chat messages this month'**
+  String get unlimitedChatThisMonth;
+
+  /// No description provided for @chatUsedOfLimitCompute.
+  ///
+  /// In en, this message translates to:
+  /// **'\${used} of \${limit} compute budget used'**
+  String chatUsedOfLimitCompute(String used, String limit);
+
+  /// No description provided for @chatUsedOfLimitMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {limit} messages used this month'**
+  String chatUsedOfLimitMessages(String used, String limit);
+
+  /// No description provided for @chatUsageProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} / {limit} used'**
+  String chatUsageProgress(String used, String limit);
+
+  /// No description provided for @chatLimitReachedUpgrade.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat limit reached. Upgrade for more messages.'**
+  String get chatLimitReachedUpgrade;
+
+  /// No description provided for @chatLimitReachedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Limit Reached'**
+  String get chatLimitReachedTitle;
+
+  /// No description provided for @chatUsageDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used {used} of your {limitDisplay} on the {plan} plan.'**
+  String chatUsageDescription(String used, String limitDisplay, String plan);
+
+  /// No description provided for @resetsInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets in {count} day(s)'**
+  String resetsInDays(int count);
+
+  /// No description provided for @resetsInHours.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets in {count} hour(s)'**
+  String resetsInHours(int count);
+
+  /// No description provided for @resetsSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Resets soon'**
+  String get resetsSoon;
+
+  /// No description provided for @upgradePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade Plan'**
+  String get upgradePlan;
+
+  /// No description provided for @billingMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get billingMonthly;
+
+  /// No description provided for @billingYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get billingYearly;
+
+  /// No description provided for @savePercent.
+  ///
+  /// In en, this message translates to:
+  /// **'Save ~17%'**
+  String get savePercent;
+
+  /// No description provided for @popular.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular'**
+  String get popular;
+
+  /// No description provided for @currentPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get currentPlan;
+
+  /// No description provided for @neoSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String neoSubtitle(int count);
+
+  /// No description provided for @operatorSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} questions per month'**
+  String operatorSubtitle(int count);
+
+  /// No description provided for @architectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power-user AI — thousands of chats + agentic automations'**
+  String get architectSubtitle;
+
+  /// No description provided for @chatUsageCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} / \${limit} used this month'**
+  String chatUsageCost(String used, String limit);
+
+  /// No description provided for @chatUsageCostNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: \${used} used this month'**
+  String chatUsageCostNoLimit(String used);
+
+  /// No description provided for @chatUsageMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} / {limit} messages this month'**
+  String chatUsageMessages(String used, String limit);
+
+  /// No description provided for @chatUsageMessagesNoLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat: {used} messages this month'**
+  String chatUsageMessagesNoLimit(String used);
+
+  /// No description provided for @chatQuotaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI chat messages used with Omi this month.'**
+  String get chatQuotaSubtitle;
+
+  /// AI reply message shown when user exceeds chat quota
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.'**
+  String get chatQuotaExceededReply;
+
+  /// Voice response audio feature title
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Omi responses aloud'**
+  String get voiceResponseAudio;
+
+  /// Voice response mode setting row title
+  ///
+  /// In en, this message translates to:
+  /// **'Voice response'**
+  String get voiceResponseMode;
+
+  /// Bottom sheet title for voice response mode selector
+  ///
+  /// In en, this message translates to:
+  /// **'When to speak responses'**
+  String get voiceResponseModeTitle;
+
+  /// Voice response mode: off
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get voiceResponseOff;
+
+  /// Voice response mode: only when headphones connected
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones only'**
+  String get voiceResponseHeadphonesOnly;
+
+  /// Voice response mode: always, including phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get voiceResponseAlways;
+
+  /// Button label on the data and AI consent screen — explicit consent action.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree & Continue'**
+  String get agreeAndContinue;
+
+  /// No description provided for @startVoiceRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Start voice recording'**
+  String get startVoiceRecording;
+
+  /// No description provided for @startCallRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Start call recording'**
+  String get startCallRecording;
+
+  /// Section header for memory knowledge graph on home page
+  ///
+  /// In en, this message translates to:
+  /// **'Mind Map'**
+  String get mindMap;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

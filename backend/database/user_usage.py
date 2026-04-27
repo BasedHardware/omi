@@ -1,4 +1,5 @@
-from datetime import datetime
+from calendar import monthrange
+from datetime import datetime, timezone
 from typing import Optional
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -7,8 +8,64 @@ from ._client import db
 from models.user_usage import UsageStats
 
 
-def update_hourly_usage(uid: str, date: datetime, updates: dict):
-    """Updates or creates usage stats for a specific hour using Firestore atomic increments."""
+def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
+    """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
+
+    Returns keys:
+      - questions: total user-initiated chat calls (desktop_chat* + backend `chat.*`)
+      - cost_usd:  total desktop_chat* cost_usd (backend GPT/Gemini chat has no cost field)
+      - reset_at:  unix seconds of the start of next UTC month (when the bucket resets)
+
+    Proactive, memory-extraction, knowledge-graph, conversation-processing etc. are
+    excluded on purpose — those are company-driven, not user-initiated questions.
+    """
+    now = now or datetime.now(timezone.utc)
+    month_prefix = f'{now.year}-{now.month:02d}-'
+
+    llm_usage_ref = db.collection('users').document(uid).collection('llm_usage')
+    questions = 0
+    cost_usd = 0.0
+    for doc in llm_usage_ref.list_documents():
+        if not doc.id.startswith(month_prefix):
+            continue
+        snap = doc.get()
+        if not snap.exists:
+            continue
+        data = snap.to_dict() or {}
+        for key, value in data.items():
+            if not isinstance(value, (int, float)):
+                continue
+            if key.startswith('desktop_chat'):
+                if key.endswith('.call_count'):
+                    questions += int(value)
+                elif key.endswith('.cost_usd'):
+                    cost_usd += float(value)
+            elif key.startswith('chat.') and key.endswith('.call_count'):
+                # user-initiated backend chat (any model)
+                questions += int(value)
+
+    # Compute end-of-month boundary in UTC for the reset timestamp.
+    last_day = monthrange(now.year, now.month)[1]
+    if now.month == 12:
+        next_year, next_month = now.year + 1, 1
+    else:
+        next_year, next_month = now.year, now.month + 1
+    reset_at = int(datetime(next_year, next_month, 1, tzinfo=timezone.utc).timestamp())
+
+    return {
+        'questions': questions,
+        'cost_usd': round(cost_usd, 4),
+        'reset_at': reset_at,
+    }
+
+
+def update_hourly_usage(uid: str, date: datetime, updates: dict, platform: Optional[str] = None):
+    """Updates or creates usage stats for a specific hour using Firestore atomic increments.
+
+    Optional `platform` ('desktop' | 'mobile') is accumulated as an
+    ArrayUnion so a single `hourly_usage/{date-hour}` doc can record activity
+    from both platforms in the same hour without double-writing.
+    """
     user_ref = db.collection('users').document(uid)
     doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
     hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
@@ -34,6 +91,8 @@ def update_hourly_usage(uid: str, date: datetime, updates: dict):
     update_doc['day'] = date.day
     update_doc['hour'] = date.hour
     update_doc['id'] = doc_id
+    if platform in ('desktop', 'mobile'):
+        update_doc['platforms'] = firestore.ArrayUnion([platform])
 
     hourly_usage_ref.set(update_doc, merge=True)
 

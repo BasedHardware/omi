@@ -176,6 +176,16 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void clearUserData() {
+    apps = [];
+    popularApps = [];
+    groupedApps = [];
+    searchResults = [];
+    filteredApps = [];
+    filters = {};
+    notifyListeners();
+  }
+
   void removeFilter(String filterGroup) {
     filters.remove(filterGroup);
     filterApps();

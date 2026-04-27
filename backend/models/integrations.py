@@ -4,7 +4,6 @@ from enum import Enum
 from datetime import datetime, timezone
 
 from models.memories import MemoryCategory, MemoryDB
-from models.transcript_segment import TranscriptSegment as BaseTranscriptSegment
 
 
 class ConversationTimestampRange(BaseModel):

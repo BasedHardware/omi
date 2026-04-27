@@ -3,7 +3,7 @@ import json
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -506,80 +506,6 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
-def update_conversation_merged_data(uid: str, conversation_id: str, merged_data: dict):
-    """
-    Update a conversation with merged data from multiple conversations.
-
-    This function handles the bulk update of all merged fields and respects
-    the conversation's data protection level.
-
-    Args:
-        uid: User ID
-        conversation_id: Primary conversation ID to update
-        merged_data: Dictionary containing all merged fields
-    """
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        return
-
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    prepared_data = _prepare_conversation_for_write(merged_data, uid, doc_level)
-    doc_ref.update(prepared_data)
-
-
-def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:
-    """
-    Delete all conversations with a specific source.
-
-    Args:
-        uid: User ID
-        source: Source type (e.g., 'limitless')
-        batch_size: Number of documents to delete per batch
-
-    Returns:
-        Number of deleted conversations
-    """
-    user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection)
-
-    total_deleted = 0
-
-    while True:
-        # Query for conversations with matching source
-        query = conversations_ref.where(filter=FieldFilter('source', '==', source)).limit(batch_size)
-        docs = list(query.stream())
-
-        if not docs:
-            break
-
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-            total_deleted += 1
-        batch.commit()
-
-        if len(docs) < batch_size:
-            break
-
-    return total_deleted
-
-
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-@with_photos(get_conversation_photos)
-def filter_conversations_by_date(uid, start_date, end_date):
-    user_ref = db.collection('users').document(uid)
-    query = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('created_at', '>=', start_date))
-        .where(filter=FieldFilter('created_at', '<=', end_date))
-        .where(filter=FieldFilter('discarded', '==', False))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
-    conversations = [doc.to_dict() for doc in query.stream()]
-    return conversations
-
-
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations_by_id(uid, conversation_ids):
@@ -726,20 +652,6 @@ def get_in_progress_conversation(uid: str):
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
     return conversation
-
-
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-@with_photos(get_conversation_photos)
-def get_in_progress_conversations(uid: str):
-    """Get all in-progress conversations for a user, ordered by created_at descending."""
-    user_ref = db.collection('users').document(uid)
-    conversations_ref = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('status', '==', 'in_progress'))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return conversations
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -962,19 +874,6 @@ def unlock_all_conversations(uid: str):
     if count > 0:
         batch.commit()
     logger.info(f"Unlocked all conversations for user {uid}")
-
-
-def get_public_conversations(data: List[Tuple[str, str]]):
-    """
-    Fetches multiple public conversations sequentially.
-    """
-    conversations = []
-    for uid, conversation_id in data:
-        # get_conversation is already decorated to return a fully populated and decrypted conversation
-        conversation_data = get_conversation(uid=uid, conversation_id=conversation_id)
-        if conversation_data and conversation_data.get('visibility') == 'public':
-            conversations.append(conversation_data)
-    return conversations
 
 
 # ****************************************

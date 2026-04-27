@@ -2375,6 +2375,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get batteryLevel => 'بیٹری کی سطح';
 
   @override
+  String get charging => 'چارج ہو رہا ہے';
+
+  @override
   String get productUpdate => 'مصنوع کی اپ ڈیٹ';
 
   @override
@@ -2501,12 +2504,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ہوم پیج پر اپنے ذاتی مقاصد کو ٹریک کریں';
-
-  @override
-  String get dailyReflection => 'روز مرہ کا تفکر';
-
-  @override
-  String get get9PmReminderToReflect => 'اپنے دن پر غور کرنے کے لیے رات 9 بجے کی یاد دہانی حاصل کریں';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'کارروائی کی چیز کی تفصیل خالی نہیں ہو سکتی';
@@ -3926,10 +3923,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get trackPersonalGoals => 'ہوم پیج پر ذاتی اہداف کو ٹریک کریں';
 
   @override
-  String get dailyReflectionDescription =>
-      'رات 9 بجے اپنے دن پر غور کرنے اور اپنے خیالات کو ریکارڈ کرنے کی یاد دہانی حاصل کریں۔';
-
-  @override
   String get endpointURL => 'اختتام پوائنٹ URL';
 
   @override
@@ -4570,10 +4563,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get alreadyBestValuePlan => 'آپ کے پاس پہلے سے بہترین قدر والا منصوبہ ہے۔ کوئی تبدیلی درکار نہیں۔';
 
   @override
-  String get unableToLoadPlans => 'منصوبے لوڈ کرنے میں ناکام';
+  String get unableToLoadPlans => 'پلان لوڈ نہیں ہو سکے';
 
   @override
-  String get checkConnectionTryAgain => 'براہ کرم اپنی کنکشن چیک کریں اور دوبارہ کوشش کریں';
+  String get checkConnectionTryAgain => 'کنکشن چیک کریں اور دوبارہ کوشش کریں';
 
   @override
   String get useFreePlan => 'مفت منصوبہ استعمال کریں';
@@ -5107,7 +5100,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'جاری رکھ کر تمام ڈیٹا جو آپ اس ایپ کے ساتھ شیئر کرتے ہیں (آپ کی گفتگو، ریکارڈنگز اور ذاتی معلومات سمیت) ہماری سرورز پر محفوظ طریقے سے محفوظ کیے جائیں گے تاکہ آپ کو AI کی طاقت سے چلنے والی بصیرت فراہم کی جا سکے اور تمام ایپ کی خصوصیات کو فعال کیا جا سکے۔';
+      'جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7196,12 +7189,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'روزانہ عکاسی کا وقت';
-
-  @override
-  String get dailyReflectionNotificationBody => 'مجھے اپنے دن کے بارے میں بتائیں';
-
-  @override
   String get actionItemReminderTitle => 'Omi یادگار';
 
   @override
@@ -8317,6 +8304,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'فون کال کی ترتیبات';
 
   @override
+  String get showPhoneCallButtonTitle => 'فون کال بٹن دکھائیں';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ہوم اسکرین پر فون کال بٹن دکھائیں';
+
+  @override
   String get yourVerifiedNumbers => 'آپ کے تصدیق شدہ نمبر';
 
   @override
@@ -8845,6 +8838,18 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'بیٹری';
+
+  @override
+  String get noBatteryDataYet => 'ابھی تک کوئی بیٹری ڈیٹا نہیں';
+
+  @override
+  String get day => 'دن';
+
+  @override
+  String get week => 'ہفتہ';
+
+  @override
   String get rollbackToStableFirmware => 'مستحکم فرم ویئر پر واپس لیں';
 
   @override
@@ -9025,4 +9030,153 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'آپ کا اکاؤنٹ حذف نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get planUpdate => 'پلان اپ ڈیٹ';
+
+  @override
+  String get planDeprecationMessage =>
+      'آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز \$49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔';
+
+  @override
+  String get upgradeYourPlan => 'اپنا پلان اپ گریڈ کریں';
+
+  @override
+  String get youAreOnAPaidPlan => 'آپ ایک ادا شدہ پلان پر ہیں۔';
+
+  @override
+  String get chatTitle => 'چیٹ';
+
+  @override
+  String get chatMessages => 'پیغامات';
+
+  @override
+  String get unlimitedChatThisMonth => 'اس مہینے لامحدود چیٹ پیغامات';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit کمپیوٹ بجٹ استعمال ہوا';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return 'اس مہینے $used / $limit پیغامات استعمال ہوئے';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit استعمال ہوا';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'چیٹ کی حد پوری ہو گئی۔ مزید پیغامات کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get chatLimitReachedTitle => 'چیٹ کی حد پوری ہو گئی';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'آپ نے $plan پلان پر $limitDisplay میں سے $used استعمال کیے ہیں۔';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count دنوں میں ری سیٹ ہوگا';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count گھنٹوں میں ری سیٹ ہوگا';
+  }
+
+  @override
+  String get resetsSoon => 'جلد ری سیٹ ہوگا';
+
+  @override
+  String get upgradePlan => 'پلان اپ گریڈ کریں';
+
+  @override
+  String get billingMonthly => 'ماہانہ';
+
+  @override
+  String get billingYearly => 'سالانہ';
+
+  @override
+  String get savePercent => '~17% بچائیں';
+
+  @override
+  String get popular => 'مقبول';
+
+  @override
+  String get currentPlan => 'موجودہ';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'ماہانہ $count سوالات';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'ماہانہ $count سوالات';
+  }
+
+  @override
+  String get architectSubtitle => 'پاور یوزر AI — ہزاروں چیٹس + ایجنٹک آٹومیشن';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'چیٹ: \$$used / \$$limit اس مہینے استعمال ہوا';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'چیٹ: \$$used اس مہینے استعمال ہوا';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'چیٹ: $used / $limit پیغامات اس مہینے';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'چیٹ: $used پیغامات اس مہینے';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'آپ اپنی ماہانہ حد تک پہنچ گئے ہیں۔ بغیر کسی پابندی کے Omi کے ساتھ چیٹ جاری رکھنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get voiceResponseAudio => 'Omi کا جواب بلند آواز میں پڑھیں';
+
+  @override
+  String get voiceResponseMode => 'آواز کا جواب';
+
+  @override
+  String get voiceResponseModeTitle => 'جواب کب پڑھے جائیں';
+
+  @override
+  String get voiceResponseOff => 'بند';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'صرف ہیڈ فون';
+
+  @override
+  String get voiceResponseAlways => 'ہمیشہ';
+
+  @override
+  String get agreeAndContinue => 'اتفاق اور جاری رکھیں';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

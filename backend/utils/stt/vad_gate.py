@@ -12,21 +12,19 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
-import copy
 import logging
 import os
-import queue
-import sys
 import threading
 import time
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-import torch
+
+from utils.stt.vad import _get_ort_session, make_fresh_state, run_vad_window, VAD_WINDOW_SAMPLES
 
 logger = logging.getLogger('vad_gate')
 
@@ -39,140 +37,10 @@ VAD_GATE_HANGOVER_MS = 4000
 VAD_GATE_SPEECH_THRESHOLD = 0.65
 VAD_GATE_FINALIZE_SILENCE_MS = 300  # Flush DG transcript during hangover after this much silence
 VAD_GATE_KEEPALIVE_SEC = 5
-VAD_GATE_MODEL_POOL_SIZE = 16
 
 
 def is_gate_enabled() -> bool:
     return VAD_GATE_MODE in ('shadow', 'active')
-
-
-# ---------------------------------------------------------------------------
-# Silero VAD model pool (shared across sessions)
-# ---------------------------------------------------------------------------
-_vad_model = None  # Set LAST during init (used as fast-path sentinel)
-_vad_torch = None  # torch module ref for tensor conversion (set before _vad_model)
-_vad_init_lock = threading.Lock()
-_vad_model_pool = None  # queue.Queue of model instances, initialized lazily
-_vad_model_pool_lock = threading.Lock()
-
-_VAD_STATE_ATTRS = ('_state', '_context', '_last_sr', '_last_batch_size')
-
-
-def _ensure_vad_model():
-    """Lazy-load Silero VAD model (reuses the one from vad.py if already loaded).
-
-    Uses the raw model for per-window speech probability (not VADIterator
-    which emits boundary events unsuitable for streaming gating).
-
-    Checks sys.modules for an already-loaded vad.py model to avoid loading
-    a duplicate Silero instance (~2MB). Falls back to torch.hub.load if
-    vad.py hasn't been imported yet.
-
-    Double-checked locking: _vad_model is set LAST so any thread that sees
-    it non-None also sees _vad_torch already set.
-    """
-    global _vad_model, _vad_torch
-    if _vad_model is not None:
-        return
-    with _vad_init_lock:
-        if _vad_model is not None:
-            return
-        # Reuse model from vad.py if already loaded (avoids duplicate in memory)
-        vad_mod = sys.modules.get('utils.stt.vad')
-        if vad_mod is not None and hasattr(vad_mod, 'model'):
-            _vad_torch = torch  # Set BEFORE _vad_model
-            _vad_model = vad_mod.model
-        else:
-            torch.set_num_threads(1)
-            model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-            _vad_torch = torch  # Set BEFORE _vad_model
-            _vad_model = model
-
-
-def _clone_state_value(value: Any) -> Any:
-    """Clone model state values, preserving tensor semantics."""
-    if _vad_torch is not None and isinstance(value, _vad_torch.Tensor):
-        return value.detach().clone()
-    if isinstance(value, tuple):
-        return tuple(_clone_state_value(v) for v in value)
-    if isinstance(value, list):
-        return [_clone_state_value(v) for v in value]
-    if isinstance(value, dict):
-        return {k: _clone_state_value(v) for k, v in value.items()}
-    try:
-        return copy.deepcopy(value)
-    except Exception:
-        return value
-
-
-def _capture_model_state(model: Any) -> Dict[str, Any]:
-    state: Dict[str, Any] = {}
-    for attr in _VAD_STATE_ATTRS:
-        if hasattr(model, attr):
-            state[attr] = _clone_state_value(getattr(model, attr))
-    return state
-
-
-def _restore_model_state(model: Any, state: Optional[Dict[str, Any]]) -> None:
-    if hasattr(model, 'reset_states'):
-        model.reset_states()
-    if not state:
-        return
-    for attr, value in state.items():
-        if hasattr(model, attr):
-            setattr(model, attr, _clone_state_value(value))
-
-
-def _clone_vad_model(base_model: Any) -> Any:
-    clone = copy.deepcopy(base_model)
-    if hasattr(clone, 'eval'):
-        clone.eval()
-    if hasattr(clone, 'reset_states'):
-        clone.reset_states()
-    return clone
-
-
-def _ensure_vad_model_pool() -> None:
-    """Lazy-init inference pool to avoid single global model bottleneck."""
-    global _vad_model_pool
-    if _vad_model_pool is not None:
-        return
-    _ensure_vad_model()
-    with _vad_model_pool_lock:
-        if _vad_model_pool is not None:
-            return
-        models = []
-        if hasattr(_vad_model, 'eval'):
-            _vad_model.eval()
-        if hasattr(_vad_model, 'reset_states'):
-            _vad_model.reset_states()
-        models.append(_vad_model)
-        for i in range(1, VAD_GATE_MODEL_POOL_SIZE):
-            try:
-                models.append(_clone_vad_model(_vad_model))
-            except Exception as e:
-                logger.warning(
-                    'VAD model clone failed at idx=%s, using pool_size=%s requested=%s err=%s',
-                    i,
-                    len(models),
-                    VAD_GATE_MODEL_POOL_SIZE,
-                    e,
-                )
-                break
-        model_pool = queue.Queue(maxsize=len(models))
-        for model in models:
-            model_pool.put(model)
-        _vad_model_pool = model_pool
-        logger.info('VAD model pool ready size=%s requested=%s', len(models), VAD_GATE_MODEL_POOL_SIZE)
-
-
-def _borrow_vad_model() -> Any:
-    _ensure_vad_model_pool()
-    return _vad_model_pool.get()
-
-
-def _return_vad_model(model: Any) -> None:
-    _vad_model_pool.put(model)
 
 
 # ---------------------------------------------------------------------------
@@ -261,9 +129,12 @@ class DgWallMapper:
 class VADStreamingGate:
     """Per-session VAD gate that decides whether to send audio to DG.
 
-    Uses Silero VAD model's speech probability (not start/end events) for
-    robust per-chunk speech detection. Buffers VAD input samples to handle
-    chunk sizes smaller than the VAD window (e.g. 30ms at 8kHz = 240 < 256).
+    Uses ONNX Silero-VAD model's speech probability (not start/end events)
+    for robust per-chunk speech detection. Buffers VAD input samples to handle
+    chunk sizes smaller than the VAD window (e.g. 16ms at 16kHz = 256 samples).
+
+    The ONNX InferenceSession is shared process-wide (thread-safe).
+    Per-connection recurrent state (h/c) and context are stored on this instance.
 
     Args:
         sample_rate: Input audio sample rate (Hz)
@@ -287,19 +158,15 @@ class VADStreamingGate:
         self.uid = uid
         self.session_id = session_id
         # All audio reaching the gate MUST be PCM16 LE (2 bytes/sample).
-        # Codecs (opus, aac, lc3) are decoded to int16 before buffering;
-        # pcm8/pcm16 are already linear16 at 8/16kHz from the hardware.
-        # Callers must pass channels=1 when DG is configured for mono.
         self._sample_width = 2  # bytes per sample, always int16
 
         # VAD setup — always resample to 16kHz for best accuracy
-        # Uses raw model probability (not VADIterator events) for continuous
-        # per-window speech classification suitable for streaming gating.
         self._vad_sample_rate = 16000
-        _ensure_vad_model_pool()
-        self._vad_window_samples = 512  # Silero recommended for 16kHz
+        # Eagerly init the shared ONNX session (fail-fast at gate creation)
+        _get_ort_session()
+        self._vad_window_samples = VAD_WINDOW_SAMPLES  # 512 for 16kHz (Silero v6)
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
-        self._vad_state: Optional[Dict[str, Any]] = None
+        self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
         self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
 
@@ -350,6 +217,9 @@ class VADStreamingGate:
             self._pre_roll.clear()
             self._pre_roll_total_ms = 0.0
             self._hangover_finalized = False
+            # Reset VAD recurrent state and buffer for clean active-mode start
+            self._vad_state, self._vad_context = make_fresh_state()
+            self._vad_buffer = np.array([], dtype=np.float32)
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._dg_cursor_sec = self._audio_cursor_ms / 1000.0
             logger.info(
@@ -388,16 +258,11 @@ class VADStreamingGate:
         return data_int16.astype(np.float32) / 32768.0
 
     def _run_vad(self, pcm_data: bytes) -> bool:
-        """Run Silero VAD on audio chunk. Returns True if speech detected.
+        """Run ONNX Silero VAD on audio chunk. Returns True if speech detected.
 
-        Calls the raw model directly for per-window speech probability.
-        VADIterator is NOT used because it emits boundary events (start/end)
-        and returns None during continuous speech, which would cause the gate
-        to drop audio mid-utterance.
-
-        Preserves session-local model state across chunks for LSTM context.
-        Session state is loaded before inference and saved afterward.
-        Model instances come from a global pool to allow concurrent sessions.
+        Uses the shared ONNX InferenceSession with per-connection recurrent
+        state (h/c stored on this instance). No model pool needed — ONNX
+        sessions are stateless and thread-safe for different input data.
 
         Buffers samples across chunks to handle cases where chunk size < window size.
         """
@@ -410,28 +275,16 @@ class VADStreamingGate:
 
             is_speech = False
             if len(self._vad_buffer) >= self._vad_window_samples:
-                model = _borrow_vad_model()
-                try:
-                    _restore_model_state(model, self._vad_state)
-                    # Process all complete windows in buffer
-                    while len(self._vad_buffer) >= self._vad_window_samples:
-                        window = self._vad_buffer[: self._vad_window_samples]
-                        self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
+                # Process all complete windows in buffer
+                while len(self._vad_buffer) >= self._vad_window_samples:
+                    window = self._vad_buffer[: self._vad_window_samples]
+                    self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
 
-                        # Convert to tensor for production Silero; mock accepts numpy
-                        if _vad_torch is not None:
-                            tensor = _vad_torch.from_numpy(window.copy())
-                        else:
-                            tensor = window
-                        prob = model(tensor, self._vad_sample_rate)
-                        # Silero returns tensor; mock returns float
-                        if hasattr(prob, 'item'):
-                            prob = prob.item()
-                        if prob > self._speech_threshold:
-                            is_speech = True
-                    self._vad_state = _capture_model_state(model)
-                finally:
-                    _return_vad_model(model)
+                    prob, self._vad_state, self._vad_context = run_vad_window(
+                        window, self._vad_state, self._vad_context
+                    )
+                    if prob > self._speech_threshold:
+                        is_speech = True
 
             # Keep buffer bounded (max 1 window of leftover)
             if len(self._vad_buffer) > self._vad_window_samples:

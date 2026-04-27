@@ -98,6 +98,13 @@ class MemoriesProvider extends ChangeNotifier {
     await prefs.remove('memories_filter');
   }
 
+  void clearUserData() {
+    _memories = [];
+    _selectedCategories = {};
+    _showOnlyManual = false;
+    notifyListeners();
+  }
+
   // Deprecated/Modified: kept as alias if needed but unused internally now
   void setCategoryFilter(MemoryCategory? category) {
     // Do nothing or migrate logic if called from legacy code?

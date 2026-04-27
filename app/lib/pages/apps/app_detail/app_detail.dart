@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -62,64 +61,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
-
-  String _getPricingText(App app) {
-    if (!app.isPaid || app.price == null || app.price == 0) {
-      return 'Free';
-    }
-    if (app.paymentPlan == 'monthly_recurring') {
-      return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)} / mo';
-    }
-    return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)}';
-  }
-
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'conversation-analysis':
-        return FontAwesomeIcons.solidComments;
-      case 'health-and-wellness':
-        return FontAwesomeIcons.solidHeart;
-      case 'education-and-learning':
-        return FontAwesomeIcons.graduationCap;
-      case 'communication-improvement':
-        return FontAwesomeIcons.solidMessage;
-      case 'emotional-and-mental-support':
-        return FontAwesomeIcons.brain;
-      case 'productivity-and-organization':
-        return FontAwesomeIcons.listCheck;
-      case 'entertainment-and-fun':
-        return FontAwesomeIcons.gamepad;
-      case 'financial':
-        return FontAwesomeIcons.solidCreditCard;
-      case 'travel-and-exploration':
-        return FontAwesomeIcons.plane;
-      case 'safety-and-security':
-        return FontAwesomeIcons.shieldHalved;
-      case 'shopping-and-commerce':
-        return FontAwesomeIcons.cartShopping;
-      case 'social-and-relationships':
-        return FontAwesomeIcons.userGroup;
-      case 'news-and-information':
-        return FontAwesomeIcons.solidNewspaper;
-      case 'utilities-and-tools':
-        return FontAwesomeIcons.toolbox;
-      case 'popular':
-        return FontAwesomeIcons.fire;
-      default:
-        return FontAwesomeIcons.solidCircleQuestion;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final day = date.day;
-    final month = months[date.month - 1];
-    if (date.year == now.year) {
-      return '$day $month';
-    }
-    return '$day $month ${date.year}';
-  }
 
   /// Safely launches a URL with fallback from in-app browser to external browser.
   /// Returns true if the URL was launched successfully, false otherwise.
@@ -738,9 +679,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin = box != null
-                                  ? box.localToGlobal(Offset.zero) & box.size
-                                  : null;
+                              final Rect? sharePositionOrigin =
+                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
@@ -754,32 +694,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
               appProvider.isAppOwner
                   ? (isLoading
-                        ? const SizedBox.shrink()
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                              onPressed: () async {
-                                HapticFeedback.mediumImpact();
-                                await showModalBottomSheet(
-                                  context: context,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      topRight: Radius.circular(16),
-                                    ),
+                      ? const SizedBox.shrink()
+                      : Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              await showModalBottomSheet(
+                                context: context,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
                                   ),
-                                  builder: (context) {
-                                    return ShowAppOptionsSheet(app: app);
-                                  },
-                                );
-                              },
-                            ),
-                          ))
+                                ),
+                                builder: (context) {
+                                  return ShowAppOptionsSheet(app: app);
+                                },
+                              );
+                            },
+                          ),
+                        ))
                   : const SizedBox(width: 8),
             ],
           ),
@@ -852,6 +792,39 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ],
                                     ],
                                   ),
+                                  // Rating + installs inline
+                                  const SizedBox(height: 6),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                                        Scrollable.ensureVisible(
+                                          _reviewsSectionKey.currentContext!,
+                                          duration: const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      }
+                                    },
+                                    child: Row(
+                                      children: [
+                                        if (app.ratingCount > 0) ...[
+                                          const Icon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${app.getRatingAvg()} (${app.ratingCount})',
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                                          ),
+                                          if (app.installs > 0) ...[
+                                            Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                          ],
+                                        ],
+                                        if (app.installs > 0)
+                                          Text(
+                                            '${(app.installs / 10).round() * 10}+ users',
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                               isLoading
@@ -863,73 +836,73 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: const Color(0xFF35343B),
                                     )
                                   : app.enabled
-                                  ? AnimatedLoadingButton(
-                                      text: context.l10n.uninstall,
-                                      width: 90,
-                                      height: 32,
-                                      onPressed: () => _toggleApp(app.id, false),
-                                      color: Colors.red,
-                                    )
-                                  : (app.isPaid && !app.isUserPaid
-                                        ? AnimatedLoadingButton(
-                                            width: 100,
-                                            height: 32,
-                                            text: "Subscribe",
-                                            onPressed: () async {
-                                              // Track subscribe button clicked
-                                              MixpanelManager().appDetailSubscribeClicked(
-                                                appId: app.id,
-                                                appName: app.name,
-                                              );
-
-                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                final uri = Uri.tryParse(app.paymentLink!);
-                                                if (uri == null) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                  );
-                                                  return;
-                                                }
-                                                _checkPaymentStatus(app.id);
-                                                await _launchUrlSafely(uri);
-                                              } else {
-                                                await _toggleApp(app.id, true);
-                                              }
-                                            },
-                                            color: Colors.green,
-                                          )
-                                        : AnimatedLoadingButton(
-                                            width: 75,
-                                            height: 32,
-                                            text: context.l10n.install,
-                                            onPressed: () async {
-                                              if (app.worksExternally()) {
-                                                showDialog(
-                                                  context: context,
-                                                  builder: (ctx) {
-                                                    return StatefulBuilder(
-                                                      builder: (ctx, setState) {
-                                                        return ConfirmationDialog(
-                                                          title: context.l10n.dataAccessNotice,
-                                                          description: context.l10n.dataAccessNoticeDescription,
-                                                          onConfirm: () {
-                                                            _toggleApp(app.id, true);
-                                                            Navigator.pop(context);
-                                                          },
-                                                          onCancel: () {
-                                                            Navigator.pop(context);
-                                                          },
-                                                        );
-                                                      },
-                                                    );
-                                                  },
+                                      ? AnimatedLoadingButton(
+                                          text: 'Disable',
+                                          width: 90,
+                                          height: 32,
+                                          onPressed: () => _toggleApp(app.id, false),
+                                          color: Colors.grey.shade700,
+                                        )
+                                      : (app.isPaid && !app.isUserPaid
+                                          ? AnimatedLoadingButton(
+                                              width: 100,
+                                              height: 32,
+                                              text: "Subscribe",
+                                              onPressed: () async {
+                                                // Track subscribe button clicked
+                                                MixpanelManager().appDetailSubscribeClicked(
+                                                  appId: app.id,
+                                                  appName: app.name,
                                                 );
-                                              } else {
-                                                _toggleApp(app.id, true);
-                                              }
-                                            },
-                                            color: Colors.green,
-                                          )),
+
+                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                  final uri = Uri.tryParse(app.paymentLink!);
+                                                  if (uri == null) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
+                                                    );
+                                                    return;
+                                                  }
+                                                  _checkPaymentStatus(app.id);
+                                                  await _launchUrlSafely(uri);
+                                                } else {
+                                                  await _toggleApp(app.id, true);
+                                                }
+                                              },
+                                              color: const Color(0xFF8B5CF6),
+                                            )
+                                          : AnimatedLoadingButton(
+                                              width: 75,
+                                              height: 32,
+                                              text: 'Enable',
+                                              onPressed: () async {
+                                                if (app.worksExternally()) {
+                                                  showDialog(
+                                                    context: context,
+                                                    builder: (ctx) {
+                                                      return StatefulBuilder(
+                                                        builder: (ctx, setState) {
+                                                          return ConfirmationDialog(
+                                                            title: context.l10n.dataAccessNotice,
+                                                            description: context.l10n.dataAccessNoticeDescription,
+                                                            onConfirm: () {
+                                                              _toggleApp(app.id, true);
+                                                              Navigator.pop(context);
+                                                            },
+                                                            onCancel: () {
+                                                              Navigator.pop(context);
+                                                            },
+                                                          );
+                                                        },
+                                                      );
+                                                    },
+                                                  );
+                                                } else {
+                                                  _toggleApp(app.id, true);
+                                                }
+                                              },
+                                              color: const Color(0xFF8B5CF6),
+                                            )),
                             ],
                           ),
                         ),
@@ -937,197 +910,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       const SizedBox(width: 20),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Ratings section - App Store style
-                            GestureDetector(
-                              onTap: () {
-                                if ((app.ratingCount > 0 || app.reviews.isNotEmpty) &&
-                                    _reviewsSectionKey.currentContext != null) {
-                                  Scrollable.ensureVisible(
-                                    _reviewsSectionKey.currentContext!,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeInOut,
-                                  );
-                                }
-                              },
-                              child: Column(
-                                children: [
-                                  Text(
-                                    app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    app.getRatingAvg() ?? '0.0',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  RatingBar.builder(
-                                    initialRating: app.ratingAvg ?? 0,
-                                    minRating: 1,
-                                    ignoreGestures: true,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 5,
-                                    itemSize: 12,
-                                    tapOnlyMode: false,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                    itemBuilder: (context, _) =>
-                                        Icon(FontAwesomeIcons.solidStar, color: Colors.grey.shade500),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {},
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Installs
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${(app.installs / 10).round() * 10}+',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'INSTALLS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Pricing
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _getPricingText(app),
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'PRICE',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Category
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                FaIcon(_getCategoryIcon(app.category), size: 20, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                Text(
-                                  app.getCategoryName().split(' ').first.toUpperCase(),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (app.getLastUpdatedDate() != null) ...[
-                              const SizedBox(width: 20),
-                              VerticalDivider(color: Colors.grey.shade800, width: 4),
-                              const SizedBox(width: 20),
-                              // Updated/Created
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _formatDate(app.getLastUpdatedDate()!),
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    app.updatedAt != null ? 'UPDATED' : 'CREATED',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            if (app.isPopular == true) ...[
-                              const SizedBox(width: 20),
-                              VerticalDivider(color: Colors.grey.shade800, width: 4),
-                              const SizedBox(width: 20),
-                              // Featured
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  FaIcon(FontAwesomeIcons.trophy, size: 20, color: Colors.grey.shade400),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'FEATURED',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 16),
+
                   // Cancel Subscription
                   !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
                       ? Padding(
@@ -1470,11 +1254,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       if (app.description.decodeString.characters.length > 200) {
                         routeToPage(
                           context,
-                          MarkdownViewer(title: context.l10n.aboutTheApp, markdown: app.description.decodeString),
+                          MarkdownViewer(title: 'Description', markdown: app.description.decodeString),
                         );
                       }
                     },
-                    title: context.l10n.aboutTheApp,
+                    title: 'Description',
                     description: app.description,
                     showChips: false,
                   ),
@@ -1585,7 +1369,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     Row(
                                       children: [
                                         Text(
-                                          context.l10n.ratingsAndReviews,
+                                          'Reviews',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 16,
@@ -1606,10 +1390,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     RecentReviewsSection(
-                                      reviews: app.reviews
-                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
-                                          .take(3)
-                                          .toList(),
+                                      reviews:
+                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () {
@@ -1794,31 +1576,19 @@ class RatingDistributionWidget extends StatelessWidget {
     required this.reviews,
   });
 
-  Map<int, int> _getRatingDistribution() {
-    final distribution = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
-    for (final review in reviews) {
-      final score = review.score.round().clamp(1, 5);
-      distribution[score] = (distribution[score] ?? 0) + 1;
-    }
-    return distribution;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final distribution = _getRatingDistribution();
-
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Left side - Large rating number with stars
+        Text(
+          ratingAvg.toStringAsFixed(1),
+          style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
+        ),
+        const SizedBox(width: 16),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              ratingAvg.toStringAsFixed(1),
-              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
-            ),
-            const SizedBox(height: 8),
             Row(
               children: List.generate(5, (index) {
                 return Padding(
@@ -1831,59 +1601,12 @@ class RatingDistributionWidget extends StatelessWidget {
                 );
               }),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
-        ),
-        const SizedBox(width: 24),
-        // Right side - Rating distribution bars
-        Expanded(
-          child: Column(
-            children: [5, 4, 3, 2, 1].map((star) {
-              final count = distribution[star] ?? 0;
-              final percentage = ratingCount > 0 ? count / ratingCount : 0.0;
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Text(
-                      '$star',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(FontAwesomeIcons.solidStar, size: 10, color: Colors.deepPurple),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(4)),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: percentage,
-                          child: Container(
-                            decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(4)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 20,
-                      child: Text(
-                        '$count',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
         ),
       ],
     );
@@ -1950,8 +1673,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-          ? prefs.fullName
-          : prefs.givenName;
+              ? prefs.fullName
+              : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -2168,9 +1891,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context)!;
-    final displayName = isUserReview
-        ? l10n.yourReview
-        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName =
+        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(

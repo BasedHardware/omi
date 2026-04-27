@@ -3,8 +3,9 @@ FROM python:3.11 AS builder
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
-COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+COPY backend/requirements.txt /tmp/reqs/requirements.txt
+COPY backend/modal/requirements.txt /tmp/reqs/modal/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/reqs/modal/requirements.txt
 
 FROM python:3.11-slim
 # Python 3.11 on Debian 12 (Bookworm)
@@ -29,4 +30,4 @@ COPY backend/models /app/models
 COPY backend/modal/ .
 
 EXPOSE 8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]

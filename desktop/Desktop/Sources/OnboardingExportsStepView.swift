@@ -6,6 +6,7 @@ struct OnboardingExportsStepView: View {
   let totalSteps: Int
   let summaryText: String
   let onContinue: () -> Void
+  let onSkip: () -> Void
   let onForceComplete: (() -> Void)?
 
   @State private var statuses: [MemoryExportDestination: MemoryExportStatus] = [:]
@@ -20,6 +21,8 @@ struct OnboardingExportsStepView: View {
       title: "Put your memories where you work.",
       description: "Connect the tools where you want Omi context to live.",
       rightPaneFooterText: summaryText,
+      showsSkip: true,
+      onSkip: onSkip,
       onForceComplete: onForceComplete
     ) {
       VStack(alignment: .leading, spacing: 18) {

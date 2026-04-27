@@ -112,6 +112,7 @@ typing-extensions==4.15.0
 tzdata==2025.3
 urllib3==2.6.2
 uvicorn==0.40.0
+uvloop==0.20.0
 yarl==1.22.0
 zipp==3.23.0
 

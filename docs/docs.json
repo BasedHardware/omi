@@ -234,6 +234,33 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "CLI",
+        "icon": "terminal",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "doc/developer/cli/introduction",
+              "doc/developer/cli/install",
+              "doc/developer/cli/quickstart"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "doc/developer/cli/commands"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "doc/developer/cli/agents",
+              "doc/developer/cli/troubleshooting"
+            ]
+          }
+        ]
       }
     ]
   },

@@ -2,10 +2,12 @@
 Import endpoints for importing data from external sources.
 """
 
+import asyncio
 import os
-import threading
 import uuid
 from typing import List, Optional
+
+from utils.executors import storage_executor
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -56,9 +58,13 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        with open(zip_path, 'wb') as f:
+        f = open(zip_path, 'wb')
+        try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                f.write(contents)
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(storage_executor, f.write, contents)
+        finally:
+            f.close()
     except Exception as e:
         # Clean up on error
         import_jobs_db.update_import_job(
@@ -67,8 +73,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
     # Start background processing
-    thread = threading.Thread(target=process_limitless_import, args=(job.id, uid, zip_path, language), daemon=True)
-    thread.start()
+    storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
 
     return ImportJobResponse(
         job_id=job.id,

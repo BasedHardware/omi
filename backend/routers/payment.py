@@ -1,3 +1,6 @@
+import os
+from datetime import datetime
+
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 import stripe
 from pydantic import BaseModel
@@ -8,7 +11,6 @@ from urllib.parse import urljoin
 
 from database import (
     users as users_db,
-    notifications as notifications_db,
     conversations as conversations_db,
     memories as memories_db,
     action_items as action_items_db,
@@ -23,6 +25,9 @@ from utils.subscription import (
     get_plan_type_from_price_id,
     get_plan_limits,
     is_paid_plan,
+    filter_plans_for_user,
+    should_show_new_plans,
+    adapt_plans_for_legacy_client,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -39,6 +44,13 @@ from fastapi.responses import HTMLResponse
 
 from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
+from utils.overage import (
+    OVERAGE_EXPLAINER_TITLE,
+    PROVIDER_REFERENCE_RATES,
+    build_explainer_text,
+    get_user_overage,
+    is_overage_plan,
+)
 from utils.log_sanitizer import sanitize
 import os
 import logging
@@ -58,9 +70,12 @@ class UpgradeSubscriptionRequest(BaseModel):
 
 class PricingOption(BaseModel):
     id: str  # price_id
+    plan_id: str = ''  # "unlimited", "operator", "architect"
     title: str  # "Monthly" or "Annual"
     price_string: str  # "$19/month" or "$199/year"
     description: Optional[str] = None
+    subtitle: Optional[str] = None  # e.g. "2000 questions per month"
+    eyebrow: Optional[str] = None  # e.g. "Starter", "Most popular"
     interval: str  # "month" or "year"
     unit_amount: int  # amount in cents
     is_active: bool = False  # Added for active status
@@ -152,8 +167,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 users_db.update_user_subscription(uid, current_subscription.dict())
 
                 # Calculate next billing date
-                from datetime import datetime
-
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
 
                 return {
@@ -168,7 +181,14 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
-def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_available_plans_endpoint(
+    # Payment / plan surfaces must stay reachable even if BYOK fingerprints
+    # drift (e.g. user rotated a key locally without re-activating). Otherwise
+    # a broken-BYOK user can't see or change their plan to recover.
+    uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
         # Get user's current subscription to determine which plan is active
@@ -214,8 +234,31 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         else:
             logger.info(f"No active paid subscription found for user {uid}")
 
+        # Version-gate the new Operator + Architect catalog. Mobile and older
+        # desktop builds see the pre-rollout plan shape. Then legacy-filter so
+        # existing subscribers still see their current plan.
+        new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
+        all_definitions = get_paid_plan_definitions()
+        if not new_plans_enabled:
+            all_definitions = adapt_plans_for_legacy_client(all_definitions)
+            # Operator subscriber on old client: map their Stripe prices to Unlimited
+            # so is_active detection works against the legacy catalog.
+            if current_subscription and current_subscription.plan == PlanType.operator:
+                op_monthly = os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID', '')
+                op_annual = os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID', '')
+                unlim_monthly = os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID', '')
+                unlim_annual = os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID', '')
+                price_map = {}
+                if op_monthly and unlim_monthly:
+                    price_map[op_monthly] = unlim_monthly
+                if op_annual and unlim_annual:
+                    price_map[op_annual] = unlim_annual
+                current_price_id = price_map.get(current_price_id, current_price_id)
+                scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
+
+        current_plan = current_subscription.plan if current_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
-        for definition in get_paid_plan_definitions():
+        for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
@@ -224,9 +267,12 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                     pricing_options.append(
                         PricingOption(
                             id=monthly_price.id,
+                            plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
                             price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
                             description=None,
+                            subtitle=definition.get("subtitle"),
+                            eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
                             unit_amount=monthly_price.unit_amount,
                             is_active=current_price_id == monthly_price.id or scheduled_price_id == monthly_price.id,
@@ -243,9 +289,12 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
                     pricing_options.append(
                         PricingOption(
                             id=annual_price.id,
+                            plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
                             price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
                             description=definition["annual_description"],
+                            subtitle=definition.get("subtitle"),
+                            eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
                             unit_amount=annual_price.unit_amount,
                             is_active=current_price_id == annual_price.id or scheduled_price_id == annual_price.id,
@@ -265,6 +314,56 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     except Exception as e:
         logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
+
+
+class OverageInfoResponse(BaseModel):
+    plan: str
+    plan_type: str
+    is_overage_plan: bool
+    included_questions: Optional[int] = None
+    included_cost_usd: Optional[float] = None
+    used_questions: int = 0
+    excess_questions: int = 0
+    real_cost_usd: float = 0.0
+    overage_usd: float = 0.0
+    markup_multiplier: float
+    markup_percent: float
+    reset_at: Optional[int] = None
+    explainer_title: str
+    explainer_body: str
+    provider_reference_rates: dict
+    byok_available: bool = True
+
+
+@router.get('/v1/payments/overage-info', response_model=OverageInfoResponse)
+def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+    """Explain overage billing + return the user's current accrued charge.
+
+    Powers the clickable "What happens past the limit?" text on the plan page.
+    Safe to call on any plan — non-overage plans just get a zero snapshot plus
+    the explainer copy.
+    """
+    subscription = users_db.get_user_subscription(uid)
+    plan = subscription.plan if subscription else PlanType.basic
+    snapshot = get_user_overage(uid, plan)
+
+    return OverageInfoResponse(
+        plan=subscription_utils.get_plan_display_name(plan),
+        plan_type=plan.value,
+        is_overage_plan=is_overage_plan(plan),
+        included_questions=snapshot['included_questions'],
+        included_cost_usd=snapshot.get('included_cost_usd'),
+        used_questions=snapshot['used_questions'],
+        excess_questions=snapshot['excess_questions'],
+        real_cost_usd=snapshot['real_cost_usd'],
+        overage_usd=snapshot['overage_usd'],
+        markup_multiplier=snapshot['markup_multiplier'],
+        markup_percent=round((snapshot['markup_multiplier'] - 1.0) * 100.0, 2),
+        reset_at=snapshot['reset_at'],
+        explainer_title=OVERAGE_EXPLAINER_TITLE,
+        explainer_body=build_explainer_text(),
+        provider_reference_rates=PROVIDER_REFERENCE_RATES,
+    )
 
 
 @router.post('/v1/payments/checkout-session')
@@ -322,14 +421,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        # Block downgrades from Pro to Unlimited
-        if current_plan == PlanType.pro and target_plan == PlanType.unlimited:
+        # Block downgrades from Architect to Unlimited
+        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
             raise HTTPException(
                 status_code=400,
-                detail="Downgrading from Pro to Unlimited is not available. Please contact support if you need to change your plan.",
+                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
             )
 
-        # Cross-plan change (e.g. Unlimited→Pro): immediate swap with proration
+        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
             updated_sub = stripe.Subscription.modify(
                 stripe_sub['id'],

@@ -348,11 +348,10 @@ settings, and storing user speech profiles.
 | Function | Purpose |
 |----------|---------|
 | `set_speech_profile_duration` | Cache speech profile duration (audio stored in GCS) |
-| `get_speech_profile_duration` | Retrieve cached speech profile duration |
 | `enable_app`, `disable_app` | Manage app enable/disable states |
 | `get_enabled_apps` | Get user's enabled apps |
 | `get_app_reviews` | Retrieve reviews for an app |
-| `cache_user_name`, `get_cached_user_name` | Cache and retrieve user names |
+| `cache_user_name` | Cache user names |
 
 <Note>
 **Storage Separation:** Redis is used for caching metadata (durations, flags, enabled apps) to improve performance. The actual speech profile audio files are stored in Google Cloud Storage via `utils/other/storage.py`. This separation ensures Redis remains fast and lightweight while GCS handles binary file storage.

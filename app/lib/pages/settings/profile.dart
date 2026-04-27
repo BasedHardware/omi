@@ -118,6 +118,120 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  String _voiceResponseModeLabel(int mode) {
+    switch (mode) {
+      case 0:
+        return context.l10n.voiceResponseOff;
+      case 2:
+        return context.l10n.voiceResponseAlways;
+      case 1:
+      default:
+        return context.l10n.voiceResponseHeadphonesOnly;
+    }
+  }
+
+  void _showVoiceResponseModeSheet() {
+    int current = SharedPreferencesUtil().voiceResponseMode;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            void pick(int value) {
+              setState(() => SharedPreferencesUtil().voiceResponseMode = value);
+              MixpanelManager().voiceResponseModeChanged(value);
+              Navigator.pop(sheetContext);
+            }
+
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 16),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+                  ),
+                  Text(
+                    context.l10n.voiceResponseModeTitle,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: Text(
+                      context.l10n.voiceResponseOff,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    ),
+                    trailing: current == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () => pick(0),
+                  ),
+                  ListTile(
+                    title: Text(
+                      context.l10n.voiceResponseHeadphonesOnly,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    ),
+                    trailing: current == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () => pick(1),
+                  ),
+                  ListTile(
+                    title: Text(
+                      context.l10n.voiceResponseAlways,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    ),
+                    trailing: current == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () => pick(2),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileStyleItem({
+    required IconData icon,
+    required String title,
+    String? chipValue,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Row(
+          children: [
+            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+              ),
+            ),
+            if (chipValue != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
+                child: Text(
+                  chipValue,
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,9 +274,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.email,
-                  chipValue: SharedPreferencesUtil().email.isEmpty
-                      ? context.l10n.notSet
-                      : SharedPreferencesUtil().email,
+                  chipValue:
+                      SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
                   showChevron: false,
@@ -206,6 +319,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const UserPeoplePage());
                   },
                 ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileStyleItem(
+                  icon: FontAwesomeIcons.volumeHigh,
+                  title: context.l10n.voiceResponseMode,
+                  chipValue: _voiceResponseModeLabel(SharedPreferencesUtil().voiceResponseMode),
+                  onTap: _showVoiceResponseModeSheet,
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -246,9 +366,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 Builder(
                   builder: (context) {
                     final uid = SharedPreferencesUtil().uid;
-                    final truncatedUid = uid.length > 6
-                        ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}'
-                        : uid;
+                    final truncatedUid =
+                        uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                     return _buildProfileItem(
                       title: context.l10n.userId,
                       chipValue: truncatedUid,

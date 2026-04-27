@@ -21,6 +21,7 @@ from models.conversation import SearchRequest
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
+from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
@@ -139,7 +140,7 @@ async def create_conversation_via_integration(
     conversation = process_conversation(uid, language_code, create_conversation)
 
     # Always trigger integration
-    trigger_external_integrations(uid, conversation)
+    await trigger_external_integrations(uid, conversation)
 
     # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
     # to finish for the conversation id
@@ -347,16 +348,7 @@ async def get_conversations_via_integration(
     conversation_items = []
     for conv in conversations_data:
         try:
-            if conv.get('is_locked', False):
-                conv['structured']['title'] = ''
-                conv['structured']['overview'] = ''
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-                conv['transcript_segments'] = []
-                conv['apps_results'] = []
-                conv['plugins_results'] = []
-                conv['suggested_summarization_apps'] = []
-
+            redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
@@ -480,16 +472,7 @@ async def search_conversations_via_integration(
     conversation_items = []
     for conv in full_conversations:
         try:
-            if conv.get('is_locked', False):
-                conv['structured']['title'] = ''
-                conv['structured']['overview'] = ''
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-                conv['transcript_segments'] = []
-                conv['apps_results'] = []
-                conv['plugins_results'] = []
-                conv['suggested_summarization_apps'] = []
-
+            redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments

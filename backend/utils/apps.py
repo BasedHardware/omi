@@ -1,11 +1,13 @@
+import asyncio
+import hashlib
 import math
 import os
-import threading
+import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
-import hashlib
-import secrets
+
+import httpx
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -36,7 +38,6 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-import database.users as users_db
 from database.memories import get_memories, get_user_public_memories
 from database.redis_db import (
     get_enabled_apps,
@@ -67,12 +68,12 @@ from database.redis_db import (
 )
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
-from models.conversation import Conversation
-from models.other import Person
+from utils.conversations.factory import deserialize_conversations
+from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
+from utils.social import get_twitter_timeline
 import logging
 
 logger = logging.getLogger(__name__)
@@ -626,8 +627,8 @@ async def generate_persona_prompt(uid: str, persona: dict):
     user_name = get_user_name(uid)
 
     # Get and condense recent conversations — exclude locked content
-    conversations = [c for c in get_conversations(uid, limit=10) if not c.get('is_locked')]
-    conversation_history = Conversation.conversations_to_string(conversations)
+    conversations = deserialize_conversations([c for c in get_conversations(uid, limit=10) if not c.get('is_locked')])
+    conversation_history = conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
         conversation_history = condense_conversations([conversation_history])
 
@@ -720,30 +721,20 @@ def update_personas_async(uid: str):
     if personas:
         set_persona_update_timestamp(uid)
 
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
+        async def _batch():
+            await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
 
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_batch())
+        except Exception as e:
+            logger.error(f"Error in persona batch update for uid={uid}: {str(e)}")
+        finally:
+            loop.close()
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
     else:
         logger.info(f"[PERSONAS] No personas found for uid={uid}")
-
-
-def sync_update_persona_prompt(persona: dict):
-    """Synchronous wrapper for update_persona_prompt"""
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(update_persona_prompt(persona))
-    except Exception as e:
-        logger.error(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
-        return None
-    finally:
-        loop.close()
 
 
 async def update_persona_prompt(persona: dict):
@@ -753,8 +744,8 @@ async def update_persona_prompt(persona: dict):
     user_name = get_user_name(persona['uid'])
 
     # Get and condense recent conversations
-    conversations = get_conversations(persona['uid'], limit=10)
-    conversation_history = Conversation.conversations_to_string(conversations)
+    conversations = deserialize_conversations(get_conversations(persona['uid'], limit=10))
+    conversation_history = conversations_to_string(conversations)
     uid = persona['uid']
     with track_usage(uid, Features.PERSONA):
         conversation_history = condense_conversations([conversation_history])
@@ -982,28 +973,6 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Summary Apps', 'id': 'memories'},
         {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
         {'title': 'Tasks', 'id': 'tasks'},
-    ]
-
-
-def get_categories_list() -> List[dict]:
-    """Get the list of app categories for grouping."""
-    return [
-        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-        {'title': 'Personality Clone', 'id': 'personality-emulation'},
-        {'title': 'Health', 'id': 'health-and-wellness'},
-        {'title': 'Education', 'id': 'education-and-learning'},
-        {'title': 'Communication', 'id': 'communication-improvement'},
-        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
-        {'title': 'Productivity', 'id': 'productivity-and-organization'},
-        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
-        {'title': 'Financial', 'id': 'financial'},
-        {'title': 'Travel', 'id': 'travel-and-exploration'},
-        {'title': 'Safety', 'id': 'safety-and-security'},
-        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
-        {'title': 'Social', 'id': 'social-and-relationships'},
-        {'title': 'News', 'id': 'news-and-information'},
-        {'title': 'Utilities', 'id': 'utilities-and-tools'},
-        {'title': 'Other', 'id': 'other'},
     ]
 
 
@@ -1348,8 +1317,6 @@ def fetch_app_chat_tools_from_manifest(
         }
     }
     """
-    import requests
-
     if not manifest_url:
         return None
 
@@ -1364,8 +1331,10 @@ def fetch_app_chat_tools_from_manifest(
     try:
         logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
-        response = requests.get(
-            manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
+        response = httpx.get(
+            manifest_url,
+            timeout=float(timeout),
+            headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'},
         )
 
         if response.status_code != 200:
@@ -1418,10 +1387,10 @@ def fetch_app_chat_tools_from_manifest(
 
         return result
 
-    except requests.Timeout:
+    except httpx.TimeoutException:
         logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
         return None
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         logger.error(f"⚠️ Manifest fetch request error: {e}")
         return None
     except ValueError as e:

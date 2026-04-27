@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from utils.llm.clients import llm_mini
+from utils.llm.clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -302,7 +302,7 @@ def evaluate_relevance(
         recent_notifications=notifications_text,
     )
 
-    with_parser = llm_mini.with_structured_output(RelevanceResult)
+    with_parser = get_llm('proactive_notification').with_structured_output(RelevanceResult)
     result: RelevanceResult = with_parser.invoke(prompt)
     return result
 
@@ -341,7 +341,7 @@ def generate_notification(
         gate_reasoning=gate_reasoning,
     )
 
-    with_parser = llm_mini.with_structured_output(NotificationDraft)
+    with_parser = get_llm('proactive_notification').with_structured_output(NotificationDraft)
     result: NotificationDraft = with_parser.invoke(prompt)
     return result
 
@@ -370,7 +370,7 @@ def validate_notification(
         goals_text=goals_text,
     )
 
-    with_parser = llm_mini.with_structured_output(ValidationResult)
+    with_parser = get_llm('proactive_notification').with_structured_output(ValidationResult)
     result: ValidationResult = with_parser.invoke(prompt)
     return result
 
@@ -473,6 +473,6 @@ def evaluate_proactive_notification(
         frequency_guidance=guidance,
     )
 
-    with_parser = llm_mini.with_structured_output(ProactiveNotificationResult)
+    with_parser = get_llm('proactive_notification').with_structured_output(ProactiveNotificationResult)
     result: ProactiveNotificationResult = with_parser.invoke(prompt)
     return result

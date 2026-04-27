@@ -43,7 +43,25 @@ class OmiBleForegroundService : Service() {
         private const val PREFS_DIAGNOSTICS = "ble_diagnostics"
         private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
         private const val KEY_RECONNECT_COUNT = "reconnect_count"
+        private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
         private const val MAX_DISCONNECT_HISTORY = 20
+        private const val RSSI_TREND_WINDOW_MS = 15_000L
+        private const val RSSI_TREND_FADING_DROP_DB = 10
+
+        /** Classify the RSSI trajectory in the window before [nowMs]. See BleDisconnectEvent.rssiTrend
+         *  for the semantics of each label. */
+        private fun classifyRssiTrend(samples: List<Pair<Long, Int>>, nowMs: Long): String {
+            val windowStart = nowMs - RSSI_TREND_WINDOW_MS
+            val recent = samples.filter { it.first >= windowStart }
+            if (recent.isEmpty()) return "gap"
+            if (recent.size < 3) return "unknown"
+            val third = (recent.size / 3).coerceAtLeast(1)
+            val oldestAvg = recent.take(third).sumOf { it.second } / third
+            val newestAvg = recent.takeLast(third).sumOf { it.second } / third
+            // RSSI is negative; a larger drop = newestAvg more negative than oldestAvg.
+            val dropDb = oldestAvg - newestAvg
+            return if (dropDb >= RSSI_TREND_FADING_DROP_DB) "fading" else "sudden"
+        }
 
         @Volatile
         var instance: OmiBleForegroundService? = null
@@ -103,7 +121,15 @@ class OmiBleForegroundService : Service() {
         var currentGattHash: Int? = null,
         var hasEverConnected: Boolean = false,
         var pendingReconnect: Runnable? = null,
-        var stabilityTimerRunnable: Runnable? = null
+        var stabilityTimerRunnable: Runnable? = null,
+        /** Reset to false on each connectGatt attempt; set true when the GATT
+         *  callback reports CONNECTED. Used to distinguish fail-to-connect from
+         *  an established link dropping. Independent of hasEverConnected which
+         *  tracks the full device lifetime. */
+        var currentAttemptEstablished: Boolean = false,
+        /** Timestamp of the last persisted unexpected disconnect event, used to
+         *  backfill time-to-reconnect on the next successful connect. */
+        var pendingReconnectMarkerTs: Long? = null
     )
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
@@ -124,9 +150,11 @@ class OmiBleForegroundService : Service() {
             Log.i(TAG, "onGattConnected: $addr")
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
+                backfillTimeToReconnect(addr, managed)
             }
             managed.retryCount = 0
             managed.hasEverConnected = true
+            managed.currentAttemptEstablished = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.pendingReconnect = null
             managed.connectionStartTime = System.currentTimeMillis()
@@ -262,7 +290,7 @@ class OmiBleForegroundService : Service() {
             .putBoolean(PREFS_USER_DISCONNECTED, true)
             .apply()
 
-        persistDisconnectEvent(addr, 0, isManual = true)
+        persistDisconnectEvent(addr, 0, isManual = true, eventType = "disconnect")
 
         bleManager.mainHandler.post {
             bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
@@ -302,6 +330,7 @@ class OmiBleForegroundService : Service() {
 
             managed.currentGattHash = gatt.hashCode()
             managed.connectionStartTime = System.currentTimeMillis()
+            managed.currentAttemptEstablished = false
             updateNotification("Connecting to Omi...")
         }
     }
@@ -360,7 +389,12 @@ class OmiBleForegroundService : Service() {
         val userDisconnected = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getBoolean(PREFS_USER_DISCONNECTED, false)
         if (!userDisconnected) {
-            persistDisconnectEvent(addr, status, isManual = false)
+            val attemptEstablished = managed?.currentAttemptEstablished ?: false
+            val eventType = if (attemptEstablished) "disconnect" else "fail_to_connect"
+            persistDisconnectEvent(addr, status, isManual = false, eventType = eventType)
+            if (eventType == "fail_to_connect") {
+                incrementFailToConnectCount(addr)
+            }
         }
 
         bleManager.mainHandler.post {
@@ -524,7 +558,7 @@ class OmiBleForegroundService : Service() {
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
-            persistDisconnectEvent(addr, -1, isManual = false)
+            persistDisconnectEvent(addr, -1, isManual = false, eventType = "disconnect")
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
             bleManager.mainHandler.post {
@@ -559,18 +593,50 @@ class OmiBleForegroundService : Service() {
 
     private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"
+    private fun failToConnectKey(address: String) = "${KEY_FAIL_TO_CONNECT_COUNT}_${address.uppercase()}"
 
-    private fun persistDisconnectEvent(address: String, status: Int, isManual: Boolean) {
+    private fun currentAppState(): String = if (OmiBleManager.isAppForeground) "foreground" else "background"
+
+    private fun persistDisconnectEvent(
+        address: String,
+        status: Int,
+        isManual: Boolean,
+        eventType: String
+    ) {
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
         val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
 
+        val addr = address.uppercase()
+        val managed = managedDevices[addr]
+        val now = System.currentTimeMillis()
+        val durationMs: Long = if (
+            eventType == "disconnect" &&
+            managed?.currentAttemptEstablished == true &&
+            managed.connectionStartTime != null
+        ) {
+            now - (managed.connectionStartTime ?: now)
+        } else {
+            0L
+        }
+
+        val rssiSnapshot = bleManager.rssiHistory[addr]?.let { deque ->
+            synchronized(deque) { deque.toList() }
+        } ?: emptyList()
+        val trend = classifyRssiTrend(rssiSnapshot, now)
+
         val event = JSONObject().apply {
-            put("timestamp", System.currentTimeMillis())
+            put("timestamp", now)
             put("reason", if (isManual) "manual" else hciStatusDescription(status))
             put("reasonCode", status)
             put("isManual", isManual)
+            put("eventType", eventType)
+            put("lastRssi", bleManager.lastRssi[addr] ?: 0)
+            put("connectionDurationMs", durationMs)
+            put("appState", currentAppState())
+            put("timeToReconnectMs", 0L)
+            put("rssiTrend", trend)
         }
         history.put(event)
 
@@ -580,6 +646,33 @@ class OmiBleForegroundService : Service() {
         }
 
         prefs.edit().putString(key, history.toString()).apply()
+
+        // Remember the event timestamp so the next successful connect can backfill
+        // the time-to-reconnect latency on this record.
+        if (!isManual && managed != null) {
+            managed.pendingReconnectMarkerTs = now
+        }
+    }
+
+    private fun backfillTimeToReconnect(address: String, managed: ManagedDevice) {
+        val markerTs = managed.pendingReconnectMarkerTs ?: return
+        managed.pendingReconnectMarkerTs = null
+
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val key = historyKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { JSONArray(historyJson) } catch (_: Exception) { return }
+
+        val now = System.currentTimeMillis()
+        // Walk backwards; history is small (≤ MAX_DISCONNECT_HISTORY).
+        for (i in history.length() - 1 downTo 0) {
+            val obj = history.getJSONObject(i)
+            if (obj.optLong("timestamp", 0L) == markerTs) {
+                obj.put("timeToReconnectMs", (now - markerTs).coerceAtLeast(0L))
+                prefs.edit().putString(key, history.toString()).apply()
+                return
+            }
+        }
     }
 
     private fun incrementReconnectionCount(address: String) {
@@ -589,11 +682,19 @@ class OmiBleForegroundService : Service() {
         prefs.edit().putInt(key, count + 1).apply()
     }
 
+    private fun incrementFailToConnectCount(address: String) {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val key = failToConnectKey(address)
+        val count = prefs.getInt(key, 0)
+        prefs.edit().putInt(key, count + 1).apply()
+    }
+
     fun getDeviceDiagnostics(address: String): BleDeviceDiagnostics {
         val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
         val historyJson = prefs.getString(historyKey(address), "[]") ?: "[]"
         val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
         val reconnectCount = prefs.getInt(reconnectKey(address), 0)
+        val failToConnectCount = prefs.getInt(failToConnectKey(address), 0)
 
         val events = mutableListOf<BleDisconnectEvent>()
         for (i in 0 until history.length()) {
@@ -602,7 +703,13 @@ class OmiBleForegroundService : Service() {
                 timestamp = obj.getLong("timestamp"),
                 reason = obj.getString("reason"),
                 reasonCode = obj.getInt("reasonCode").toLong(),
-                isManual = obj.getBoolean("isManual")
+                isManual = obj.getBoolean("isManual"),
+                eventType = obj.optString("eventType", "disconnect"),
+                lastRssi = obj.optLong("lastRssi", 0L),
+                connectionDurationMs = obj.optLong("connectionDurationMs", 0L),
+                appState = obj.optString("appState", ""),
+                timeToReconnectMs = obj.optLong("timeToReconnectMs", 0L),
+                rssiTrend = obj.optString("rssiTrend", "")
             ))
         }
 
@@ -612,7 +719,8 @@ class OmiBleForegroundService : Service() {
         return BleDeviceDiagnostics(
             disconnectHistory = events,
             reconnectionCount = reconnectCount.toLong(),
-            connectedAt = connectedAt
+            connectedAt = connectedAt,
+            failToConnectCount = failToConnectCount.toLong()
         )
     }
 

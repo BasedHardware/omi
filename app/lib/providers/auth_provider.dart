@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -119,7 +121,7 @@ class AuthenticationProvider extends BaseProvider {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
+        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');

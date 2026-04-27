@@ -5,11 +5,104 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
+from database.redis_db import try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
+#   signup_platform       — set once at account creation, immutable
+#   last_active_platform  — overwritten on every authenticated request
+#   platforms_used        — array union of every platform the user has ever
+#                           authenticated from (for cross-platform segmentation)
+#
+# We normalize the raw header into a coarse `desktop | mobile` bucket, matching
+# the profitability dashboard splits, and preserve the granular value
+# (`ios`/`android`/`macos`) in `last_active_os` for finer drill-down.
+_PLATFORM_ALIASES = {
+    'macos': 'desktop',
+    'mac': 'desktop',
+    'mac os x': 'desktop',
+    'desktop': 'desktop',
+    'ios': 'mobile',
+    'iphone os': 'mobile',
+    'android': 'mobile',
+    'mobile': 'mobile',
+    'web': 'web',
+    'browser': 'web',
+}
+
+
+def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Return (coarse_platform, os_value) for a raw `X-App-Platform` header.
+
+    `coarse_platform` is one of 'desktop' / 'mobile' (None if unrecognized).
+    `os_value` is the normalized OS string preserved for drill-down.
+    """
+    if not raw or not isinstance(raw, str):
+        return None, None
+    os_value = raw.strip().lower()
+    if not os_value:
+        return None, None
+    coarse = _PLATFORM_ALIASES.get(os_value)
+    return coarse, os_value
+
+
+def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
+    """Write the user-platform fields from an `X-App-Platform` header value.
+
+    Called on every authenticated request. Throttled to one Firestore write
+    per (uid, coarse_platform) every 10 minutes via Redis so chatty endpoints
+    don't hot-spot the user doc. Fail-open: any error is logged and swallowed
+    because this is a telemetry side-effect, not a request-correctness path.
+
+    - `signup_platform` is set once via `Firestore.ArrayUnion` semantics:
+      we read the doc and only write it if it's not already present.
+    - `last_active_platform` / `last_active_os` / `last_active_at` are
+      overwritten every throttle-window.
+    - `platforms_used` accumulates via `firestore.ArrayUnion`.
+    """
+    coarse, os_value = _normalize_platform(raw_platform)
+    if not coarse:
+        return
+
+    try:
+        if not try_acquire_user_platform_write_lock(uid, coarse):
+            return
+
+        now = datetime.now(timezone.utc)
+        user_ref = db.collection('users').document(uid)
+
+        updates = {
+            'last_active_platform': coarse,
+            'last_active_os': os_value,
+            'last_active_at': now,
+            f'last_active_at_{coarse}': now,
+            'platforms_used': firestore.ArrayUnion([coarse]),
+        }
+
+        # `signup_platform` is set_once. Read the doc (single read) and only
+        # include the field in the write if it's not already present. Cheaper
+        # than a transaction for a field that almost never changes.
+        snapshot = user_ref.get()
+        if snapshot.exists:
+            data = snapshot.to_dict() or {}
+            if not data.get('signup_platform'):
+                updates['signup_platform'] = coarse
+                updates['signup_os'] = os_value
+                updates['signup_platform_at'] = data.get('created_at') or now
+        else:
+            # First-ever auth'd request for this uid — treat as sign-up.
+            updates['signup_platform'] = coarse
+            updates['signup_os'] = os_value
+            updates['signup_platform_at'] = now
+
+        user_ref.set(updates, merge=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
 
 def is_exists_user(uid: str):
@@ -60,6 +153,62 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
                 'reason': reason,
                 'reason_details': reason_details or '',
                 'timestamp': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
+# BYOK (Bring Your Own Keys) — free-plan flag.
+# We never store keys themselves; only SHA-256 fingerprints so we can detect
+# rotation. `active` is the subscription-bypass gate.
+
+BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
+
+
+def get_byok_state(uid: str) -> dict:
+    user_ref = db.collection('users').document(uid)
+    data = user_ref.get().to_dict() or {}
+    return data.get('byok', {})
+
+
+def is_byok_active(uid: str) -> bool:
+    """True if user has a live BYOK activation (heartbeat within TTL)."""
+    state = get_byok_state(uid)
+    if not state.get('active'):
+        return False
+    last_seen = state.get('last_seen_at')
+    if not last_seen:
+        return False
+    if isinstance(last_seen, datetime):
+        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    else:
+        return False
+    return age <= BYOK_HEARTBEAT_TTL_SECONDS
+
+
+def set_byok_active(uid: str, fingerprints: dict):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'byok': {
+                'active': True,
+                'fingerprints': fingerprints,
+                'last_seen_at': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
+def clear_byok_active(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'byok': {
+                'active': False,
+                'fingerprints': {},
+                'last_seen_at': datetime.now(timezone.utc),
             }
         },
         merge=True,
@@ -1026,22 +1175,6 @@ def delete_integration(uid: str, app_key: str) -> bool:
 
     integration_ref.delete()
     return True
-
-
-# Legacy function names for backward compatibility
-def get_calendar_integration(uid: str, app_key: str) -> Optional[dict]:
-    """Legacy function name - use get_integration instead."""
-    return get_integration(uid, app_key)
-
-
-def set_calendar_integration(uid: str, app_key: str, data: dict) -> None:
-    """Legacy function name - use set_integration instead."""
-    return set_integration(uid, app_key, data)
-
-
-def delete_calendar_integration(uid: str, app_key: str) -> bool:
-    """Legacy function name - use delete_integration instead."""
-    return delete_integration(uid, app_key)
 
 
 # **************************************

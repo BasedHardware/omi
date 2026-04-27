@@ -2371,6 +2371,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get batteryLevel => 'Stav baterie';
 
   @override
+  String get charging => 'Nabíjení';
+
+  @override
   String get productUpdate => 'Aktualizace produktu';
 
   @override
@@ -2497,12 +2500,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sledujte své osobní cíle na domovské stránce';
-
-  @override
-  String get dailyReflection => 'Denní reflexe';
-
-  @override
-  String get get9PmReminderToReflect => 'Získejte připomínku v 21:00 k zamyšlení nad svým dnem';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Popis úkolu nesmí být prázdný';
@@ -3916,10 +3913,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get trackPersonalGoals => 'Sledovat osobní cíle na domovské stránce';
 
   @override
-  String get dailyReflectionDescription =>
-      'Získejte připomínku ve 21:00, abyste se zamysleli nad svým dnem a zachytili své myšlenky.';
-
-  @override
   String get endpointURL => 'URL koncového bodu';
 
   @override
@@ -4556,7 +4549,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get alreadyBestValuePlan => 'Již máte plán s nejlepší hodnotou. Nejsou potřeba žádné změny.';
 
   @override
-  String get unableToLoadPlans => 'Nelze načíst plány';
+  String get unableToLoadPlans => 'Nepodařilo se načíst plány';
 
   @override
   String get checkConnectionTryAgain => 'Zkontrolujte připojení a zkuste to znovu';
@@ -5092,7 +5085,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Pokračováním budou všechna data, která s touto aplikací sdílíte (včetně vašich konverzací, nahrávek a osobních informací), bezpečně uložena na našich serverech, abychom vám mohli poskytovat poznatky založené na AI a umožnit všechny funkce aplikace.';
+      'Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.';
 
   @override
   String get tasksEmptyStateMessage => 'Úkoly z vašich konverzací se zobrazí zde.\nKlepněte na + pro ruční vytvoření.';
@@ -7174,12 +7167,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Čas na denní reflexi';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Pověz mi o svém dni';
-
-  @override
   String get actionItemReminderTitle => 'Připomínka Omi';
 
   @override
@@ -8299,6 +8286,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastaveni hovoru';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobrazit tlačítko telefonního hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobrazit tlačítko telefonního hovoru na domovské obrazovce';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overena cisla';
 
   @override
@@ -8826,6 +8819,18 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Baterie';
+
+  @override
+  String get noBatteryDataYet => 'Zatím žádná data o baterii';
+
+  @override
+  String get day => 'Den';
+
+  @override
+  String get week => 'Týden';
+
+  @override
   String get rollbackToStableFirmware => 'Vrátit se na stabilní firmware';
 
   @override
@@ -9004,4 +9009,153 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Váš účet se nepodařilo smazat. Zkuste to znovu.';
+
+  @override
+  String get planUpdate => 'Aktualizace plánu';
+
+  @override
+  String get planDeprecationMessage =>
+      'Váš plán Unlimited je rušen. Přejděte na plán Operator — stejné skvělé funkce za \$49/měs. Váš stávající plán bude zatím nadále fungovat.';
+
+  @override
+  String get upgradeYourPlan => 'Upgradujte svůj plán';
+
+  @override
+  String get youAreOnAPaidPlan => 'Máte placený plán.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'zpráv';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neomezené chatové zprávy tento měsíc';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used z $limit výpočetního rozpočtu využito';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used z $limit zpráv využito tento měsíc';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit využito';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Dosažen limit chatu. Upgradujte pro více zpráv.';
+
+  @override
+  String get chatLimitReachedTitle => 'Dosažen limit chatu';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Využili jste $used z $limitDisplay na plánu $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Obnoví se za $count dní';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Obnoví se za $count hodin';
+  }
+
+  @override
+  String get resetsSoon => 'Brzy se obnoví';
+
+  @override
+  String get upgradePlan => 'Upgradovat plán';
+
+  @override
+  String get billingMonthly => 'Měsíční';
+
+  @override
+  String get billingYearly => 'Roční';
+
+  @override
+  String get savePercent => 'Ušetřete ~17%';
+
+  @override
+  String get popular => 'Oblíbené';
+
+  @override
+  String get currentPlan => 'Aktuální';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count dotazů měsíčně';
+  }
+
+  @override
+  String get architectSubtitle => 'AI pro pokročilé — tisíce chatů + agentní automatizace';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit využito tento měsíc';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used využito tento měsíc';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit zpráv tento měsíc';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used zpráv tento měsíc';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Dosáhli jste svého měsíčního limitu. Upgradujte, abyste mohli pokračovat v chatu s Omi bez omezení.';
+
+  @override
+  String get voiceResponseAudio => 'Přečíst odpověď Omi nahlas';
+
+  @override
+  String get voiceResponseMode => 'Hlasová odpověď';
+
+  @override
+  String get voiceResponseModeTitle => 'Kdy vyslovit odpovědi';
+
+  @override
+  String get voiceResponseOff => 'Vypnuto';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Pouze sluchátka';
+
+  @override
+  String get voiceResponseAlways => 'Vždy';
+
+  @override
+  String get agreeAndContinue => 'Souhlasím a pokračovat';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

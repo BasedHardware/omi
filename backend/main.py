@@ -11,12 +11,9 @@ logging.basicConfig(level=logging.INFO)
 import firebase_admin
 from fastapi import FastAPI
 
-from modal import Image, App, asgi_app, Secret
 from routers import (
-    workflow,
     chat,
     firmware,
-    plugins,
     transcribe,
     notifications,
     speech_profile,
@@ -25,7 +22,6 @@ from routers import (
     trends,
     sync,
     apps,
-    custom_auth,
     payment,
     integration,
     conversations,
@@ -41,7 +37,6 @@ from routers import (
     developer,
     updates,
     calendar_meetings,
-    calendar_onboarding,
     imports,
     knowledge_graph,
     wrapped,
@@ -58,11 +53,13 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    tts,
 )
 
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
+from utils.http_client import close_all_clients
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -86,11 +83,9 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
-app.include_router(plugins.router)
 app.include_router(speech_profile.router)
 # app.include_router(screenpipe.router)
 app.include_router(notifications.router)
-app.include_router(workflow.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
@@ -103,9 +98,7 @@ app.include_router(updates.router)
 app.include_router(sync.router)
 
 app.include_router(apps.router)
-app.include_router(custom_auth.router)
 app.include_router(calendar_meetings.router)
-app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 
@@ -130,6 +123,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(tts.router)
 
 
 methods_timeout = {
@@ -142,25 +136,14 @@ methods_timeout = {
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 
+from utils.byok import BYOKMiddleware
 
-modal_app = App(
-    name='backend',
-    secrets=[Secret.from_name("gcp-credentials"), Secret.from_name('envs')],
-)
-image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_from_requirements('requirements.txt')
+app.add_middleware(BYOKMiddleware)
 
 
-@modal_app.function(
-    image=image,
-    keep_warm=0,
-    memory=(512, 1024),
-    cpu=2,
-    allow_concurrent_inputs=10,
-    timeout=60 * 10,
-)
-@asgi_app()
-def api():
-    return app
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_all_clients()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']

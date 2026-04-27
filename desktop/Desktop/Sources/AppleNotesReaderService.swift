@@ -134,7 +134,7 @@ actor AppleNotesReaderService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
@@ -142,7 +142,7 @@ actor AppleNotesReaderService {
         prompt: synthesisPrompt,
         systemPrompt:
           "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in "" },
         onToolActivity: { @Sendable _, _, _, _ in }

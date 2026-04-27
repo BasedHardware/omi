@@ -74,9 +74,19 @@ for name in [
     "utils.llm.external_integrations",
     "utils.notifications",
     "utils.webhooks",
+    "utils.conversations",
+    "utils.conversations.factory",
 ]:
     if name not in sys.modules:
-        _stub_module(name)
+        mod = _stub_module(name)
+        if name == "utils.conversations":
+            mod.__path__ = []
+
+# deserialize_conversation must return an object with transcript_segments and discarded attrs.
+_mock_convo = MagicMock()
+_mock_convo.transcript_segments = [{"text": "hello"}]
+_mock_convo.discarded = False
+sys.modules["utils.conversations.factory"].deserialize_conversation = MagicMock(return_value=_mock_convo)
 
 # Add needed attrs to stubs
 utils_llm_ext = sys.modules["utils.llm.external_integrations"]

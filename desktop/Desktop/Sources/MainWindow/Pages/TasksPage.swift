@@ -4258,6 +4258,30 @@ struct TaskRow: View {
             // Hover actions overlaid on trailing edge (no layout shift)
             if (isHovering || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
                 HStack(spacing: 4) {
+                    // Execute: spawn an agent pill that handles this task end-to-end.
+                    if !task.completed {
+                        Button {
+                            let model = ShortcutSettings.shared.selectedModel.isEmpty
+                                ? "claude-sonnet-4-6"
+                                : ShortcutSettings.shared.selectedModel
+                            AgentPillsManager.shared.spawn(query: task.description, model: model)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Execute")
+                                    .scaledFont(size: 10, weight: .semibold)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Spawn an agent to do this")
+                    }
+
                     // Add date button (shown on hover when no due date)
                     if task.dueAt == nil && !task.completed {
                         Button {

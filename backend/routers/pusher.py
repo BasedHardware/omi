@@ -1,10 +1,11 @@
 import struct
 import asyncio
+import contextvars
 import json
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Set
+from typing import Dict, Optional, Set
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -15,6 +16,7 @@ from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from utils.conversations.factory import deserialize_conversation
 from models.geolocation import Geolocation
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
@@ -22,8 +24,10 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
     trigger_external_integrations,
 )
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import async_get_google_maps_location
+from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
+from utils.executors import storage_executor
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -48,8 +52,8 @@ PRIVATE_CLOUD_CHUNK_DURATION = 60.0
 PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk exceeds this age
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
-# Queue warning thresholds
-PRIVATE_CLOUD_QUEUE_WARN_SIZE = 50
+# Queue size limits
+PRIVATE_CLOUD_QUEUE_MAX_SIZE = 20  # ~18MB/connection max (30 conns × 18MB = 540MB) — prevents OOM with headroom
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
 
 # Constants for transcript queue batching
@@ -60,8 +64,21 @@ TRANSCRIPT_QUEUE_WARN_SIZE = 50
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
 
 
-async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
-    """Process a conversation and send result back to _listen via websocket."""
+async def _process_conversation_task(
+    uid: str,
+    conversation_id: str,
+    language: str,
+    websocket: WebSocket,
+    byok_keys: Optional[Dict[str, str]] = None,
+):
+    """Process a conversation and send result back to _listen via websocket.
+
+    `byok_keys` is forwarded from the listen service. When present, LLM and
+    STT calls made inside process_conversation route through the user's own
+    provider keys instead of Omi's env keys.
+    """
+    if byok_keys:
+        set_byok_keys(byok_keys)
     try:
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if not conversation_data:
@@ -73,7 +90,7 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             await websocket.send_bytes(data)
             return
 
-        conversation = Conversation(**conversation_data)
+        conversation = deserialize_conversation(conversation_data)
 
         if conversation.status != ConversationStatus.processing:
             conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
@@ -84,13 +101,21 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await asyncio.to_thread(
-                    get_google_maps_location, geolocation.latitude, geolocation.longitude
+                conversation.geolocation = await async_get_google_maps_location(
+                    geolocation.latitude, geolocation.longitude
                 )
 
-            # Run blocking operations in thread pool to avoid blocking event loop
-            conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
-            messages = await asyncio.to_thread(trigger_external_integrations, uid, conversation)
+            # Run in default executor (not critical_executor) because process_conversation
+            # is a coordinator that submits child tasks to critical_executor — nesting both
+            # in the same pool causes deadlock under concurrent load.
+            # Copy the current context (which holds BYOK keys) into the worker thread so
+            # LLM client proxies see the right key when resolving per-request.
+            loop = asyncio.get_running_loop()
+            ctx = contextvars.copy_context()
+            conversation = await loop.run_in_executor(
+                None, lambda: ctx.run(process_conversation, uid, language, conversation)
+            )
+            messages = await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
             conversations_db.set_conversation_as_discarded(uid, conversation.id)
@@ -164,9 +189,10 @@ async def _websocket_util_trigger(
     transcript_queue: deque = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
     audio_bytes_queue: deque = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
 
-    # private_cloud_queue stays unbounded — it carries irreplaceable user audio.
-    # Silent drops (via deque maxlen) would cause permanent data loss.
-    private_cloud_queue: List[dict] = []
+    # private_cloud_queue caps at PRIVATE_CLOUD_QUEUE_MAX_SIZE to prevent OOM kills.
+    # An OOM kill loses ALL queued data for ALL users on the pod — dropping the oldest
+    # chunk for one user is strictly better than killing the pod.
+    private_cloud_queue: deque = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
     async def process_private_cloud_queue():
@@ -201,17 +227,23 @@ async def _websocket_util_trigger(
             if not batch or len(batch['data']) == 0:
                 return
             chunk_data = bytes(batch['data'])
+            del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
                 chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
-                await asyncio.to_thread(
-                    upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
+                del chunks_to_upload
                 try:
-                    audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
+                    audio_files = await loop.run_in_executor(
+                        storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
+                    )
                     if audio_files:
-                        await asyncio.to_thread(
+                        await loop.run_in_executor(
+                            storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
@@ -388,6 +420,11 @@ async def _websocket_util_trigger(
                         and current_conversation_id != new_conversation_id
                         and len(private_cloud_sync_buffer) > 0
                     ):
+                        if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                            logger.warning(
+                                f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                                f"dropping oldest chunk to prevent OOM {uid}"
+                            )
                         private_cloud_queue.append(
                             {
                                 'data': bytes(private_cloud_sync_buffer),
@@ -425,9 +462,10 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
+                    byok_keys = res.get('byok_keys') or None
                     if conversation_id:
                         logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
-                        spawn(_process_conversation_task(uid, conversation_id, language, websocket))
+                        spawn(_process_conversation_task(uid, conversation_id, language, websocket, byok_keys))
                     continue
 
                 # Speaker sample extraction request - queue for background processing
@@ -474,8 +512,11 @@ async def _websocket_util_trigger(
                         private_cloud_sync_buffer.extend(audio_data)
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
-                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_WARN_SIZE:
-                                logger.warning(f"Warning: private_cloud_queue size {len(private_cloud_queue)} {uid}")
+                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                                logger.warning(
+                                    f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                                    f"dropping oldest chunk to prevent OOM {uid}"
+                                )
                             private_cloud_queue.append(
                                 {
                                     'data': bytes(private_cloud_sync_buffer),
@@ -528,6 +569,11 @@ async def _websocket_util_trigger(
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
             if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
+                if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                    logger.warning(
+                        f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                        f"dropping oldest chunk to prevent OOM {uid}"
+                    )
                 private_cloud_queue.append(
                     {
                         'data': bytes(private_cloud_sync_buffer),

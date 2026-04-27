@@ -14,6 +14,7 @@
 #include "lib/core/sd_card.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <lfs.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,10 +34,11 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define DISK_DRIVE_NAME CONFIG_SDMMC_VOLUME_NAME
 #define SD_REQ_QUEUE_MSGS 100
 #define SD_FSYNC_INTERVAL_MS (60 * 1000)
-#define WRITE_BATCH_COUNT 200
+#define WRITE_BATCH_COUNT 100
 #define WRITE_DRAIN_BURST 16
 #define ERROR_THRESHOLD 5
 #define FILE_CACHE_TTL_MS (30 * 1000)
+#define BOOT_MIN_AUDIO_FILE_SIZE 10000
 
 /* LittleFS paths are relative to FS root (no mount-point prefix) */
 #define FILE_DATA_DIR "audio"
@@ -227,6 +229,9 @@ static uint32_t pending_time_synced_utc = 0;
 static bool is_mounted = false;
 static bool sd_enabled = false;
 static bool sd_shutdown_in_progress = false;
+static atomic_t sd_io_low_power = ATOMIC_INIT(0);
+/* 1: supported/unknown, 0: unsupported (ENOSYS/ENOTSUP observed) */
+static atomic_t sd_dev_pm_supported = ATOMIC_INIT(1);
 static uint32_t current_file_size = 0;
 static size_t bytes_since_sync = 0;
 static int64_t last_file_sync_uptime_ms = 0;
@@ -298,12 +303,14 @@ static void build_file_path(const char *filename, char *path, size_t path_size);
 static void invalidate_file_cache(void);
 static void update_current_file_cache_size(uint32_t delta);
 static void sort_cached_file_entries(void);
+static void sd_set_io_low_power(bool enable);
 
 static void process_save_offset_req(const sd_req_t *req)
 {
     if (sd_write_blocked)
         return;
 
+    sd_set_io_low_power(false);
     lfs_file_seek(&lfs_fs, &lfs_fil_info, 0, LFS_SEEK_SET);
     lfs_ssize_t bw = lfs_file_write(&lfs_fs, &lfs_fil_info, &req->u.info.offset_info, sizeof(sd_offset_info_t));
     if (bw == (lfs_ssize_t) sizeof(sd_offset_info_t)) {
@@ -312,6 +319,7 @@ static void process_save_offset_req(const sd_req_t *req)
     } else {
         LOG_ERR("[SD_WORK] save offset write err %d", (int) bw);
     }
+    sd_set_io_low_power(true);
 }
 
 static void drain_pending_write_queue_for_shutdown(void)
@@ -337,27 +345,37 @@ static void process_write_data_req(const sd_req_t *req)
     if (current_file_deleted && ble_connected)
         return;
 
+    /* Track whether we woke SPI for I/O in this call so we can
+     * suspend it once at the end — keeps SPI + SD card powered
+     * only during actual flash operations, not during the long
+     * batch-accumulation window between flushes. */
+    bool spi_woken = false;
+
     if (current_filename[0] == '\0') {
+        sd_set_io_low_power(false);
+        spi_woken = true;
         int res = create_audio_file_with_timestamp();
         if (res < 0) {
             sd_write_blocked = true;
-            return;
+            goto done;
         }
     }
 
     if (should_rotate_file()) {
         LOG_INF("[SD_WORK] Rotating file after 30 min");
+        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
         flush_batch_buffer();
         create_audio_file_with_timestamp();
     }
 
     if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
+        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
         flush_batch_buffer();
         if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
             LOG_ERR("[SD_WORK] batch buffer overflow guard len=%u off=%u",
                     (unsigned) req->u.write.len,
                     (unsigned) write_batch_offset);
-            return;
+            goto done;
         }
     }
 
@@ -369,6 +387,7 @@ static void process_write_data_req(const sd_req_t *req)
     bool queue_pressure_high = queued_writes >= (SD_REQ_QUEUE_MSGS / 3);
 
     if (write_batch_counter >= WRITE_BATCH_COUNT || queue_pressure_high) {
+        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
         flush_batch_buffer();
     }
 
@@ -376,10 +395,16 @@ static void process_write_data_req(const sd_req_t *req)
         (bytes_since_sync > 0) && ((k_uptime_get() - last_file_sync_uptime_ms) >= SD_FSYNC_INTERVAL_MS);
 
     if (sync_due_to_interval) {
+        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
         lfs_file_sync(&lfs_fs, &lfs_fil_data);
         data_sync_gen++;
         bytes_since_sync = 0;
         last_file_sync_uptime_ms = k_uptime_get();
+    }
+
+done:
+    if (spi_woken) {
+        sd_set_io_low_power(true);
     }
 }
 
@@ -390,6 +415,61 @@ static void close_read_handle(void)
         read_handle_open = false;
         read_handle_filename[0] = '\0';
         read_handle_pos = 0;
+    }
+}
+
+static bool pm_action_is_unsupported(int ret)
+{
+    return (ret == -ENOSYS || ret == -ENOTSUP);
+}
+
+static bool pm_action_is_ok(int ret)
+{
+    return (ret == 0 || ret == -EALREADY || pm_action_is_unsupported(ret));
+}
+
+static void sd_set_io_low_power(bool enable)
+{
+    const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
+
+    if (!sd_enabled || !device_is_ready(spi_dev)) {
+        return;
+    }
+
+    if (enable) {
+        if (!atomic_cas(&sd_io_low_power, 0, 1)) {
+            return;
+        }
+
+        int ret_sd = 0;
+        if (atomic_get(&sd_dev_pm_supported)) {
+            ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+            if (pm_action_is_unsupported(ret_sd)) {
+                atomic_set(&sd_dev_pm_supported, 0);
+                LOG_INF("SD device PM suspend unsupported, keep using SPI PM only");
+            }
+        }
+        int ret_spi = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
+        if (!pm_action_is_ok(ret_sd) || !pm_action_is_ok(ret_spi)) {
+            LOG_WRN("SD low-power suspend failed (sd=%d spi=%d)", ret_sd, ret_spi);
+        }
+    } else {
+        if (!atomic_cas(&sd_io_low_power, 1, 0)) {
+            return;
+        }
+
+        int ret_spi = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
+        int ret_sd = 0;
+        if (atomic_get(&sd_dev_pm_supported)) {
+            ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+            if (pm_action_is_unsupported(ret_sd)) {
+                atomic_set(&sd_dev_pm_supported, 0);
+                LOG_INF("SD device PM resume unsupported, keep using SPI PM only");
+            }
+        }
+        if (!pm_action_is_ok(ret_sd) || !pm_action_is_ok(ret_spi)) {
+            LOG_WRN("SD low-power resume failed (sd=%d spi=%d)", ret_sd, ret_spi);
+        }
     }
 }
 
@@ -406,16 +486,28 @@ static int sd_enable_power(bool enable)
         ret = gpio_pin_set_dt(&sd_en, 1);
         if (device_is_ready(spi_dev)) {
             pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
-            pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+            if (atomic_get(&sd_dev_pm_supported)) {
+                int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+                if (pm_action_is_unsupported(ret_sd)) {
+                    atomic_set(&sd_dev_pm_supported, 0);
+                }
+            }
         }
+        atomic_set(&sd_io_low_power, 0);
         sd_enabled = true;
     } else {
         if (device_is_ready(spi_dev)) {
-            pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+            if (atomic_get(&sd_dev_pm_supported)) {
+                int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+                if (pm_action_is_unsupported(ret_sd)) {
+                    atomic_set(&sd_dev_pm_supported, 0);
+                }
+            }
             pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
         }
         gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
         ret = gpio_pin_set_dt(&sd_en, 0);
+        atomic_set(&sd_io_low_power, 0);
         sd_enabled = false;
     }
     return ret;
@@ -561,6 +653,78 @@ static bool filename_equals_ignore_case(const char *a, const char *b)
             break;
     }
     return true;
+}
+
+static void cleanup_audio_files_at_boot(void)
+{
+    uint32_t removed_total = 0;
+    uint32_t removed_tmp = 0;
+    uint32_t removed_small = 0;
+
+    while (1) {
+        lfs_dir_t dir;
+        struct lfs_info info;
+        char target_name[MAX_FILENAME_LEN] = {0};
+        bool target_is_tmp = false;
+        bool target_is_small = false;
+
+        if (lfs_dir_open(&lfs_fs, &dir, FILE_DATA_DIR) < 0) {
+            break;
+        }
+
+        while (lfs_dir_read(&lfs_fs, &dir, &info) > 0) {
+            if (info.type != LFS_TYPE_REG) {
+                continue;
+            }
+
+            char *dot = strrchr(info.name, '.');
+            if (!dot || strcasecmp(dot, ".txt") != 0) {
+                continue;
+            }
+
+            bool is_tmp = (strncasecmp(info.name, "TMP_", 4) == 0);
+            bool is_small = (info.size < BOOT_MIN_AUDIO_FILE_SIZE);
+            if (!is_tmp && !is_small) {
+                continue;
+            }
+
+            strncpy(target_name, info.name, sizeof(target_name) - 1);
+            target_is_tmp = is_tmp;
+            target_is_small = is_small;
+            break;
+        }
+
+        lfs_dir_close(&lfs_fs, &dir);
+
+        if (target_name[0] == '\0') {
+            break;
+        }
+
+        char path[64];
+        build_file_path(target_name, path, sizeof(path));
+        int rm = lfs_remove(&lfs_fs, path);
+        if (rm < 0) {
+            LOG_WRN("[SD_BOOT] cleanup rm %s failed: %d", path, rm);
+            continue;
+        }
+
+        removed_total++;
+        if (target_is_tmp) {
+            removed_tmp++;
+        }
+        if (target_is_small) {
+            removed_small++;
+        }
+    }
+
+    if (removed_total > 0) {
+        LOG_INF("[SD_BOOT] cleanup removed %u file(s) (tmp=%u, small<%uB=%u)",
+                removed_total,
+                removed_tmp,
+                BOOT_MIN_AUDIO_FILE_SIZE,
+                removed_small);
+        invalidate_file_cache();
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -790,6 +954,7 @@ static int flush_batch_buffer(void)
     bytes_since_sync += (size_t) bw;
     current_file_size += (uint32_t) bw;
     update_current_file_cache_size((uint32_t) bw);
+    LOG_DBG("[SD] wrote %u bytes -> %s (total=%u)", (unsigned) bw, current_filename, current_file_size);
     write_batch_offset = 0;
     write_batch_counter = 0;
     writing_error_counter = 0;
@@ -1065,6 +1230,9 @@ void sd_worker_thread(void)
         }
     }
 
+    /* ---- Boot cleanup: remove stale temp/small files ---- */
+    cleanup_audio_files_at_boot();
+
     /* ---- Print existing files at boot ---- */
     print_audio_files_at_boot();
 
@@ -1139,6 +1307,10 @@ void sd_worker_thread(void)
     atomic_set(&sd_boot_ready, 1);
     LOG_INF("[SD_BOOT] SD card ready for audio writes (boot took %lld ms)", k_uptime_get());
 
+    /* Suspend SPI + SD until the first batch flush actually needs I/O.
+     * Saves ~0.5 mA idle current during the initial accumulation window. */
+    sd_set_io_low_power(true);
+
     /* ---- Main loop ---- */
     while (1) {
         /* Handle deferred control requests first (when queue was saturated). */
@@ -1166,6 +1338,13 @@ void sd_worker_thread(void)
             continue;
 
     handle_req:
+        /* Wake SPI for request types that need filesystem I/O.
+         * REQ_WRITE_DATA manages its own SPI gating internally
+         * (only wakes when a batch flush actually occurs). */
+        if (req.type != REQ_WRITE_DATA) {
+            sd_set_io_low_power(false);
+        }
+
         switch (req.type) {
 
         /* ---- Write data ---- */
@@ -1460,6 +1639,11 @@ void sd_worker_thread(void)
         default:
             LOG_ERR("[SD_WORK] unknown request type %d", req.type);
         }
+
+        /* Suspend SPI after non-write requests complete */
+        if (req.type != REQ_WRITE_DATA) {
+            sd_set_io_low_power(true);
+        }
     }
 }
 
@@ -1626,7 +1810,8 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     if (sd_shutdown_in_progress) {
         int64_t now = k_uptime_get();
         if (now - last_shutdown_drop_log_ms > 1000) {
-            LOG_WRN("write_to_file dropped: SD shutdown in progress");
+            LOG_WRN("write_to_file dropped: SD %s",
+                    sd_shutdown_in_progress ? "shutdown" : "paused");
             last_shutdown_drop_log_ms = now;
         }
         return 0;

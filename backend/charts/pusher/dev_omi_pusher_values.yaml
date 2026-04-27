@@ -100,8 +100,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: FAL_KEY
-  - name: HOSTED_VAD_API_URL
-    value: "http://vad.omiapi.com:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
     value: "http://vad.omiapi.com:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
@@ -140,11 +138,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: WORKFLOW_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: WORKFLOW_API_KEY
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
@@ -238,6 +231,14 @@ env:
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
+  - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
+    value: "price_1TN7s21F8wnoWYvwG6JuEFm6"
+  - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
+    value: "price_1TN7sF1F8wnoWYvwd0QaLZNA"
+  - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID
+    value: "price_1TN7jS1F8wnoWYvwM5GqfxDw"
+  - name: STRIPE_OPERATOR_ANNUAL_PRICE_ID
+    value: "price_1TN7jo1F8wnoWYvw6Xu1zAtC"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: SERVICE_ACCOUNT_JSON

@@ -73,14 +73,19 @@ class ChatLabViewModel: ObservableObject {
 
     let chatProvider: ChatProvider
 
+    /// User must provide their own Anthropic API key for ChatLab.
+    /// Persisted in UserDefaults so they don't have to re-enter each session.
+    @Published var userApiKey: String {
+        didSet { UserDefaults.standard.set(userApiKey, forKey: "chatlab_anthropic_api_key") }
+    }
+
     private var anthropicKey: String {
-        let devKey = UserDefaults.standard.string(forKey: "dev_anthropic_api_key") ?? ""
-        if !devKey.isEmpty { return devKey }
-        return ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
+        userApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     init(chatProvider: ChatProvider) {
         self.chatProvider = chatProvider
+        self.userApiKey = UserDefaults.standard.string(forKey: "chatlab_anthropic_api_key") ?? ""
         loadDefaultQuestions()
         loadCurrentPrompt()
         // Load history in background — don't block the UI
@@ -245,7 +250,8 @@ class ChatLabViewModel: ObservableObject {
             let authHeader = try await AuthService.shared.getAuthHeader()
 
             // Fetch messages with ratings from the last 60 days
-            let url = URL(string: "https://api.omi.me/v2/messages?limit=500")!
+            let baseURL = await APIClient.shared.baseURL
+            let url = URL(string: "\(baseURL)v2/messages?limit=500")!
             var request = URLRequest(url: url)
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
 
@@ -326,7 +332,7 @@ class ChatLabViewModel: ObservableObject {
             // Build the real system prompt — same as ChatProvider does
             let systemPrompt = buildRealSystemPrompt(version: versions[vIdx])
 
-            // Run through the real ACP bridge (with tools, real context)
+            // Run through the real agent bridge (with tools, real context)
             let response = await runThroughBridge(
                 question: q.text,
                 systemPrompt: systemPrompt,
@@ -355,7 +361,7 @@ class ChatLabViewModel: ObservableObject {
         )
     }
 
-    /// Send a question through the real ACP bridge (same path as floating bar / main chat).
+    /// Send a question through the real agent bridge (same path as floating bar / main chat).
     /// Falls back to direct API if bridge isn't available.
     private func runThroughBridge(question: String, systemPrompt: String, sessionKey: String) async -> String {
         let chatProvider = chatProvider
@@ -436,7 +442,7 @@ class ChatLabViewModel: ObservableObject {
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
 
             let body: [String: Any] = [
-                "model": "claude-sonnet-4-20250514",
+                "model": ModelQoS.Claude.chatLabQuery,
                 "max_tokens": 1024,
                 "system": systemPrompt.prefix(50000),
                 "messages": [["role": "user", "content": userMessage]],
@@ -481,7 +487,7 @@ class ChatLabViewModel: ObservableObject {
             """
 
             let body: [String: Any] = [
-                "model": "claude-haiku-4-5-20251001",
+                "model": ModelQoS.Claude.chatLabGrade,
                 "max_tokens": 200,
                 "messages": [["role": "user", "content": gradePrompt]],
             ]
@@ -735,6 +741,26 @@ struct ChatLabView: View {
                         vm.editingFloatingPrefix = vm.versions[idx].floatingPrefix
                         vm.editingMainPrompt = vm.versions[idx].mainPrompt
                     }
+                }
+            }
+
+            // Anthropic API key (user must provide their own)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Anthropic API Key")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
+
+                SecureField("sk-ant-...", text: $vm.userApiKey)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, design: .monospaced))
+                    .padding(8)
+                    .background(OmiColors.backgroundTertiary)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                if vm.userApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Enter your own Anthropic API key to use ChatLab evaluation features.")
+                        .scaledFont(size: 11)
+                        .foregroundColor(.orange)
                 }
             }
 

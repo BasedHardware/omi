@@ -30,7 +30,12 @@ class OmiBleManager private constructor(private val application: Application) {
 
     companion object {
         private const val TAG = "OmiBle"
+        private const val RSSI_HISTORY_LIMIT = 10
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
+        private const val PREFS_BATTERY = "battery_history"
+        private const val MAX_BATTERY_HISTORY = 2000
+        private const val BATTERY_RETENTION_MS = 7L * 24 * 3600 * 1000
+        private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
 
         @Volatile
         private var _instance: OmiBleManager? = null
@@ -47,6 +52,11 @@ class OmiBleManager private constructor(private val application: Application) {
          *  app for WebSocket audio streaming. */
         @Volatile
         var isFlutterAlive: Boolean = false
+
+        /** True while MainActivity is resumed. Set from onResume/onPause. Used to tag
+         *  diagnostic disconnect events with the app lifecycle state at the moment of the event. */
+        @Volatile
+        var isAppForeground: Boolean = false
 
         fun initialize(application: Application) {
             if (_instance == null) {
@@ -99,6 +109,15 @@ class OmiBleManager private constructor(private val application: Application) {
     private val rssiKeepAliveInterval = 3000L // ms
     @Volatile
     var isRssiStreamingEnabled = false
+
+    /// Most recent RSSI per device (uppercase MAC). Used by the foreground service
+    /// to annotate disconnect events so we can tell range-driven drops from healthy-signal drops.
+    val lastRssi = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /// Sliding window of recent (timestamp_ms, rssi_dbm) samples per device, used
+    /// by the foreground service to classify RSSI trajectory at disconnect time.
+    /// Synchronized on the deque itself for reader/writer safety.
+    val rssiHistory = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Pair<Long, Int>>>()
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -274,15 +293,14 @@ class OmiBleManager private constructor(private val application: Application) {
             completion(Result.failure(Exception("Device not connected")))
             return
         }
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+        val state = device.bondState
+        if (state == BluetoothDevice.BOND_BONDED) {
             Log.i(TAG, "requestBond: $addr already bonded")
             completion(Result.success(true))
             return
         }
-        Log.i(TAG, "requestBond: $addr initiating bond")
         bondingAddress = addr
         bondCompletionCallback = { bonded -> completion(Result.success(bonded)) }
-        device.createBond()
         val timeoutRunnable = Runnable {
             bondTimeoutRunnable = null
             bondingAddress = null
@@ -292,6 +310,14 @@ class OmiBleManager private constructor(private val application: Application) {
         }
         bondTimeoutRunnable = timeoutRunnable
         mainHandler.postDelayed(timeoutRunnable, BOND_TIMEOUT_MS)
+        if (state == BluetoothDevice.BOND_BONDING) {
+            // Peripheral already initiated SMP (firmware's bt_conn_set_security).
+            // Don't call createBond() again — it can spawn a second pair dialog or restart SMP.
+            Log.i(TAG, "requestBond: $addr already bonding, awaiting completion")
+            return
+        }
+        Log.i(TAG, "requestBond: $addr initiating bond")
+        device.createBond()
     }
 
     // ── Characteristic operations ──
@@ -507,6 +533,54 @@ class OmiBleManager private constructor(private val application: Application) {
         isProcessingCommand = false
     }
 
+    // ── Battery history ──
+
+    private fun batteryHistoryKey(address: String) = "battery_history_${address.uppercase()}"
+
+    private fun persistBatteryReading(address: String, level: Int) {
+        val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
+        val key = batteryHistoryKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { org.json.JSONArray(historyJson) } catch (_: Exception) { org.json.JSONArray() }
+
+        val now = System.currentTimeMillis()
+        val cutoff = now - BATTERY_RETENTION_MS
+
+        val pruned = org.json.JSONArray()
+        for (i in 0 until history.length()) {
+            val obj = history.getJSONObject(i)
+            if (obj.getLong("ts") >= cutoff) pruned.put(obj)
+        }
+
+        pruned.put(org.json.JSONObject().apply {
+            put("ts", now)
+            put("level", level)
+        })
+
+        while (pruned.length() > MAX_BATTERY_HISTORY) pruned.remove(0)
+
+        prefs.edit().putString(key, pruned.toString()).apply()
+    }
+
+    fun getBatteryHistory(address: String): List<BleBatteryPoint> {
+        val prefs = application.getSharedPreferences(PREFS_BATTERY, Context.MODE_PRIVATE)
+        val key = batteryHistoryKey(address)
+        val historyJson = prefs.getString(key, "[]") ?: "[]"
+        val history = try { org.json.JSONArray(historyJson) } catch (_: Exception) { return emptyList() }
+
+        val now = System.currentTimeMillis()
+        val cutoff = now - BATTERY_RETENTION_MS
+        val result = mutableListOf<BleBatteryPoint>()
+        for (i in 0 until history.length()) {
+            val obj = history.getJSONObject(i)
+            val ts = obj.getLong("ts")
+            if (ts >= cutoff) {
+                result.add(BleBatteryPoint(timestamp = ts, level = obj.getInt("level").toLong()))
+            }
+        }
+        return result
+    }
+
     // ── GATT callback factory ──
 
     private fun createGattCallback() = object : BluetoothGattCallback() {
@@ -596,6 +670,11 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
+
+            if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID && value.isNotEmpty()) {
+                persistBatteryReading(address, value[0].toInt() and 0xFF)
+            }
+
             mainHandler.post {
                 flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
             }
@@ -657,8 +736,14 @@ class OmiBleManager private constructor(private val application: Application) {
                 Log.w(TAG, "RSSI read failed: status=$status for ${gatt.device.address}")
                 return
             }
+            val address = gatt.device.address.uppercase()
+            lastRssi[address] = rssi
+            val deque = rssiHistory.getOrPut(address) { java.util.ArrayDeque() }
+            synchronized(deque) {
+                deque.addLast(Pair(System.currentTimeMillis(), rssi))
+                while (deque.size > RSSI_HISTORY_LIMIT) deque.removeFirst()
+            }
             if (isRssiStreamingEnabled) {
-                val address = gatt.device.address.uppercase()
                 mainHandler.post {
                     flutterApi?.onRssiUpdate(address, rssi.toLong()) {}
                 }

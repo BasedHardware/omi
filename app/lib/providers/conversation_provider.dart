@@ -72,6 +72,33 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
   }
 
+  void clearUserData() {
+    conversations = [];
+    searchedConversations = [];
+    groupedConversations = {};
+    processingConversations = [];
+    mergingConversationIds = {};
+    selectedConversationIds = {};
+    isSelectionModeActive = false;
+    showDailySummaries = false;
+    hasDailySummaries = false;
+    selectedDate = null;
+    selectedFolderId = null;
+    previousQuery = '';
+    totalSearchPages = 1;
+    currentSearchPage = 1;
+    isLoadingConversations = false;
+    isFetchingConversations = false;
+    memoriesToDelete = {};
+    deleteTimestamps = {};
+    _processingConversationWatchTimer?.cancel();
+    _processingConversationWatchTimer = null;
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = null;
+    _lastRefreshTime = null;
+    notifyListeners();
+  }
+
   Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
     var convo = await getConversationById(id);
     if (convo != null) {

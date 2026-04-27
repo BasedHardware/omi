@@ -22,6 +22,14 @@ class ApiClient {
   }
 }
 
+class AuthTokenUnavailableException implements Exception {
+  final String message;
+  AuthTokenUnavailableException([this.message = 'No auth token found']);
+
+  @override
+  String toString() => 'AuthTokenUnavailableException: $message';
+}
+
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
@@ -42,7 +50,7 @@ Future<String> getAuthHeader() async {
     if (AuthService.instance.isSignedIn()) {
       // should only throw if the user is signed in but the token is not found
       // if the user is not signed in, the token will always be empty
-      throw Exception('No auth token found');
+      throw AuthTokenUnavailableException('No auth token found');
     }
   }
   return 'Bearer ${SharedPreferencesUtil().authToken}';
@@ -64,7 +72,18 @@ Future<Map<String, String>> buildHeaders({
   };
 
   if (requireAuthCheck) {
-    headers['Authorization'] = await getAuthHeader();
+    try {
+      headers['Authorization'] = await getAuthHeader();
+    } on AuthTokenUnavailableException {
+      // Signed-in user has no usable token (refresh returned null for a
+      // transient or degraded reason). Proceed without Authorization; the
+      // downstream HTTP 401 path in makeApiCall already calls
+      // AuthService.signOut(), so recovery runs where it was already wired.
+      // We avoid forcing sign-out here because getIdToken() treats generic
+      // failures as transient (e.g. offline / platform hiccups) and leaves
+      // currentUser intact.
+      Logger.debug('No auth token available for request, proceeding without Authorization header');
+    }
   }
 
   return headers;
@@ -101,6 +120,7 @@ Future<http.Response?> makeApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool signOutOn401 = true,
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -127,7 +147,7 @@ Future<http.Response?> makeApiCall({
           retries: 0,
         );
         Logger.log('Token refreshed and request retried');
-        if (response.statusCode == 401) {
+        if (response.statusCode == 401 && signOutOn401) {
           await AuthService.instance.signOut();
           Logger.handle(
             Exception('Authentication failed. Please sign in again.'),
@@ -135,7 +155,7 @@ Future<http.Response?> makeApiCall({
             message: 'Authentication failed. Please sign in again.',
           );
         }
-      } else {
+      } else if (signOutOn401) {
         await AuthService.instance.signOut();
         Logger.handle(
           Exception('Authentication failed. Please sign in again.'),
@@ -390,6 +410,14 @@ Stream<String> makeStreamingApiCall({
 
     if (streamedResponse.statusCode != 200) {
       Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
+      if (streamedResponse.statusCode == 402) {
+        try {
+          var body = await streamedResponse.stream.bytesToString();
+          yield 'error:402:$body';
+        } catch (_) {
+          yield 'error:402:{}';
+        }
+      }
       return;
     }
 
@@ -480,6 +508,14 @@ Stream<String> makeMultipartStreamingApiCall({
 
     if (response.statusCode != 200) {
       Logger.error('Multipart streaming request failed: ${response.statusCode}');
+      if (response.statusCode == 402) {
+        try {
+          var body = await response.stream.bytesToString();
+          yield 'error:402:$body';
+        } catch (_) {
+          yield 'error:402:{}';
+        }
+      }
       return;
     }
 

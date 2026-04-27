@@ -44,9 +44,9 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
       - [x] Activating the 2nd mic
     - [x] BLE
     - [x] Encoding (OPUS) and transmitting
-    - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148 
-      - [x] android, fixed by increasing the BLE connnection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tunning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590 
-      - [x] iOS, they doesn't allow increasing the connnection interval(CI). the feasible CI on iOS is about 15ms.
+    - [x] Fix the audio byte loss issue - currently about 30% https://github.com/BasedHardware/omi/pull/2217#issuecomment-2815077148
+      - [x] android, fixed by increasing the BLE connection interval (7ms) - but tbh i don't think this is a good solution since our devkit work fine without tuning the connection interval. 100 rps, 50 bytes each is not a big deal! https://github.com/BasedHardware/omi/pull/2248#issuecomment-2820156590
+      - [x] iOS, they doesn't allow increasing the connection interval(CI). the feasible CI on iOS is about 15ms.
   - [x] LEDs
     - [x] Charging
     - [x] BLE connected

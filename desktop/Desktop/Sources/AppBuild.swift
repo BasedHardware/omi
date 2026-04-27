@@ -15,6 +15,10 @@ enum AppBuild {
     bundleIdentifier.hasPrefix("com.omi.") && bundleIdentifier != productionBundleIdentifier
   }
 
+  static var isProductionBundle: Bool {
+    bundleIdentifier == productionBundleIdentifier
+  }
+
   static var displayName: String {
     if let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
       !displayName.isEmpty
@@ -74,6 +78,15 @@ enum AppBuild {
     let resolved = resolveFreshInstallUpdateChannelSynchronously()
     if resolved == "beta" {
       UserDefaults.standard.set("beta", forKey: updateChannelDefaultsKey)
+    }
+  }
+
+  static func prepareUpdateChannelForBackendRouting() {
+    guard isProductionBundle else { return }
+
+    migrateBetaChannelOverwrite()
+    if UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil {
+      syncUpdateChannelOnFirstLaunch()
     }
   }
 

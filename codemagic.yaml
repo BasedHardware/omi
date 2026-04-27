@@ -1832,13 +1832,12 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV_V2          — base64-encoded .env bundled into .app at build time
-  #                                     Contains:
-  #                                       OMI_API_URL=https://api.omi.me
-  #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
+  #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
+  #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
   #                                       MIXPANEL_PROJECT_TOKEN=<token>
-  #                                     NOTE: OMI_PYTHON_API_URL is set via workflow vars (not in this secret)
+  #                                     URLs are set via workflow vars (not in this secret):
+  #                                       OMI_DESKTOP_API_URL, OMI_PYTHON_API_URL
   #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
   #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
   #                                       GOOGLE_CALENDAR_API_KEY
@@ -1876,7 +1875,7 @@ workflows:
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
-        DESKTOP_BACKEND_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app"
+        OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
         OMI_PYTHON_API_URL: "https://api.omi.me"
         GCP_PROJECT: "based-hardware"
         GCP_REGION: "us-central1"
@@ -1945,11 +1944,30 @@ workflows:
             "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-      - name: Build acp-bridge (TypeScript → JavaScript)
+      - name: Build agent (TypeScript → JavaScript)
         script: |
-          cd acp-bridge
+          cd agent
           npm install --no-fund --no-audit
           npm run build
+          cd ..
+
+      - name: Test pi-mono-extension denylist classifier
+        script: |
+          # Run the pi-mono-extension unit tests so a `classifyBash()` /
+          # `classifyFileWrite()` / audit-log fail-safe regression fails the
+          # Mac app build before the tagged release is cut. The tests live
+          # in `pi-mono-extension/index.test.ts` and use node:test + the
+          # `--experimental-strip-types` flag that ships in Node 22+. We
+          # avoid a hard dependency on the codemagic runner's Node version
+          # by using `npx tsx` as a version-agnostic TypeScript loader that
+          # still delegates to node:test.
+          cd pi-mono-extension
+          if node --experimental-strip-types --test index.test.ts; then
+            echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
+          else
+            echo "Falling back to npx tsx for older Node versions..."
+            npx --yes tsx@4.19.2 --test index.test.ts
+          fi
           cd ..
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
@@ -2004,6 +2022,57 @@ workflows:
           fi
           echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
+      - name: Prepare universal libwebp (arm64 + x86_64)
+        script: |
+          # Homebrew's libwebp is arm64-only on M2 runners, but we build a universal app.
+          # Build each arch separately (multi-arch cmake fails with _Float16 on x86_64),
+          # then lipo them into universal dylibs.
+          command -v cmake >/dev/null 2>&1 || brew install cmake
+          WEBP_VERSION="1.5.0"
+          TEMP_DIR="/tmp/libwebp-build-$$"
+          CMAKE_COMMON="-DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF \
+            -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
+            -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF \
+            -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF \
+            -DWEBP_BUILD_WEBPMUX=OFF"
+          mkdir -p "$TEMP_DIR"
+          curl -sL "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-$WEBP_VERSION.tar.gz" \
+            | tar xz -C "$TEMP_DIR"
+          SRC="$TEMP_DIR/libwebp-$WEBP_VERSION"
+
+          # Build arm64
+          mkdir "$SRC/build-arm64" && cd "$SRC/build-arm64"
+          cmake .. -DCMAKE_OSX_ARCHITECTURES=arm64 $CMAKE_COMMON
+          make -j$(sysctl -n hw.ncpu)
+
+          # Build x86_64
+          mkdir "$SRC/build-x86_64" && cd "$SRC/build-x86_64"
+          cmake .. -DCMAKE_OSX_ARCHITECTURES=x86_64 $CMAKE_COMMON
+          make -j$(sysctl -n hw.ncpu)
+
+          # Lipo into universal dylibs
+          mkdir -p /tmp/libwebp-universal
+          ARM64_WEBP=$(find "$SRC/build-arm64" -name "libwebp.7.*.dylib" -not -type l | head -1)
+          X86_WEBP=$(find "$SRC/build-x86_64" -name "libwebp.7.*.dylib" -not -type l | head -1)
+          lipo -create "$ARM64_WEBP" "$X86_WEBP" -output /tmp/libwebp-universal/libwebp.7.dylib
+
+          ARM64_SY=$(find "$SRC/build-arm64" -name "libsharpyuv.0.*.dylib" -not -type l | head -1)
+          X86_SY=$(find "$SRC/build-x86_64" -name "libsharpyuv.0.*.dylib" -not -type l | head -1)
+          lipo -create "$ARM64_SY" "$X86_SY" -output /tmp/libwebp-universal/libsharpyuv.0.dylib
+
+          # Verify both architectures are present
+          for lib in /tmp/libwebp-universal/*.dylib; do
+            echo "$(basename "$lib"): $(file "$lib" | sed 's/.*: //')"
+            file "$lib" | grep -q "universal binary" || {
+              echo "ERROR: $(basename "$lib") is not a universal binary"
+              exit 1
+            }
+          done
+
+          rm -rf "$TEMP_DIR"
+
       - name: Resolve SPM packages
         script: |
           # Unset TOOLCHAINS to use Xcode's default toolchain
@@ -2027,6 +2096,9 @@ workflows:
 
       - name: Build Swift app (arm64 + x86_64)
         script: |
+          # Install libwebp (required for screenshot encoding)
+          brew install webp
+
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
@@ -2113,6 +2185,30 @@ workflows:
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
 
+          # Bundle universal libwebp dylibs (built from source in earlier step)
+          BREW_WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
+          if [ -f "/tmp/libwebp-universal/libwebp.7.dylib" ]; then
+            cp /tmp/libwebp-universal/libwebp.7.dylib "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            [ -f /tmp/libwebp-universal/libsharpyuv.0.dylib ] && \
+              cp /tmp/libwebp-universal/libsharpyuv.0.dylib "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+            install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ] && \
+              install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+            # Fix libwebp's reference to libsharpyuv (source build uses local path)
+            SHARPYUV_REF=$(otool -L "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" | grep libsharpyuv | awk '{print $1}')
+            if [ -n "$SHARPYUV_REF" ] && [ "$SHARPYUV_REF" != "@rpath/libsharpyuv.0.dylib" ]; then
+              install_name_tool -change "$SHARPYUV_REF" "@rpath/libsharpyuv.0.dylib" \
+                "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+            fi
+            # Fix main binary's reference to libwebp (linked against Homebrew path)
+            install_name_tool -change "$BREW_WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+            echo "Bundled universal libwebp: $(file "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" | grep -oE 'arm64|x86_64' | tr '\n' '+' | sed 's/+$//')"
+          else
+            echo "ERROR: universal libwebp not found at /tmp/libwebp-universal/"
+            echo "Ensure 'Prepare universal libwebp' step ran successfully"
+            exit 1
+          fi
+
           # Copy app icon
           [ -f "omi_icon.icns" ] && cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 
@@ -2132,14 +2228,26 @@ workflows:
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi
 
-          # Copy acp-bridge (Claude Code integration)
-          if [ -d "acp-bridge/dist" ]; then
-            mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
-            cp -Rf acp-bridge/dist        "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-            cp -f  acp-bridge/package.json "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-            cp -Rf acp-bridge/node_modules "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+          # Copy agent (Claude Code integration)
+          if [ -d "agent/dist" ]; then
+            mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+            cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
+            cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
+            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
           else
-            echo "ERROR: acp-bridge/dist not found"
+            echo "ERROR: agent/dist not found"
+            exit 1
+          fi
+
+          # Copy pi-mono-extension (default harness — registers the Omi provider
+          # with pi and routes requests to the Rust desktop-backend /v2/chat/completions
+          # proxy). Without this, piMono mode cannot start and the app is broken.
+          if [ -d "pi-mono-extension" ]; then
+            mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+            cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+          else
+            echo "ERROR: pi-mono-extension directory not found"
             exit 1
           fi
 
@@ -2165,13 +2273,14 @@ workflows:
           [ -f "Desktop/embedded.provisionprofile" ] && \
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
-          # Write runtime .env from OMI_DESKTOP_APP_ENV_V2 secret (base64-encoded, slimmed down)
-          # V2 contains: OMI_API_URL, OMI_AUTH_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
-          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
+          # Write runtime .env from OMI_DESKTOP_APP_ENV_V3 secret (base64-encoded, secrets only)
+          # V3 contains only: FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # URLs are appended from workflow vars below
+          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
-          echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
-          # Must point to api.omi.me, NOT the Rust desktop-backend
+          echo "$OMI_DESKTOP_APP_ENV_V3" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          # Append backend URLs from workflow vars
+          echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
@@ -2195,15 +2304,15 @@ workflows:
               "$NODE_BUNDLE_PATH"
           fi
 
-          # Sign acp-bridge native binaries
-          ACP_BRIDGE_BUNDLE="$APP_BUNDLE/Contents/Resources/acp-bridge"
-          if [ -d "$ACP_BRIDGE_BUNDLE/node_modules" ]; then
+          # Sign agent native binaries
+          AGENT_BUNDLE="$APP_BUNDLE/Contents/Resources/agent"
+          if [ -d "$AGENT_BUNDLE/node_modules" ]; then
             # Remove JetBrains plugin — its JARs contain .jnilib files Apple rejects during notarization
-            rm -rf "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" \
+            rm -rf "$AGENT_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" \
               2>/dev/null || true
 
             # Primary pass: sign known native binary extensions
-            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+            find "$AGENT_BUNDLE/node_modules" -type f \
               \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
               2>/dev/null | while read native_bin; do
               file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
@@ -2212,7 +2321,7 @@ workflows:
             done
 
             # Catch-all pass: any remaining unsigned Mach-O binaries
-            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+            find "$AGENT_BUNDLE/node_modules" -type f \
               ! -name "*.js"   ! -name "*.json" ! -name "*.ts"   ! -name "*.map" \
               ! -name "*.md"   ! -name "*.txt"  ! -name "*.yml"  ! -name "*.yaml" \
               ! -name "*.css"  ! -name "*.html" ! -name "*.jar"  ! -name "*.d.ts" \
@@ -2245,6 +2354,14 @@ workflows:
           HEAP_FW="$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
           if [ -d "$HEAP_FW" ]; then
             codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$HEAP_FW"
+          fi
+
+          # Sign libwebp dylibs (must be before main app bundle)
+          if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+          fi
+          if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
           fi
 
           # Sign the main app bundle with release entitlements
@@ -2520,7 +2637,7 @@ workflows:
             -H "Content-Type: application/json" \
             -H "X-Release-Secret: $RELEASE_SECRET" \
             -d "$RELEASE_JSON" \
-            "$DESKTOP_BACKEND_URL/updates/releases")
+            "$OMI_DESKTOP_API_URL/updates/releases")
 
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" = "201" ]; then

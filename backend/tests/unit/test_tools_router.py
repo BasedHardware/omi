@@ -121,9 +121,20 @@ notif_mod.send_action_item_data_message = MagicMock()
 
 # Stub utils packages
 _stub_package("utils")
+_stub_package("utils.conversations")
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
+
+# Stub render and factory modules
+render_mod = _stub_module("utils.conversations.render")
+render_mod.conversations_to_string = MagicMock(
+    side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
+)
+factory_mod = _stub_module("utils.conversations.factory")
+factory_mod.deserialize_conversation = MagicMock(
+    side_effect=lambda d: d if not isinstance(d, dict) else type('FakeConv', (), d)()
+)
 endpoints_mod = _stub_module("utils.other.endpoints")
 endpoints_mod.get_current_user_uid = MagicMock()
 endpoints_mod.with_rate_limit = MagicMock(return_value=MagicMock())

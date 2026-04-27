@@ -109,8 +109,8 @@ class AppState: ObservableObject {
   private var lastNotificationAlertStyle: String?
   private var lastNotificationSoundEnabled: Bool?
   private var lastNotificationBadgeEnabled: Bool?
-  @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
-  @Published var isScreenRecordingStale = false  // TCC says yes but capture fails (developer signing changed)
+  @Published var isScreenCaptureKitBroken = false  // Capture engine issue; not the source of permission truth
+  @Published var isScreenRecordingStale = false  // Deprecated: no longer inferred from capture failures
   var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
   @Published var hasAutomationPermission = false
   @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
@@ -141,7 +141,7 @@ class AppState: ObservableObject {
   var missingPermissions: [String] {
     var missing: [String] = []
     if !hasMicrophonePermission { missing.append("Microphone") }
-    if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale {
+    if !hasScreenRecordingPermission || isScreenRecordingStale {
       missing.append("Screen Recording")
     }
     if !hasNotificationPermission {
@@ -230,6 +230,9 @@ class AppState: ObservableObject {
     // Register as the current instance so background services can check recording state
     AppState.current = self
 
+    // Resolve beta/stable before loading backend URLs so beta releases use dev services.
+    AppBuild.prepareUpdateChannelForBackendRouting()
+
     // Load API key from environment or .env file
     loadEnvironment()
 
@@ -248,9 +251,12 @@ class AppState: ObservableObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.hasScreenRecordingPermission = false
+        let granted = ScreenCaptureService.checkPermission()
+        self?.hasScreenRecordingPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
+          tccGranted: granted)
         self?.isScreenCaptureKitBroken = false  // Not broken, just lost
-        log("AppState: Screen recording permission lost")
+        self?.isScreenRecordingStale = false
+        log("AppState: Screen recording permission lost notification; TCC granted=\(granted)")
       }
     }
 
@@ -261,9 +267,13 @@ class AppState: ObservableObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.hasScreenRecordingPermission = false
-        self?.isScreenCaptureKitBroken = true  // Needs reset
-        log("AppState: ScreenCaptureKit broken - needs reset")
+        let granted = ScreenCaptureService.checkPermission()
+        self?.hasScreenRecordingPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
+          tccGranted: granted)
+        self?.isScreenCaptureKitBroken = ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(
+          tccGranted: granted)
+        self?.isScreenRecordingStale = false
+        log("AppState: ScreenCaptureKit broken notification; TCC granted=\(granted)")
       }
     }
 
@@ -458,7 +468,7 @@ class AppState: ObservableObject {
             guard !key.hasPrefix("#") else { continue }
             // API keys are fetched from the backend at runtime (APIKeyService).
             // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
-            let backendServedKeys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
               continue
@@ -475,6 +485,8 @@ class AppState: ObservableObject {
         // Don't break - load all .env files to merge keys
       }
     }
+
+    DesktopBackendEnvironment.applyReleaseChannelDefaults()
 
     log("Environment loaded (API keys will be fetched from backend after auth)")
   }
@@ -839,82 +851,22 @@ class AppState: ObservableObject {
 
   /// Check screen recording permission status
   func checkScreenRecordingPermission() {
-    let tccGranted = CGPreflightScreenCaptureAccess()
-    let shouldForceActualTest = screenRecordingGrantAttempts > 0 || hasScreenRecordingPermission
+    let permissionGranted = ScreenCaptureService.checkPermission()
+    hasScreenRecordingPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
+      tccGranted: permissionGranted)
 
-    if !tccGranted {
-      let actualPermission = ScreenCaptureService.checkPermission(
-        forceActualTestIfPreflightDenied: shouldForceActualTest)
-      if actualPermission {
-        hasScreenRecordingPermission = true
-        isScreenCaptureKitBroken = false
-        isScreenRecordingStale = false
-        screenRecordingGrantAttempts = 0
-        UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
-        return
-      }
-
-      hasScreenRecordingPermission = false
+    if !permissionGranted {
       isScreenCaptureKitBroken = false
-      // If user already tried Grant once and permission is still not granted,
-      // the TCC entry is likely corrupted (e.g. after developer account change
-      // + tccutil reset). Show stale UI with toggle off/on instructions.
-      if screenRecordingGrantAttempts > 0 && !isScreenRecordingStale {
-        log(
-          "Screen capture: Grant attempted but permission still denied — showing recovery instructions"
-        )
-        isScreenRecordingStale = true
-      }
+      isScreenRecordingStale = false
       return
     }
 
-    // TCC says granted. If the permission alert is currently showing (permission was
-    // previously false or broken or stale), do a real capture test to verify the stale TCC case
-    // (e.g. after developer account change). This avoids spawning a screencapture process
-    // on every didBecomeActive when everything is fine.
-    if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale {
-      let realPermission = ScreenCaptureService.checkPermission()
-      hasScreenRecordingPermission = realPermission
-
-      // Stale TCC entry from old developer signing: CGPreflight says granted but
-      // actual capture fails. The user must toggle OFF then ON in System Settings
-      // to update the code signing requirement (csreq) stored in the TCC database.
-      // NOTE: Do NOT call tccutil reset here — it wipes the user's permission entry
-      // entirely and forces them to re-grant manually. This was the root cause of
-      // users' screen recording permission getting reset "for no reason" after
-      // local rebuilds of Omi Beta (binary hash changes → stale csreq → self-reset).
-      // The correct recovery is for the user to toggle the permission in System
-      // Settings, which refreshes csreq in place. See PR #5616 / a2bc4471d for history.
-      if !realPermission && !isScreenRecordingStale {
-        log("Screen capture: stale TCC entry detected (developer signing changed)")
-        log(
-          "Screen capture: please toggle Screen Recording OFF then ON for this app in System Settings → Privacy & Security → Screen Recording"
-        )
-        isScreenRecordingStale = true
-      } else if realPermission {
-        // Permission recovered (user toggled off/on in System Settings)
-        isScreenRecordingStale = false
-        screenRecordingGrantAttempts = 0
-        UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
-      }
-
-      if isScreenCaptureKitBroken {
-        // Re-check if SCK has recovered (user toggled permission in System Settings)
-        if #available(macOS 14.0, *) {
-          Task {
-            let sckWorks = await ScreenCaptureService.testScreenCaptureKitPermission()
-            if sckWorks {
-              log("AppState: ScreenCaptureKit recovered — clearing broken flag")
-              self.isScreenCaptureKitBroken = false
-              self.hasScreenRecordingPermission = true
-              UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
-            }
-          }
-        }
-      }
-    } else {
-      hasScreenRecordingPermission = true
-    }
+    // Permission is granted. Capture-engine failures are handled by the
+    // monitoring pipeline and must not make the permission badge red.
+    isScreenRecordingStale = false
+    isScreenCaptureKitBroken = false
+    screenRecordingGrantAttempts = 0
+    UserDefaults.standard.removeObject(forKey: NotificationService.screenCaptureResetShownKey)
   }
 
   /// Check automation permission without triggering a prompt

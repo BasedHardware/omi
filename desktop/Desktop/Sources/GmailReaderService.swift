@@ -259,7 +259,7 @@ actor GmailReaderService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true)
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 
@@ -267,7 +267,7 @@ actor GmailReaderService {
         prompt: synthesisPrompt,
         systemPrompt:
           "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
-        model: "claude-opus-4-6",
+        model: ModelQoS.Claude.synthesis,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

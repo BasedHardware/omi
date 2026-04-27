@@ -2381,6 +2381,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get batteryLevel => 'Nivell de bateria';
 
   @override
+  String get charging => 'Carregant';
+
+  @override
   String get productUpdate => 'Actualització del producte';
 
   @override
@@ -2507,12 +2510,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Segueix els teus objectius personals a la pàgina d\'inici';
-
-  @override
-  String get dailyReflection => 'Reflexió diària';
-
-  @override
-  String get get9PmReminderToReflect => 'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'La descripció de l\'element d\'acció no pot estar buida';
@@ -3938,10 +3935,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get trackPersonalGoals => 'Fes el seguiment d\'objectius personals a la pàgina d\'inici';
 
   @override
-  String get dailyReflectionDescription =>
-      'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.';
-
-  @override
   String get endpointURL => 'URL del Punt Final';
 
   @override
@@ -5131,7 +5124,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'En continuar, totes les dades que comparteixis amb aquesta aplicació (incloent les teves converses, gravacions i informació personal) s\'emmagatzemaran de forma segura als nostres servidors per proporcionar-te informació basada en IA i habilitar totes les funcions de l\'aplicació.';
+      'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7223,12 +7216,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Hora de la reflexió diària';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Explica\'m el teu dia';
-
-  @override
   String get actionItemReminderTitle => 'Recordatori d\'Omi';
 
   @override
@@ -8354,6 +8341,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracio de trucades';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostra el botó de trucada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostra el botó de trucada telefònica a la pantalla d\'inici';
+
+  @override
   String get yourVerifiedNumbers => 'Els teus numeros verificats';
 
   @override
@@ -8881,6 +8874,18 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Bateria';
+
+  @override
+  String get noBatteryDataYet => 'Encara no hi ha dades de bateria';
+
+  @override
+  String get day => 'Dia';
+
+  @override
+  String get week => 'Setmana';
+
+  @override
   String get rollbackToStableFirmware => 'Tornar al firmware estable';
 
   @override
@@ -9062,4 +9067,153 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'No s\'ha pogut eliminar el teu compte. Torna-ho a provar.';
+
+  @override
+  String get planUpdate => 'Actualització del pla';
+
+  @override
+  String get planDeprecationMessage =>
+      'El vostre pla Unlimited s\'està retirant. Canvieu al pla Operator — les mateixes funcions excel·lents a \$49/mes. El vostre pla actual continuarà funcionant mentrestant.';
+
+  @override
+  String get upgradeYourPlan => 'Actualitza el teu pla';
+
+  @override
+  String get youAreOnAPaidPlan => 'Estàs en un pla de pagament.';
+
+  @override
+  String get chatTitle => 'Xat';
+
+  @override
+  String get chatMessages => 'missatges';
+
+  @override
+  String get unlimitedChatThisMonth => 'Missatges de xat il·limitats aquest mes';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used de $limit pressupost de càlcul utilitzat';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used de $limit missatges utilitzats aquest mes';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit utilitzats';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Límit de xat assolit. Actualitza per a més missatges.';
+
+  @override
+  String get chatLimitReachedTitle => 'Límit de xat assolit';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Has utilitzat $used dels teus $limitDisplay al pla $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Es reinicia en $count dies';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Es reinicia en $count hores';
+  }
+
+  @override
+  String get resetsSoon => 'Es reinicia aviat';
+
+  @override
+  String get upgradePlan => 'Actualitzar pla';
+
+  @override
+  String get billingMonthly => 'Mensual';
+
+  @override
+  String get billingYearly => 'Anual';
+
+  @override
+  String get savePercent => 'Estalvia ~17%';
+
+  @override
+  String get popular => 'Popular';
+
+  @override
+  String get currentPlan => 'Actual';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count preguntes al mes';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count preguntes al mes';
+  }
+
+  @override
+  String get architectSubtitle => 'IA avançada — milers de xats + automatitzacions d\'agent';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Xat: \$$used / \$$limit utilitzat aquest mes';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Xat: \$$used utilitzat aquest mes';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Xat: $used / $limit missatges aquest mes';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Xat: $used missatges aquest mes';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Has assolit el teu límit mensual. Actualitza per continuar xatejant amb Omi sense restriccions.';
+
+  @override
+  String get voiceResponseAudio => 'Llegeix la resposta d\'Omi en veu alta';
+
+  @override
+  String get voiceResponseMode => 'Resposta de veu';
+
+  @override
+  String get voiceResponseModeTitle => 'Quan pronunciar les respostes';
+
+  @override
+  String get voiceResponseOff => 'Desactivat';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Només auriculars';
+
+  @override
+  String get voiceResponseAlways => 'Sempre';
+
+  @override
+  String get agreeAndContinue => 'Accepto i continuo';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

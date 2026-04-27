@@ -4,11 +4,11 @@ import XCTest
 
 final class SubscriptionPlanCatalogMergerTests: XCTestCase {
 
-  func testMergeDeduplicatesDuplicatePriceIDsWithoutCrashing() {
+  func testMergeDeduplicatesDuplicatePriceIDsWithoutCrashing() throws {
     let fallback = [
       SubscriptionPlanOption(
-        id: "pro",
-        title: "Omi Pro",
+        id: "architect",
+        title: "Architect",
         features: ["Fallback Feature"],
         prices: [
           SubscriptionPriceOption(
@@ -29,8 +29,8 @@ final class SubscriptionPlanCatalogMergerTests: XCTestCase {
 
     let primary = [
       SubscriptionPlanOption(
-        id: "pro",
-        title: "Omi Pro",
+        id: "architect",
+        title: "Architect",
         features: ["Primary Feature"],
         prices: [
           SubscriptionPriceOption(

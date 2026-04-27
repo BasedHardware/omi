@@ -95,6 +95,10 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   var messageId = "1000"; // Default new message
 
   await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
+    if (line.startsWith('error:402:')) {
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+      return;
+    }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
@@ -129,6 +133,10 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {Strin
     files: files,
     fields: language != null ? {'language': language} : {},
   )) {
+    if (line.startsWith('error:402:')) {
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+      return;
+    }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
@@ -205,5 +213,9 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
     }
   }
 
-  return transcripts.join(' ');
+  final transcript = transcripts.join(' ').trim();
+  if (transcript.isEmpty) {
+    throw Exception('Voice message transcription returned empty transcript');
+  }
+  return transcript;
 }

@@ -11,7 +11,7 @@ import sys
 import wave
 
 import pytest
-import requests
+import httpx
 from unittest.mock import MagicMock
 
 # Mock modules that initialize GCP clients at import time
@@ -89,7 +89,7 @@ class TestExtractEmbeddingFromBytesValidation:
         mock_response.json.return_value = [0.1] * 512
         mock_response.raise_for_status = MagicMock()
 
-        monkeypatch.setattr(requests, "post", MagicMock(return_value=mock_response))
+        monkeypatch.setattr(httpx, "post", MagicMock(return_value=mock_response))
 
         # Should not raise ValueError - duration check passes
         result = extract_embedding_from_bytes(wav, "test.wav")

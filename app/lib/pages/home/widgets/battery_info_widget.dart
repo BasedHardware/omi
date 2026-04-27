@@ -1,21 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/device.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-class BatteryInfoWidget extends StatelessWidget {
+class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
+
+  @override
+  State<BatteryInfoWidget> createState() => _BatteryInfoWidgetState();
+}
+
+class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
+  Future<void> _startRecording(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final captureProvider = context.read<CaptureProvider>();
+    if (captureProvider.recordingState == RecordingState.initialising) return;
+    if (captureProvider.recordingState == RecordingState.record) {
+      await captureProvider.stopStreamRecording();
+      captureProvider.forceProcessingCurrentConversation();
+      MixpanelManager().phoneMicRecordingStopped();
+      return;
+    }
+    await captureProvider.streamRecording();
+    MixpanelManager().phoneMicRecordingStarted();
+    if (context.mounted) {
+      final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+          ? captureProvider.conversationProvider!.conversations.first.id
+          : null;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,11 +57,16 @@ class BatteryInfoWidget extends StatelessWidget {
       builder: (context, isMemoriesPage, child) {
         // Use Selector to only rebuild when battery level, connected device, or connecting state changes
         // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
-        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool)>(
-          selector: (_, provider) =>
-              (provider.batteryLevel, provider.connectedDevice, provider.pairedDevice, provider.isConnecting),
+        return Selector<DeviceProvider, (int, BtDevice?, BtDevice?, bool, bool)>(
+          selector: (_, provider) => (
+            provider.batteryLevel,
+            provider.connectedDevice,
+            provider.pairedDevice,
+            provider.isConnecting,
+            provider.isCharging
+          ),
           builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, pairedDevice, isConnecting) = data;
+            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
             if (connectedDevice != null) {
               return GestureDetector(
                 onTap: () {
@@ -59,19 +97,22 @@ class BatteryInfoWidget extends StatelessWidget {
                       // Only show battery indicator and percentage when battery level is valid (> 0)
                       if (batteryLevel > 0) ...[
                         const SizedBox(width: 6.0),
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : Colors.red,
-                            shape: BoxShape.circle,
+                        if (isCharging)
+                          const Icon(Icons.bolt, color: Color.fromARGB(255, 0, 255, 8), size: 14)
+                        else
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6.0),
+                        const SizedBox(width: 4.0),
                         Text(
                           '$batteryLevel%',
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
@@ -120,43 +161,98 @@ class BatteryInfoWidget extends StatelessWidget {
                 ),
               );
             } else {
-              return GestureDetector(
-                onTap: () async {
-                  if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                    routeToPage(context, const ConnectDevicePage());
-                    MixpanelManager().connectFriendClicked();
-                  } else {
-                    await routeToPage(context, const ConnectedDevice());
-                  }
-                },
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
-                      isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                      isConnecting && isMemoriesPage
-                          ? Text(
-                              context.l10n.searching,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                            )
-                          : isMemoriesPage
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+                        routeToPage(context, const ConnectDevicePage());
+                        MixpanelManager().connectFriendClicked();
+                      } else {
+                        await routeToPage(context, const ConnectedDevice());
+                      }
+                    },
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1F1F25),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
+                          isConnecting && isMemoriesPage
                               ? Text(
-                                  context.l10n.connectDevice,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                  context.l10n.searching,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium!
+                                      .copyWith(color: Colors.white, fontSize: 12),
                                 )
-                              : const SizedBox.shrink(),
-                    ],
+                              : isMemoriesPage
+                                  ? const Text(
+                                      'Connect',
+                                      style: TextStyle(color: Colors.white, fontSize: 12),
+                                    )
+                                  : const SizedBox.shrink(),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  if (isMemoriesPage)
+                    Consumer<CaptureProvider>(
+                      builder: (context, captureProvider, _) {
+                        final isRecording = captureProvider.recordingState == RecordingState.record;
+                        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: GestureDetector(
+                            onTap: () => _startRecording(context),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              height: 36,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  if (isRecording)
+                                    const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
+                                  else if (isInitialising)
+                                    const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  else
+                                    const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isRecording
+                                        ? 'Stop'
+                                        : isInitialising
+                                            ? '...'
+                                            : 'Record',
+                                    style:
+                                        const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               );
             }
           },

@@ -166,7 +166,38 @@ data class BleDisconnectEvent (
   val timestamp: Long,
   val reason: String,
   val reasonCode: Long,
-  val isManual: Boolean
+  val isManual: Boolean,
+  /**
+   * Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+   * (connect attempt never established). Defaults to "disconnect" for legacy records.
+   */
+  val eventType: String,
+  /** Last RSSI sample captured before this event (dBm). 0 if unknown. */
+  val lastRssi: Long,
+  /**
+   * How long the link was established before this event (ms). 0 if unknown
+   * or for fail_to_connect events.
+   */
+  val connectionDurationMs: Long,
+  /**
+   * App lifecycle state at the moment of the event: "foreground", "background",
+   * or "inactive" (iOS transitioning). Empty string if unknown.
+   */
+  val appState: String,
+  /**
+   * ms between this disconnect and the subsequent successful reconnect.
+   * 0 while the device has not yet reconnected.
+   */
+  val timeToReconnectMs: Long,
+  /**
+   * RSSI trajectory over the ~15s before this event. One of:
+   *   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+   *   "sudden"  — signal stable then link died (interference/stall/device off)
+   *   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+   *   "unknown" — insufficient samples to classify
+   * Empty string on legacy records written before this field existed.
+   */
+  val rssiTrend: String
 )
  {
   companion object {
@@ -175,7 +206,13 @@ data class BleDisconnectEvent (
       val reason = pigeonVar_list[1] as String
       val reasonCode = pigeonVar_list[2] as Long
       val isManual = pigeonVar_list[3] as Boolean
-      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual)
+      val eventType = pigeonVar_list[4] as String
+      val lastRssi = pigeonVar_list[5] as Long
+      val connectionDurationMs = pigeonVar_list[6] as Long
+      val appState = pigeonVar_list[7] as String
+      val timeToReconnectMs = pigeonVar_list[8] as Long
+      val rssiTrend = pigeonVar_list[9] as String
+      return BleDisconnectEvent(timestamp, reason, reasonCode, isManual, eventType, lastRssi, connectionDurationMs, appState, timeToReconnectMs, rssiTrend)
     }
   }
   fun toList(): List<Any?> {
@@ -184,10 +221,51 @@ data class BleDisconnectEvent (
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
+      rssiTrend,
     )
   }
   override fun equals(other: Any?): Boolean {
     if (other !is BleDisconnectEvent) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
+ * A single battery level reading persisted by the native BLE layer.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class BleBatteryPoint (
+  val timestamp: Long,
+  val level: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): BleBatteryPoint {
+      val timestamp = pigeonVar_list[0] as Long
+      val level = pigeonVar_list[1] as Long
+      return BleBatteryPoint(timestamp, level)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      timestamp,
+      level,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is BleBatteryPoint) {
       return false
     }
     if (this === other) {
@@ -206,7 +284,12 @@ data class BleDisconnectEvent (
 data class BleDeviceDiagnostics (
   val disconnectHistory: List<BleDisconnectEvent>,
   val reconnectionCount: Long,
-  val connectedAt: Long
+  val connectedAt: Long,
+  /**
+   * Count of connect attempts that never reached didConnect. Surfaces the
+   * silent-failure path separately from established-then-dropped disconnects.
+   */
+  val failToConnectCount: Long
 )
  {
   companion object {
@@ -214,7 +297,8 @@ data class BleDeviceDiagnostics (
       val disconnectHistory = pigeonVar_list[0] as List<BleDisconnectEvent>
       val reconnectionCount = pigeonVar_list[1] as Long
       val connectedAt = pigeonVar_list[2] as Long
-      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt)
+      val failToConnectCount = pigeonVar_list[3] as Long
+      return BleDeviceDiagnostics(disconnectHistory, reconnectionCount, connectedAt, failToConnectCount)
     }
   }
   fun toList(): List<Any?> {
@@ -222,6 +306,7 @@ data class BleDeviceDiagnostics (
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -255,6 +340,11 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          BleBatteryPoint.fromList(it)
+        }
+      }
+      133.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           BleDeviceDiagnostics.fromList(it)
         }
       }
@@ -275,8 +365,12 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.toList())
       }
-      is BleDeviceDiagnostics -> {
+      is BleBatteryPoint -> {
         stream.write(132)
+        writeValue(stream, value.toList())
+      }
+      is BleDeviceDiagnostics -> {
+        stream.write(133)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -719,6 +813,7 @@ interface BleHostApi {
   fun startRssiStreaming(uuid: String)
   fun stopRssiStreaming(uuid: String)
   fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit)
+  fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit)
   /** (Android only) Check if any CompanionDeviceManager association exists. */
   fun hasCompanionDeviceAssociation(): Boolean
   /** (Android only) Initiate CompanionDeviceManager association for a device. */
@@ -984,6 +1079,26 @@ interface BleHostApi {
             val args = message as List<Any?>
             val uuidArg = args[0] as String
             api.getDeviceDiagnostics(uuidArg) { result: Result<BleDeviceDiagnostics> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uuidArg = args[0] as String
+            api.getBatteryHistory(uuidArg) { result: Result<List<BleBatteryPoint>> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))

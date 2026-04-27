@@ -2388,6 +2388,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get batteryLevel => 'பேட்டரி நிலை';
 
   @override
+  String get charging => 'சார்ஜ் ஆகிறது';
+
+  @override
   String get productUpdate => 'பொருள் புதுப்பிப்பு';
 
   @override
@@ -2514,12 +2517,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'முதற்பக்கத்தில் உங்கள் ব்যক்திগত இலக்குகளை ট்র்যாக் செய்';
-
-  @override
-  String get dailyReflection => 'தினசரி பிரதிபலனை';
-
-  @override
-  String get get9PmReminderToReflect => 'உங்கள் நாளைப் பிரதிபலிக்க 9 PM நினைவூட்டல் பெறவும்';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'செயல் உருப்படி விளக்கம் காலியாக இருக்க முடியாது';
@@ -3944,10 +3941,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get trackPersonalGoals => 'முகப்பில் ব்যக்তிगத இலக்குகளைக் கண்காணிக்கவும்';
 
   @override
-  String get dailyReflectionDescription =>
-      'உங்கள் நாளைக் பிரதிபலிக்கவும் மற்றும் உங்கள் எண்ணங்களைப் பிடிக்க இரவு 9 மணிக்கு நினைவூட்டல் பান்.';
-
-  @override
   String get endpointURL => 'இறுதிப்புள்ளி URL';
 
   @override
@@ -4594,10 +4587,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get alreadyBestValuePlan => 'உங்களிடம் ஏற்கனவே சிறந்த மதிப்பு திட்டம் உள்ளது. எந்த மாற்றமும் தேவையில்லை.';
 
   @override
-  String get unableToLoadPlans => 'திட்டங்களைச் சரிசெய்ய முடியவில்லை';
+  String get unableToLoadPlans => 'திட்டங்களை ஏற்ற முடியவில்லை';
 
   @override
-  String get checkConnectionTryAgain => 'உங்கள் இணைப்பைச் சரிபார்க்கவும் மற்றும் மீண்டும் முயற்சி செய்யவும்';
+  String get checkConnectionTryAgain => 'இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்';
 
   @override
   String get useFreePlan => 'இலவச திட்டத்தைப் பயன்படுத்தவும்';
@@ -5135,7 +5128,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'தொடர்ந்து வைப்பதன் மூலம், நீங்கள் இந்த பயன்பாட்டுடன் பகிரும் அனைத்து தரவு (உங்கள் உரையாடல்கள், பதிவுகள் மற்றும் ব்যক்தिगत தகவல் உள்ளிட்டு) AI-চালিত பெரிய நுணுக்கம் வழங்க மற்றும் அனைத்து பயன்பாட்டு அம்சங்களை இயக்க எங்கள் சர்வரில் பாதுகாப்பாக சேமிக்கப்படும்।';
+      'தொடர்வதன் மூலம், உங்கள் உரையாடல்கள், பதிவுகள் மற்றும் தனிப்பட்ட தகவல்கள் எங்கள் சேவையகங்களில் பாதுகாப்பாக சேமிக்கப்படும். உங்கள் ஆடியோ பதிவுகள் மற்றும் படியெடுப்புகள் மூன்றாம் தரப்பு AI சேவைகளால் செயலாக்கப்படுகின்றன (படியெடுப்பிற்கு Deepgram மற்றும் பகுப்பாய்விற்கு OpenAI உட்பட) AI இயக்கும் நுண்ணறிவுகளை உங்களுக்கு வழங்கவும் அனைத்து பயன்பாட்டு அம்சங்களையும் இயக்கவும்.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7240,12 +7233,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'தினசரி சிந்தனைக்கான நேரம்';
-
-  @override
-  String get dailyReflectionNotificationBody => 'உங்கள் நாளைப் பற்றி சொல்லுங்கள்';
-
-  @override
   String get actionItemReminderTitle => 'Omi நினைவூட்டல்';
 
   @override
@@ -8363,6 +8350,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'தொலைபேசி அழைப்பு அமைப்பாடுகள்';
 
   @override
+  String get showPhoneCallButtonTitle => 'ஃபோன் அழைப்பு பொத்தானை காட்டு';
+
+  @override
+  String get showPhoneCallButtonDesc => 'முகப்பு திரையில் ஃபோன் அழைப்பு பொத்தானை காட்டு';
+
+  @override
   String get yourVerifiedNumbers => 'உங்கள் சரிபார்க்கப்பட்ட எண்கள்';
 
   @override
@@ -8896,6 +8889,18 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'பேட்டரி';
+
+  @override
+  String get noBatteryDataYet => 'இன்னும் பேட்டரி தரவு இல்லை';
+
+  @override
+  String get day => 'நாள்';
+
+  @override
+  String get week => 'வாரம்';
+
+  @override
   String get rollbackToStableFirmware => 'நிலையான Firmware க்கு மீண்டு திரும்பு';
 
   @override
@@ -9077,4 +9082,153 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'உங்கள் கணக்கை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get planUpdate => 'திட்ட புதுப்பிப்பு';
+
+  @override
+  String get planDeprecationMessage =>
+      'உங்கள் Unlimited திட்டம் நிறுத்தப்படுகிறது. Operator திட்டத்திற்கு மாறுங்கள் — அதே சிறந்த அம்சங்கள் \$49/மாதம். உங்கள் தற்போதைய திட்டம் இதற்கிடையில் தொடர்ந்து செயல்படும்.';
+
+  @override
+  String get upgradeYourPlan => 'உங்கள் திட்டத்தை மேம்படுத்தவும்';
+
+  @override
+  String get youAreOnAPaidPlan => 'நீங்கள் கட்டண திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get chatTitle => 'அரட்டை';
+
+  @override
+  String get chatMessages => 'செய்திகள்';
+
+  @override
+  String get unlimitedChatThisMonth => 'இந்த மாதம் வரம்பற்ற அரட்டை செய்திகள்';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit கணக்கீடு பட்ஜெட் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return 'இந்த மாதம் $used / $limit செய்திகள் பயன்படுத்தப்பட்டன';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'அரட்டை வரம்பு எட்டியது. மேலும் செய்திகளுக்கு மேம்படுத்தவும்.';
+
+  @override
+  String get chatLimitReachedTitle => 'அரட்டை வரம்பு எட்டியது';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$plan திட்டத்தில் $limitDisplay இல் $used பயன்படுத்தியுள்ளீர்கள்.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count நாட்களில் மீட்டமைக்கப்படும்';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count மணி நேரத்தில் மீட்டமைக்கப்படும்';
+  }
+
+  @override
+  String get resetsSoon => 'விரைவில் மீட்டமைக்கப்படும்';
+
+  @override
+  String get upgradePlan => 'திட்டத்தை மேம்படுத்து';
+
+  @override
+  String get billingMonthly => 'மாதாந்திர';
+
+  @override
+  String get billingYearly => 'ஆண்டு';
+
+  @override
+  String get savePercent => '~17% சேமிக்கவும்';
+
+  @override
+  String get popular => 'பிரபலம்';
+
+  @override
+  String get currentPlan => 'தற்போதைய';
+
+  @override
+  String neoSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return 'மாதத்திற்கு $count கேள்விகள்';
+  }
+
+  @override
+  String get architectSubtitle => 'பவர் AI — ஆயிரக்கணக்கான உரையாடல்கள் + ஏஜென்ட் ஆட்டோமேஷன்';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'அரட்டை: \$$used / \$$limit இந்த மாதம் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'அரட்டை: \$$used இந்த மாதம் பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'அரட்டை: $used / $limit செய்திகள் இந்த மாதம்';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'அரட்டை: $used செய்திகள் இந்த மாதம்';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'நீங்கள் உங்கள் மாதாந்திர வரம்பை அடைந்துவிட்டீர்கள். கட்டுப்பாடுகள் இல்லாமல் Omi உடன் அரட்டையைத் தொடர மேம்படுத்தவும்.';
+
+  @override
+  String get voiceResponseAudio => 'Omi பதிலை சத்தமாக படிக்கவும்';
+
+  @override
+  String get voiceResponseMode => 'குரல் பதில்';
+
+  @override
+  String get voiceResponseModeTitle => 'பதில்களை எப்போது பேசுவது';
+
+  @override
+  String get voiceResponseOff => 'முடக்கம்';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ஹெட்ஃபோன் மட்டும்';
+
+  @override
+  String get voiceResponseAlways => 'எப்போதும்';
+
+  @override
+  String get agreeAndContinue => 'ஒப்புக்கொள் & தொடரவும்';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

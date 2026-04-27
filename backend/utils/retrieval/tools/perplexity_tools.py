@@ -4,8 +4,10 @@ Tools for performing web searches using Perplexity AI.
 
 import os
 
-import requests
+import httpx
 from langchain_core.tools import tool
+from utils.http_client import get_webhook_client
+from utils.llm.clients import get_model
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -13,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-def perplexity_web_search_tool(
+async def perplexity_web_search_tool(
     query: str,
 ) -> str:
     """
@@ -55,13 +57,14 @@ def perplexity_web_search_tool(
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         payload = {
-            "model": "sonar-pro",
+            "model": get_model('web_search'),
             "messages": [{"role": "user", "content": query}],
             "temperature": 0.2,
             "max_tokens": 1000,
         }
 
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        client = get_webhook_client()
+        response = await client.post(url, json=payload, headers=headers, timeout=30.0)
 
         if response.status_code != 200:
             logger.error(
@@ -99,10 +102,10 @@ def perplexity_web_search_tool(
             logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {result}")
             return "Error: Unexpected response format from Perplexity API"
 
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.warning("❌ perplexity_web_search_tool - Request timeout")
         return "Error: Request to Perplexity API timed out. Please try again later."
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
         return f"Error: Failed to connect to Perplexity API. {str(e)}"
     except Exception as e:

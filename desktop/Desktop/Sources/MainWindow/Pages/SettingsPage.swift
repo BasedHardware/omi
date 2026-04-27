@@ -73,6 +73,9 @@ struct SubscriptionPlanCatalogMerger {
         mergedById[plan.id] = SubscriptionPlanOption(
           id: plan.id,
           title: plan.title.isEmpty ? existing.title : plan.title,
+          subtitle: plan.subtitle ?? existing.subtitle,
+          description: plan.description ?? existing.description,
+          eyebrow: plan.eyebrow ?? existing.eyebrow,
           features: plan.features.isEmpty ? existing.features : plan.features,
           prices: mergePrices(primary: plan.prices, fallback: existing.prices)
         )
@@ -224,6 +227,11 @@ struct SettingsContentView: View {
   @State private var userSubscription: UserSubscriptionResponse?
   @State private var isLoadingSubscription: Bool = false
   @State private var subscriptionError: String?
+  @State private var chatUsageQuota: APIClient.ChatUsageQuota?
+  @State private var isLoadingChatUsage: Bool = false
+  @State private var overageInfo: OverageInfoResponse?
+  @State private var isLoadingOverage: Bool = false
+  @State private var showOverageExplainer: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
@@ -259,7 +267,7 @@ struct SettingsContentView: View {
   @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
   // AI Chat settings
-  @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "agentSDK"
+  @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -363,9 +371,14 @@ struct SettingsContentView: View {
   @State private var isDeletingAccount: Bool = false
   @State private var deleteAccountError: String?
 
-  // Developer API Key overrides
+  // Developer API Key overrides — also double as BYOK free-plan credentials
+  // when all four (Gemini, Anthropic, OpenAI, Deepgram) are provided.
   @AppStorage("dev_gemini_api_key") private var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
+  @AppStorage("dev_openai_api_key") private var devOpenAIKey: String = ""
+  @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+  @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
+  @State private var byokActivationError: String?
 
   init(
     appState: AppState,
@@ -1797,6 +1810,42 @@ struct SettingsContentView: View {
         }
       }
 
+      if let subscription = userSubscription?.subscription,
+        subscription.deprecated == true
+      {
+        settingsCard(settingId: "planusage.deprecation") {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+                .scaledFont(size: 16)
+              Text("Plan Retiring")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            }
+
+            Text(
+              subscription.deprecationMessage
+                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo."
+            )
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button(action: {
+              selectedPlanIdForCheckout = "operator"
+            }) {
+              Text("Try Operator")
+                .scaledFont(size: 13, weight: .semibold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(OmiColors.success)
+          }
+        }
+      }
+
       if shouldShowPlanPurchaseOptions {
         settingsCard(settingId: "planusage.purchase") {
           VStack(alignment: .leading, spacing: 18) {
@@ -1810,15 +1859,295 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textTertiary)
             }
 
-            HStack(alignment: .top, spacing: 14) {
-              ForEach(subscriptionPlansForDisplay) { plan in
-                subscriptionPlanCard(plan)
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(alignment: .top, spacing: 14) {
+                ForEach(subscriptionPlansForDisplay) { plan in
+                  subscriptionPlanCard(plan)
+                    .frame(minWidth: 220)
+                }
               }
             }
           }
         }
       }
+
+      chatUsageQuotaCard
+
+      overageCard
+
+      byokPromoCard
     }
+    .sheet(isPresented: $showOverageExplainer) {
+      overageExplainerSheet
+    }
+  }
+
+  @ViewBuilder
+  private var overageCard: some View {
+    if let info = overageInfo, info.isOveragePlan {
+      settingsCard(settingId: "planusage.overage") {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(spacing: 10) {
+            Image(systemName: info.excessQuestions > 0
+              ? "dollarsign.circle.fill"
+              : "checkmark.circle.fill")
+              .scaledFont(size: 18)
+              .foregroundColor(info.excessQuestions > 0
+                ? OmiColors.warning
+                : OmiColors.success)
+            Text(info.excessQuestions > 0
+              ? "Usage-based overage"
+              : "No overage yet this cycle")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            if info.excessQuestions > 0 {
+              Text(String(format: "$%.2f", info.overageUsd))
+                .scaledFont(size: 15, weight: .semibold)
+                .foregroundColor(OmiColors.warning)
+                .monospacedDigit()
+            }
+          }
+
+          if info.excessQuestions > 0 {
+            Text(
+              "You've gone \(info.excessQuestions) question\(info.excessQuestions == 1 ? "" : "s") past your plan's \(info.includedQuestions ?? 0) included. We'll bill the overage at end of your cycle."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+          } else {
+            Text(
+              "Go over your \(info.includedQuestions ?? 0) included questions and we'll charge real provider cost + \(Int(info.markupPercent))%. No hard cutoff."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+          }
+
+          Button(action: { showOverageExplainer = true }) {
+            HStack(spacing: 4) {
+              Text(info.explainerTitle)
+                .scaledFont(size: 12, weight: .medium)
+              Image(systemName: "info.circle")
+                .scaledFont(size: 11)
+            }
+            .foregroundColor(OmiColors.purplePrimary)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+    } else if isLoadingOverage && overageInfo == nil {
+      // silent while loading — nothing to show
+      EmptyView()
+    }
+  }
+
+  private var overageExplainerSheet: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        HStack {
+          Text(overageInfo?.explainerTitle ?? "How overage billing works")
+            .scaledFont(size: 18, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Spacer()
+          Button(action: { showOverageExplainer = false }) {
+            Image(systemName: "xmark.circle.fill")
+              .scaledFont(size: 20)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+          .buttonStyle(.plain)
+        }
+
+        Text(overageInfo?.explainerBody ?? "")
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+
+        if let info = overageInfo, info.isOveragePlan {
+          Divider().overlay(OmiColors.backgroundQuaternary)
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Your current cycle")
+              .scaledFont(size: 13, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            overageExplainerRow("Questions used", value: "\(info.usedQuestions)")
+            overageExplainerRow("Included in plan", value: "\(info.includedQuestions ?? 0)")
+            overageExplainerRow("Over the limit", value: "\(info.excessQuestions)")
+            overageExplainerRow(
+              "Real provider cost",
+              value: String(format: "$%.2f", info.realCostUsd)
+            )
+            overageExplainerRow(
+              "Markup",
+              value: String(format: "%.0f%%", info.markupPercent)
+            )
+            overageExplainerRow(
+              "Overage to bill",
+              value: String(format: "$%.2f", info.overageUsd),
+              emphasized: true
+            )
+          }
+        }
+      }
+      .padding(24)
+    }
+    .frame(minWidth: 440, minHeight: 360)
+  }
+
+  private func overageExplainerRow(_ label: String, value: String, emphasized: Bool = false) -> some View {
+    HStack {
+      Text(label)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+      Spacer()
+      Text(value)
+        .scaledFont(size: 12, weight: emphasized ? .semibold : .regular)
+        .foregroundColor(emphasized ? OmiColors.warning : OmiColors.textSecondary)
+        .monospacedDigit()
+    }
+  }
+
+  @ViewBuilder
+  private var byokPromoCard: some View {
+    settingsCard(settingId: "planusage.byok") {
+      VStack(alignment: .leading, spacing: 12) {
+        HStack(spacing: 12) {
+          Image(systemName: "key.fill")
+            .scaledFont(size: 20)
+            .foregroundColor(OmiColors.purplePrimary)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              APIKeyService.isByokActive
+                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
+                : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+          }
+          Spacer()
+        }
+
+        Button(action: openBYOKSettings) {
+          Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
+            .scaledFont(size: 13, weight: .semibold)
+        }
+        .buttonStyle(.bordered)
+      }
+    }
+  }
+
+  private func openBYOKSettings() {
+    selectedSection = .advanced
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+      highlightedSettingId = "advanced.devkeys.info"
+    }
+  }
+
+  // MARK: - Chat Usage Quota Card
+
+  @ViewBuilder
+  private var chatUsageQuotaCard: some View {
+    if let quota = chatUsageQuota {
+      settingsCard(settingId: "planusage.current") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Text("Usage this month")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Text(chatUsageQuotaValueText(quota))
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(chatUsageBarColor(quota))
+              .monospacedDigit()
+          }
+
+          ProgressView(value: min(quota.percent / 100.0, 1.0))
+            .progressViewStyle(LinearProgressViewStyle(tint: chatUsageBarColor(quota)))
+            .frame(height: 6)
+
+          HStack {
+            Text(chatUsageQuotaDescription(quota))
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            if let resetText = chatUsageQuotaResetText(quota) {
+              Text(resetText)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
+
+          if !quota.allowed {
+            // Neo / overage-enabled plans keep working past the cap (extra
+            // usage accrues as overage). Show a softer message on those plans;
+            // only show the hard "upgrade" copy on Free and other hard-capped
+            // plans.
+            if let info = overageInfo, info.isOveragePlan {
+              Text("You're past your included limit — extra usage is billed as overage at end of cycle.")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.warning)
+            } else {
+              Text("You've reached this month's limit. Upgrade your plan or wait until the next reset.")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.warning)
+            }
+          } else if quota.percent >= 80.0 {
+            Text("You're close to your monthly limit.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+      }
+    } else if isLoadingChatUsage {
+      settingsCard(settingId: "planusage.current") {
+        HStack {
+          ProgressView().controlSize(.small)
+          Text("Loading usage…")
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+    }
+  }
+
+  private func chatUsageQuotaValueText(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      let limit = q.limit.map { String(format: "$%.0f", $0) } ?? "—"
+      return String(format: "$%.2f / %@", q.used, limit)
+    }
+    let used = Int(q.used)
+    let limit = q.limit.map { "\(Int($0))" } ?? "∞"
+    return "\(used) / \(limit)"
+  }
+
+  private func chatUsageQuotaDescription(_ q: APIClient.ChatUsageQuota) -> String {
+    if q.unit == "cost_usd" {
+      return "Chat spend on \(q.plan) plan"
+    }
+    return "Chat questions on \(q.plan) plan"
+  }
+
+  private func chatUsageQuotaResetText(_ q: APIClient.ChatUsageQuota) -> String? {
+    guard let resetAt = q.resetAt else { return nil }
+    let resetDate = Date(timeIntervalSince1970: TimeInterval(resetAt))
+    let now = Date()
+    let days = max(0, Int(resetDate.timeIntervalSince(now) / 86400))
+    if days <= 0 {
+      return "Resets today"
+    }
+    if days == 1 {
+      return "Resets tomorrow"
+    }
+    return "Resets in \(days) days"
+  }
+
+  private func chatUsageBarColor(_ q: APIClient.ChatUsageQuota) -> Color {
+    if !q.allowed || q.percent >= 100.0 { return OmiColors.warning }
+    if q.percent >= 80.0 { return OmiColors.warning }
+    return OmiColors.purplePrimary
   }
 
   // MARK: - AI Chat Section
@@ -1929,9 +2258,47 @@ struct SettingsContentView: View {
         }
       }
 
+      voicePicker(settingId: "floatingbar.voice")
+        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
+        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
         .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
         .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
+    }
+  }
+
+  private func voicePicker(settingId: String) -> some View {
+    settingsCard(settingId: settingId) {
+      HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Voice")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
+          )
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textSecondary)
+        }
+        Spacer()
+        Picker("", selection: $shortcutSettings.selectedVoiceID) {
+          Section("Female") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+          Section("Male") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
+              Text(voice.name).tag(voice.id)
+            }
+          }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(width: 180)
+        .tint(OmiColors.purplePrimary)
+      }
     }
   }
 
@@ -1956,8 +2323,9 @@ struct SettingsContentView: View {
             Spacer()
 
             Picker("", selection: $chatBridgeMode) {
-              Text("omi account").tag("agentSDK")
-              Text("Your Claude Account").tag("claudeCode")
+              ForEach(AIProvider.all) { provider in
+                Text(provider.displayName).tag(provider.bridgeModeRawValue)
+              }
             }
             .pickerStyle(.menu)
             .frame(width: 200)
@@ -1970,13 +2338,19 @@ struct SettingsContentView: View {
             }
           }
 
-          Text(
-            chatBridgeMode == "claudeCode"
-              ? "Using your Claude Pro/Max subscription. You'll be prompted to sign in with your Claude account."
-              : "Using your omi account."
-          )
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
+            if let url = provider.attributionURL {
+              Link(destination: url) {
+                Text("\(provider.tagline) · \(url.host ?? "")")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+            } else {
+              Text(provider.tagline)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
             Divider()
@@ -2779,8 +3153,9 @@ struct SettingsContentView: View {
             Spacer()
 
             Picker("", selection: $chatBridgeMode) {
-              Text("omi account").tag("agentSDK")
-              Text("Your Claude Account").tag("claudeCode")
+              ForEach(AIProvider.all) { provider in
+                Text(provider.displayName).tag(provider.bridgeModeRawValue)
+              }
             }
             .pickerStyle(.menu)
             .frame(width: 200)
@@ -2793,13 +3168,19 @@ struct SettingsContentView: View {
             }
           }
 
-          Text(
-            chatBridgeMode == "claudeCode"
-              ? "Use your Claude subscription for desktop chat."
-              : "Use your omi account for desktop chat."
-          )
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
+            if let url = provider.attributionURL {
+              Link(destination: url) {
+                Text("\(provider.tagline) · \(url.host ?? "")")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+            } else {
+              Text(provider.tagline)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
             Divider()
@@ -4798,39 +5179,57 @@ struct SettingsContentView: View {
 
   private var developerKeysSubsection: some View {
     VStack(spacing: 20) {
-      settingsCard(settingId: "advanced.devkeys.info") {
-        HStack(spacing: 12) {
-          Image(systemName: "info.circle")
-            .foregroundColor(OmiColors.textTertiary)
-          Text("Override backend-provided API keys with your own. Leave blank to use default keys.")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-          Spacer()
-        }
-      }
+      byokStatusBanner
 
       developerKeyField(
+        provider: .openai,
+        title: "OpenAI API Key",
+        subtitle: "For GPT calls.",
+        settingId: "advanced.devkeys.openai",
+        value: $devOpenAIKey
+      )
+
+      developerKeyField(
+        provider: .anthropic,
+        title: "Anthropic API Key",
+        subtitle: "For chat (Claude).",
+        settingId: "advanced.devkeys.anthropic",
+        value: $devAnthropicKey
+      )
+
+      developerKeyField(
+        provider: .gemini,
         title: "Gemini API Key",
-        subtitle: "For proactive AI (memory, tasks, insights, focus)",
+        subtitle: "For proactive AI (memory, tasks, insights, focus).",
         settingId: "advanced.devkeys.gemini",
         value: $devGeminiKey
       )
 
       developerKeyField(
-        title: "Anthropic API Key",
-        subtitle: "For chat (Claude)",
-        settingId: "advanced.devkeys.anthropic",
-        value: $devAnthropicKey
+        provider: .deepgram,
+        title: "Deepgram API Key",
+        subtitle: "For live transcription.",
+        settingId: "advanced.devkeys.deepgram",
+        value: $devDeepgramKey
       )
 
-      if !devGeminiKey.isEmpty || !devAnthropicKey.isEmpty {
+      if let byokActivationError {
+        settingsCard(settingId: "advanced.devkeys.error") {
+          HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundColor(OmiColors.warning)
+            Text(byokActivationError)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+      }
+
+      if hasAnyBYOKKey {
         settingsCard(settingId: "advanced.devkeys.clear") {
           HStack {
             Spacer()
-            Button(action: {
-              devGeminiKey = ""
-              devAnthropicKey = ""
-            }) {
+            Button(action: clearAllBYOKKeys) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(.red)
@@ -4841,23 +5240,148 @@ struct SettingsContentView: View {
         }
       }
     }
+    .onChange(of: devOpenAIKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devAnthropicKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
+  }
+
+  private var hasAnyBYOKKey: Bool {
+    !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
+      || !devDeepgramKey.isEmpty
+  }
+
+  private var hasAllBYOKKeys: Bool {
+    !devOpenAIKey.isEmpty && !devAnthropicKey.isEmpty && !devGeminiKey.isEmpty
+      && !devDeepgramKey.isEmpty
+  }
+
+  @ViewBuilder
+  private var byokStatusBanner: some View {
+    settingsCard(settingId: "advanced.devkeys.info") {
+      HStack(alignment: .top, spacing: 12) {
+        Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
+          .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            hasAllBYOKKeys
+              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
+              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+          )
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+        Spacer()
+      }
+    }
+  }
+
+  private func clearAllBYOKKeys() {
+    devOpenAIKey = ""
+    devAnthropicKey = ""
+    devGeminiKey = ""
+    devDeepgramKey = ""
+    Task {
+      try? await APIClient.shared.deactivateBYOK()
+    }
+  }
+
+  private func refreshBYOKActivation() {
+    Task {
+      if APIKeyService.isByokActive {
+        // Validate before flipping the backend flag — otherwise we'd put the
+        // user on the free plan with dead keys and every chat would 401.
+        let snapshot = APIKeyService.byokSnapshot.reduce(into: [BYOKProvider: String]()) {
+          acc, entry in acc[entry.key] = entry.value.key
+        }
+        let results = await BYOKValidator.validateAll(snapshot)
+        let allOk = results.allSatisfy {
+          if case .ok = $0.value { return true }
+          return false
+        }
+        if allOk {
+          let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
+            acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
+          }
+          try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+          await FloatingBarUsageLimiter.shared.fetchPlan()
+          await MainActor.run {
+            byokKeyStatuses = results
+            byokActivationError = nil
+          }
+        } else {
+          let failed = results.filter {
+            if case .ok = $0.value { return false }
+            return true
+          }
+          let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
+          try? await APIClient.shared.deactivateBYOK()
+          await FloatingBarUsageLimiter.shared.fetchPlan()
+          await MainActor.run {
+            byokKeyStatuses = results
+            byokActivationError =
+              "Rejected by provider: \(names). Free plan stays off until all 4 keys authenticate."
+          }
+        }
+      } else {
+        try? await APIClient.shared.deactivateBYOK()
+        await FloatingBarUsageLimiter.shared.fetchPlan()
+        await MainActor.run {
+          byokKeyStatuses = [:]
+          byokActivationError = nil
+        }
+      }
+      await MainActor.run { loadSubscriptionInfo() }
+    }
   }
 
   private func developerKeyField(
+    provider: BYOKProvider? = nil,
     title: String, subtitle: String, settingId: String, value: Binding<String>
   ) -> some View {
     settingsCard(settingId: settingId) {
       VStack(alignment: .leading, spacing: 8) {
-        Text(title)
-          .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+        HStack {
+          Text(title)
+            .scaledFont(size: 14, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+          Spacer()
+          if let provider, let status = byokKeyStatuses[provider] {
+            byokStatusBadge(status)
+          }
+        }
         Text(subtitle)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
         SecureField("Leave blank for default", text: value)
           .textFieldStyle(.roundedBorder)
           .scaledFont(size: 13)
+        if let provider, case .failed(let msg) = byokKeyStatuses[provider] ?? .notChecked {
+          Text(msg)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.warning)
+        }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func byokStatusBadge(_ status: BYOKValidator.Status) -> some View {
+    switch status {
+    case .notChecked:
+      EmptyView()
+    case .checking:
+      HStack(spacing: 4) {
+        ProgressView().controlSize(.mini)
+        Text("Checking…").scaledFont(size: 11).foregroundColor(OmiColors.textTertiary)
+      }
+    case .ok:
+      Text("Valid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.success)
+    case .failed:
+      Text("Invalid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.warning)
     }
   }
 
@@ -5518,29 +6042,65 @@ struct SettingsContentView: View {
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    let order = ["unlimited": 0, "pro": 1]
-    return mergedPlanCatalog.sorted { lhs, rhs in
-      let lhsOrder = order[lhs.id, default: Int.max]
-      let rhsOrder = order[rhs.id, default: Int.max]
-      if lhsOrder != rhsOrder {
-        return lhsOrder < rhsOrder
+    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // on the right. Hide the user's current plan — they already see it above.
+    // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
+    let order = ["unlimited": 0, "operator": 1, "architect": 2]
+    return mergedPlanCatalog
+      .filter { !isCurrentSubscriptionPlan($0) }
+      .sorted { lhs, rhs in
+        let lhsOrder = order[lhs.id, default: Int.max]
+        let rhsOrder = order[rhs.id, default: Int.max]
+        if lhsOrder != rhsOrder {
+          return lhsOrder < rhsOrder
+        }
+        return lhs.title < rhs.title
       }
-      return lhs.title < rhs.title
-    }
   }
 
   private var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Basic"
+      return isLoadingSubscription ? "Loading plan..." : "Free"
+    }
+    // BYOK users: the backend returns plan=unlimited to turn off metering
+    // but that's an implementation detail — to the user, they're on the
+    // free plan because they pay the providers directly, not Omi.
+    if subscription.features.contains("byok") {
+      return "Free (BYOK)"
     }
     switch subscription.plan {
     case .basic:
-      return "Basic"
+      return "Free"
     case .unlimited:
-      return "Unlimited Plan"
-    case .pro:
-      return "Omi Pro"
+      // Backend serializes Operator subscribers as plan="unlimited" for
+      // backward compat with old mobile builds that don't know the
+      // `operator` enum. Distinguish by matching current_price_id against
+      // an Operator-titled plan in the catalog.
+      if isCurrentSubscriptionOperator() {
+        return "Operator"
+      }
+      return "Neo"
+    case .architect, .pro:
+      return "Architect"
+    case .operator:
+      return "Operator"
     }
+  }
+
+  /// Returns true when the user's current Stripe price maps to a plan the
+  /// backend is calling "Operator". Protects against the wire-level
+  /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
+  private func isCurrentSubscriptionOperator() -> Bool {
+    guard let subscription = userSubscription?.subscription,
+          let currentPriceId = subscription.currentPriceId
+    else { return false }
+    for plan in subscriptionPlansForDisplay {
+      guard plan.title == "Operator" else { continue }
+      if plan.prices.contains(where: { $0.id == currentPriceId }) {
+        return true
+      }
+    }
+    return false
   }
 
   private var currentPlanSubtitle: String {
@@ -5587,16 +6147,20 @@ struct SettingsContentView: View {
   private func planSubtitle(for planId: String) -> String? {
     switch planId {
     case "unlimited":
-      return "Current mobile and web subscription"
-    case "pro":
-      return "Desktop power-user tier"
+      return "200 questions per month"
+    case "operator":
+      return "500 questions per month"
+    case "architect":
+      return "Power-user AI — thousands of chats + agentic automations"
     default:
       return nil
     }
   }
 
   private func planAccentColor(for planId: String) -> Color {
-    planId == "pro" ? OmiColors.purplePrimary : OmiColors.success
+    // Architect is the premium/purple tier; Operator + legacy Unlimited
+    // are the mass-market green tier.
+    planId == "architect" ? OmiColors.purplePrimary : OmiColors.success
   }
 
   private func planSummaryText(for plan: SubscriptionPlanOption) -> String {
@@ -5618,8 +6182,10 @@ struct SettingsContentView: View {
   private func planEyebrow(for planId: String) -> String {
     switch planId {
     case "unlimited":
+      return "Starter"
+    case "operator":
       return "Most popular"
-    case "pro":
+    case "architect":
       return "Automation + coding"
     default:
       return "Plan"
@@ -5629,9 +6195,11 @@ struct SettingsContentView: View {
   private func planDescription(for planId: String) -> String {
     switch planId {
     case "unlimited":
-      return "Uses the existing Unlimited subscription from mobile and web."
-    case "pro":
-      return "Unlock automations, vibe coding, and unlimited actions on desktop."
+      return "100 chat questions per month. Shared with mobile and web."
+    case "operator":
+      return "500 chat questions per month. Shared with mobile and web."
+    case "architect":
+      return "Power-user AI for heavy agentic workflows and vibe coding."
     default:
       return ""
     }
@@ -5668,19 +6236,26 @@ struct SettingsContentView: View {
 
   private func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
-    case "pro":
+    case "architect":
       return [
-        "Automations",
-        "Vibe coding",
-        "Unlimited actions",
+        "Automations and vibe coding",
+        "Unlimited listening, memories, and insights",
         "Priority desktop AI features",
+        "~$400 of monthly AI compute included (fair-use cap)",
+      ]
+    case "operator":
+      return [
+        "500 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
       ]
     case "unlimited":
       return [
-        "Unlimited listening time",
-        "Unlimited words transcribed",
-        "Unlimited insights",
-        "Unlimited memories",
+        "200 chat questions per month",
+        "Unlimited listening and transcription",
+        "Unlimited memories and insights",
+        "Shared with mobile and web",
       ]
     default:
       return []
@@ -5689,11 +6264,17 @@ struct SettingsContentView: View {
 
   private func normalizedPlanId(from title: String) -> String? {
     let normalized = title.lowercased()
-    if normalized.contains("unlimited") {
+    // Match the three plan families by title keyword. Neo is the post-rename
+    // display name for the legacy "unlimited" plan and still maps to that id
+    // because Stripe/backend PlanType enum is unchanged.
+    if normalized.contains("unlimited") || normalized.contains("neo") {
       return "unlimited"
     }
-    if normalized.contains("pro") {
-      return "pro"
+    if normalized.contains("operator") {
+      return "operator"
+    }
+    if normalized.contains("architect") || normalized.contains("pro") {
+      return "architect"
     }
     return nil
   }
@@ -5709,9 +6290,11 @@ struct SettingsContentView: View {
       let title: String
       switch planId {
       case "unlimited":
-        title = "Unlimited Plan"
-      case "pro":
-        title = "Omi Pro"
+        title = "Neo"
+      case "operator":
+        title = "Operator"
+      case "architect":
+        title = "Architect"
       default:
         title = options.first?.title ?? "Plan"
       }
@@ -5739,14 +6322,16 @@ struct SettingsContentView: View {
     let isSelected = selectedPlanIdForCheckout == plan.id
     let accent = planAccentColor(for: plan.id)
     let isCurrentPlan = isCurrentSubscriptionPlan(plan)
-    let isProUser = userSubscription?.subscription.plan == .pro
-    let isDowngrade = isProUser && plan.id == "unlimited"
+    let isArchitectUser =
+      userSubscription?.subscription.plan == .architect
+      || userSubscription?.subscription.plan == .pro
+    let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 6) {
-          Text(planEyebrow(for: plan.id).uppercased())
+          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
             .scaledFont(size: 10, weight: .bold)
             .foregroundColor(accent)
             .tracking(0.8)
@@ -5755,7 +6340,7 @@ struct SettingsContentView: View {
             .scaledFont(size: 18, weight: .bold)
             .foregroundColor(OmiColors.textPrimary)
 
-          if let subtitle = planSubtitle(for: plan.id) {
+          if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
@@ -5778,7 +6363,7 @@ struct SettingsContentView: View {
         .fixedSize(horizontal: true, vertical: false)
       }
 
-      Text(planDescription(for: plan.id))
+      Text(plan.description ?? planDescription(for: plan.id))
         .scaledFont(size: 13)
         .foregroundColor(OmiColors.textSecondary)
 
@@ -6202,6 +6787,39 @@ struct SettingsContentView: View {
         }
       }
     }
+    loadChatUsageQuota()
+    loadOverageInfo()
+  }
+
+  private func loadChatUsageQuota() {
+    guard !isLoadingChatUsage else { return }
+    isLoadingChatUsage = true
+    Task {
+      let quota = await APIClient.shared.fetchChatUsageQuota()
+      await MainActor.run {
+        chatUsageQuota = quota
+        isLoadingChatUsage = false
+      }
+    }
+  }
+
+  private func loadOverageInfo() {
+    guard !isLoadingOverage else { return }
+    isLoadingOverage = true
+    Task {
+      do {
+        let info = try await APIClient.shared.getOverageInfo()
+        await MainActor.run {
+          overageInfo = info
+          isLoadingOverage = false
+        }
+      } catch {
+        logError("Failed to load overage info", error: error)
+        await MainActor.run {
+          isLoadingOverage = false
+        }
+      }
+    }
   }
 
   private func startCheckout(for priceId: String) {
@@ -6343,11 +6961,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              FloatingBarUsageLimiter.shared.applyPlan(
-                plan: subscription.subscription.plan,
-                status: subscription.subscription.status
-              )
               userSubscription = subscription
               subscriptionError = nil
               pendingSubscriptionPriceId = nil

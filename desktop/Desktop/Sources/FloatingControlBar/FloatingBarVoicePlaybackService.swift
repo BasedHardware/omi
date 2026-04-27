@@ -22,6 +22,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   nonisolated private static let followupChunkEmergencyLength = 800
   private var playbackRate: Float { ShortcutSettings.shared.voicePlaybackSpeed }
 
+  nonisolated private static let voiceSampleText = "Hey, how is it going?"
+
   nonisolated private static let fillerPhrases: [String] = [
     "Let me check.",
     "One moment.",
@@ -145,10 +147,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private func resolvePlaybackMode() -> PlaybackMode {
     // TTS is now proxied through the backend — no client-side API key needed.
     // Fall back to system voice only if the backend URL is not configured.
-    guard getenv("OMI_API_URL") != nil else {
+    guard getenv("OMI_DESKTOP_API_URL") != nil else {
       return .systemFallback
     }
-    return .elevenLabs(voiceID: Self.defaultVoiceID)
+    let voiceID = ShortcutSettings.shared.selectedVoiceID
+    let resolvedVoiceID = voiceID.isEmpty ? Self.defaultVoiceID : voiceID
+    return .elevenLabs(voiceID: resolvedVoiceID)
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
@@ -229,6 +233,70 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     currentResponseID = nil
     interruptedResponseID = nil
     shouldInterruptNextResponse = false
+  }
+
+  /// Play a short preview of the given ElevenLabs voice so the user can hear it
+  /// when switching voices in settings.
+  func playVoiceSample(voiceID: String) {
+    resetPlaybackPipeline(clearMode: true)
+    currentResponseID = nil
+    interruptedResponseID = nil
+    shouldInterruptNextResponse = false
+
+    let phrase = Self.voiceSampleText
+
+    // Without the backend URL the service falls back to the system voice, which
+    // wouldn't demo the ElevenLabs voice anyway.
+    guard getenv("OMI_DESKTOP_API_URL") != nil else {
+      enqueueSystemSpeech(phrase)
+      return
+    }
+
+    playbackTask = Task { [weak self] in
+      do {
+        let audioData = try await Self.synthesizeSpeech(text: phrase, voiceID: voiceID)
+        try Task.checkCancellation()
+        await MainActor.run {
+          guard let self else { return }
+          self.startPlayback(audioData)
+        }
+      } catch is CancellationError {
+        return
+      } catch {
+        if Self.isCancellation(error) { return }
+        log(
+          "FloatingBarVoicePlaybackService: voice sample failed: \(error.localizedDescription)"
+        )
+      }
+    }
+  }
+
+  /// Synthesize and play a single short phrase via ElevenLabs (or fall back to
+  /// the system voice). Used by agent pills to speak a short acknowledgement
+  /// like "On it" before the agent kicks off.
+  func speakOneShot(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let mode = currentMode ?? resolvePlaybackMode()
+    currentMode = mode
+    switch mode {
+    case .elevenLabs(let voiceID):
+      Task { [weak self] in
+        do {
+          let audio = try await Self.synthesizeSpeech(text: trimmed, voiceID: voiceID)
+          await MainActor.run {
+            self?.startPlayback(audio)
+          }
+        } catch {
+          // Network/API error — fall back to system voice on the main thread.
+          await MainActor.run {
+            self?.enqueueSystemSpeech(trimmed)
+          }
+        }
+      }
+    case .systemFallback:
+      enqueueSystemSpeech(trimmed)
+    }
   }
 
   func interruptCurrentResponse() {

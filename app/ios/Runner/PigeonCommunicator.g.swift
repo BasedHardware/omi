@@ -210,6 +210,27 @@ struct BleDisconnectEvent: Hashable {
   var reason: String
   var reasonCode: Int64
   var isManual: Bool
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  var eventType: String
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  var lastRssi: Int64
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  var connectionDurationMs: Int64
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  var appState: String
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  var timeToReconnectMs: Int64
+  /// RSSI trajectory over the ~15s before this event. One of:
+  ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+  ///   "sudden"  — signal stable then link died (interference/stall/device off)
+  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "unknown" — insufficient samples to classify
+  /// Empty string on legacy records written before this field existed.
+  var rssiTrend: String
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -218,12 +239,24 @@ struct BleDisconnectEvent: Hashable {
     let reason = pigeonVar_list[1] as! String
     let reasonCode = pigeonVar_list[2] as! Int64
     let isManual = pigeonVar_list[3] as! Bool
+    let eventType = pigeonVar_list[4] as! String
+    let lastRssi = pigeonVar_list[5] as! Int64
+    let connectionDurationMs = pigeonVar_list[6] as! Int64
+    let appState = pigeonVar_list[7] as! String
+    let timeToReconnectMs = pigeonVar_list[8] as! Int64
+    let rssiTrend = pigeonVar_list[9] as! String
 
     return BleDisconnectEvent(
       timestamp: timestamp,
       reason: reason,
       reasonCode: reasonCode,
-      isManual: isManual
+      isManual: isManual,
+      eventType: eventType,
+      lastRssi: lastRssi,
+      connectionDurationMs: connectionDurationMs,
+      appState: appState,
+      timeToReconnectMs: timeToReconnectMs,
+      rssiTrend: rssiTrend
     )
   }
   func toList() -> [Any?] {
@@ -232,9 +265,46 @@ struct BleDisconnectEvent: Hashable {
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
+      rssiTrend,
     ]
   }
   static func == (lhs: BleDisconnectEvent, rhs: BleDisconnectEvent) -> Bool {
+    return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
+  func hash(into hasher: inout Hasher) {
+    deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
+  }
+}
+
+/// A single battery level reading persisted by the native BLE layer.
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct BleBatteryPoint: Hashable {
+  var timestamp: Int64
+  var level: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> BleBatteryPoint? {
+    let timestamp = pigeonVar_list[0] as! Int64
+    let level = pigeonVar_list[1] as! Int64
+
+    return BleBatteryPoint(
+      timestamp: timestamp,
+      level: level
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      timestamp,
+      level,
+    ]
+  }
+  static func == (lhs: BleBatteryPoint, rhs: BleBatteryPoint) -> Bool {
     return deepEqualsPigeonCommunicator(lhs.toList(), rhs.toList())  }
   func hash(into hasher: inout Hasher) {
     deepHashPigeonCommunicator(value: toList(), hasher: &hasher)
@@ -248,6 +318,9 @@ struct BleDeviceDiagnostics: Hashable {
   var disconnectHistory: [BleDisconnectEvent]
   var reconnectionCount: Int64
   var connectedAt: Int64
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  var failToConnectCount: Int64
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -255,11 +328,13 @@ struct BleDeviceDiagnostics: Hashable {
     let disconnectHistory = pigeonVar_list[0] as! [BleDisconnectEvent]
     let reconnectionCount = pigeonVar_list[1] as! Int64
     let connectedAt = pigeonVar_list[2] as! Int64
+    let failToConnectCount = pigeonVar_list[3] as! Int64
 
     return BleDeviceDiagnostics(
       disconnectHistory: disconnectHistory,
       reconnectionCount: reconnectionCount,
-      connectedAt: connectedAt
+      connectedAt: connectedAt,
+      failToConnectCount: failToConnectCount
     )
   }
   func toList() -> [Any?] {
@@ -267,6 +342,7 @@ struct BleDeviceDiagnostics: Hashable {
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     ]
   }
   static func == (lhs: BleDeviceDiagnostics, rhs: BleDeviceDiagnostics) -> Bool {
@@ -286,6 +362,8 @@ private class PigeonCommunicatorPigeonCodecReader: FlutterStandardReader {
     case 131:
       return BleDisconnectEvent.fromList(self.readValue() as! [Any?])
     case 132:
+      return BleBatteryPoint.fromList(self.readValue() as! [Any?])
+    case 133:
       return BleDeviceDiagnostics.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -304,8 +382,11 @@ private class PigeonCommunicatorPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? BleDisconnectEvent {
       super.writeByte(131)
       super.writeValue(value.toList())
-    } else if let value = value as? BleDeviceDiagnostics {
+    } else if let value = value as? BleBatteryPoint {
       super.writeByte(132)
+      super.writeValue(value.toList())
+    } else if let value = value as? BleDeviceDiagnostics {
+      super.writeByte(133)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -741,6 +822,7 @@ protocol BleHostApi {
   func startRssiStreaming(uuid: String) throws
   func stopRssiStreaming(uuid: String) throws
   func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void)
+  func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void)
   /// (Android only) Check if any CompanionDeviceManager association exists.
   func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
@@ -977,6 +1059,23 @@ class BleHostApiSetup {
       }
     } else {
       getDeviceDiagnosticsChannel.setMessageHandler(nil)
+    }
+    let getBatteryHistoryChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getBatteryHistoryChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        api.getBatteryHistory(uuid: uuidArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      getBatteryHistoryChannel.setMessageHandler(nil)
     }
     /// (Android only) Check if any CompanionDeviceManager association exists.
     let hasCompanionDeviceAssociationChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.hasCompanionDeviceAssociation\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)

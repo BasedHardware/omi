@@ -263,7 +263,7 @@ class AuthService {
       });
 
       // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         linkSubscription.cancel();
@@ -562,7 +562,7 @@ class AuthService {
 
       Logger.debug('Authorization URL: $authUrl');
 
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         throw Exception('Failed to launch authentication URL');

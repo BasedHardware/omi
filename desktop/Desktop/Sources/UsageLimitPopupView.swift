@@ -10,6 +10,7 @@ struct UsageLimitPopupView: View {
   let reason: String
   let onUpgrade: () -> Void
   let onDismiss: () -> Void
+  let onBringYourOwnKeys: () -> Void
 
   private var headline: String {
     "You've hit your monthly limit"
@@ -89,10 +90,10 @@ struct UsageLimitPopupView: View {
             }
             .buttonStyle(.plain)
 
-            Button(action: onDismiss) {
-              Text("Not now")
+            Button(action: onBringYourOwnKeys) {
+              Text("Bring your own keys")
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(OmiColors.purplePrimary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 32)
             }
@@ -121,7 +122,8 @@ struct UsageLimitPopupView: View {
   UsageLimitPopupView(
     reason: "transcription",
     onUpgrade: {},
-    onDismiss: {}
+    onDismiss: {},
+    onBringYourOwnKeys: {}
   )
   .frame(width: 900, height: 600)
 }

@@ -1,14 +1,18 @@
 from typing import List, Dict, Any, Optional
+import threading
 import uuid
 import logging
 import json
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
+
+from utils.executors import critical_executor, storage_executor
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from .clients import llm_mini
+from .clients import get_llm
 from .usage_tracker import track_usage, Features
 from database import knowledge_graph as kg_db
 
@@ -95,8 +99,13 @@ def extract_knowledge_from_memory(
         )
 
         with track_usage(uid, Features.KNOWLEDGE_GRAPH):
-            response = llm_mini.invoke(prompt)
-        extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+            response = get_llm('knowledge_graph').invoke(prompt)
+
+        try:
+            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+        except Exception as e:
+            logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+            extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
         label_to_node_id = {}
         for existing in existing_nodes:
@@ -187,8 +196,13 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
             )
 
             with track_usage(uid, Features.KNOWLEDGE_GRAPH):
-                response = llm_mini.invoke(prompt)
-            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+                response = get_llm('knowledge_graph').invoke(prompt)
+
+            try:
+                extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+            except Exception as e:
+                logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+                extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
             created_nodes = []
             created_edges = []
@@ -246,14 +260,13 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(process_memory, m) for m in memories]
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                all_nodes.extend(result.get('nodes', []))
-                all_edges.extend(result.get('edges', []))
-            except Exception:
-                logging.exception("Error in concurrent memory extraction")
+    futures = [storage_executor.submit(process_memory, m) for m in memories]
+    for future in as_completed(futures):
+        try:
+            result = future.result()
+            all_nodes.extend(result.get('nodes', []))
+            all_edges.extend(result.get('edges', []))
+        except Exception:
+            logging.exception("Error in concurrent memory extraction")
 
     return kg_db.get_knowledge_graph(uid)

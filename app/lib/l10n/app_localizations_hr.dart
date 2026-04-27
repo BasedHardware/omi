@@ -1797,7 +1797,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get rateOnGooglePlay => 'Ocijeni na Google Play';
 
   @override
-  String get maybeLater => 'Možda Kasnije';
+  String get maybeLater => 'Možda kasnije';
 
   @override
   String get speechProfileIntro => 'Omi trebalo nauči tvoje ciljeve i tvoj glas. Moći ćeš ga later promijeniti.';
@@ -2378,6 +2378,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get batteryLevel => 'Razina baterije';
 
   @override
+  String get charging => 'Punjenje';
+
+  @override
   String get productUpdate => 'Ažuriranje proizvoda';
 
   @override
@@ -2504,12 +2507,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Prati svoje osobne ciljeve na početnoj stranici';
-
-  @override
-  String get dailyReflection => 'Dnevna refleksija';
-
-  @override
-  String get get9PmReminderToReflect => 'Dobij podsjetnik u 21:00 kako bi se reflektirao na svoj dan';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Opis stavke aktivnosti ne može biti prazan';
@@ -3932,10 +3929,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get trackPersonalGoals => 'Pratite osobne ciljeve na početnoj stranici';
 
   @override
-  String get dailyReflectionDescription =>
-      'Dobijte podsjetnik u 21:00 kako bi razmislili o vašem danu i zabilježili svoje misli.';
-
-  @override
   String get endpointURL => 'URL krajnje točke';
 
   @override
@@ -4583,7 +4576,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get unableToLoadPlans => 'Nije moguće učitati planove';
 
   @override
-  String get checkConnectionTryAgain => 'Provjerite vašu vezu i pokušajte ponovno';
+  String get checkConnectionTryAgain => 'Provjerite vezu i pokušajte ponovo';
 
   @override
   String get useFreePlan => 'Koristi besplatni plan';
@@ -5119,7 +5112,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'Nastavkom, svi podaci koje dijelite s ovom aplikacijom (uključujući vaše razgovore, snimanja i osobne podatke) bit će sigurno pohranjeni na našim poslužiteljima kako bismo vam dali AI-powered insights i omogućili sve karakteristike aplikacije.';
+      'Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7207,12 +7200,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Vrijeme je za Dnevnu Refleksiju';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Recite mi o vašem danu';
-
-  @override
   String get actionItemReminderTitle => 'Omi Podsjetnik';
 
   @override
@@ -8332,6 +8319,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Postavke telefonskih poziva';
 
   @override
+  String get showPhoneCallButtonTitle => 'Prikaži gumb za poziv';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Prikaži gumb za telefonski poziv na početnom zaslonu';
+
+  @override
   String get yourVerifiedNumbers => 'Vaši potvrđeni brojevi';
 
   @override
@@ -8860,6 +8853,18 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'Baterija';
+
+  @override
+  String get noBatteryDataYet => 'Još nema podataka o bateriji';
+
+  @override
+  String get day => 'Dan';
+
+  @override
+  String get week => 'Tjedan';
+
+  @override
   String get rollbackToStableFirmware => 'Vrati se na stabilni firmware';
 
   @override
@@ -9038,4 +9043,153 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'Brisanje vašeg računa nije uspjelo. Pokušajte ponovno.';
+
+  @override
+  String get planUpdate => 'Ažuriranje plana';
+
+  @override
+  String get planDeprecationMessage =>
+      'Vaš Unlimited plan se ukida. Prijeđite na Operator plan — iste izvrsne značajke za \$49/mj. Vaš trenutni plan će nastaviti raditi u međuvremenu.';
+
+  @override
+  String get upgradeYourPlan => 'Nadogradite svoj plan';
+
+  @override
+  String get youAreOnAPaidPlan => 'Na plaćenom ste planu.';
+
+  @override
+  String get chatTitle => 'Chat';
+
+  @override
+  String get chatMessages => 'poruka';
+
+  @override
+  String get unlimitedChatThisMonth => 'Neograničene poruke ovog mjeseca';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used od $limit proračuna korišteno';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used od $limit poruka korišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit korišteno';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'Dostignut limit chata. Nadogradite za više poruka.';
+
+  @override
+  String get chatLimitReachedTitle => 'Dostignut limit chata';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'Koristili ste $used od $limitDisplay na planu $plan.';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'Resetira se za $count dana';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'Resetira se za $count sati';
+  }
+
+  @override
+  String get resetsSoon => 'Uskoro se resetira';
+
+  @override
+  String get upgradePlan => 'Nadogradi plan';
+
+  @override
+  String get billingMonthly => 'Mjesečno';
+
+  @override
+  String get billingYearly => 'Godišnje';
+
+  @override
+  String get savePercent => 'Uštedite ~17%';
+
+  @override
+  String get popular => 'Popularno';
+
+  @override
+  String get currentPlan => 'Trenutni';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count pitanja mjesečno';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count pitanja mjesečno';
+  }
+
+  @override
+  String get architectSubtitle => 'Napredni AI — tisuće razgovora + agentna automatizacija';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'Chat: \$$used / \$$limit iskorišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'Chat: \$$used iskorišteno ovog mjeseca';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'Chat: $used / $limit poruka ovog mjeseca';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'Chat: $used poruka ovog mjeseca';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply =>
+      'Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.';
+
+  @override
+  String get voiceResponseAudio => 'Pročitaj Omijev odgovor naglas';
+
+  @override
+  String get voiceResponseMode => 'Glasovni odgovor';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada izgovarati odgovore';
+
+  @override
+  String get voiceResponseOff => 'Isključeno';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Samo slušalice';
+
+  @override
+  String get voiceResponseAlways => 'Uvijek';
+
+  @override
+  String get agreeAndContinue => 'Slažem se i nastavi';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

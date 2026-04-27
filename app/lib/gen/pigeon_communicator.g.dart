@@ -150,6 +150,12 @@ class BleDisconnectEvent {
     required this.reason,
     required this.reasonCode,
     required this.isManual,
+    required this.eventType,
+    required this.lastRssi,
+    required this.connectionDurationMs,
+    required this.appState,
+    required this.timeToReconnectMs,
+    required this.rssiTrend,
   });
 
   int timestamp;
@@ -160,12 +166,45 @@ class BleDisconnectEvent {
 
   bool isManual;
 
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  String eventType;
+
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  int lastRssi;
+
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  int connectionDurationMs;
+
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  String appState;
+
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  int timeToReconnectMs;
+
+  /// RSSI trajectory over the ~15s before this event. One of:
+  ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+  ///   "sudden"  — signal stable then link died (interference/stall/device off)
+  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "unknown" — insufficient samples to classify
+  /// Empty string on legacy records written before this field existed.
+  String rssiTrend;
+
   List<Object?> _toList() {
     return <Object?>[
       timestamp,
       reason,
       reasonCode,
       isManual,
+      eventType,
+      lastRssi,
+      connectionDurationMs,
+      appState,
+      timeToReconnectMs,
+      rssiTrend,
     ];
   }
 
@@ -179,6 +218,12 @@ class BleDisconnectEvent {
       reason: result[1]! as String,
       reasonCode: result[2]! as int,
       isManual: result[3]! as bool,
+      eventType: result[4]! as String,
+      lastRssi: result[5]! as int,
+      connectionDurationMs: result[6]! as int,
+      appState: result[7]! as String,
+      timeToReconnectMs: result[8]! as int,
+      rssiTrend: result[9]! as String,
     );
   }
 
@@ -200,12 +245,60 @@ class BleDisconnectEvent {
 ;
 }
 
+/// A single battery level reading persisted by the native BLE layer.
+class BleBatteryPoint {
+  BleBatteryPoint({
+    required this.timestamp,
+    required this.level,
+  });
+
+  int timestamp;
+
+  int level;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      timestamp,
+      level,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static BleBatteryPoint decode(Object result) {
+    result as List<Object?>;
+    return BleBatteryPoint(
+      timestamp: result[0]! as int,
+      level: result[1]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! BleBatteryPoint || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(encode(), other.encode());
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => Object.hashAll(_toList())
+;
+}
+
 /// Diagnostics data read from native preferences on demand.
 class BleDeviceDiagnostics {
   BleDeviceDiagnostics({
     required this.disconnectHistory,
     required this.reconnectionCount,
     required this.connectedAt,
+    required this.failToConnectCount,
   });
 
   List<BleDisconnectEvent> disconnectHistory;
@@ -214,11 +307,16 @@ class BleDeviceDiagnostics {
 
   int connectedAt;
 
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  int failToConnectCount;
+
   List<Object?> _toList() {
     return <Object?>[
       disconnectHistory,
       reconnectionCount,
       connectedAt,
+      failToConnectCount,
     ];
   }
 
@@ -231,6 +329,7 @@ class BleDeviceDiagnostics {
       disconnectHistory: (result[0] as List<Object?>?)!.cast<BleDisconnectEvent>(),
       reconnectionCount: result[1]! as int,
       connectedAt: result[2]! as int,
+      failToConnectCount: result[3]! as int,
     );
   }
 
@@ -269,8 +368,11 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is BleDisconnectEvent) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is BleDeviceDiagnostics) {
+    }    else if (value is BleBatteryPoint) {
       buffer.putUint8(132);
+      writeValue(buffer, value.encode());
+    }    else if (value is BleDeviceDiagnostics) {
+      buffer.putUint8(133);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -287,6 +389,8 @@ class _PigeonCodec extends StandardMessageCodec {
       case 131: 
         return BleDisconnectEvent.decode(readValue(buffer)!);
       case 132: 
+        return BleBatteryPoint.decode(readValue(buffer)!);
+      case 133: 
         return BleDeviceDiagnostics.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1275,6 +1379,34 @@ class BleHostApi {
       );
     } else {
       return (pigeonVar_replyList[0] as BleDeviceDiagnostics?)!;
+    }
+  }
+
+  Future<List<BleBatteryPoint>> getBatteryHistory(String uuid) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as List<Object?>?)!.cast<BleBatteryPoint>();
     }
   }
 

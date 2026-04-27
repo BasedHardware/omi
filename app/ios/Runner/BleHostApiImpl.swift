@@ -89,6 +89,10 @@ final class BleHostApiImpl: BleHostApi {
         completion(.success(bleManager.getDeviceDiagnostics(uuid: uuid)))
     }
 
+    func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void) {
+        completion(.success(bleManager.getBatteryHistory(uuid: uuid)))
+    }
+
     func hasCompanionDeviceAssociation() throws -> Bool {
         return true // iOS uses state restoration
     }

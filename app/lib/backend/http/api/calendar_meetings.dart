@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/calendar_meeting_context.dart';
 import 'package:omi/env/env.dart';
@@ -75,59 +73,5 @@ Future<StoreMeetingResponse?> storeMeeting({
     Logger.debug('storeMeeting: Exception: $e');
     Logger.debug('storeMeeting: Stack trace: $stackTrace');
     return null;
-  }
-}
-
-/// Get a calendar meeting by its Firestore document ID
-Future<CalendarMeetingContext?> getMeeting(String meetingId) async {
-  try {
-    var response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/calendar/meetings/$meetingId',
-      headers: {},
-      method: 'GET',
-      body: '',
-    );
-
-    if (response == null) return null;
-
-    if (response.statusCode == 200) {
-      return CalendarMeetingContext.fromJson(jsonDecode(response.body));
-    } else {
-      Logger.debug('getMeeting: Failed with status ${response.statusCode}');
-      return null;
-    }
-  } catch (e) {
-    Logger.debug('getMeeting: Exception: $e');
-    return null;
-  }
-}
-
-/// List calendar meetings within a date range
-Future<List<CalendarMeetingContext>> listMeetings({DateTime? startDate, DateTime? endDate, int limit = 50}) async {
-  try {
-    String url = '${Env.apiBaseUrl}v1/calendar/meetings?limit=$limit';
-
-    if (startDate != null) {
-      url += '&start_date=${startDate.toUtc().toIso8601String()}';
-    }
-
-    if (endDate != null) {
-      url += '&end_date=${endDate.toUtc().toIso8601String()}';
-    }
-
-    var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-
-    if (response == null) return [];
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((json) => CalendarMeetingContext.fromJson(json)).toList();
-    } else {
-      Logger.debug('listMeetings: Failed with status ${response.statusCode}');
-      return [];
-    }
-  } catch (e) {
-    Logger.debug('listMeetings: Exception: $e');
-    return [];
   }
 }

@@ -323,7 +323,7 @@ int button_init()
     // Regist callback
     ret = button_regist_callback();
     if (ret < 0) {
-        LOG_ERR("Failed to regist buttons callback (%d)", ret);
+        LOG_ERR("Failed to register buttons callback (%d)", ret);
         return ret;
     }
 

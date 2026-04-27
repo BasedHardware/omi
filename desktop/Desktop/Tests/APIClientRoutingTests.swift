@@ -35,6 +35,37 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
         lock.unlock()
     }
 
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 4096
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let readCount = stream.read(buffer, maxLength: bufferSize)
+            if readCount > 0 {
+                data.append(buffer, count: readCount)
+            } else if readCount < 0 {
+                return nil
+            } else {
+                break
+            }
+        }
+
+        return data.isEmpty ? nil : data
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
@@ -44,7 +75,7 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
                 url: url,
                 method: request.httpMethod ?? "GET",
                 headers: request.allHTTPHeaderFields ?? [:],
-                body: request.httpBody
+                body: Self.bodyData(from: request)
             ))
         }
         let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
@@ -89,6 +120,60 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://api.omi.me/")
     }
 
+    func testBetaProductionBundleUsesDevelopmentPythonBackend() {
+        let url = DesktopBackendEnvironment.pythonBaseURL(
+            useDevelopmentBackends: true,
+            environmentValue: "https://api.omi.me"
+        )
+        XCTAssertEqual(url, "https://api.omiapi.com/")
+    }
+
+    func testStableProductionBundleKeepsProductionPythonBackend() {
+        let url = DesktopBackendEnvironment.pythonBaseURL(
+            useDevelopmentBackends: false,
+            environmentValue: "https://api.omi.me"
+        )
+        XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testBetaProductionBundleUsesDevelopmentRustBackend() {
+        let url = DesktopBackendEnvironment.rustBackendURL(
+            useDevelopmentBackends: true,
+            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
+            launchEnvironmentValue: nil
+        )
+        XCTAssertEqual(url, "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/")
+    }
+
+    func testStableProductionBundleKeepsConfiguredRustBackend() {
+        let url = DesktopBackendEnvironment.rustBackendURL(
+            useDevelopmentBackends: false,
+            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
+            launchEnvironmentValue: nil
+        )
+        XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
+    }
+
+    func testDevelopmentBackendRoutingDisabled() {
+        // Beta-to-dev routing disabled — see DesktopBackendEnvironment for context.
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "beta"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "staging"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "stable"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.desktop-dev",
+            updateChannel: "beta"
+        ))
+    }
+
     func testBaseURLReadsFromPythonEnvVar() async {
         setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
         defer { unsetenv("OMI_PYTHON_API_URL") }
@@ -114,15 +199,15 @@ final class APIClientRoutingTests: XCTestCase {
     }
 
     func testRustBackendURLReadsFromApiUrlEnvVar() async {
-        setenv("OMI_API_URL", "http://localhost:8787", 1)
-        defer { unsetenv("OMI_API_URL") }
+        setenv("OMI_DESKTOP_API_URL", "http://localhost:8787", 1)
+        defer { unsetenv("OMI_DESKTOP_API_URL") }
         let client = APIClient()
         let url = await client.rustBackendURL
         XCTAssertEqual(url, "http://localhost:8787/")
     }
 
     func testRustBackendURLReturnsEmptyWhenNotSet() async {
-        unsetenv("OMI_API_URL")
+        unsetenv("OMI_DESKTOP_API_URL")
         let client = APIClient()
         let url = await client.rustBackendURL
         XCTAssertEqual(url, "")
@@ -130,8 +215,8 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testBaseURLAndRustBackendURLAreIndependent() async {
         setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
-        setenv("OMI_API_URL", "http://rust:8787", 1)
-        defer { unsetenv("OMI_PYTHON_API_URL"); unsetenv("OMI_API_URL") }
+        setenv("OMI_DESKTOP_API_URL", "http://rust:8787", 1)
+        defer { unsetenv("OMI_PYTHON_API_URL"); unsetenv("OMI_DESKTOP_API_URL") }
 
         let client = APIClient()
         let base = await client.baseURL
@@ -156,12 +241,12 @@ final class APIClientRoutingTests: XCTestCase {
         super.setUp()
         URLCapture.reset()
         setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
-        setenv("OMI_API_URL", "http://rust-test:9002", 1)
+        setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
     }
 
     override func tearDown() {
         unsetenv("OMI_PYTHON_API_URL")
-        unsetenv("OMI_API_URL")
+        unsetenv("OMI_DESKTOP_API_URL")
         URLCapture.reset()
         super.tearDown()
     }
@@ -220,16 +305,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v3/memories", method: "POST",
                      label: "createMemory")
-    }
-
-    // -- Action items (GET → Python) --
-
-    func testGetActionItemRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getActionItem(id: "ai-1") as TaskActionItem
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/action-items/ai-1", method: "GET",
-                     label: "getActionItem")
     }
 
     // -- Goals: manual URL path (PATCH → Python) --
@@ -379,16 +454,6 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "deleteStagedTask")
     }
 
-    // -- Daily score (GET → Python, migrated from Rust) --
-
-    func testGetDailyScoreRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getDailyScore() as DailyScore
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/daily-score", method: "GET",
-                     label: "getDailyScore")
-    }
-
     // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
 
     func testGetChatSessionsRoutesToPython() async {
@@ -423,16 +488,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v2/desktop/messages", method: "DELETE",
                      label: "deleteMessages")
-    }
-
-    // -- AI profile (GET, PATCH → Python, migrated from Rust) --
-
-    func testGetAIUserProfileRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getAIUserProfile() as AIUserProfileResponse?
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/ai-profile", method: "GET",
-                     label: "getAIUserProfile")
     }
 
     // -- LLM usage (GET → Python, migrated from Rust) --
@@ -485,16 +540,6 @@ final class APIClientRoutingTests: XCTestCase {
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/users/private-cloud-sync", method: "POST",
                      label: "setPrivateCloudSync")
-    }
-
-    // -- updatePersonName: manual URL PATCH → Python --
-
-    func testUpdatePersonNameRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.updatePersonName(personId: "p1", newName: "Alice")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/people/p1/name", method: "PATCH",
-                     label: "updatePersonName")
     }
 
     // -- completeGoal: manual URL PATCH → Python --

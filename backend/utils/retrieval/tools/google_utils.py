@@ -5,14 +5,16 @@ Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 import os
 from typing import Optional
 
+import httpx
+
 import database.users as users_db
-import requests
+from utils.http_client import get_auth_client
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
+async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
     Works for both Calendar and Gmail since they use the same OAuth.
@@ -35,7 +37,8 @@ def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
         return None
 
     try:
-        response = requests.post(
+        client = get_auth_client()
+        response = await client.post(
             'https://oauth2.googleapis.com/token',
             data={
                 'client_id': client_id,
@@ -43,7 +46,6 @@ def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 'refresh_token': refresh_token,
                 'grant_type': 'refresh_token',
             },
-            timeout=10.0,
         )
 
         if response.status_code == 200:
@@ -61,7 +63,7 @@ def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     return None
 
 
-def google_api_request(
+async def google_api_request(
     method: str,
     url: str,
     access_token: str,
@@ -71,13 +73,13 @@ def google_api_request(
 ):
     logger.info(f"🌐 Google API {method.upper()} {url}")
 
-    r = requests.request(
+    client = get_auth_client()
+    r = await client.request(
         method=method,
         url=url,
         headers={"Authorization": f"Bearer {access_token}"},
         json=body,
         params=params,
-        timeout=10,
     )
 
     logger.info(f"🔎 Status {r.status_code}")

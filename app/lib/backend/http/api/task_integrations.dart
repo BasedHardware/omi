@@ -34,27 +34,6 @@ Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
   }
 }
 
-/// Get the user's default task integration app
-Future<String?> getDefaultTaskIntegration() async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/task-integrations/default',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return data['default_app'] as String?;
-  } else {
-    Logger.debug('getDefaultTaskIntegration error ${response.statusCode}');
-    return null;
-  }
-}
-
 /// Set the user's default task integration app
 Future<bool> setDefaultTaskIntegration(String appKey) async {
   var response = await makeApiCall(

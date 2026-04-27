@@ -692,6 +692,14 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearUserData() {
+    _actionItems = [];
+    _selectedItems = {};
+    _pendingSortUpdates.clear();
+    _pendingIndentUpdates.clear();
+    notifyListeners();
+  }
+
   bool isItemSelected(String itemId) {
     return _selectedItems.contains(itemId);
   }

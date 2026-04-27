@@ -114,6 +114,13 @@ int app_sd_init(void);
  */
 int app_sd_off(void);
 
+/**
+ * @brief Pause or resume SD card writes (keeps SD powered and mounted).
+ *        Used by AAD to stop writing during VAD silence without
+ *        unmounting the filesystem.
+ */
+void sd_write_pause(bool pause);
+
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
 /**

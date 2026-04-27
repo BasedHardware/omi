@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
@@ -59,7 +58,7 @@ class CategorySection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header - Apple style
+          // Section header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             child: Row(
@@ -207,17 +206,11 @@ class SectionAppItemCard extends StatelessWidget {
                       ),
                       if (app.ratingAvg != null) ...[
                         const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
-                            const SizedBox(width: 4),
-                            Text(
-                              app.getRatingAvg()!,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                            ),
-                            const SizedBox(width: 4),
-                            Text('(${app.ratingCount})', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                          ],
+                        Text(
+                          '${app.getRatingAvg()!} · ${app.ratingCount} ${app.ratingCount == 1 ? "rating" : "ratings"}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ],
@@ -226,7 +219,7 @@ class SectionAppItemCard extends StatelessWidget {
 
                 const SizedBox(width: 8),
 
-                // Action button - Apple style
+                // Action button
                 Container(
                   width: 60,
                   height: 28,
@@ -236,7 +229,7 @@ class SectionAppItemCard extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      isEnabled ? 'Open' : 'Install',
+                      isEnabled ? 'Open' : 'Enable',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

@@ -1,4 +1,4 @@
-# Coding Guidelines
+# Omi Development Guide
 <!-- Official guidance for writing these files:
      CLAUDE.md: https://docs.anthropic.com/en/docs/claude-code/memory
      AGENTS.md: https://developers.openai.com/codex/guides/agents-md
@@ -10,90 +10,37 @@
 - Never ask for confirmation. Just act. Make decisions autonomously and proceed without checking in.
 - You have full access to the user's computer — browser, desktop, all apps. Never ask the user to do something you can do yourself (sign in, click buttons, dismiss dialogs, etc.).
 
-## Computer Control (clicking, typing, screenshots)
-
-You have multiple MCP tools for controlling the Mac. Use the **right tool for each job** — don't bounce between tools.
-
-### For clicking at coordinates — use `cliclick` (FASTEST)
-```bash
-cliclick c:X,Y        # click
-cliclick dc:X,Y       # double-click
-cliclick rc:X,Y       # right-click
-cliclick m:X,Y        # move mouse
-cliclick t:"text"     # type text
-cliclick p            # print current mouse position
-cliclick kd:cmd ku:cmd  # key down/up
-```
-`cliclick` uses CGEvent, handles Retina correctly, works across all displays. No MCP overhead.
-
-### For screenshots — use `codriver`
-- `mcp__codriver__desktop_screenshot` — capture screen (use `scale: 0.5` for speed)
-- `mcp__codriver__desktop_ocr` — find text positions on screen
-- `mcp__codriver__desktop_windows` — list/focus windows
-
-### Workflow: screenshot → find target → click
-1. Take screenshot with `codriver` to see the screen
-2. Identify the coordinates of what to click (use OCR if needed)
-3. Click with `cliclick c:X,Y` via Bash — instant, reliable
-
-### For native macOS app testing — use `agent-swift`
-Already documented below. Use for connected SwiftUI/AppKit apps.
-
-### For browser interaction — priority order:
-1. **`playwright`** MCP — headless browser, most reliable for web automation
-2. **`claude-in-chrome`** — for existing browser tabs (only when extension is connected)
-3. **`codriver` screenshot + `cliclick`** — fallback if browser tools fail
-
-### Rules:
-- NEVER try 3+ different click tools for the same action — pick one and commit
-- For multi-monitor: always check coordinates against the screenshot scale factor
-- `codriver` screenshots at `scale: 0.5` means multiply coordinates by 2 before clicking
-- Prefer `cliclick` over `automac`/`mac-use-mcp` click — they have coordinate bugs on multi-monitor
-- When a tool errors (e.g., "helper binary not found", "extension not connected"), immediately switch to the fallback — don't retry the broken tool
-
 ## Setup
 
-### Install Pre-commit Hook (required)
-Run before your first commit — formatting is enforced by CI:
+### Pre-commit Hook (required)
 ```bash
 ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
-### Mobile App Setup
+### Mobile App
 ```bash
 cd app && bash setup.sh ios    # or: bash setup.sh android
 ```
 
-## Backend
+---
+
+## Backend (Python)
 <!-- Maintainers: @beastoin (service map, logging security), @Thinh (imports, memory mgmt) -->
 
-### No In-Function Imports
-All imports must be at the module top level. Never import inside functions.
-
-### Import from Lower-Level Modules
-Follow the module hierarchy when importing. Higher-level modules import from lower-level modules, never the reverse.
-
-**Module hierarchy (lowest to highest):**
-1. `database/` - Database connections, cache instances
-2. `utils/` - Utility functions, helpers
-3. `routers/` - API endpoints
-4. `main.py` - Application entry point
-
-### Memory Management
-Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+### Rules
+- **No in-function imports** — all imports at module top level.
+- **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
+- **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/lint_async_blockers.py` before committing.
 
 ### Logging Security
 Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
-
-Rules:
-- `sanitize()` for `response.text`, API responses, and error bodies.
-- `sanitize_pii()` for names, emails, and user text.
-- Keep log levels as-is (don't downgrade to hide data).
-- Keep UIDs, IPs, status codes, and structural info visible for debugging.
+- `sanitize()` for `response.text`, API responses, error bodies.
+- `sanitize_pii()` for names, emails, user text.
+- Keep UIDs, IPs, status codes visible for debugging.
 - Never put raw `response.text` in exception messages.
 
-### Backend Service Map
-
+### Service Map
 ```
 Shared: Firestore, Redis
 
@@ -117,152 +64,147 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 See service descriptions in AGENTS.md. Update both files when service boundaries change.
 
+---
+
 ## App (Flutter)
 <!-- Maintainers: @Thinh (l10n, formatting) -->
 
-### Localization Required
-
-- All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
-- **Translate all locales**: When adding new l10n keys, provide real translations for all 33 non-English locales — do not leave English text in non-English ARB files. Use the `omi-add-missing-language-keys-l10n` skill to generate proper translations. Ensure `{parameter}` placeholders match the English ARB exactly.
-- After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
-```bash
-cd app && flutter gen-l10n
-```
-
-### Verifying UI Changes (agent-flutter)
-
-After editing Flutter UI code, **verify the change programmatically** — do not just hot restart and hope.
-
-Marionette is already integrated in debug builds (`marionette_flutter: ^0.3.0`). Install agent-flutter once: `npm install -g agent-flutter-cli`.
-
-**Edit → Verify → Evidence loop:**
-```bash
-# 1. Edit Dart code, then hot restart
-kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)
-
-# 2. Connect (must reconnect after every hot restart)
-AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect
-
-# 3. See what's on screen
-agent-flutter snapshot -i              # list interactive widgets
-agent-flutter snapshot -i --json       # structured data for parsing
-
-# 4. Interact
-agent-flutter press @e3                # tap by ref
-agent-flutter press 540 1200           # tap by coordinates (ADB fallback)
-agent-flutter dismiss                  # dismiss system dialogs (location, permissions)
-agent-flutter find type button press   # find and tap (more stable than @ref)
-agent-flutter fill @e5 "hello"         # type into textfield
-agent-flutter scroll down              # scroll current view
-
-# 5. Screenshot evidence for PRs
-agent-flutter screenshot /tmp/after-change.png
-```
-
-**Key rules:**
-- Refs go stale frequently (Flutter rebuilds aggressively) — always re-snapshot before every interaction. Use `press x y` as fallback.
-- `AGENT_FLUTTER_LOG` must point to the flutter run stdout log file (not logcat). This is how agent-flutter finds the correct VM Service URI.
-- `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
-- When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
-- Android: auto-detects via ADB. iOS: requires `AGENT_FLUTTER_LOG` or explicit URI.
-- **App flows & exploration skill**: See `app/e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and known flows. Read this when developing features or exploring the app.
+### Localization
+- All user-facing strings must use l10n: `context.l10n.keyName` instead of hardcoded strings.
+- Add new keys via `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
+- **Translate all 33 locales** — no English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill.
+- Regenerate after changes: `cd app && flutter gen-l10n`
 
 ### Firebase Prod Config
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
 
-## Desktop (macOS)
+### Verifying UI Changes (agent-flutter)
+After editing Flutter UI code, **verify programmatically** — don't just hot restart and hope.
 
-### Verifying UI Changes (agent-swift)
-
-After editing Swift UI code, **verify the change programmatically** via the macOS Accessibility API — no app-side instrumentation needed.
-
-Install agent-swift once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app (System Settings → Privacy & Security → Accessibility).
-
-**Edit → Verify → Evidence loop:**
 ```bash
-# 1. Edit Swift code, rebuild and run
-cd desktop && ./run.sh
-
-# 2. Connect to the running app
-agent-swift connect --bundle-id com.omi.desktop-dev
-
-# 3. See what's on screen
-agent-swift snapshot -i              # interactive elements only (recommended)
-agent-swift snapshot -i --json       # structured data for parsing
-
-# 4. Interact
-agent-swift click @e3                # CGEvent click (works with SwiftUI)
-agent-swift press @e3                # AXPress action (AppKit buttons)
-agent-swift fill @e5 "search text"   # type into a text field
-agent-swift find role button click   # find + chained action
-agent-swift scroll down              # scroll the view
-
-# 5. Assert & wait
-agent-swift is exists @e3            # exit 0 = true, exit 1 = false
-agent-swift wait text "Settings"     # wait for text to appear (5s default)
-
-# 6. Screenshot evidence for PRs
-agent-swift screenshot /tmp/after-change.png  # capture app window
+kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)                # hot restart
+AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect      # reconnect after restart
+agent-flutter snapshot -i                                         # see interactive widgets
+agent-flutter find type button press                              # find and tap
+agent-flutter fill @e5 "hello"                                    # type into textfield
+agent-flutter screenshot /tmp/evidence.png                        # PR evidence
 ```
 
 **Key rules:**
-- `agent-swift doctor` verifies Accessibility permission and can check the target app.
-- Prefer `click` over `press` for SwiftUI apps — `click` sends CGEvent mouse clicks that trigger NavigationLink/gesture handlers, while `press` sends AXPress which only works for AppKit buttons.
-- Refs go stale after `click`/`press`/`fill`/`scroll` — re-snapshot before the next interaction.
-- Always use `snapshot -i` (interactive only) — full snapshots of complex apps are very verbose.
-- Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
-- JSON output: `--json` flag, `AGENT_SWIFT_JSON=1` env var, or pipe to auto-detect.
-- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
-- Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
-- Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
-- **Named test bundles**: When testing a feature or bug fix, ALWAYS create a separate named bundle with `OMI_APP_NAME="feature-name" ./run.sh`. This installs to `/Applications/feature-name.app` with bundle ID `com.omi.feature-name`, running side-by-side with "Omi Dev" and "Omi Beta". NEVER overwrite "Omi Dev" when testing a specific change — the user may have it running. Connect agent-swift with `--bundle-id com.omi.feature-name`.
-- Keep the bundle suffix and app name identical so auth callbacks reopen the correct app. Example: `1233.app` should use `com.omi.1233`, `search.app` should use `com.omi.search`, and mismatches like `1233.app` with `com.omi.desktop-dev` are not allowed.
-- **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
-- When asked to build or rebuild the desktop app for testing, don't stop at a successful compile: launch the named test app, interact with it programmatically to confirm it actually runs, and report any environment blocker if full interaction is impossible.
+- Re-snapshot before every interaction (refs go stale). Use `press x y` as coordinate fallback.
+- `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
+- `find type X` / `find text "label"` is more stable than `@ref` numbers.
+- Add `Key('descriptive_name')` to new interactive widgets for `find key`.
+- See `app/e2e/SKILL.md` for navigation architecture, screen map, and known flows.
+
+---
+
+## Desktop (macOS)
+
+### Building & Running
+- `./run.sh` — full local dev (build + backend + tunnel + app)
+- `./run.sh --yolo` — quick start with prod backend, no local services
+- Release builds are handled entirely by Codemagic CI (no local release script)
+- Build command: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required)
+- **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly
+
+### Named Test Bundles
+When testing a feature or bug fix, **always create a separate named bundle**:
+```bash
+OMI_APP_NAME="omi-fix-rewind" ./run.sh
+```
+This installs to `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-rewind`.
+
+**Rules:**
+- **ALWAYS prefix with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so bundles are grouped in `/Applications/`
+- NEVER use bare `./run.sh` when testing a specific change — it overwrites "Omi Dev"
+- NEVER kill or interfere with "Omi", "Omi Beta" — those are production installs
+- Keep app name and bundle suffix identical (e.g., `omi-search.app` → `com.omi.omi-search`)
+- Named bundles get their own permissions, auth state, and database
+- After building, launch and interact programmatically to confirm it runs — don't stop at compile
+
+### Verifying UI Changes (agent-swift)
+After editing Swift UI code, **verify programmatically** via macOS Accessibility API:
+
+```bash
+agent-swift connect --bundle-id com.omi.omi-fix-rewind           # connect to named bundle
+agent-swift snapshot -i                                           # interactive elements only
+agent-swift click @e3                                             # CGEvent click (SwiftUI)
+agent-swift press @e3                                             # AXPress (AppKit buttons)
+agent-swift fill @e5 "text"                                       # type into field
+agent-swift wait text "Settings"                                  # wait for text
+agent-swift screenshot /tmp/evidence.png                          # PR evidence
+```
+
+**Key rules:**
+- Prefer `click` over `press` for SwiftUI (CGEvent triggers NavigationLink; AXPress is AppKit only).
+- Re-snapshot before every interaction (refs go stale).
+- Always use `snapshot -i` (interactive only) — full snapshots are very verbose.
+- `agent-swift doctor` verifies Accessibility permission.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- See `desktop/e2e/SKILL.md` for navigation architecture and known flows.
+
+---
+
+## Computer Control (clicking, typing, screenshots)
+
+For controlling the Mac GUI. Use the **right tool for each job**:
+
+| Task | Tool | Example |
+|------|------|---------|
+| Click at coordinates | `cliclick` | `cliclick c:X,Y` |
+| Screenshots/OCR | `codriver` | `mcp__codriver__desktop_screenshot` (scale: 0.5) |
+| Native macOS app testing | `agent-swift` | See Desktop section above |
+| Browser automation | `playwright` MCP | Headless, most reliable |
+| Existing browser tabs | `claude-in-chrome` | Only when extension connected |
+
+**Workflow:** screenshot (`codriver`) → find target → click (`cliclick c:X,Y`)
+
+**Rules:**
+- NEVER try 3+ different click tools for the same action — pick one and commit.
+- `codriver` at `scale: 0.5` → multiply coordinates by 2 before clicking.
+- Prefer `cliclick` over `automac`/`mac-use-mcp` (coordinate bugs on multi-monitor).
+
+---
 
 ## Formatting
 <!-- Maintainers: @Thinh (Jan 19) -->
 
-Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
+The pre-commit hook auto-formats, but you can run manually:
 
-### Dart (app/)
-```bash
-dart format --line-length 120 <files>
-```
-Note: Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
+| Language | Command |
+|----------|---------|
+| Dart (`app/`) | `dart format --line-length 120 <files>` |
+| Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
+| C/C++ (firmware) | `clang-format -i <files>` |
 
-### Python (backend/)
-```bash
-black --line-length 120 --skip-string-normalization <files>
-```
+Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
 
-### C/C++ (firmware: omi/, omiGlass/)
-```bash
-clang-format -i <files>
-```
+---
 
 ## Git
 <!-- Maintainers: @AaravGarg (original, Feb 2), @NikShevchenko (push rules, Mar 3) -->
 
 ### Rules
 - Always commit to the current branch — never switch branches.
-- Never push directly to `main`.
-- Never merge directly from a local branch. Land changes through a PR only.
-- When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
+- Never push directly to `main`. Land changes through PRs only.
 - Never squash merge PRs — use regular merge.
 - Make individual commits per file, not bulk commits.
-- The pre-commit hook auto-formats staged code — no need to format manually before committing.
-- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`.
+- If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
-- Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
+- Always work in a git worktree for code changes. Use `EnterWorktree` to isolate work.
+- Before creating a worktree or branch, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 
-### RELEASE command
-<!-- Added by @AaravGarg (Feb 4) -->
-When the user says "RELEASE", create a branch from `main`, make individual commits per changed file, push/create a PR, merge without squash, then switch back to `main` and pull.
+### RELEASE Command
+Create branch from `main`, individual commits per file, push/create PR, merge without squash, switch back to `main` and pull.
 
-### RELEASEWITHBACKEND command
-<!-- Added by @AaravGarg (Feb 4) -->
-Run the full RELEASE flow, then deploy backend to production with `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
+### RELEASEWITHBACKEND Command
+Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
+
+---
+
+## Testing
+Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
 
 ## CI/CD
 See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and checks.
@@ -271,12 +213,7 @@ See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and c
 See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 
 ## Documentation Maintenance
-
-- If a PR changes setup steps, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
+- If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - Keep `AGENTS.md` synced with this file. Update both in the same commit.
-- Keep rules concise (one-line statements). No code examples or verbose prose in this file.
-- For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
-- If a PR changes how audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol works — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR. This includes changes to timeouts, event types, processing flow, or inter-service communication between listen and pusher.
-
-## Testing
-Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
+- For architecture/core flow/API changes — update Mintlify docs (`docs/`) in the same PR.
+- If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.

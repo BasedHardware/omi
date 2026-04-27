@@ -41,25 +41,6 @@ Future<ActionItemsResponse> getActionItems({
   }
 }
 
-Future<ActionItemWithMetadata?> getActionItem(String actionItemId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
-  } else {
-    Logger.debug('getActionItem error ${response.statusCode}');
-    return null;
-  }
-}
-
 Future<ActionItemWithMetadata?> createActionItem({
   required String description,
   DateTime? dueAt,
@@ -157,67 +138,9 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
 }
 
-Future<ActionItemWithMetadata?> toggleActionItemCompletion(String actionItemId, bool completed) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/$actionItemId/completed?completed=$completed',
-    headers: {},
-    method: 'PATCH',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
-  } else {
-    Logger.debug('toggleActionItemCompletion error ${response.statusCode}');
-    return null;
-  }
-}
-
 Future<bool> deleteActionItem(String actionItemId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-
-  if (response == null) return false;
-
-  return response.statusCode == 204;
-}
-
-// Conversation-specific action items
-Future<ActionItemsResponse> getConversationActionItems(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return ActionItemsResponse(
-      actionItems: (data['action_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
-      hasMore: false, // Conversation-specific calls don't have pagination
-    );
-  } else {
-    Logger.debug('getConversationActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
-  }
-}
-
-Future<bool> deleteConversationActionItems(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
     headers: {},
     method: 'DELETE',
     body: '',
@@ -302,27 +225,6 @@ Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
   } else {
     Logger.debug('batchUpdateActionItems error ${response.statusCode}');
     return false;
-  }
-}
-
-// Batch operations
-Future<List<ActionItemWithMetadata>> createActionItemsBatch(List<Map<String, dynamic>> actionItems) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/batch',
-    headers: {},
-    method: 'POST',
-    body: jsonEncode(actionItems),
-  );
-
-  if (response == null) return [];
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList();
-  } else {
-    Logger.debug('createActionItemsBatch error ${response.statusCode}');
-    return [];
   }
 }
 

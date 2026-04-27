@@ -7,6 +7,7 @@ import fal_client
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
+from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 import logging
 
@@ -16,6 +17,15 @@ logger = logging.getLogger(__name__)
 # WARN: the pre-recorded transcription is available on deepgram cloud
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
+
+
+def _deepgram_client_for_request() -> DeepgramClient:
+    """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
+    byok = get_byok_key('deepgram')
+    if byok:
+        return DeepgramClient(byok, _deepgram_options)
+    return _deepgram_client
+
 
 # Languages supported by nova-3
 _deepgram_nova3_languages = {
@@ -180,7 +190,7 @@ def deepgram_prerecorded(
             else:
                 options["keywords"] = list(keywords)
 
-        response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
+        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_url({"url": audio_url}, options)
 
         # Extract words from response
         result = response.to_dict()
@@ -252,6 +262,7 @@ def deepgram_prerecorded_from_bytes(
     language: Optional[str] = None,
     model: str = "nova-3",
     return_language: bool = False,
+    keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio bytes using Deepgram's pre-recorded API.
@@ -270,6 +281,7 @@ def deepgram_prerecorded_from_bytes(
         language: Language code for transcription, or None for auto-detect
         model: Deepgram model name (default 'nova-3')
         return_language: If True, returns (words, language) tuple
+        keywords: Custom vocabulary words to boost transcription accuracy
 
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
@@ -293,6 +305,12 @@ def deepgram_prerecorded_from_bytes(
         if language and not is_multi:
             options["language"] = language
 
+        if keywords:
+            if str(model).startswith("nova-3"):
+                options["keyterm"] = list(keywords)
+            else:
+                options["keywords"] = list(keywords)
+
         # For raw PCM, Deepgram needs encoding + sample_rate to interpret the bytes
         if encoding:
             options["encoding"] = encoding
@@ -304,7 +322,7 @@ def deepgram_prerecorded_from_bytes(
         mimetype = "audio/raw" if encoding else "audio/wav"
         source = {"buffer": audio_buffer, "mimetype": mimetype}
 
-        response = _deepgram_client.listen.rest.v("1").transcribe_file(source, options)
+        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options)
 
         # Extract words from response
         result = response.to_dict()
@@ -351,7 +369,16 @@ def deepgram_prerecorded_from_bytes(
         logger.error(f'Deepgram prerecorded from bytes error: {e}')
         if attempts < 2:
             return deepgram_prerecorded_from_bytes(
-                audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, model, return_language
+                audio_bytes,
+                sample_rate,
+                diarize,
+                attempts + 1,
+                encoding,
+                channels,
+                language,
+                model,
+                return_language,
+                keywords,
             )
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
 

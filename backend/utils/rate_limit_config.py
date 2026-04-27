@@ -58,6 +58,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Memory batch writes — each request can create up to 100 memories, so the
     # per-request cap is intentionally tighter than memories:create.
     "memories:batch": (30, 3600),
+    # Memory mutations — lightweight Firestore writes
+    "memories:modify": (120, 3600),
+    # Memory deletes — destructive operations
+    "memories:delete": (60, 3600),
+    # Delete-all is extremely destructive; tight cap with one retry cushion
+    "memories:delete_all": (2, 3600),
     # Goals — single LLM call
     "goals:suggest": (30, 3600),
     "goals:advice": (30, 3600),
@@ -80,6 +86,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
+    # char caps are enforced in database.redis_db.check_tts_rate_limit.
+    "tts:synthesize": (300, 3600),
 }
 
 

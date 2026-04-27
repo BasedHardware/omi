@@ -162,12 +162,12 @@ struct GeminiResponse: Decodable {
 actor GeminiClient {
   private let model: String
 
-  /// Backend proxy base URL (from OMI_API_URL env var)
+  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
-    return ""
+    return "https://api.omi.me/"
   }
 
   enum GeminiClientError: LocalizedError {
@@ -226,10 +226,11 @@ actor GeminiClient {
     }
   }
 
-  init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
+  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
-    // the key server-side. Requires OMI_API_URL to be set (standard dev flow via run.sh).
+    // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
+    // so installed test bundles launched from Finder still have AI features.
     guard !Self.proxyBaseURL.isEmpty else {
       throw GeminiClientError.missingAPIKey
     }
@@ -277,6 +278,18 @@ actor GeminiClient {
       throw GeminiClientError.apiError("blocked: \(reason)")
     }
     throw GeminiClientError.invalidResponse
+  }
+
+  /// Check HTTP status code before attempting JSON decode.
+  /// Throws GeminiClientError.apiError for non-2xx responses so the error flows
+  /// through isTransientError() and userFacingMessage() instead of crashing JSONDecoder.
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    guard let httpResponse = response as? HTTPURLResponse else { return }
+    let status = httpResponse.statusCode
+    guard (200..<300).contains(status) else {
+      let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+      throw GeminiClientError.apiError("HTTP \(status): \(body)")
+    }
   }
 
   /// Check if an error is transient and worth retrying
@@ -338,7 +351,7 @@ actor GeminiClient {
             contents: [
               GeminiRequest.Content(parts: [
                 GeminiRequest.Part(text: prompt),
-                GeminiRequest.Part(mimeType: "image/jpeg", data: base64Data),
+                GeminiRequest.Part(mimeType: "image/webp", data: base64Data),
               ])
             ],
             systemInstruction: GeminiRequest.SystemInstruction(
@@ -361,7 +374,8 @@ actor GeminiClient {
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
 
@@ -401,9 +415,10 @@ actor GeminiClient {
   /// - Returns: The text response from the model
   func sendTextRequest(
     prompt: String,
-    systemPrompt: String
+    systemPrompt: String,
+    maxRetries: Int = 2,
+    timeout: TimeInterval = 300
   ) async throws -> String {
-    let maxRetries = 2
     var lastError: Error?
 
     for attempt in 0...maxRetries {
@@ -425,10 +440,11 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
+        urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
 
@@ -496,7 +512,8 @@ actor GeminiClient {
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
 
@@ -932,7 +949,8 @@ extension GeminiClient {
     urlRequest.timeoutInterval = 300
     urlRequest.httpBody = try JSONEncoder().encode(request)
 
-    let (data, _) = try await URLSession.shared.data(for: urlRequest)
+    let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+    try checkHTTPStatus(urlResponse, data: data)
 
     // Parse response
     let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
@@ -1036,7 +1054,8 @@ extension GeminiClient {
     urlRequest.timeoutInterval = 300
     urlRequest.httpBody = try JSONEncoder().encode(request)
 
-    let (data, _) = try await URLSession.shared.data(for: urlRequest)
+    let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+    try checkHTTPStatus(urlResponse, data: data)
 
     let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
 
@@ -1249,7 +1268,8 @@ extension GeminiClient {
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
 
@@ -1340,7 +1360,8 @@ extension GeminiClient {
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
 
@@ -1460,7 +1481,8 @@ extension GeminiClient {
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
 

@@ -1,11 +1,11 @@
-import { getIdToken } from './firebase';
+import { getIdToken } from "./firebase";
 import {
   invalidateCache,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
   CACHE_TTL,
-} from './cache';
+} from "./cache";
 import type {
   Conversation,
   ConversationSearchResponse,
@@ -20,7 +20,7 @@ import type {
   MessageChunkType,
   MessageFile,
   AudioFileUrlInfo,
-} from '@/types/conversation';
+} from "@/types/conversation";
 import type {
   App,
   AppCategory,
@@ -34,30 +34,29 @@ import type {
   GenerateDescriptionResponse,
   NotificationScope,
   PaymentPlan,
-  AppApiKey,
-} from '@/types/apps';
+} from "@/types/apps";
 
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
-const API_BASE_URL = '/api/proxy';
+const API_BASE_URL = "/api/proxy";
 
 /**
  * Make an authenticated API request
  */
 async function fetchWithAuth<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
@@ -66,21 +65,22 @@ async function fetchWithAuth<T>(
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-App-Platform": "web",
         ...options.headers,
       },
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'No error body');
+      const errorText = await response.text().catch(() => "No error body");
       // Only log non-404 errors (404s are expected for optional endpoints)
       if (response.status !== 404) {
-        console.error('API error response:', response.status, errorText);
+        console.error("API error response:", response.status, errorText);
       }
 
       if (response.status === 401) {
-        throw new Error('Unauthorized - please sign in again');
+        throw new Error("Unauthorized - please sign in again");
       }
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
@@ -92,9 +92,14 @@ async function fetchWithAuth<T>(
 
     return response.json();
   } catch (fetchError) {
-    if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
-      console.error('Network error - possible CORS issue or API unavailable');
-      throw new Error('Network error: Unable to reach the API. Please check your connection.');
+    if (
+      fetchError instanceof TypeError &&
+      fetchError.message === "Failed to fetch"
+    ) {
+      console.error("Network error - possible CORS issue or API unavailable");
+      throw new Error(
+        "Network error: Unable to reach the API. Please check your connection.",
+      );
     }
     throw fetchError;
   }
@@ -114,12 +119,12 @@ export interface GetConversationsParams {
 }
 
 export async function getConversations(
-  params: GetConversationsParams = {}
+  params: GetConversationsParams = {},
 ): Promise<Conversation[]> {
   const {
     limit = 50,
     offset = 0,
-    statuses = ['processing', 'completed'],
+    statuses = ["processing", "completed"],
     includeDiscarded = false,
     startDate,
     endDate,
@@ -130,19 +135,19 @@ export async function getConversations(
     limit: limit.toString(),
     offset: offset.toString(),
     include_discarded: includeDiscarded.toString(),
-    statuses: statuses.join(','),
+    statuses: statuses.join(","),
   });
 
   if (startDate) {
-    queryParams.set('start_date', startDate.toISOString());
+    queryParams.set("start_date", startDate.toISOString());
   }
 
   if (endDate) {
-    queryParams.set('end_date', endDate.toISOString());
+    queryParams.set("end_date", endDate.toISOString());
   }
 
   if (folderId) {
-    queryParams.set('folder_id', folderId);
+    queryParams.set("folder_id", folderId);
   }
 
   return fetchWithAuth<Conversation[]>(`/v1/conversations?${queryParams}`);
@@ -156,7 +161,7 @@ export async function getConversation(id: string): Promise<Conversation> {
   return fetchWithCache<Conversation>(
     cacheKeys.conversation(id),
     () => fetchWithAuth<Conversation>(`/v1/conversations/${id}`),
-    { ttl: CACHE_TTL.SHORT }
+    { ttl: CACHE_TTL.SHORT },
   );
 }
 
@@ -171,12 +176,12 @@ export interface SearchConversationsParams {
 }
 
 export async function searchConversations(
-  params: SearchConversationsParams
+  params: SearchConversationsParams,
 ): Promise<ConversationSearchResponse> {
   const { query, page = 1, perPage = 10, includeDiscarded = false } = params;
 
-  return fetchWithAuth<ConversationSearchResponse>('/v1/conversations/search', {
-    method: 'POST',
+  return fetchWithAuth<ConversationSearchResponse>("/v1/conversations/search", {
+    method: "POST",
     body: JSON.stringify({
       query,
       page,
@@ -191,10 +196,10 @@ export async function searchConversations(
  */
 export async function toggleStarred(
   id: string,
-  starred: boolean
+  starred: boolean,
 ): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}/starred?starred=${starred}`, {
-    method: 'PATCH',
+    method: "PATCH",
   });
   invalidateCache(invalidationPatterns.conversations);
 }
@@ -204,7 +209,7 @@ export async function toggleStarred(
  */
 export async function deleteConversation(id: string): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   invalidateCache(invalidationPatterns.conversations);
 }
@@ -224,10 +229,10 @@ export interface MergeConversationsResponse {
 
 export async function mergeConversations(
   conversationIds: string[],
-  reprocess: boolean = true
+  reprocess: boolean = true,
 ): Promise<MergeConversationsResponse> {
-  return fetchWithAuth<MergeConversationsResponse>('/v1/conversations/merge', {
-    method: 'POST',
+  return fetchWithAuth<MergeConversationsResponse>("/v1/conversations/merge", {
+    method: "POST",
     body: JSON.stringify({
       conversation_ids: conversationIds,
       reprocess,
@@ -252,15 +257,18 @@ export interface CreateConversationResponse {
  */
 export async function processInProgressConversation(): Promise<CreateConversationResponse | null> {
   try {
-    const result = await fetchWithAuth<CreateConversationResponse>('/v1/conversations', {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
+    const result = await fetchWithAuth<CreateConversationResponse>(
+      "/v1/conversations",
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
     invalidateCache(invalidationPatterns.conversations);
     return result;
   } catch (error) {
     // 404 means no in-progress conversation exists
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof Error && error.message.includes("404")) {
       return null;
     }
     throw error;
@@ -286,7 +294,7 @@ interface ActionItemsResponse {
 }
 
 export async function getActionItems(
-  params: GetActionItemsParams = {}
+  params: GetActionItemsParams = {},
 ): Promise<{ items: ActionItem[]; hasMore: boolean }> {
   const { limit = 100, offset = 0, completed } = params;
 
@@ -296,10 +304,12 @@ export async function getActionItems(
   });
 
   if (completed !== undefined) {
-    queryParams.set('completed', completed.toString());
+    queryParams.set("completed", completed.toString());
   }
 
-  const response = await fetchWithAuth<ActionItemsResponse>(`/v1/action-items?${queryParams}`);
+  const response = await fetchWithAuth<ActionItemsResponse>(
+    `/v1/action-items?${queryParams}`,
+  );
 
   return {
     items: response.action_items || [],
@@ -316,10 +326,10 @@ export interface CreateActionItemParams {
 }
 
 export async function createActionItem(
-  params: CreateActionItemParams
+  params: CreateActionItemParams,
 ): Promise<ActionItem> {
-  return fetchWithAuth<ActionItem>('/v1/action-items', {
-    method: 'POST',
+  return fetchWithAuth<ActionItem>("/v1/action-items", {
+    method: "POST",
     body: JSON.stringify(params),
   });
 }
@@ -329,11 +339,14 @@ export async function createActionItem(
  */
 export async function toggleActionItemCompleted(
   id: string,
-  completed: boolean
+  completed: boolean,
 ): Promise<void> {
-  await fetchWithAuth(`/v1/action-items/${id}/completed?completed=${completed}`, {
-    method: 'PATCH',
-  });
+  await fetchWithAuth(
+    `/v1/action-items/${id}/completed?completed=${completed}`,
+    {
+      method: "PATCH",
+    },
+  );
 }
 
 /**
@@ -341,10 +354,10 @@ export async function toggleActionItemCompleted(
  */
 export async function updateActionItemDueDate(
   id: string,
-  due_at: string | null
+  due_at: string | null,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ due_at }),
   });
 }
@@ -354,10 +367,10 @@ export async function updateActionItemDueDate(
  */
 export async function updateActionItemDescription(
   id: string,
-  description: string
+  description: string,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ description }),
   });
 }
@@ -367,7 +380,7 @@ export async function updateActionItemDescription(
  */
 export async function deleteActionItem(id: string): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   invalidateCache(invalidationPatterns.actionItems);
 }
@@ -386,7 +399,7 @@ export interface GetMemoriesParams {
 }
 
 export async function getMemories(
-  params: GetMemoriesParams = {}
+  params: GetMemoriesParams = {},
 ): Promise<Memory[]> {
   const { limit = 100, offset = 0, categories } = params;
 
@@ -396,7 +409,7 @@ export async function getMemories(
   });
 
   if (categories && categories.length > 0) {
-    queryParams.set('categories', categories.join(','));
+    queryParams.set("categories", categories.join(","));
   }
 
   return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
@@ -412,14 +425,14 @@ export interface CreateMemoryParams {
 }
 
 export async function createMemory(
-  params: CreateMemoryParams
+  params: CreateMemoryParams,
 ): Promise<Memory> {
-  const memory = await fetchWithAuth<Memory>('/v3/memories', {
-    method: 'POST',
+  const memory = await fetchWithAuth<Memory>("/v3/memories", {
+    method: "POST",
     body: JSON.stringify({
       content: params.content,
-      visibility: params.visibility || 'public',
-      category: params.category || 'manual',
+      visibility: params.visibility || "public",
+      category: params.category || "manual",
     }),
   });
   invalidateCache(invalidationPatterns.memories);
@@ -431,11 +444,11 @@ export async function createMemory(
  */
 export async function updateMemoryContent(
   id: string,
-  content: string
+  content: string,
 ): Promise<void> {
   const encodedValue = encodeURIComponent(content);
   await fetchWithAuth(`/v3/memories/${id}?value=${encodedValue}`, {
-    method: 'PATCH',
+    method: "PATCH",
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -445,10 +458,10 @@ export async function updateMemoryContent(
  */
 export async function updateMemoryVisibility(
   id: string,
-  visibility: MemoryVisibility
+  visibility: MemoryVisibility,
 ): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/visibility?value=${visibility}`, {
-    method: 'PATCH',
+    method: "PATCH",
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -458,7 +471,7 @@ export async function updateMemoryVisibility(
  */
 export async function deleteMemory(id: string): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -466,12 +479,9 @@ export async function deleteMemory(id: string): Promise<void> {
 /**
  * Review a memory (accept or reject)
  */
-export async function reviewMemory(
-  id: string,
-  accept: boolean
-): Promise<void> {
+export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -483,15 +493,15 @@ export async function reviewMemory(
  * Get knowledge graph data
  */
 export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
-  return fetchWithAuth<KnowledgeGraph>('/v1/knowledge-graph');
+  return fetchWithAuth<KnowledgeGraph>("/v1/knowledge-graph");
 }
 
 /**
  * Trigger knowledge graph rebuild
  */
 export async function rebuildKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth('/v1/knowledge-graph/rebuild', {
-    method: 'POST',
+  await fetchWithAuth("/v1/knowledge-graph/rebuild", {
+    method: "POST",
   });
 }
 
@@ -513,10 +523,10 @@ function decodeBase64Utf8(base64: string): string {
       bytes[i] = binaryString.charCodeAt(i);
     }
     // Decode as UTF-8
-    const decoder = new TextDecoder('utf-8');
+    const decoder = new TextDecoder("utf-8");
     return decoder.decode(bytes);
   } catch (e) {
-    console.error('Failed to decode base64 UTF-8:', e);
+    console.error("Failed to decode base64 UTF-8:", e);
     // Fallback to simple atob
     return atob(base64);
   }
@@ -526,51 +536,51 @@ function decodeBase64Utf8(base64: string): string {
  * Parse a streaming response line into a MessageChunk
  */
 export function parseStreamLine(line: string): MessageChunk | null {
-  if (!line || line.trim() === '') return null;
+  if (!line || line.trim() === "") return null;
 
-  if (line.startsWith('think: ')) {
+  if (line.startsWith("think: ")) {
     return {
-      type: 'think' as MessageChunkType,
-      text: line.slice(7).replace(/__CRLF__/g, '\n'),
+      type: "think" as MessageChunkType,
+      text: line.slice(7).replace(/__CRLF__/g, "\n"),
     };
   }
-  if (line.startsWith('data: ')) {
+  if (line.startsWith("data: ")) {
     return {
-      type: 'data' as MessageChunkType,
-      text: line.slice(6).replace(/__CRLF__/g, '\n'),
+      type: "data" as MessageChunkType,
+      text: line.slice(6).replace(/__CRLF__/g, "\n"),
     };
   }
-  if (line.startsWith('done: ')) {
+  if (line.startsWith("done: ")) {
     try {
       const decoded = decodeBase64Utf8(line.slice(6));
       const message = JSON.parse(decoded) as ServerMessage;
       return {
-        type: 'done' as MessageChunkType,
+        type: "done" as MessageChunkType,
         text: decoded,
         message,
       };
     } catch (e) {
-      console.error('Failed to parse done chunk:', e);
+      console.error("Failed to parse done chunk:", e);
       return null;
     }
   }
-  if (line.startsWith('message: ')) {
+  if (line.startsWith("message: ")) {
     try {
       const decoded = decodeBase64Utf8(line.slice(9));
       const message = JSON.parse(decoded) as ServerMessage;
       return {
-        type: 'message' as MessageChunkType,
+        type: "message" as MessageChunkType,
         text: decoded,
         message,
       };
     } catch (e) {
-      console.error('Failed to parse message chunk:', e);
+      console.error("Failed to parse message chunk:", e);
       return null;
     }
   }
-  if (line.startsWith('error: ')) {
+  if (line.startsWith("error: ")) {
     return {
-      type: 'error' as MessageChunkType,
+      type: "error" as MessageChunkType,
       text: line.slice(7),
     };
   }
@@ -584,10 +594,10 @@ export function parseStreamLine(line: string): MessageChunk | null {
 export async function getMessages(appId?: string): Promise<ServerMessage[]> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set('app_id', appId);
+    queryParams.set("app_id", appId);
   }
 
-  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
   return fetchWithAuth<ServerMessage[]>(endpoint);
 }
 
@@ -606,33 +616,34 @@ export async function sendMessageStream(
       title?: string;
       summary?: string;
     } | null;
-  }
+  },
 ): Promise<void> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const queryParams = new URLSearchParams();
   if (options?.appId) {
-    queryParams.set('app_id', options.appId);
+    queryParams.set("app_id", options.appId);
   }
 
-  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
 
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-App-Platform": "web",
     },
     body: JSON.stringify({
       text,
@@ -642,18 +653,18 @@ export async function sendMessageStream(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Send message error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Send message error:", response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }
 
   if (!response.body) {
-    throw new Error('No response body');
+    throw new Error("No response body");
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
 
   try {
     while (true) {
@@ -664,8 +675,8 @@ export async function sendMessageStream(
       buffer += decoder.decode(value, { stream: true });
 
       // Process complete lines
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
       for (const line of lines) {
         const chunk = parseStreamLine(line);
@@ -693,21 +704,12 @@ export async function sendMessageStream(
 export async function clearMessages(appId?: string): Promise<void> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set('app_id', appId);
+    queryParams.set("app_id", appId);
   }
 
-  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ""}`;
   await fetchWithAuth(endpoint, {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Get initial greeting message from an app
- */
-export async function getInitialMessage(appId: string): Promise<ServerMessage> {
-  return fetchWithAuth<ServerMessage>(`/v2/initial-message?app_id=${appId}`, {
-    method: 'POST',
+    method: "DELETE",
   });
 }
 
@@ -716,45 +718,45 @@ export async function getInitialMessage(appId: string): Promise<ServerMessage> {
  */
 export async function uploadChatFiles(
   files: File[],
-  appId?: string
+  appId?: string,
 ): Promise<MessageFile[]> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set('app_id', appId);
+    queryParams.set("app_id", appId);
   }
 
-  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ""}`;
 
   const formData = new FormData();
   for (const file of files) {
     // Append with explicit filename to ensure proper handling
-    formData.append('files', file, file.name);
+    formData.append("files", file, file.name);
   }
 
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Upload files error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Upload files error:", response.status, errorText);
     throw new Error(`Failed to upload files: ${response.status}`);
   }
 
@@ -770,36 +772,36 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
 
   const formData = new FormData();
   // API expects field name 'files' (matching mobile app)
-  formData.append('files', audioBlob, 'audio.wav');
+  formData.append("files", audioBlob, "audio.wav");
 
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Transcribe error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Transcribe error:", response.status, errorText);
     throw new Error(`Failed to transcribe audio: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.transcript || '';
+  return data.transcript || "";
 }
 
 // ============================================================================
@@ -807,16 +809,18 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
 // ============================================================================
 
 // Re-export App type for backward compatibility
-export type { App } from '@/types/apps';
+export type { App } from "@/types/apps";
 
 /**
  * Get apps grouped by capability (for explore page)
  */
-export async function getAppsGrouped(params: {
-  capability?: string;
-  offset?: number;
-  limit?: number;
-} = {}): Promise<AppsGroupedResponse> {
+export async function getAppsGrouped(
+  params: {
+    capability?: string;
+    offset?: number;
+    limit?: number;
+  } = {},
+): Promise<AppsGroupedResponse> {
   const { capability, offset = 0, limit = 20 } = params;
 
   const queryParams = new URLSearchParams({
@@ -825,7 +829,7 @@ export async function getAppsGrouped(params: {
   });
 
   if (capability) {
-    queryParams.set('capability', capability);
+    queryParams.set("capability", capability);
   }
 
   return fetchWithAuth<AppsGroupedResponse>(`/v2/apps?${queryParams}`);
@@ -834,18 +838,21 @@ export async function getAppsGrouped(params: {
 /**
  * Search apps with filters
  */
-export async function searchApps(params: AppsSearchParams = {}): Promise<AppsSearchResponse> {
+export async function searchApps(
+  params: AppsSearchParams = {},
+): Promise<AppsSearchResponse> {
   const queryParams = new URLSearchParams();
 
-  if (params.q) queryParams.set('q', params.q);
-  if (params.category) queryParams.set('category', params.category);
-  if (params.capability) queryParams.set('capability', params.capability);
-  if (params.rating !== undefined) queryParams.set('rating', params.rating.toString());
-  if (params.sort) queryParams.set('sort', params.sort);
-  if (params.my_apps) queryParams.set('my_apps', 'true');
-  if (params.installed_apps) queryParams.set('installed_apps', 'true');
-  queryParams.set('offset', (params.offset || 0).toString());
-  queryParams.set('limit', (params.limit || 20).toString());
+  if (params.q) queryParams.set("q", params.q);
+  if (params.category) queryParams.set("category", params.category);
+  if (params.capability) queryParams.set("capability", params.capability);
+  if (params.rating !== undefined)
+    queryParams.set("rating", params.rating.toString());
+  if (params.sort) queryParams.set("sort", params.sort);
+  if (params.my_apps) queryParams.set("my_apps", "true");
+  if (params.installed_apps) queryParams.set("installed_apps", "true");
+  queryParams.set("offset", (params.offset || 0).toString());
+  queryParams.set("limit", (params.limit || 20).toString());
 
   return fetchWithAuth<AppsSearchResponse>(`/v2/apps/search?${queryParams}`);
 }
@@ -854,7 +861,7 @@ export async function searchApps(params: AppsSearchParams = {}): Promise<AppsSea
  * Get popular apps
  */
 export async function getPopularApps(): Promise<App[]> {
-  return fetchWithAuth<App[]>('/v1/apps/popular');
+  return fetchWithAuth<App[]>("/v1/apps/popular");
 }
 
 /**
@@ -868,14 +875,14 @@ export async function getApp(appId: string): Promise<App> {
  * Get app categories
  */
 export async function getAppCategories(): Promise<AppCategory[]> {
-  return fetchWithAuth<AppCategory[]>('/v1/app-categories');
+  return fetchWithAuth<AppCategory[]>("/v1/app-categories");
 }
 
 /**
  * Get app capabilities
  */
 export async function getAppCapabilities(): Promise<AppCapability[]> {
-  return fetchWithAuth<AppCapability[]>('/v1/app-capabilities');
+  return fetchWithAuth<AppCapability[]>("/v1/app-capabilities");
 }
 
 /**
@@ -883,7 +890,7 @@ export async function getAppCapabilities(): Promise<AppCapability[]> {
  */
 export async function enableApp(appId: string): Promise<{ status: string }> {
   return fetchWithAuth<{ status: string }>(`/v1/apps/enable?app_id=${appId}`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -892,7 +899,7 @@ export async function enableApp(appId: string): Promise<{ status: string }> {
  */
 export async function disableApp(appId: string): Promise<{ status: string }> {
   return fetchWithAuth<{ status: string }>(`/v1/apps/disable?app_id=${appId}`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -908,8 +915,10 @@ export async function getInstalledApps(): Promise<AppsSearchResponse> {
  */
 export async function getChatApps(): Promise<App[]> {
   const response = await searchApps({ installed_apps: true, limit: 100 });
-  return response.data.filter(app =>
-    app.capabilities?.includes('chat') || app.capabilities?.includes('persona')
+  return response.data.filter(
+    (app) =>
+      app.capabilities?.includes("chat") ||
+      app.capabilities?.includes("persona"),
   );
 }
 
@@ -921,41 +930,46 @@ export async function getChatApps(): Promise<App[]> {
  * Create a new app
  */
 export async function createApp(
-  data: CreateAppRequest & { deleted?: boolean; price?: number; thumbnails?: string[]; uid?: string },
-  imageFile?: File
+  data: CreateAppRequest & {
+    deleted?: boolean;
+    price?: number;
+    thumbnails?: string[];
+    uid?: string;
+  },
+  imageFile?: File,
 ): Promise<{ app_id: string }> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const url = `${API_BASE_URL}/v1/apps`;
 
   const formData = new FormData();
-  formData.append('app_data', JSON.stringify(data));
+  formData.append("app_data", JSON.stringify(data));
   if (imageFile) {
-    formData.append('file', imageFile, imageFile.name);
+    formData.append("file", imageFile, imageFile.name);
   }
 
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Create app error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Create app error:", response.status, errorText);
     throw new Error(`Failed to create app: ${response.status}`);
   }
 
@@ -968,19 +982,19 @@ export async function createApp(
 export async function updateApp(
   appId: string,
   data: Partial<CreateAppRequest>,
-  imageFile?: File
+  imageFile?: File,
 ): Promise<void> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const url = `${API_BASE_URL}/v1/apps/${appId}`;
@@ -989,22 +1003,22 @@ export async function updateApp(
   const dataWithId = { ...data, id: appId };
 
   const formData = new FormData();
-  formData.append('app_data', JSON.stringify(dataWithId));
+  formData.append("app_data", JSON.stringify(dataWithId));
   if (imageFile) {
-    formData.append('file', imageFile, imageFile.name);
+    formData.append("file", imageFile, imageFile.name);
   }
 
   const response = await fetch(url, {
-    method: 'PATCH',
+    method: "PATCH",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Update app error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Update app error:", response.status, errorText);
     throw new Error(`Failed to update app: ${response.status}`);
   }
 }
@@ -1014,19 +1028,7 @@ export async function updateApp(
  */
 export async function deleteApp(appId: string): Promise<void> {
   await fetchWithAuth(`/v1/apps/${appId}`, {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Change app visibility (public/private)
- */
-export async function changeAppVisibility(
-  appId: string,
-  isPrivate: boolean
-): Promise<void> {
-  await fetchWithAuth(`/v1/apps/${appId}/change-visibility?private=${isPrivate}`, {
-    method: 'PATCH',
+    method: "DELETE",
   });
 }
 
@@ -1034,37 +1036,37 @@ export async function changeAppVisibility(
  * Upload app thumbnail
  */
 export async function uploadAppThumbnail(
-  file: File
+  file: File,
 ): Promise<ThumbnailUploadResponse> {
   let token: string | null = null;
 
   try {
     token = await getIdToken();
   } catch (tokenError) {
-    console.error('Failed to get auth token:', tokenError);
-    throw new Error('Failed to get authentication token');
+    console.error("Failed to get auth token:", tokenError);
+    throw new Error("Failed to get authentication token");
   }
 
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   const url = `${API_BASE_URL}/v1/app/thumbnails`;
 
   const formData = new FormData();
-  formData.append('file', file, file.name);
+  formData.append("file", file, file.name);
 
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'No error body');
-    console.error('Upload thumbnail error:', response.status, errorText);
+    const errorText = await response.text().catch(() => "No error body");
+    console.error("Upload thumbnail error:", response.status, errorText);
     throw new Error(`Failed to upload thumbnail: ${response.status}`);
   }
 
@@ -1076,12 +1078,15 @@ export async function uploadAppThumbnail(
  */
 export async function generateAppDescription(
   name: string,
-  currentDescription: string
+  currentDescription: string,
 ): Promise<string> {
-  const response = await fetchWithAuth<GenerateDescriptionResponse>('/v1/app/generate-description', {
-    method: 'POST',
-    body: JSON.stringify({ name, description: currentDescription }),
-  });
+  const response = await fetchWithAuth<GenerateDescriptionResponse>(
+    "/v1/app/generate-description",
+    {
+      method: "POST",
+      body: JSON.stringify({ name, description: currentDescription }),
+    },
+  );
   return response.description;
 }
 
@@ -1091,24 +1096,24 @@ export async function generateAppDescription(
  */
 export async function generateAppDescriptionAndEmoji(
   name: string,
-  prompt: string
+  prompt: string,
 ): Promise<{ description: string; emoji: string }> {
   try {
-    const response = await fetchWithAuth<{ description: string; emoji: string }>(
-      '/v1/app/generate-description-emoji',
-      {
-        method: 'POST',
-        body: JSON.stringify({ name, prompt }),
-      }
-    );
+    const response = await fetchWithAuth<{
+      description: string;
+      emoji: string;
+    }>("/v1/app/generate-description-emoji", {
+      method: "POST",
+      body: JSON.stringify({ name, prompt }),
+    });
     return {
-      description: response.description || '',
-      emoji: response.emoji || '✨',
+      description: response.description || "",
+      emoji: response.emoji || "✨",
     };
   } catch {
     // Fallback: generate description only and use default emoji
     const description = await generateAppDescription(name, prompt);
-    return { description, emoji: '✨' };
+    return { description, emoji: "✨" };
   }
 }
 
@@ -1121,12 +1126,16 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(`${API_BASE_URL}/v1/apps/proactive-notification-scopes`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-App-Platform": "web",
+        },
       },
-    });
+    );
 
     if (!response.ok) return [];
     return response.json();
@@ -1146,8 +1155,9 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
 
     const response = await fetch(`${API_BASE_URL}/v1/app/plans`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-App-Platform": "web",
       },
     });
 
@@ -1156,31 +1166,6 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
   } catch {
     return [];
   }
-}
-
-/**
- * Get API keys for an app
- */
-export async function getAppApiKeys(appId: string): Promise<AppApiKey[]> {
-  return fetchWithAuth<AppApiKey[]>(`/v1/apps/${appId}/api-keys`);
-}
-
-/**
- * Create new API key for an app
- */
-export async function createAppApiKey(appId: string): Promise<AppApiKey> {
-  return fetchWithAuth<AppApiKey>(`/v1/apps/${appId}/api-keys`, {
-    method: 'POST',
-  });
-}
-
-/**
- * Delete API key for an app
- */
-export async function deleteAppApiKey(appId: string, keyId: string): Promise<void> {
-  await fetchWithAuth(`/v1/apps/${appId}/api-keys/${keyId}`, {
-    method: 'DELETE',
-  });
 }
 
 // ============================================================================
@@ -1193,7 +1178,6 @@ import type {
   DeveloperWebhooks,
   WebhookSettings,
   RecordingPermission,
-  PrivateCloudSync,
   UserUsage,
   UserUsageResponse,
   UsageStats,
@@ -1201,13 +1185,15 @@ import type {
   UserSubscription,
   UserSubscriptionResponse,
   Person,
-} from '@/types/user';
+} from "@/types/user";
 
 /**
  * Get user's primary language
  */
 export async function getUserLanguage(): Promise<string> {
-  const response = await fetchWithAuth<{ language: string }>('/v1/users/language');
+  const response = await fetchWithAuth<{ language: string }>(
+    "/v1/users/language",
+  );
   return response.language;
 }
 
@@ -1215,8 +1201,8 @@ export async function getUserLanguage(): Promise<string> {
  * Set user's primary language
  */
 export async function setUserLanguage(language: string): Promise<void> {
-  await fetchWithAuth('/v1/users/language', {
-    method: 'PATCH',
+  await fetchWithAuth("/v1/users/language", {
+    method: "PATCH",
     body: JSON.stringify({ language }),
   });
 }
@@ -1225,15 +1211,19 @@ export async function setUserLanguage(language: string): Promise<void> {
  * Get daily summary settings
  */
 export async function getDailySummarySettings(): Promise<DailySummarySettings> {
-  return fetchWithAuth<DailySummarySettings>('/v1/users/daily-summary-settings');
+  return fetchWithAuth<DailySummarySettings>(
+    "/v1/users/daily-summary-settings",
+  );
 }
 
 /**
  * Update daily summary settings
  */
-export async function updateDailySummarySettings(settings: DailySummarySettings): Promise<void> {
-  await fetchWithAuth('/v1/users/daily-summary-settings', {
-    method: 'PATCH',
+export async function updateDailySummarySettings(
+  settings: DailySummarySettings,
+): Promise<void> {
+  await fetchWithAuth("/v1/users/daily-summary-settings", {
+    method: "PATCH",
     body: JSON.stringify(settings),
   });
 }
@@ -1242,7 +1232,7 @@ export async function updateDailySummarySettings(settings: DailySummarySettings)
 // Daily Summaries (Recaps) API
 // ============================================================================
 
-import type { DailySummary } from '@/types/recap';
+import type { DailySummary } from "@/types/recap";
 
 export interface GetDailySummariesParams {
   limit?: number;
@@ -1253,14 +1243,16 @@ export interface GetDailySummariesParams {
  * Get list of daily summaries with pagination
  */
 export async function getDailySummaries(
-  params: GetDailySummariesParams = {}
+  params: GetDailySummariesParams = {},
 ): Promise<DailySummary[]> {
   const { limit = 30, offset = 0 } = params;
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
-  return fetchWithAuth<DailySummary[]>(`/v1/users/daily-summaries?${queryParams}`);
+  return fetchWithAuth<DailySummary[]>(
+    `/v1/users/daily-summaries?${queryParams}`,
+  );
 }
 
 /**
@@ -1275,16 +1267,18 @@ export async function getDailySummary(id: string): Promise<DailySummary> {
  */
 export async function deleteDailySummary(id: string): Promise<void> {
   await fetchWithAuth(`/v1/users/daily-summaries/${id}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
 /**
  * Generate a test daily summary for a specific date
  */
-export async function generateTestDailySummary(date: string): Promise<DailySummary> {
-  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
-    method: 'POST',
+export async function generateTestDailySummary(
+  date: string,
+): Promise<DailySummary> {
+  return fetchWithAuth<DailySummary>("/v1/users/daily-summary-settings/test", {
+    method: "POST",
     body: JSON.stringify({ date }),
   });
 }
@@ -1293,29 +1287,23 @@ export async function generateTestDailySummary(date: string): Promise<DailySumma
  * Get transcription preferences
  */
 export async function getTranscriptionPreferences(): Promise<TranscriptionPreferences> {
-  return fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
-}
-
-/**
- * Update transcription preferences
- */
-export async function updateTranscriptionPreferences(
-  preferences: Partial<TranscriptionPreferences>
-): Promise<void> {
-  await fetchWithAuth('/v1/users/transcription-preferences', {
-    method: 'PATCH',
-    body: JSON.stringify(preferences),
-  });
+  return fetchWithAuth<TranscriptionPreferences>(
+    "/v1/users/transcription-preferences",
+  );
 }
 
 // Webhook type enum matching backend API
-type WebhookType = 'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+type WebhookType =
+  | "memory_created"
+  | "realtime_transcript"
+  | "audio_bytes"
+  | "day_summary";
 
 /**
  * Get developer webhook URL
  */
 export async function getDeveloperWebhook(
-  type: WebhookType
+  type: WebhookType,
 ): Promise<WebhookSettings> {
   return fetchWithAuth<WebhookSettings>(`/v1/users/developer/webhook/${type}`);
 }
@@ -1325,10 +1313,10 @@ export async function getDeveloperWebhook(
  */
 export async function setDeveloperWebhook(
   type: WebhookType,
-  url: string
+  url: string,
 ): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ url }),
   });
 }
@@ -1336,11 +1324,9 @@ export async function setDeveloperWebhook(
 /**
  * Enable developer webhook
  */
-export async function enableDeveloperWebhook(
-  type: WebhookType
-): Promise<void> {
+export async function enableDeveloperWebhook(type: WebhookType): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/enable`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -1348,10 +1334,10 @@ export async function enableDeveloperWebhook(
  * Disable developer webhook
  */
 export async function disableDeveloperWebhook(
-  type: WebhookType
+  type: WebhookType,
 ): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/disable`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -1359,14 +1345,18 @@ export async function disableDeveloperWebhook(
  * Get all webhook statuses
  */
 export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
-  return fetchWithAuth<DeveloperWebhooks>('/v1/users/developer/webhooks/status');
+  return fetchWithAuth<DeveloperWebhooks>(
+    "/v1/users/developer/webhooks/status",
+  );
 }
 
 /**
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  return fetchWithAuth<RecordingPermission>(
+    "/v1/users/store-recording-permission",
+  );
 }
 
 /**
@@ -1374,57 +1364,40 @@ export async function getRecordingPermission(): Promise<RecordingPermission> {
  */
 export async function setRecordingPermission(enabled: boolean): Promise<void> {
   await fetchWithAuth(`/v1/users/store-recording-permission?value=${enabled}`, {
-    method: 'POST',
-  });
-}
-
-/**
- * Delete recording permission and all stored recordings
- */
-export async function deleteRecordingPermission(): Promise<void> {
-  await fetchWithAuth('/v1/users/store-recording-permission', {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Get private cloud sync status
- */
-export async function getPrivateCloudSync(): Promise<PrivateCloudSync> {
-  return fetchWithAuth<PrivateCloudSync>('/v1/users/private-cloud-sync');
-}
-
-/**
- * Set private cloud sync
- */
-export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
-  await fetchWithAuth(`/v1/users/private-cloud-sync?value=${enabled}`, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
 /**
  * Get user usage stats for a specific period
  */
-export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
+export async function getUserUsage(
+  period: "today" | "monthly" | "yearly" | "all_time" = "monthly",
+): Promise<UserUsage | null> {
   try {
-    const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
+    const response = await fetchWithAuth<UserUsageResponse>(
+      `/v1/users/me/usage?period=${period}`,
+    );
 
     // Extract the relevant period's stats
     let stats: UsageStats | undefined;
-    if (period === 'all_time') {
+    if (period === "all_time") {
       stats = response.all_time;
-    } else if (period === 'yearly') {
+    } else if (period === "yearly") {
       stats = response.yearly;
-    } else if (period === 'monthly') {
+    } else if (period === "monthly") {
       stats = response.monthly;
-    } else if (period === 'today') {
+    } else if (period === "today") {
       stats = response.today;
     }
 
     // Fallback to any available stats
     if (!stats) {
-      stats = response.all_time || response.monthly || response.yearly || response.today;
+      stats =
+        response.all_time ||
+        response.monthly ||
+        response.yearly ||
+        response.today;
     }
 
     // Return data if we have stats OR history - some periods might have history without aggregate stats
@@ -1439,7 +1412,7 @@ export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all
     }
     return null;
   } catch (error) {
-    console.error('getUserUsage error:', error);
+    console.error("getUserUsage error:", error);
     return null;
   }
 }
@@ -1449,10 +1422,10 @@ export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all
  */
 export async function getAllUsageData(): Promise<AllUsageData> {
   const [today, monthly, yearly, all_time] = await Promise.all([
-    getUserUsage('today'),
-    getUserUsage('monthly'),
-    getUserUsage('yearly'),
-    getUserUsage('all_time'),
+    getUserUsage("today"),
+    getUserUsage("monthly"),
+    getUserUsage("yearly"),
+    getUserUsage("all_time"),
   ]);
   return { today, monthly, yearly, all_time };
 }
@@ -1462,12 +1435,14 @@ export async function getAllUsageData(): Promise<AllUsageData> {
  */
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
-    const response = await fetchWithAuth<UserSubscriptionResponse>('/v1/users/me/subscription');
+    const response = await fetchWithAuth<UserSubscriptionResponse>(
+      "/v1/users/me/subscription",
+    );
 
     const result: UserSubscription = {
-      plan: response.subscription?.plan || 'basic',
-      status: response.subscription?.status || 'active',
-      is_unlimited: response.subscription?.plan === 'unlimited',
+      plan: response.subscription?.plan || "basic",
+      status: response.subscription?.status || "active",
+      is_unlimited: response.subscription?.plan === "unlimited",
       current_period_end: response.subscription?.current_period_end,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
@@ -1475,7 +1450,7 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
     };
     return result;
   } catch (error) {
-    console.error('getUserSubscription error:', error);
+    console.error("getUserSubscription error:", error);
     return null;
   }
 }
@@ -1485,10 +1460,12 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
  */
 export async function getAvailablePlans(): Promise<AvailablePlansResponse | null> {
   try {
-    const response = await fetchWithAuth<AvailablePlansResponse>('/v1/payments/available-plans');
+    const response = await fetchWithAuth<AvailablePlansResponse>(
+      "/v1/payments/available-plans",
+    );
     return response;
   } catch (error) {
-    console.error('getAvailablePlans error:', error);
+    console.error("getAvailablePlans error:", error);
     return null;
   }
 }
@@ -1496,15 +1473,20 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
 /**
  * Create a checkout session for subscription
  */
-export async function createCheckoutSession(priceId: string): Promise<CheckoutSessionResponse | null> {
+export async function createCheckoutSession(
+  priceId: string,
+): Promise<CheckoutSessionResponse | null> {
   try {
-    const response = await fetchWithAuth<CheckoutSessionResponse>('/v1/payments/checkout-session', {
-      method: 'POST',
-      body: JSON.stringify({ price_id: priceId }),
-    });
+    const response = await fetchWithAuth<CheckoutSessionResponse>(
+      "/v1/payments/checkout-session",
+      {
+        method: "POST",
+        body: JSON.stringify({ price_id: priceId }),
+      },
+    );
     return response;
   } catch (error) {
-    console.error('createCheckoutSession error:', error);
+    console.error("createCheckoutSession error:", error);
     return null;
   }
 }
@@ -1512,15 +1494,20 @@ export async function createCheckoutSession(priceId: string): Promise<CheckoutSe
 /**
  * Upgrade subscription to a different plan
  */
-export async function upgradeSubscription(priceId: string): Promise<UpgradeSubscriptionResponse | null> {
+export async function upgradeSubscription(
+  priceId: string,
+): Promise<UpgradeSubscriptionResponse | null> {
   try {
-    const response = await fetchWithAuth<UpgradeSubscriptionResponse>('/v1/payments/upgrade-subscription', {
-      method: 'POST',
-      body: JSON.stringify({ price_id: priceId }),
-    });
+    const response = await fetchWithAuth<UpgradeSubscriptionResponse>(
+      "/v1/payments/upgrade-subscription",
+      {
+        method: "POST",
+        body: JSON.stringify({ price_id: priceId }),
+      },
+    );
     return response;
   } catch (error) {
-    console.error('upgradeSubscription error:', error);
+    console.error("upgradeSubscription error:", error);
     return null;
   }
 }
@@ -1530,12 +1517,15 @@ export async function upgradeSubscription(priceId: string): Promise<UpgradeSubsc
  */
 export async function cancelSubscription(): Promise<CancelSubscriptionResponse | null> {
   try {
-    const response = await fetchWithAuth<CancelSubscriptionResponse>('/v1/payments/subscription', {
-      method: 'DELETE',
-    });
+    const response = await fetchWithAuth<CancelSubscriptionResponse>(
+      "/v1/payments/subscription",
+      {
+        method: "DELETE",
+      },
+    );
     return response;
   } catch (error) {
-    console.error('cancelSubscription error:', error);
+    console.error("cancelSubscription error:", error);
     return null;
   }
 }
@@ -1545,12 +1535,15 @@ export async function cancelSubscription(): Promise<CancelSubscriptionResponse |
  */
 export async function getCustomerPortal(): Promise<CustomerPortalResponse | null> {
   try {
-    const response = await fetchWithAuth<CustomerPortalResponse>('/v1/payments/customer-portal', {
-      method: 'POST',
-    });
+    const response = await fetchWithAuth<CustomerPortalResponse>(
+      "/v1/payments/customer-portal",
+      {
+        method: "POST",
+      },
+    );
     return response;
   } catch (error) {
-    console.error('getCustomerPortal error:', error);
+    console.error("getCustomerPortal error:", error);
     return null;
   }
 }
@@ -1559,15 +1552,15 @@ export async function getCustomerPortal(): Promise<CustomerPortalResponse | null
  * Get all people for speaker identification
  */
 export async function getPeople(): Promise<Person[]> {
-  return fetchWithAuth<Person[]>('/v1/users/people');
+  return fetchWithAuth<Person[]>("/v1/users/people");
 }
 
 /**
  * Create a new person
  */
 export async function createPerson(name: string): Promise<Person> {
-  return fetchWithAuth<Person>('/v1/users/people', {
-    method: 'POST',
+  return fetchWithAuth<Person>("/v1/users/people", {
+    method: "POST",
     body: JSON.stringify({ name }),
   });
 }
@@ -1575,9 +1568,12 @@ export async function createPerson(name: string): Promise<Person> {
 /**
  * Update person name
  */
-export async function updatePersonName(personId: string, name: string): Promise<void> {
+export async function updatePersonName(
+  personId: string,
+  name: string,
+): Promise<void> {
   await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ name }),
   });
 }
@@ -1587,7 +1583,7 @@ export async function updatePersonName(personId: string, name: string): Promise<
  */
 export async function deletePerson(personId: string): Promise<void> {
   await fetchWithAuth(`/v1/users/people/${personId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -1601,37 +1597,40 @@ export async function deletePerson(personId: string): Promise<void> {
 export async function assignBulkTranscriptSegments(
   conversationId: string,
   segmentIds: string[],
-  options: { isUser?: boolean; personId?: string | null }
+  options: { isUser?: boolean; personId?: string | null },
 ): Promise<void> {
   const { isUser, personId } = options;
 
-  let assignType: 'is_user' | 'person_id';
+  let assignType: "is_user" | "person_id";
   let value: string | null;
 
   if (isUser) {
-    assignType = 'is_user';
-    value = 'true';
+    assignType = "is_user";
+    value = "true";
   } else {
-    assignType = 'person_id';
+    assignType = "person_id";
     value = personId ?? null;
   }
 
-  await fetchWithAuth(`/v1/conversations/${conversationId}/segments/assign-bulk`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      segment_ids: segmentIds,
-      assign_type: assignType,
-      value,
-    }),
-  });
+  await fetchWithAuth(
+    `/v1/conversations/${conversationId}/segments/assign-bulk`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        segment_ids: segmentIds,
+        assign_type: assignType,
+        value,
+      }),
+    },
+  );
 }
 
 /**
  * Delete account permanently
  */
 export async function deleteAccount(): Promise<void> {
-  await fetchWithAuth('/v1/users/delete-account', {
-    method: 'DELETE',
+  await fetchWithAuth("/v1/users/delete-account", {
+    method: "DELETE",
   });
 }
 
@@ -1639,15 +1638,15 @@ export async function deleteAccount(): Promise<void> {
  * Get training data opt-in status
  */
 export async function getTrainingDataOptIn(): Promise<{ opted_in: boolean }> {
-  return fetchWithAuth<{ opted_in: boolean }>('/v1/users/training-data-opt-in');
+  return fetchWithAuth<{ opted_in: boolean }>("/v1/users/training-data-opt-in");
 }
 
 /**
  * Set training data opt-in
  */
 export async function setTrainingDataOptIn(optIn: boolean): Promise<void> {
-  await fetchWithAuth('/v1/users/training-data-opt-in', {
-    method: 'POST',
+  await fetchWithAuth("/v1/users/training-data-opt-in", {
+    method: "POST",
     body: JSON.stringify({ opted_in: optIn }),
   });
 }
@@ -1666,14 +1665,14 @@ import type {
   UpgradeSubscriptionResponse,
   CancelSubscriptionResponse,
   CustomerPortalResponse,
-} from '@/types/user';
+} from "@/types/user";
 
 /**
  * Get user's developer API keys
  */
 export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
   try {
-    return await fetchWithAuth<DeveloperApiKey[]>('/v1/dev/keys');
+    return await fetchWithAuth<DeveloperApiKey[]>("/v1/dev/keys");
   } catch {
     return [];
   }
@@ -1682,13 +1681,16 @@ export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
 /**
  * Create a new developer API key with optional scopes
  */
-export async function createDeveloperApiKey(name: string, scopes?: string[]): Promise<DeveloperApiKey> {
+export async function createDeveloperApiKey(
+  name: string,
+  scopes?: string[],
+): Promise<DeveloperApiKey> {
   const body: { name: string; scopes?: string[] } = { name };
   if (scopes && scopes.length > 0) {
     body.scopes = scopes;
   }
-  return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
-    method: 'POST',
+  return fetchWithAuth<DeveloperApiKey>("/v1/dev/keys", {
+    method: "POST",
     body: JSON.stringify(body),
   });
 }
@@ -1698,7 +1700,7 @@ export async function createDeveloperApiKey(name: string, scopes?: string[]): Pr
  */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -1711,7 +1713,7 @@ export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
  */
 export async function getMcpApiKeys(): Promise<McpApiKey[]> {
   try {
-    return await fetchWithAuth<McpApiKey[]>('/v1/mcp/keys');
+    return await fetchWithAuth<McpApiKey[]>("/v1/mcp/keys");
   } catch {
     return [];
   }
@@ -1721,8 +1723,8 @@ export async function getMcpApiKeys(): Promise<McpApiKey[]> {
  * Create a new MCP API key
  */
 export async function createMcpApiKey(name: string): Promise<McpApiKey> {
-  return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
-    method: 'POST',
+  return fetchWithAuth<McpApiKey>("/v1/mcp/keys", {
+    method: "POST",
     body: JSON.stringify({ name }),
   });
 }
@@ -1732,7 +1734,7 @@ export async function createMcpApiKey(name: string): Promise<McpApiKey> {
  */
 export async function deleteMcpApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/mcp/keys/${keyId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -1746,7 +1748,7 @@ export async function deleteMcpApiKey(keyId: string): Promise<void> {
 export async function exportAllData(): Promise<Blob> {
   const token = await getIdToken();
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
   const response = await fetch(`${API_BASE_URL}/v1/users/export`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -1761,8 +1763,8 @@ export async function exportAllData(): Promise<Blob> {
  * Delete the knowledge graph
  */
 export async function deleteKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth('/v1/knowledge-graph', {
-    method: 'DELETE',
+  await fetchWithAuth("/v1/knowledge-graph", {
+    method: "DELETE",
   });
 }
 
@@ -1775,7 +1777,9 @@ export async function deleteKnowledgeGraph(): Promise<void> {
  */
 export async function getCustomVocabulary(): Promise<string[]> {
   try {
-    const result = await fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
+    const result = await fetchWithAuth<TranscriptionPreferences>(
+      "/v1/users/transcription-preferences",
+    );
     return result.vocabulary || [];
   } catch {
     return [];
@@ -1786,8 +1790,8 @@ export async function getCustomVocabulary(): Promise<string[]> {
  * Update custom vocabulary words via transcription preferences
  */
 export async function updateCustomVocabulary(words: string[]): Promise<void> {
-  await fetchWithAuth('/v1/users/transcription-preferences', {
-    method: 'PATCH',
+  await fetchWithAuth("/v1/users/transcription-preferences", {
+    method: "PATCH",
     body: JSON.stringify({ vocabulary: words }),
   });
 }
@@ -1805,20 +1809,62 @@ const INTEGRATION_DEFINITIONS: Array<{
   logo: string;
   coming_soon?: boolean;
 }> = [
-  { id: 'google_calendar', appKey: 'google_calendar', name: 'Google Calendar', description: 'Sync with your calendar', logo: '/integrations/google-calendar.png' },
-  { id: 'whoop', appKey: 'whoop', name: 'Whoop', description: 'Health & fitness tracking', logo: '/integrations/whoop.png' },
-  { id: 'notion', appKey: 'notion', name: 'Notion', description: 'Sync notes to Notion', logo: '/integrations/notion-logo.png' },
-  { id: 'github', appKey: 'github', name: 'GitHub', description: 'Create issues and notes', logo: '/integrations/github-logo.png' },
-  { id: 'twitter', appKey: 'twitter', name: 'X (Twitter)', description: 'Share to Twitter', logo: '/integrations/x-logo.avif' },
-  { id: 'gmail', appKey: 'gmail', name: 'Gmail', description: 'Email integrations', logo: '/integrations/gmail-logo.jpeg', coming_soon: true },
+  {
+    id: "google_calendar",
+    appKey: "google_calendar",
+    name: "Google Calendar",
+    description: "Sync with your calendar",
+    logo: "/integrations/google-calendar.png",
+  },
+  {
+    id: "whoop",
+    appKey: "whoop",
+    name: "Whoop",
+    description: "Health & fitness tracking",
+    logo: "/integrations/whoop.png",
+  },
+  {
+    id: "notion",
+    appKey: "notion",
+    name: "Notion",
+    description: "Sync notes to Notion",
+    logo: "/integrations/notion-logo.png",
+  },
+  {
+    id: "github",
+    appKey: "github",
+    name: "GitHub",
+    description: "Create issues and notes",
+    logo: "/integrations/github-logo.png",
+  },
+  {
+    id: "twitter",
+    appKey: "twitter",
+    name: "X (Twitter)",
+    description: "Share to Twitter",
+    logo: "/integrations/x-logo.avif",
+  },
+  {
+    id: "gmail",
+    appKey: "gmail",
+    name: "Gmail",
+    description: "Email integrations",
+    logo: "/integrations/gmail-logo.jpeg",
+    coming_soon: true,
+  },
 ];
 
 /**
  * Get individual integration connection status (like mobile app)
  */
-async function getIntegrationStatus(appKey: string): Promise<{ connected: boolean }> {
+async function getIntegrationStatus(
+  appKey: string,
+): Promise<{ connected: boolean }> {
   try {
-    const response = await fetchWithAuth<{ connected: boolean; app_key: string }>(`/v1/integrations/${appKey}`);
+    const response = await fetchWithAuth<{
+      connected: boolean;
+      app_key: string;
+    }>(`/v1/integrations/${appKey}`);
     return { connected: response.connected ?? false };
   } catch {
     return { connected: false };
@@ -1850,9 +1896,13 @@ export async function getIntegrations(): Promise<Integration[]> {
  * Get OAuth URL for an integration
  * Opens the OAuth flow for the user to authorize
  */
-export async function getIntegrationOAuthUrl(integrationId: string): Promise<string | null> {
+export async function getIntegrationOAuthUrl(
+  integrationId: string,
+): Promise<string | null> {
   try {
-    const response = await fetchWithAuth<{ auth_url: string }>(`/v1/integrations/${integrationId}/oauth-url`);
+    const response = await fetchWithAuth<{ auth_url: string }>(
+      `/v1/integrations/${integrationId}/oauth-url`,
+    );
     return response.auth_url || null;
   } catch {
     return null;
@@ -1860,20 +1910,13 @@ export async function getIntegrationOAuthUrl(integrationId: string): Promise<str
 }
 
 /**
- * Connect an integration (alternative method)
- */
-export async function connectIntegration(integrationId: string): Promise<{ redirect_url: string }> {
-  return fetchWithAuth<{ redirect_url: string }>(`/v1/integrations/${integrationId}/connect`, {
-    method: 'POST',
-  });
-}
-
-/**
  * Disconnect an integration
  */
-export async function disconnectIntegration(integrationId: string): Promise<void> {
+export async function disconnectIntegration(
+  integrationId: string,
+): Promise<void> {
   await fetchWithAuth(`/v1/integrations/${integrationId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
 }
 
@@ -1889,16 +1932,16 @@ export async function disconnectIntegration(integrationId: string): Promise<void
  */
 export async function reprocessConversation(
   conversationId: string,
-  appId?: string
+  appId?: string,
 ): Promise<Conversation> {
   const queryParams = new URLSearchParams();
   if (appId) {
-    queryParams.set('app_id', appId);
+    queryParams.set("app_id", appId);
   }
 
-  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ""}`;
   return fetchWithAuth<Conversation>(endpoint, {
-    method: 'POST',
+    method: "POST",
   });
 }
 
@@ -1909,11 +1952,14 @@ export async function reprocessConversation(
  */
 export async function updateConversationTitle(
   conversationId: string,
-  title: string
+  title: string,
 ): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`, {
-    method: 'PATCH',
-  });
+  await fetchWithAuth(
+    `/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`,
+    {
+      method: "PATCH",
+    },
+  );
 }
 
 /**
@@ -1924,14 +1970,14 @@ export async function updateConversationTitle(
  */
 export async function testConversationPrompt(
   conversationId: string,
-  prompt: string
+  prompt: string,
 ): Promise<string> {
   const response = await fetchWithAuth<{ summary: string }>(
     `/v1/conversations/${conversationId}/test-prompt`,
     {
-      method: 'POST',
+      method: "POST",
       body: JSON.stringify({ prompt }),
-    }
+    },
   );
   return response.summary;
 }
@@ -1949,7 +1995,7 @@ export async function testConversationPrompt(
 export function getAudioStreamUrl(
   conversationId: string,
   audioFileId: string,
-  format: string = 'wav'
+  format: string = "wav",
 ): string {
   return `${API_BASE_URL}/v1/sync/audio/${conversationId}/${audioFileId}?format=${format}`;
 }
@@ -1961,19 +2007,19 @@ export function getAudioStreamUrl(
  */
 export async function getConversationAudioUrls(
   conversationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<AudioFileUrlInfo[]> {
   try {
     const response = await fetchWithAuth<{ audio_files: AudioFileUrlInfo[] }>(
       `/v1/sync/audio/${conversationId}/urls`,
-      { signal }
+      { signal },
     );
     return response.audio_files || [];
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && error.name === "AbortError") {
       return []; // Silently return empty for aborted requests
     }
-    console.error('Error fetching audio URLs:', error);
+    console.error("Error fetching audio URLs:", error);
     return [];
   }
 }
@@ -1985,18 +2031,18 @@ export async function getConversationAudioUrls(
  */
 export async function precacheConversationAudio(
   conversationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
     await fetchWithAuth(`/v1/sync/audio/${conversationId}/precache`, {
-      method: 'POST',
+      method: "POST",
       signal,
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && error.name === "AbortError") {
       return; // Silently return for aborted requests
     }
-    console.error('Error pre-caching audio:', error);
+    console.error("Error pre-caching audio:", error);
   }
 }
 
@@ -2007,10 +2053,10 @@ export async function precacheConversationAudio(
 export async function getAudioAuthHeaders(): Promise<Record<string, string>> {
   const token = await getIdToken();
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
   return {
-    'Authorization': `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -2023,14 +2069,16 @@ export async function getAudioAuthHeaders(): Promise<Record<string, string>> {
  */
 export async function fetchAudioBlob(
   conversationId: string,
-  audioFileId: string
+  audioFileId: string,
 ): Promise<string> {
   const headers = await getAudioAuthHeaders();
   const url = getAudioStreamUrl(conversationId, audioFileId);
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
-    throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch audio: ${response.status} ${response.statusText}`,
+    );
   }
 
   const blob = await response.blob();
@@ -2046,8 +2094,7 @@ import type {
   CreateFolderRequest,
   UpdateFolderRequest,
   BulkMoveConversationsRequest,
-  ReorderFoldersRequest,
-} from '@/types/folder';
+} from "@/types/folder";
 
 /**
  * Map backend folder to frontend format (icon -> emoji)
@@ -2064,7 +2111,7 @@ function mapFolderResponse(folder: Folder): Folder {
  */
 export async function getFolders(): Promise<Folder[]> {
   try {
-    const folders = await fetchWithAuth<Folder[]>('/v1/folders');
+    const folders = await fetchWithAuth<Folder[]>("/v1/folders");
     return folders.map(mapFolderResponse);
   } catch {
     return [];
@@ -2075,8 +2122,8 @@ export async function getFolders(): Promise<Folder[]> {
  * Create a new folder
  */
 export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
-  const folder = await fetchWithAuth<Folder>('/v1/folders', {
-    method: 'POST',
+  const folder = await fetchWithAuth<Folder>("/v1/folders", {
+    method: "POST",
     body: JSON.stringify(data),
   });
   invalidateCache(invalidationPatterns.folders);
@@ -2088,10 +2135,10 @@ export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
  */
 export async function updateFolder(
   folderId: string,
-  data: UpdateFolderRequest
+  data: UpdateFolderRequest,
 ): Promise<Folder> {
   const folder = await fetchWithAuth<Folder>(`/v1/folders/${folderId}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(data),
   });
   invalidateCache(invalidationPatterns.folders);
@@ -2104,26 +2151,10 @@ export async function updateFolder(
  */
 export async function deleteFolder(folderId: string): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}`, {
-    method: 'DELETE',
+    method: "DELETE",
   });
   invalidateCache(invalidationPatterns.folders);
   invalidateCache(invalidationPatterns.conversations); // Conversations move back to "All"
-}
-
-/**
- * Move a single conversation to a folder
- * @param conversationId - The conversation to move
- * @param folderId - The target folder ID, or null to remove from folder
- */
-export async function moveConversationToFolder(
-  conversationId: string,
-  folderId: string | null
-): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${conversationId}/folder`, {
-    method: 'PATCH',
-    body: JSON.stringify({ folder_id: folderId }),
-  });
-  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -2133,22 +2164,11 @@ export async function moveConversationToFolder(
  */
 export async function bulkMoveConversationsToFolder(
   folderId: string,
-  conversationIds: string[]
+  conversationIds: string[],
 ): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}/conversations/bulk-move`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ conversation_ids: conversationIds }),
-  });
-}
-
-/**
- * Reorder folders
- * @param folderIds - Array of folder IDs in the desired order
- */
-export async function reorderFolders(folderIds: string[]): Promise<void> {
-  await fetchWithAuth('/v1/folders/reorder', {
-    method: 'POST',
-    body: JSON.stringify({ folder_ids: folderIds }),
   });
 }
 
@@ -2156,14 +2176,14 @@ export async function reorderFolders(folderIds: string[]): Promise<void> {
 // FCM Token Registration API
 // ============================================================================
 
-const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
+const WEB_DEVICE_ID_KEY = "omi-web-device-id";
 
 /**
  * Get or generate a unique device ID for this browser
  * This is used to identify the device when registering FCM tokens
  */
 function getWebDeviceIdHash(): string {
-  if (typeof window === 'undefined') return 'server';
+  if (typeof window === "undefined") return "server";
 
   let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
   if (!deviceId) {
@@ -2176,7 +2196,7 @@ function getWebDeviceIdHash(): string {
   let hash = 0;
   for (let i = 0; i < deviceId.length; i++) {
     const char = deviceId.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
   return Math.abs(hash).toString(16);
@@ -2191,11 +2211,11 @@ export async function registerFCMToken(fcmToken: string): Promise<void> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const deviceIdHash = getWebDeviceIdHash();
 
-  await fetchWithAuth('/v1/users/fcm-token', {
-    method: 'POST',
+  await fetchWithAuth("/v1/users/fcm-token", {
+    method: "POST",
     headers: {
-      'X-App-Platform': 'web',
-      'X-Device-Id-Hash': deviceIdHash,
+      "X-App-Platform": "web",
+      "X-Device-Id-Hash": deviceIdHash,
     },
     body: JSON.stringify({
       fcm_token: fcmToken,
@@ -2212,11 +2232,11 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   try {
     const deviceIdHash = getWebDeviceIdHash();
 
-    await fetchWithAuth('/v1/users/fcm-token', {
-      method: 'DELETE',
+    await fetchWithAuth("/v1/users/fcm-token", {
+      method: "DELETE",
       headers: {
-        'X-App-Platform': 'web',
-        'X-Device-Id-Hash': deviceIdHash,
+        "X-App-Platform": "web",
+        "X-Device-Id-Hash": deviceIdHash,
       },
       body: JSON.stringify({
         fcm_token: fcmToken,
@@ -2224,7 +2244,7 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
     });
   } catch (error) {
     // Silently fail on logout - token cleanup is best-effort
-    console.warn('Failed to unregister FCM token:', error);
+    console.warn("Failed to unregister FCM token:", error);
   }
 }
 
@@ -2233,7 +2253,7 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
 // ============================================================================
 
 export interface FairUseStatus {
-  stage: 'none' | 'warning' | 'throttle' | 'restrict';
+  stage: "none" | "warning" | "throttle" | "restrict";
   case_ref: string;
   speech_hours_today: number;
   speech_hours_3day: number;
@@ -2260,9 +2280,9 @@ export interface FairUseStatus {
 
 export async function getFairUseStatus(): Promise<FairUseStatus | null> {
   try {
-    return await fetchWithAuth<FairUseStatus>('/v1/fair-use/status');
+    return await fetchWithAuth<FairUseStatus>("/v1/fair-use/status");
   } catch (error) {
-    console.error('getFairUseStatus error:', error);
+    console.error("getFairUseStatus error:", error);
     return null;
   }
 }

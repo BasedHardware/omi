@@ -7,7 +7,7 @@ actor EmbeddingService {
 
   /// Gemini embedding-001 outputs 3072 dimensions by default
   static let embeddingDimension = 3072
-  static let modelName = "gemini-embedding-001"
+  static var modelName: String { ModelQoS.Gemini.embedding }
 
   /// In-memory index: action_item.id -> normalized embedding
   private var index: [Int64: [Float]] = [:]
@@ -16,9 +16,9 @@ actor EmbeddingService {
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
 
-  /// Backend proxy base URL (from OMI_API_URL env var)
+  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return ""
@@ -64,7 +64,14 @@ actor EmbeddingService {
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, _) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await URLSession.shared.data(for: request)
+
+    // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
+    // cause "data couldn't be read" errors that mask the real problem.
+    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+      let body = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+      throw EmbeddingError.serverError(statusCode: httpResponse.statusCode, body: body)
+    }
 
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let embedding = json["embedding"] as? [String: Any],
@@ -308,11 +315,13 @@ actor EmbeddingService {
   enum EmbeddingError: LocalizedError {
     case missingAPIKey
     case invalidResponse
+    case serverError(statusCode: Int, body: String)
 
     var errorDescription: String? {
       switch self {
       case .missingAPIKey: return "AI features are not configured. Please update the app."
       case .invalidResponse: return "AI service returned an unexpected response. Please try again."
+      case .serverError(let statusCode, let body): return "Embedding API error (HTTP \(statusCode)): \(body)"
       }
     }
   }

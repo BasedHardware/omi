@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,7 +24,6 @@ import 'package:omi/utils/logger.dart';
 class _FCMNotificationService implements NotificationInterface {
   _FCMNotificationService._();
 
-  MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   final channel = NotificationChannel(
@@ -118,16 +116,7 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   @override
-  Future<void> register() async {
-    try {
-      await platform.invokeMethod('setNotificationOnKillService', {
-        'title': "Your Omi Device Disconnected",
-        'description': "Please keep your app opened to continue using your Omi.",
-      });
-    } catch (e) {
-      Logger.debug('NotifOnKill error: $e');
-    }
-  }
+  Future<void> register() async {}
 
   @override
   Future<String> getTimeZone() async {

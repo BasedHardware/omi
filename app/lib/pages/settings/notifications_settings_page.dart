@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -24,9 +23,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22; // Default to 10 PM
 
-  // Daily Reflection settings
-  bool _dailyReflectionEnabled = true;
-
   @override
   void initState() {
     super.initState();
@@ -42,7 +38,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     final mentorSettings = await getMentorNotificationSettings();
 
     // Load settings from local prefs
-    final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     final localFrequency = SharedPreferencesUtil().notificationFrequency;
 
     if (mounted) {
@@ -57,7 +52,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
         }
-        _dailyReflectionEnabled = reflectionEnabled;
         _isLoading = false;
       });
     }
@@ -124,19 +118,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     setState(() => _dailySummaryHour = hour);
     await setDailySummarySettings(hour: hour);
     MixpanelManager().dailySummaryTimeChanged(hour: hour);
-  }
-
-  void _updateDailyReflectionEnabled(bool value) {
-    MixpanelManager().dailyReflectionToggled(enabled: value);
-    setState(() => _dailyReflectionEnabled = value);
-    SharedPreferencesUtil().dailyReflectionEnabled = value;
-
-    // Schedule or cancel the notification based on the setting
-    if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-    } else {
-      DailyReflectionNotification.cancelNotification();
-    }
   }
 
   Future<void> _showHourPicker() async {
@@ -251,20 +232,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     ),
                   ),
                   _buildDailySummaryCard(),
-
-                  const SizedBox(height: 32),
-
-                  // Daily Reflection Section
-                  _buildSectionHeader(context.l10n.dailyReflection),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      context.l10n.dailyReflectionDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
-                    ),
-                  ),
-                  _buildDailyReflectionCard(),
                 ],
               ),
             ),
@@ -407,22 +374,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDailyReflectionCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-      child: _buildSettingRow(
-        icon: FontAwesomeIcons.moon,
-        title: context.l10n.enable,
-        trailing: Switch(
-          value: _dailyReflectionEnabled,
-          onChanged: _updateDailyReflectionEnabled,
-          activeColor: const Color(0xFF6366F1),
-        ),
       ),
     );
   }

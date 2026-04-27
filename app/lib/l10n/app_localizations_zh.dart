@@ -1761,7 +1761,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rateOnGooglePlay => '在 Google Play 评价';
 
   @override
-  String get maybeLater => '稍后再说';
+  String get maybeLater => '以后再说';
 
   @override
   String get speechProfileIntro => 'Omi需要学习您的目标和声音。您稍后可以修改它。';
@@ -2323,6 +2323,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryLevel => '电池电量';
 
   @override
+  String get charging => '充电中';
+
+  @override
   String get productUpdate => '产品更新';
 
   @override
@@ -2448,12 +2451,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => '在主页上跟踪您的个人目标';
-
-  @override
-  String get dailyReflection => '每日反思';
-
-  @override
-  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
@@ -3847,9 +3844,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trackPersonalGoals => '在主页上跟踪个人目标';
 
   @override
-  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
-
-  @override
   String get endpointURL => '端点 URL';
 
   @override
@@ -4477,7 +4471,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToLoadPlans => '无法加载计划';
 
   @override
-  String get checkConnectionTryAgain => '请检查您的连接并重试';
+  String get checkConnectionTryAgain => '请检查连接并重试';
 
   @override
   String get useFreePlan => '使用免费计划';
@@ -4993,7 +4987,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '已删除附加语音样本';
 
   @override
-  String get consentDataMessage => '继续即表示您与此应用共享的所有数据（包括您的对话、录音和个人信息）将安全存储在我们的服务器上，以便为您提供AI驱动的洞察并启用所有应用功能。';
+  String get consentDataMessage =>
+      '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
   String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
@@ -7047,12 +7042,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => '每日反思时间';
-
-  @override
-  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
-
-  @override
   String get actionItemReminderTitle => 'Omi 提醒';
 
   @override
@@ -8153,6 +8142,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSettingsTitle => '通话设置';
 
   @override
+  String get showPhoneCallButtonTitle => '显示电话按钮';
+
+  @override
+  String get showPhoneCallButtonDesc => '在主屏幕上显示电话按钮';
+
+  @override
   String get yourVerifiedNumbers => '您已验证的号码';
 
   @override
@@ -8669,6 +8664,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => '电池';
+
+  @override
+  String get noBatteryDataYet => '暂无电池数据';
+
+  @override
+  String get day => '日';
+
+  @override
+  String get week => '周';
+
+  @override
   String get rollbackToStableFirmware => '回滚到稳定固件';
 
   @override
@@ -8845,4 +8852,151 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => '无法删除您的账户。请重试。';
+
+  @override
+  String get planUpdate => '套餐更新';
+
+  @override
+  String get planDeprecationMessage => '您的 Unlimited 套餐即将停用。请切换到 Operator 套餐——同样出色的功能，每月 \$49。您当前的套餐在此期间将继续可用。';
+
+  @override
+  String get upgradeYourPlan => '升级你的计划';
+
+  @override
+  String get youAreOnAPaidPlan => '你正在使用付费计划。';
+
+  @override
+  String get chatTitle => '聊天';
+
+  @override
+  String get chatMessages => '条消息';
+
+  @override
+  String get unlimitedChatThisMonth => '本月无限聊天消息';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '已使用 $used / $limit 计算预算';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '本月已使用 $used / $limit 条消息';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '已使用 $used / $limit';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => '聊天限额已用完。升级以获取更多消息。';
+
+  @override
+  String get chatLimitReachedTitle => '聊天限额已用完';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '您已在 $plan 计划中使用了 $limitDisplay 中的 $used。';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count 天后重置';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count 小时后重置';
+  }
+
+  @override
+  String get resetsSoon => '即将重置';
+
+  @override
+  String get upgradePlan => '升级计划';
+
+  @override
+  String get billingMonthly => '月付';
+
+  @override
+  String get billingYearly => '年付';
+
+  @override
+  String get savePercent => '节省约17%';
+
+  @override
+  String get popular => '热门';
+
+  @override
+  String get currentPlan => '当前';
+
+  @override
+  String neoSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '每月 $count 个问题';
+  }
+
+  @override
+  String get architectSubtitle => '高级用户 AI — 数千次对话 + 代理自动化';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return '聊天：\$$used / \$$limit 本月已使用';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return '聊天：\$$used 本月已使用';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return '聊天：$used / $limit 条消息本月';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return '聊天：$used 条消息本月';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => '您已达到每月限额。升级以无限制地继续与Omi聊天。';
+
+  @override
+  String get voiceResponseAudio => '朗读 Omi 的回复';
+
+  @override
+  String get voiceResponseMode => '语音回复';
+
+  @override
+  String get voiceResponseModeTitle => '何时朗读回复';
+
+  @override
+  String get voiceResponseOff => '关闭';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '仅耳机';
+
+  @override
+  String get voiceResponseAlways => '始终';
+
+  @override
+  String get agreeAndContinue => '同意并继续';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

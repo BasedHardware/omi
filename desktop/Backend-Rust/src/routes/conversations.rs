@@ -191,6 +191,7 @@ async fn create_conversation_from_segments(
         // Get LLM client (Gemini)
         let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
             LlmClient::new(api_key.clone())
+                .with_model(crate::llm::model_qos::gemini_extraction())
         } else {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -441,6 +442,7 @@ async fn reprocess_conversation(
     // Get LLM client (Gemini)
     let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
         LlmClient::new(api_key.clone())
+            .with_model(crate::llm::model_qos::gemini_extraction())
     } else {
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -841,7 +843,8 @@ async fn merge_conversations(
     // If reprocessing is requested and we have an LLM client, process the merged conversation
     if request.reprocess {
         if let Some(api_key) = &state.config.gemini_api_key {
-            let llm = LlmClient::new(api_key.clone());
+            let llm = LlmClient::new(api_key.clone())
+                .with_model(crate::llm::model_qos::gemini_extraction());
 
             // Get existing data for deduplication
             let existing_memories = state

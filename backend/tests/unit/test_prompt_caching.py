@@ -270,21 +270,11 @@ class TestPromptCacheRetention:
         )
         assert match, "llm_medium_experiment missing extra_body with prompt_cache_retention='24h'"
 
-    def test_llm_agent_has_cache_retention(self):
-        """llm_agent must have extra_body with prompt_cache_retention=24h."""
+    def test_qos_tier_medium_gets_cache_retention(self):
+        """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_openai_llm."""
         source = self._read_clients_source()
-        match = re.search(
-            r'llm_agent\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
-        )
-        assert match, "llm_agent missing extra_body with prompt_cache_retention='24h'"
-
-    def test_llm_agent_stream_has_cache_retention(self):
-        """llm_agent_stream must have extra_body with prompt_cache_retention=24h."""
-        source = self._read_clients_source()
-        match = re.search(
-            r'llm_agent_stream\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
-        )
-        assert match, "llm_agent_stream missing extra_body with prompt_cache_retention='24h'"
+        match = re.search(r'_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h', source, re.DOTALL)
+        assert match, "QoS _get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
 
     def test_cache_retention_not_in_model_kwargs(self):
         """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""
@@ -294,26 +284,24 @@ class TestPromptCacheRetention:
             assert 'prompt_cache_retention' not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
 
     def test_prompt_cache_key_in_structure_function(self):
-        """get_transcript_structure must use prompt_cache_key='omi-transcript-structure'."""
+        """get_transcript_structure must pass cache_key='omi-transcript-structure' via get_llm."""
         source = inspect.getsource(get_transcript_structure)
         assert (
-            'prompt_cache_key="omi-transcript-structure"' in source
-        ), "get_transcript_structure missing prompt_cache_key binding"
+            "cache_key='omi-transcript-structure'" in source
+        ), "get_transcript_structure missing cache_key in get_llm call"
 
     def test_prompt_cache_key_in_action_items_function(self):
-        """extract_action_items must use prompt_cache_key='omi-extract-actions'."""
+        """extract_action_items must pass cache_key='omi-extract-actions' via get_llm."""
         source = inspect.getsource(extract_action_items)
-        assert (
-            'prompt_cache_key="omi-extract-actions"' in source
-        ), "extract_action_items missing prompt_cache_key binding"
+        assert "cache_key='omi-extract-actions'" in source, "extract_action_items missing cache_key in get_llm call"
 
     def test_distinct_cache_keys_per_function(self):
-        """Each function must have a distinct prompt_cache_key to avoid cache conflation."""
+        """Each function must have a distinct cache_key to avoid cache conflation."""
         source_structure = inspect.getsource(get_transcript_structure)
         source_actions = inspect.getsource(extract_action_items)
-        key_structure = re.search(r'prompt_cache_key="([^"]+)"', source_structure)
-        key_actions = re.search(r'prompt_cache_key="([^"]+)"', source_actions)
-        assert key_structure and key_actions, "Both functions must have prompt_cache_key"
+        key_structure = re.search(r"cache_key='([^']+)'", source_structure)
+        key_actions = re.search(r"cache_key='([^']+)'", source_actions)
+        assert key_structure and key_actions, "Both functions must have cache_key"
         assert key_structure.group(1) != key_actions.group(
             1
         ), f"Cache keys must be distinct: structure={key_structure.group(1)}, actions={key_actions.group(1)}"

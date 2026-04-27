@@ -23,37 +23,38 @@ from utils.stt.vad_gate import (
 _mock_is_speech = False
 _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
+import numpy as np
 
-class _MockVADModel:
-    """Mock Silero VAD model that returns speech probability directly.
 
-    Returns 0.9 for speech, 0.1 for silence — matching how the raw model
-    works (continuous probability per window, NOT event-based like VADIterator).
+def _mock_run_vad_window(window, state, context):
+    """Mock run_vad_window that returns controlled probability.
+
+    Returns 0.9 for speech, 0.1 for silence — matching how the real ONNX model
+    works (continuous probability per window).
     When _mock_vad_prob is set, returns that exact value for boundary testing.
     """
+    if _mock_vad_prob is not None:
+        prob = float(_mock_vad_prob)
+    else:
+        prob = 0.9 if _mock_is_speech else 0.1
+    return prob, state, context
 
-    def __call__(self, tensor, sample_rate):
-        if _mock_vad_prob is not None:
-            return _mock_vad_prob
-        return 0.9 if _mock_is_speech else 0.1
 
-    def reset_states(self):
-        pass
+def _mock_make_fresh_state():
+    """Mock make_fresh_state returning zero arrays (matches real signature)."""
+    return np.zeros((2, 1, 128), dtype=np.float32), np.zeros((1, 64), dtype=np.float32)
 
 
 @pytest.fixture(autouse=True)
 def mock_silero():
-    """Mock Silero VAD model to avoid torch dependency in tests.
+    """Mock ONNX VAD functions to avoid onnxruntime dependency in tests.
 
-    Patches the raw model (not VADIterator) and sets _vad_torch=None
-    so _run_vad passes numpy arrays directly to the mock.
+    Patches run_vad_window and make_fresh_state at the vad_gate import site
+    so _run_vad uses the mock instead of real ONNX inference.
     """
-    mock_model = _MockVADModel()
     with (
-        patch('utils.stt.vad_gate._vad_model', mock_model),
-        patch('utils.stt.vad_gate._vad_torch', None),
-        patch('utils.stt.vad_gate._vad_model_pool', None),
-        patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
+        patch('utils.stt.vad_gate.run_vad_window', side_effect=_mock_run_vad_window),
+        patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
     ):
         global _mock_is_speech, _mock_vad_prob
         _mock_is_speech = False
@@ -1202,39 +1203,24 @@ class TestStructuredMetricsLog:
         assert payload['estimated_savings_pct'] == pytest.approx(payload['bytes_saved_ratio'] * 100.0, abs=0.001)
 
 
-class _StatefulMockModel:
-    def __init__(self):
-        self._state = 0
+class TestOnnxStateAndConcurrency:
+    """Tests for ONNX VAD state persistence and concurrent inference."""
 
-    def __call__(self, tensor, sample_rate):
-        self._state += 1
-        return 0.9 if self._state >= 2 else 0.1
-
-    def reset_states(self):
-        self._state = 0
-
-
-class _SlowMockModel:
-    def __init__(self, sleep_sec):
-        self.sleep_sec = sleep_sec
-
-    def __call__(self, tensor, sample_rate):
-        time.sleep(self.sleep_sec)
-        return 0.1
-
-    def reset_states(self):
-        pass
-
-
-class TestModelPoolAndState:
     def test_session_state_persists_across_chunks(self):
-        """Second chunk should see carried LSTM-like state and trigger speech."""
-        model = _StatefulMockModel()
+        """Second chunk should see carried LSTM-like state and trigger speech.
+
+        Uses a stateful mock that returns silence on first call, speech on second.
+        """
+        call_count = [0]
+
+        def _stateful_run_vad_window(window, state, context):
+            call_count[0] += 1
+            prob = 0.9 if call_count[0] >= 2 else 0.1
+            return prob, state, context
+
         with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 1),
+            patch('utils.stt.vad_gate.run_vad_window', side_effect=_stateful_run_vad_window),
+            patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
         ):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
             out1 = gate.process_audio(_make_pcm(40), 1000.0)
@@ -1243,52 +1229,22 @@ class TestModelPoolAndState:
             assert not out1.is_speech
             assert out2.is_speech
 
-    def test_model_pool_allows_parallel_inference(self):
-        """Two sessions should infer concurrently when pool size > 1."""
-        sleep_sec = 0.2
-        model = _SlowMockModel(sleep_sec=sleep_sec)
-        with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
-        ):
-            gate1 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u1', session_id='s1')
-            gate2 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u2', session_id='s2')
-            barrier = threading.Barrier(3)
-            chunk = _make_pcm(40)  # >= 1 VAD window at 16kHz
+    def test_concurrent_sessions_no_deadlock(self):
+        """Multiple concurrent sessions should complete without deadlock.
 
-            def _run(gate, wall_time):
-                barrier.wait()
-                gate.process_audio(chunk, wall_time)
-
-            t1 = threading.Thread(target=_run, args=(gate1, 1000.0))
-            t2 = threading.Thread(target=_run, args=(gate2, 1000.0))
-            t1.start()
-            t2.start()
-            start = time.perf_counter()
-            barrier.wait()
-            t1.join()
-            t2.join()
-            elapsed = time.perf_counter() - start
-
-            assert elapsed < sleep_sec * 1.75
-
-
-class TestPoolExhaustionUnderContention:
-    """Tests for pool behavior when more callers than pool size."""
-
-    def test_callers_exceed_pool_size_no_deadlock(self):
-        """4 concurrent callers with pool_size=2 should all complete (no deadlock)."""
+        ONNX sessions are stateless and thread-safe — per-connection state
+        is stored on VADStreamingGate instances, not the model.
+        """
         sleep_sec = 0.05
-        model = _SlowMockModel(sleep_sec=sleep_sec)
-        pool_size = 2
+
+        def _slow_run_vad_window(window, state, context):
+            time.sleep(sleep_sec)
+            return 0.1, state, context
+
         num_callers = 4
         with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
+            patch('utils.stt.vad_gate.run_vad_window', side_effect=_slow_run_vad_window),
+            patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
         ):
             gates = [
                 VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
@@ -1315,51 +1271,12 @@ class TestPoolExhaustionUnderContention:
                 t.join(timeout=10)
             elapsed = time.perf_counter() - start
 
-            # All callers should complete (no deadlock)
             for i in range(num_callers):
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
-            # With pool_size=2, 4 callers should take ~2x the single-call time (2 batches)
-            # Allow generous margin for CI jitter
-            assert elapsed < sleep_sec * 6, f'Took {elapsed:.3f}s — possible starvation'
-
-    def test_pool_recovery_after_contention(self):
-        """After contention burst, pool models should be returned and reusable."""
-        model = _SlowMockModel(sleep_sec=0.01)
-        pool_size = 2
-        with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
-        ):
-            # First: burst of contention
-            gates = [
-                VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
-                for i in range(4)
-            ]
-            chunk = _make_pcm(40)
-            threads = []
-            for g in gates:
-                t = threading.Thread(target=lambda gate: gate.process_audio(chunk, 1000.0), args=(g,))
-                threads.append(t)
-                t.start()
-            for t in threads:
-                t.join(timeout=10)
-
-            # After contention: pool should be fully returned (pool_size items available)
-            from utils.stt.vad_gate import _vad_model_pool
-
-            assert _vad_model_pool is not None
-            assert (
-                _vad_model_pool.qsize() == pool_size
-            ), f'Pool has {_vad_model_pool.qsize()} models, expected {pool_size}'
-
-            # New caller should work immediately
-            new_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='new', session_id='new')
-            out = new_gate.process_audio(chunk, 2000.0)
-            assert out is not None
+            # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
+            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
 
 
 class TestLongSessionStress:

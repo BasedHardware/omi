@@ -1,71 +1,103 @@
 import AppKit
-import ImageIO
+import CWebP
 
 class ScreenCaptureManager {
-    static func captureScreen() -> URL? {
-        // Check screen recording permission before capture.
-        // On macOS 15+, CGDisplayCreateImage returns a wallpaper-only image (not nil)
-        // when permission is denied, so we must check explicitly.
+    /// Returns a CGImage for the screen under the mouse cursor.
+    static func captureScreenImage() -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else {
             log("ScreenCaptureManager: Screen recording permission not granted, skipping capture")
             return nil
         }
 
-        let fileManager = FileManager.default
-        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            log("ScreenCaptureManager: Could not find documents directory")
-            return nil
-        }
-        let screenshotsDirectory = documentsDirectory
-            .appendingPathComponent("Omi")
-            .appendingPathComponent("Screenshots")
-
-        do {
-            try fileManager.createDirectory(at: screenshotsDirectory, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            log("ScreenCaptureManager: Error creating directory: \(error)")
-            return nil
-        }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        let timestamp = formatter.string(from: Date())
-        let fileName = "screenshot-\(timestamp).jpg"
-        let fileURL = screenshotsDirectory.appendingPathComponent(fileName)
-
-        // Capture the screen where the mouse cursor is, not just the primary display
-        let displayID: CGDirectDisplayID = {
-            let mouseLocation = NSEvent.mouseLocation
-            for screen in NSScreen.screens {
-                if screen.frame.contains(mouseLocation),
-                   let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
-                    return screenNumber
-                }
-            }
-            return CGMainDisplayID()
-        }()
-
+        let displayID = displayIDUnderMouse()
         guard let image = CGDisplayCreateImage(displayID) else {
             log("ScreenCaptureManager: Could not capture screen (display \(displayID))")
             return nil
         }
 
-        guard let destination = CGImageDestinationCreateWithURL(fileURL as CFURL, "public.jpeg" as CFString, 1, nil) else {
-            log("ScreenCaptureManager: Could not create image destination")
+        return image
+    }
+
+    /// Returns WebP data for the screen under the mouse cursor at full Retina
+    /// resolution, compressed in memory via libwebp. No disk I/O.
+    static func captureScreenData() -> Data? {
+        guard let image = captureScreenImage() else { return nil }
+
+        let width = image.width
+        let height = image.height
+
+        // Render CGImage into an RGBA bitmap context
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else {
+            log("ScreenCaptureManager: Could not create bitmap context")
+            return nil
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        guard let pixelData = context.data else {
+            log("ScreenCaptureManager: Could not get pixel data from context")
             return nil
         }
 
-        // JPEG at 0.75 quality keeps file size ~400–800 KB vs 5+ MB for PNG,
-        // staying well under the Claude API's 5 MB base64 limit.
-        let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.75]
-        CGImageDestinationAddImage(destination, image, options as CFDictionary)
+        // Encode to WebP via libwebp at quality 70
+        let rgba = pixelData.assumingMemoryBound(to: UInt8.self)
+        var output: UnsafeMutablePointer<UInt8>?
+        let size = WebPEncodeRGBA(rgba, Int32(width), Int32(height), Int32(width * 4), 70.0, &output)
 
-        if !CGImageDestinationFinalize(destination) {
-            log("ScreenCaptureManager: Could not save image")
+        guard size > 0, let webpPtr = output else {
+            log("ScreenCaptureManager: WebP encoding failed")
             return nil
         }
 
-        log("ScreenCaptureManager: Screenshot saved to \(fileURL.path) (\(image.width)×\(image.height))")
-        return fileURL
+        let data = Data(bytes: webpPtr, count: size)
+        WebPFree(webpPtr)
+
+        log("ScreenCaptureManager: Screenshot captured \(width)x\(height), WebP \(data.count / 1024) KB")
+        return data
+    }
+
+    private static func displayIDUnderMouse() -> CGDirectDisplayID {
+        let mouseLocation = NSEvent.mouseLocation
+        for screen in NSScreen.screens {
+            if screen.frame.contains(mouseLocation),
+               let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+                return screenNumber
+            }
+        }
+        return CGMainDisplayID()
+    }
+
+    /// Legacy file-based capture (kept for callers that need a URL).
+    static func captureScreen() -> URL? {
+        guard let data = captureScreenData() else { return nil }
+
+        let fileManager = FileManager.default
+        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let screenshotsDirectory = documentsDirectory
+            .appendingPathComponent("Omi")
+            .appendingPathComponent("Screenshots")
+        try? fileManager.createDirectory(at: screenshotsDirectory, withIntermediateDirectories: true, attributes: nil)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let timestamp = formatter.string(from: Date())
+        let fileURL = screenshotsDirectory.appendingPathComponent("screenshot-\(timestamp).webp")
+
+        do {
+            try data.write(to: fileURL)
+            return fileURL
+        } catch {
+            log("ScreenCaptureManager: Could not save screenshot: \(error)")
+            return nil
+        }
     }
 }

@@ -19,6 +19,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -1074,7 +1075,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           ],
         ),
         const SizedBox(height: 12),
-        if (currentTab == 0)
+        if (currentTab == 0 && context.watch<UsageProvider>().showSubscriptionUI)
           GestureDetector(
             onTap: () => Navigator.of(
               context,

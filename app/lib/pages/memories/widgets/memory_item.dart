@@ -15,6 +15,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -81,6 +82,7 @@ class MemoryItem extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
+                        if (!context.read<UsageProvider>().showSubscriptionUI) return;
                         MixpanelManager().paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
@@ -91,10 +93,12 @@ class MemoryItem extends StatelessWidget {
                           color: Colors.black.withValues(alpha: 0.01),
                           borderRadius: const BorderRadius.all(Radius.circular(8)),
                         ),
-                        child: const Text(
-                          'Upgrade to unlimited',
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        child: context.watch<UsageProvider>().showSubscriptionUI
+                            ? const Text(
+                                'Upgrade to unlimited',
+                                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ),
                   ),

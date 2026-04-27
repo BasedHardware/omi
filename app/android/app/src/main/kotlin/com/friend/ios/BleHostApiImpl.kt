@@ -104,6 +104,10 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.isRssiStreamingEnabled = false
     }
 
+    override fun getBatteryHistory(uuid: String, callback: (Result<List<BleBatteryPoint>>) -> Unit) {
+        callback(Result.success(bleManager.getBatteryHistory(uuid)))
+    }
+
     override fun getDeviceDiagnostics(uuid: String, callback: (Result<BleDeviceDiagnostics>) -> Unit) {
         val service = OmiBleForegroundService.instance
         if (service != null) {
@@ -112,7 +116,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             callback(Result.success(BleDeviceDiagnostics(
                 disconnectHistory = emptyList(),
                 reconnectionCount = 0,
-                connectedAt = 0
+                connectedAt = 0,
+                failToConnectCount = 0
             )))
         }
     }

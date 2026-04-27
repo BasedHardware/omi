@@ -1786,7 +1786,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get rateOnGooglePlay => 'ให้คะแนนบน Google Play';
 
   @override
-  String get maybeLater => 'อาจจะภายหลัง';
+  String get maybeLater => 'ไว้ทีหลัง';
 
   @override
   String get speechProfileIntro => 'Omi จำเป็นต้องเรียนรู้เป้าหมายและเสียงของคุณ คุณจะสามารถแก้ไขได้ในภายหลัง';
@@ -2356,6 +2356,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryLevel => 'ระดับแบตเตอรี่';
 
   @override
+  String get charging => 'กำลังชาร์จ';
+
+  @override
   String get productUpdate => 'การอัปเดตผลิตภัณฑ์';
 
   @override
@@ -2482,12 +2485,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
-
-  @override
-  String get dailyReflection => 'การทบทวนรายวัน';
-
-  @override
-  String get get9PmReminderToReflect => 'รับการแจ้งเตือนเวลา 21:00 น. เพื่อทบทวนวันของคุณ';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'คำอธิบายรายการการดำเนินการต้องไม่ว่างเปล่า';
@@ -3897,9 +3894,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get trackPersonalGoals => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
 
   @override
-  String get dailyReflectionDescription => 'รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด';
-
-  @override
   String get endpointURL => 'URL ปลายทาง';
 
   @override
@@ -4538,7 +4532,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get alreadyBestValuePlan => 'คุณมีแพ็คเกจที่คุ้มค่าที่สุดแล้ว ไม่จำเป็นต้องเปลี่ยนแปลง';
 
   @override
-  String get unableToLoadPlans => 'ไม่สามารถโหลดแพ็คเกจได้';
+  String get unableToLoadPlans => 'ไม่สามารถโหลดแผนได้';
 
   @override
   String get checkConnectionTryAgain => 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
@@ -5073,7 +5067,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      'เมื่อดำเนินการต่อ ข้อมูลทั้งหมดที่คุณแชร์กับแอปนี้ (รวมถึงการสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณ) จะถูกจัดเก็บอย่างปลอดภัยบนเซิร์ฟเวอร์ของเราเพื่อให้ข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานฟีเจอร์ทั้งหมดของแอป';
+      'เมื่อดำเนินการต่อ การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณจะถูกจัดเก็บอย่างปลอดภัยบนเซิร์ฟเวอร์ของเรา การบันทึกเสียงและการถอดความของคุณจะถูกประมวลผลโดยบริการ AI ของบุคคลที่สาม (รวมถึง Deepgram สำหรับการถอดความ และ OpenAI สำหรับการวิเคราะห์) เพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป';
 
   @override
   String get tasksEmptyStateMessage => 'งานจากการสนทนาของคุณจะปรากฏที่นี่\nแตะ + เพื่อสร้างด้วยตนเอง';
@@ -7147,12 +7141,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'ถึงเวลาทบทวนรายวัน';
-
-  @override
-  String get dailyReflectionNotificationBody => 'เล่าให้ฟังเกี่ยวกับวันของคุณ';
-
-  @override
   String get actionItemReminderTitle => 'การแจ้งเตือน Omi';
 
   @override
@@ -8260,6 +8248,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ตั้งค่าการโทร';
 
   @override
+  String get showPhoneCallButtonTitle => 'แสดงปุ่มโทรศัพท์';
+
+  @override
+  String get showPhoneCallButtonDesc => 'แสดงปุ่มโทรศัพท์บนหน้าจอหลัก';
+
+  @override
   String get yourVerifiedNumbers => 'หมายเลขที่ยืนยันแล้วของคุณ';
 
   @override
@@ -8784,6 +8778,18 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get batteryHistory => 'แบตเตอรี่';
+
+  @override
+  String get noBatteryDataYet => 'ยังไม่มีข้อมูลแบตเตอรี่';
+
+  @override
+  String get day => 'วัน';
+
+  @override
+  String get week => 'สัปดาห์';
+
+  @override
   String get rollbackToStableFirmware => 'ย้อนกลับเป็นเฟิร์มแวร์เสถียร';
 
   @override
@@ -8962,4 +8968,152 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteAccountFailed => 'ไม่สามารถลบบัญชีของคุณได้ โปรดลองอีกครั้ง';
+
+  @override
+  String get planUpdate => 'อัปเดตแผน';
+
+  @override
+  String get planDeprecationMessage =>
+      'แผน Unlimited ของคุณกำลังถูกยกเลิก เปลี่ยนไปใช้แผน Operator — ฟีเจอร์ดีเยี่ยมเหมือนเดิมในราคา \$49/เดือน แผนปัจจุบันของคุณจะยังคงใช้งานได้ในระหว่างนี้';
+
+  @override
+  String get upgradeYourPlan => 'อัปเกรดแผนของคุณ';
+
+  @override
+  String get youAreOnAPaidPlan => 'คุณอยู่ในแผนชำระเงิน';
+
+  @override
+  String get chatTitle => 'แชท';
+
+  @override
+  String get chatMessages => 'ข้อความ';
+
+  @override
+  String get unlimitedChatThisMonth => 'ข้อความแชทไม่จำกัดเดือนนี้';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used จาก $limit งบคำนวณที่ใช้ไป';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '$used จาก $limit ข้อความที่ใช้ไปเดือนนี้';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit ใช้ไป';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'ถึงขีดจำกัดแชทแล้ว อัปเกรดเพื่อเพิ่มข้อความ';
+
+  @override
+  String get chatLimitReachedTitle => 'ถึงขีดจำกัดแชทแล้ว';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return 'คุณใช้ไป $used จาก $limitDisplay ในแผน $plan';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return 'รีเซ็ตใน $count วัน';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return 'รีเซ็ตใน $count ชั่วโมง';
+  }
+
+  @override
+  String get resetsSoon => 'จะรีเซ็ตเร็วๆ นี้';
+
+  @override
+  String get upgradePlan => 'อัปเกรดแผน';
+
+  @override
+  String get billingMonthly => 'รายเดือน';
+
+  @override
+  String get billingYearly => 'รายปี';
+
+  @override
+  String get savePercent => 'ประหยัด ~17%';
+
+  @override
+  String get popular => 'ยอดนิยม';
+
+  @override
+  String get currentPlan => 'ปัจจุบัน';
+
+  @override
+  String neoSubtitle(int count) {
+    return '$count คำถามต่อเดือน';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '$count คำถามต่อเดือน';
+  }
+
+  @override
+  String get architectSubtitle => 'AI ขั้นสูง — แชทนับพัน + ระบบอัตโนมัติ';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'แชท: \$$used / \$$limit ที่ใช้ในเดือนนี้';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'แชท: \$$used ที่ใช้ในเดือนนี้';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'แชท: $used / $limit ข้อความในเดือนนี้';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'แชท: $used ข้อความในเดือนนี้';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => 'คุณถึงขีดจำกัดรายเดือนแล้ว อัปเกรดเพื่อแชทกับ Omi ต่อโดยไม่มีข้อจำกัด';
+
+  @override
+  String get voiceResponseAudio => 'อ่านคำตอบของ Omi ออกเสียง';
+
+  @override
+  String get voiceResponseMode => 'ตอบกลับด้วยเสียง';
+
+  @override
+  String get voiceResponseModeTitle => 'เมื่อใดจึงจะอ่านคำตอบ';
+
+  @override
+  String get voiceResponseOff => 'ปิด';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'หูฟังเท่านั้น';
+
+  @override
+  String get voiceResponseAlways => 'เสมอ';
+
+  @override
+  String get agreeAndContinue => 'ยอมรับและดำเนินการต่อ';
+
+  @override
+  String get startVoiceRecording => 'Start voice recording';
+
+  @override
+  String get startCallRecording => 'Start call recording';
+
+  @override
+  String get mindMap => 'Mind Map';
 }

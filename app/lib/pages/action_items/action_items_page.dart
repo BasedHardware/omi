@@ -527,11 +527,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                      ? _buildEmptyTasksList()
-                      : _buildTasksList(categorizedItems, provider),
+                          ? _buildEmptyTasksList()
+                          : _buildTasksList(categorizedItems, provider),
                 ),
               ),
-              _buildFab(),
+              // Hide the purple corner FAB when the empty-state already
+              // shows its own "Create Action Item" pill — otherwise we
+              // render two competing add buttons on top of each other.
+              if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
             ],
           ),
         );
@@ -550,41 +553,133 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
-        const SliverPadding(padding: EdgeInsets.only(top: 24)),
-        SliverToBoxAdapter(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(24),
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: _buildEmptyTasksContent()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyTasksContent() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Layered icon: soft purple aura behind a tactile glassy tile.
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 160,
+                height: 160,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.deepPurple.withValues(alpha: 0.35),
+                      Colors.deepPurple.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+              ),
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(26),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
+                  ),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.deepPurple.withValues(alpha: 0.45),
+                      blurRadius: 30,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 12),
                     ),
-                    child: Icon(Icons.check_circle_outline, size: 40, color: Colors.deepPurple.withOpacity(0.6)),
+                  ],
+                ),
+                child: const Icon(Icons.task_alt_rounded, size: 42, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Text(
+            context.l10n.noTasksYet,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Text(
+              context.l10n.tasksEmptyStateMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 15,
+                height: 1.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          // Primary action: open the new-task sheet so users have an obvious next step.
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const ActionItemFormSheet(),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6),
                   ),
-                  const SizedBox(height: 24),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.add_rounded, color: Color(0xFF1F1F25), size: 20),
+                  const SizedBox(width: 8),
                   Text(
-                    context.l10n.noTasksYet,
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.tasksEmptyStateMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 16, height: 1.5),
+                    context.l10n.createActionItem,
+                    style: const TextStyle(
+                      color: Color(0xFF1F1F25),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.1,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1201,9 +1296,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   width: 44,
                   height: 44,
                   child: Center(
-                    child: provider.isSelectionMode
-                        ? _buildSelectionCheckbox(isSelected)
-                        : _buildCheckbox(item.completed),
+                    child:
+                        provider.isSelectionMode ? _buildSelectionCheckbox(isSelected) : _buildCheckbox(item.completed),
                   ),
                 ),
               ),

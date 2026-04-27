@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
@@ -16,6 +17,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
@@ -27,6 +29,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -38,8 +41,9 @@ import 'package:omi/widgets/bottom_nav_bar.dart';
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
+  final bool autoStartVoice;
 
-  const ChatPage({super.key, this.isPivotBottom = false, this.autoMessage});
+  const ChatPage({super.key, this.isPivotBottom = false, this.autoMessage, this.autoStartVoice = false});
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -52,6 +56,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
+  MessageProvider? _messageProvider;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -61,6 +66,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   // Track which app is pending deletion confirmation
   String? _pendingDeleteAppId;
   String? _selectedContext;
+  bool _quotaSheetShown = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -85,6 +91,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      _messageProvider = provider;
+      // Listen for quota exceeded from any send path (text or voice)
+      provider.addListener(_onMessageProviderChanged);
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
@@ -92,10 +101,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       provider.fetchChatApps();
       // Pre-connect agent WebSocket so it's ready when the user sends a message
       provider.preConnectAgent();
+      // Chat quota is checked via 402 error when sending messages
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
-      // Auto-focus the text field only on initial load, not on app switches
-      if (_isInitialLoad) {
+      // Auto-start voice recording if requested (e.g., from home chat bar mic button)
+      if (widget.autoStartVoice && _isInitialLoad) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            context.read<VoiceRecorderProvider>().startRecording();
+          }
+        });
+      } else if (_isInitialLoad) {
+        // Auto-focus the text field only on initial load, not on app switches
         Future.delayed(const Duration(milliseconds: 300), () {
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
           if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
@@ -139,8 +156,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.initState();
   }
 
+  void _onMessageProviderChanged() {
+    final provider = context.read<MessageProvider>();
+    if (mounted && provider.isChatQuotaExceeded && !_quotaSheetShown) {
+      _quotaSheetShown = true;
+      _showPlansSheetOnQuotaExceeded();
+    } else if (!provider.isChatQuotaExceeded) {
+      _quotaSheetShown = false;
+    }
+  }
+
   @override
   void dispose() {
+    _messageProvider?.removeListener(_onMessageProviderChanged);
     textController.dispose();
     scrollController.dispose();
     textFieldFocusNode.dispose();
@@ -209,115 +237,117 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           ],
                         )
                       : provider.isClearingChat
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                            const SizedBox(height: 16),
-                            Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                          ],
-                        )
-                      : (provider.messages.isEmpty)
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 32.0),
-                            child: Text(
-                              connectivityProvider.isConnected
-                                  ? context.l10n.noMessagesYet
-                                  : context.l10n.noInternetConnection,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                textSelectionTheme: TextSelectionThemeData(
-                                  selectionColor: Colors.white.withOpacity(0.3),
-                                  selectionHandleColor: Colors.blue,
-                                ),
-                              ),
-                              child: ListView.builder(
-                                shrinkWrap: false,
-                                reverse: false,
-                                controller: scrollController,
-                                padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                itemCount: provider.messages.length,
-                                itemBuilder: (context, chatIndex) {
-                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                    _hasInitialScrolled = true;
-                                    SchedulerBinding.instance.addPostFrameCallback((_) {
-                                      if (scrollController.hasClients) {
-                                        scrollController.jumpTo(scrollController.position.maxScrollExtent);
-                                      }
-                                    });
-                                  }
-
-                                  final message = provider.messages[chatIndex];
-                                  double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                  return Padding(
-                                    key: ValueKey(message.id),
-                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                    child: message.sender == MessageSender.ai
-                                        ? Builder(
-                                            builder: (context) {
-                                              final child = AIMessage(
-                                                showTypingIndicator:
-                                                    provider.showTypingIndicator &&
-                                                    chatIndex == provider.messages.length - 1,
-                                                showThinkingAfterText: provider.agentThinkingAfterText,
-                                                message: message,
-                                                sendMessage: _sendMessageUtil,
-                                                onAskOmi: (text) {
-                                                  setState(() {
-                                                    _selectedContext = text;
-                                                  });
-                                                  textFieldFocusNode.requestFocus();
-                                                },
-                                                displayOptions: provider.messages.length <= 1,
-                                                appSender: provider.messageSenderApp(message.appId),
-                                                updateConversation: (ServerConversation conversation) {
-                                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                                },
-                                                setMessageNps: (int value, {String? reason}) {
-                                                  provider.setMessageNps(message, value, reason: reason);
-                                                },
-                                              );
-
-                                              // Dynamic spacer logic
-                                              if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
-                                                return Container(
-                                                  constraints: BoxConstraints(
-                                                    minHeight: MediaQuery.of(context).size.height * 0.5,
-                                                  ),
-                                                  alignment: Alignment.topLeft,
-                                                  child: child,
-                                                );
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                                const SizedBox(height: 16),
+                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
+                              ],
+                            )
+                          : (provider.messages.isEmpty)
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 100.0),
+                                    child: Text(
+                                      connectivityProvider.isConnected
+                                          ? context.l10n.noMessagesYet
+                                          : context.l10n.noInternetConnection,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                )
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        textSelectionTheme: TextSelectionThemeData(
+                                          selectionColor: Colors.white.withOpacity(0.3),
+                                          selectionHandleColor: Colors.blue,
+                                        ),
+                                      ),
+                                      child: ListView.builder(
+                                        shrinkWrap: false,
+                                        reverse: false,
+                                        controller: scrollController,
+                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                        itemCount: provider.messages.length,
+                                        itemBuilder: (context, chatIndex) {
+                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                            _hasInitialScrolled = true;
+                                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                                              if (scrollController.hasClients) {
+                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
                                               }
-                                              return child;
-                                            },
-                                          )
-                                        : HumanMessage(
-                                            message: message,
-                                            onAskOmi: (text) {
-                                              setState(() {
-                                                _selectedContext = text;
-                                              });
-                                              textFieldFocusNode.requestFocus();
-                                            },
-                                          ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                                            });
+                                          }
+
+                                          final message = provider.messages[chatIndex];
+                                          double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                          double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                          return Padding(
+                                            key: ValueKey(message.id),
+                                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                            child: message.sender == MessageSender.ai
+                                                ? Builder(
+                                                    builder: (context) {
+                                                      final child = AIMessage(
+                                                        showTypingIndicator: provider.showTypingIndicator &&
+                                                            chatIndex == provider.messages.length - 1,
+                                                        showThinkingAfterText: provider.agentThinkingAfterText,
+                                                        message: message,
+                                                        sendMessage: _sendMessageUtil,
+                                                        onAskOmi: (text) {
+                                                          setState(() {
+                                                            _selectedContext = text;
+                                                          });
+                                                          textFieldFocusNode.requestFocus();
+                                                        },
+                                                        displayOptions: provider.messages.length <= 1,
+                                                        appSender: provider.messageSenderApp(message.appId),
+                                                        updateConversation: (ServerConversation conversation) {
+                                                          context
+                                                              .read<ConversationProvider>()
+                                                              .updateConversation(conversation);
+                                                        },
+                                                        setMessageNps: (int value, {String? reason}) {
+                                                          provider.setMessageNps(message, value, reason: reason);
+                                                        },
+                                                      );
+
+                                                      // Dynamic spacer logic
+                                                      if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                        return Container(
+                                                          constraints: BoxConstraints(
+                                                            minHeight: MediaQuery.of(context).size.height * 0.5,
+                                                          ),
+                                                          alignment: Alignment.topLeft,
+                                                          child: child,
+                                                        );
+                                                      }
+                                                      return child;
+                                                    },
+                                                  )
+                                                : HumanMessage(
+                                                    message: message,
+                                                    onAskOmi: (text) {
+                                                      setState(() {
+                                                        _selectedContext = text;
+                                                      });
+                                                      textFieldFocusNode.requestFocus();
+                                                    },
+                                                  ),
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
                 ),
-                // Send message area - fixed at bottom
+                // Send message area
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   decoration: const BoxDecoration(
@@ -346,7 +376,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               if (provider.selectedFiles.isNotEmpty) {
                                 return Container(
                                   margin: const EdgeInsets.only(top: 16, bottom: 8),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  // Align with chat bar's left edge: outer Padding(8) + plus button (48) + gap (8).
+                                  padding: const EdgeInsets.only(left: 64, right: 8),
                                   height: 70,
                                   child: ListView.builder(
                                     scrollDirection: Axis.horizontal,
@@ -437,219 +468,421 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 bottom: widget.isPivotBottom
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
-                                              (textController.text.length > 40 || textController.text.contains('\n'))
-                                          ? 0
-                                          : 2),
+                                            (textController.text.length > 40 || textController.text.contains('\n'))
+                                        ? 0
+                                        : 2),
                               ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2A2A2F),
-                                  borderRadius: BorderRadius.circular(32),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    // Plus button
-                                    if (shouldShowMenuButton())
-                                      GestureDetector(
-                                        onTap: () {
-                                          HapticFeedback.lightImpact();
-                                          FocusScope.of(context).unfocus();
-                                          if (provider.selectedFiles.length > 3) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(context.l10n.maxFilesLimit),
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                          _showIOSStyleActionSheet(context);
-                                        },
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      // Placeholder for the floating LEFT button so the pill
+                                      // sits at the right x-position. The actual button is
+                                      // rendered as a Positioned overlay below so the pill's
+                                      // shadow can't bleed onto it.
+                                      if ((voiceRecorderProvider.isActive &&
+                                              voiceRecorderProvider.state == VoiceRecorderState.recording) ||
+                                          (!voiceRecorderProvider.isActive && shouldShowMenuButton()))
+                                        const SizedBox(width: 56),
+                                      // CENTER pill — text field/waveform + right-side button stays inside.
+                                      Expanded(
                                         child: Container(
-                                          height: 44,
-                                          width: 44,
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF3C3C43),
-                                            shape: BoxShape.circle,
+                                          padding: const EdgeInsets.only(left: 14, right: 8, top: 7, bottom: 7),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF1F1F25),
+                                            borderRadius: BorderRadius.circular(32),
+                                            border: Border.all(color: const Color(0xFF35343B), width: 1),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.65),
+                                                blurRadius: 60,
+                                                spreadRadius: 14,
+                                                offset: const Offset(0, -16),
+                                              ),
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.45),
+                                                blurRadius: 32,
+                                                spreadRadius: 6,
+                                                offset: const Offset(0, -8),
+                                              ),
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.25),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
                                           ),
-                                          child: Center(
-                                            child: FaIcon(
-                                              FontAwesomeIcons.plus,
-                                              color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
-                                              size: 18,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    const SizedBox(width: 12),
-                                    // Text field
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          if (_selectedContext != null && !voiceRecorderProvider.isActive)
-                                            Padding(
-                                              padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF1f1f25),
-                                                  borderRadius: BorderRadius.circular(16),
-                                                ),
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                child: Row(
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              Expanded(
+                                                child: Column(
                                                   mainAxisSize: MainAxisSize.min,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
-                                                    const Padding(
-                                                      padding: EdgeInsets.only(top: 1),
-                                                      child: Icon(
-                                                        Icons.subdirectory_arrow_right,
-                                                        size: 14,
-                                                        color: Colors.blue,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Flexible(
-                                                      child: Text(
-                                                        _selectedContext!.length > 25
-                                                            ? '${_selectedContext!.substring(0, 25)}...'
-                                                            : _selectedContext!,
-                                                        style: const TextStyle(
-                                                          color: Colors.blue,
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.w500,
+                                                    if (_selectedContext != null && !voiceRecorderProvider.isActive)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
+                                                        child: Container(
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFF1f1f25),
+                                                            borderRadius: BorderRadius.circular(16),
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              const Padding(
+                                                                padding: EdgeInsets.only(top: 1),
+                                                                child: Icon(
+                                                                  Icons.subdirectory_arrow_right,
+                                                                  size: 14,
+                                                                  color: Colors.blue,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(width: 8),
+                                                              Flexible(
+                                                                child: Text(
+                                                                  _selectedContext!.length > 25
+                                                                      ? '${_selectedContext!.substring(0, 25)}...'
+                                                                      : _selectedContext!,
+                                                                  style: const TextStyle(
+                                                                    color: Colors.blue,
+                                                                    fontSize: 14,
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                  maxLines: 1,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(width: 8),
+                                                              GestureDetector(
+                                                                onTap: () {
+                                                                  setState(() {
+                                                                    _selectedContext = null;
+                                                                  });
+                                                                },
+                                                                child: const Icon(Icons.close,
+                                                                    size: 14, color: Colors.blue),
+                                                              ),
+                                                            ],
+                                                          ),
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
                                                       ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        setState(() {
-                                                          _selectedContext = null;
-                                                        });
-                                                      },
-                                                      child: const Icon(Icons.close, size: 14, color: Colors.blue),
-                                                    ),
+                                                    voiceRecorderProvider.isActive
+                                                        ? VoiceRecorderWidget(
+                                                            onTranscriptReady: (transcript, autoSend) {
+                                                              textController.text = transcript;
+                                                              voiceRecorderProvider.close();
+                                                              context
+                                                                  .read<MessageProvider>()
+                                                                  .setNextMessageOriginIsVoice(true);
+                                                              if (autoSend && transcript.trim().isNotEmpty) {
+                                                                _sendMessageUtil(transcript.trim());
+                                                              }
+                                                            },
+                                                            onClose: () {
+                                                              voiceRecorderProvider.close();
+                                                            },
+                                                          )
+                                                        : Theme(
+                                                            data: Theme.of(context).copyWith(
+                                                              textSelectionTheme: TextSelectionThemeData(
+                                                                selectionColor: Colors.grey.withOpacity(0.4),
+                                                                selectionHandleColor: Colors.white,
+                                                              ),
+                                                            ),
+                                                            child: TextField(
+                                                              enabled: true,
+                                                              controller: textController,
+                                                              focusNode: textFieldFocusNode,
+                                                              obscureText: false,
+                                                              textAlign: TextAlign.start,
+                                                              // y: -0.35 nudges glyphs up. Font line metrics
+                                                              // place the visual baseline below the line box
+                                                              // center, so plain `.center` reads slightly low.
+                                                              textAlignVertical: const TextAlignVertical(y: -0.35),
+                                                              decoration: InputDecoration(
+                                                                hintText: context.l10n.askAnything,
+                                                                hintStyle:
+                                                                    const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                                focusedBorder: InputBorder.none,
+                                                                enabledBorder: InputBorder.none,
+                                                                contentPadding: const EdgeInsets.symmetric(
+                                                                  horizontal: 4,
+                                                                  vertical: 10,
+                                                                ),
+                                                                isDense: true,
+                                                              ),
+                                                              minLines: 1,
+                                                              maxLines: 10,
+                                                              keyboardType: TextInputType.multiline,
+                                                              textCapitalization: TextCapitalization.sentences,
+                                                              style: const TextStyle(
+                                                                fontSize: 16.0,
+                                                                color: Colors.white,
+                                                                height: 1.2,
+                                                              ),
+                                                            ),
+                                                          ),
                                                   ],
                                                 ),
                                               ),
-                                            ),
-                                          voiceRecorderProvider.isActive
-                                              ? VoiceRecorderWidget(
-                                                  onTranscriptReady: (transcript) {
-                                                    textController.text = transcript;
-                                                    voiceRecorderProvider.close();
-                                                    context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                                  },
-                                                  onClose: () {
-                                                    voiceRecorderProvider.close();
-                                                  },
-                                                )
-                                              : Theme(
-                                                  data: Theme.of(context).copyWith(
-                                                    textSelectionTheme: TextSelectionThemeData(
-                                                      selectionColor: Colors.grey.withOpacity(0.4),
-                                                      selectionHandleColor: Colors.white,
+                                              const SizedBox(width: 8),
+                                              // Right-side button — stays INSIDE the pill.
+                                              // Send button while recording — transcribes and sends in one tap.
+                                              if (voiceRecorderProvider.isActive)
+                                                GestureDetector(
+                                                  onTap: voiceRecorderProvider.state == VoiceRecorderState.recording
+                                                      ? () {
+                                                          HapticFeedback.mediumImpact();
+                                                          voiceRecorderProvider.requestAutoSendOnNextTranscript();
+                                                          voiceRecorderProvider.processRecording();
+                                                        }
+                                                      : null,
+                                                  child: Container(
+                                                    height: 38,
+                                                    width: 38,
+                                                    decoration: BoxDecoration(
+                                                      color: voiceRecorderProvider.state == VoiceRecorderState.recording
+                                                          ? Colors.white
+                                                          : const Color(0xFF4A4A4F),
+                                                      shape: BoxShape.circle,
                                                     ),
-                                                  ),
-                                                  child: TextField(
-                                                    enabled: true,
-                                                    controller: textController,
-                                                    focusNode: textFieldFocusNode,
-                                                    obscureText: false,
-                                                    textAlign: TextAlign.start,
-                                                    textAlignVertical: TextAlignVertical.center,
-                                                    decoration: InputDecoration(
-                                                      hintText: context.l10n.askAnything,
-                                                      hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
-                                                      focusedBorder: InputBorder.none,
-                                                      enabledBorder: InputBorder.none,
-                                                      contentPadding: const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 12,
+                                                    child: Center(
+                                                      child: FaIcon(
+                                                        FontAwesomeIcons.arrowUp,
+                                                        color:
+                                                            voiceRecorderProvider.state == VoiceRecorderState.recording
+                                                                ? const Color(0xFF1f1f25)
+                                                                : Colors.grey.shade400,
+                                                        size: 16,
                                                       ),
-                                                      isDense: true,
-                                                    ),
-                                                    minLines: 1,
-                                                    maxLines: 10,
-                                                    keyboardType: TextInputType.multiline,
-                                                    textCapitalization: TextCapitalization.sentences,
-                                                    style: const TextStyle(
-                                                      fontSize: 16.0,
-                                                      color: Colors.white,
-                                                      height: 1.4,
                                                     ),
                                                   ),
                                                 ),
-                                        ],
-                                      ),
-                                    ),
-                                    // Microphone button
-                                    if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
-                                      GestureDetector(
-                                        onTap: () {
-                                          HapticFeedback.lightImpact();
-                                          FocusScope.of(context).unfocus();
-                                          voiceRecorderProvider.startRecording();
-                                        },
-                                        child: Container(
-                                          height: 44,
-                                          width: 44,
-                                          alignment: Alignment.center,
-                                          child: const FaIcon(
-                                            FontAwesomeIcons.microphone,
-                                            color: Colors.grey,
-                                            size: 20,
+                                              // Microphone button — round white pill matching the send button.
+                                              if (!voiceRecorderProvider.isActive &&
+                                                  shouldShowVoiceRecorderButton() &&
+                                                  textController.text.isEmpty)
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    HapticFeedback.lightImpact();
+                                                    FocusScope.of(context).unfocus();
+                                                    voiceRecorderProvider.startRecording();
+                                                  },
+                                                  child: Container(
+                                                    height: 38,
+                                                    width: 38,
+                                                    decoration: const BoxDecoration(
+                                                      color: Colors.white,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: const Center(
+                                                      child: FaIcon(
+                                                        FontAwesomeIcons.microphone,
+                                                        color: Color(0xFF1f1f25),
+                                                        size: 16,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              // Send button — only when there's text and not in voice mode
+                                              if (!voiceRecorderProvider.isActive && shouldShowSendButton(provider))
+                                                ValueListenableBuilder<TextEditingValue>(
+                                                  valueListenable: textController,
+                                                  builder: (context, value, child) {
+                                                    bool hasText = value.text.trim().isNotEmpty;
+                                                    if (!hasText) return const SizedBox.shrink();
+
+                                                    bool canSend = hasText &&
+                                                        !provider.sendingMessage &&
+                                                        !provider.isUploadingFiles &&
+                                                        connectivityProvider.isConnected;
+
+                                                    return GestureDetector(
+                                                      onTap: canSend
+                                                          ? () {
+                                                              HapticFeedback.mediumImpact();
+                                                              String message = textController.text.trim();
+                                                              if (message.isEmpty) return;
+                                                              _sendMessageUtil(message);
+                                                            }
+                                                          : null,
+                                                      child: Container(
+                                                        height: 38,
+                                                        width: 38,
+                                                        decoration: const BoxDecoration(
+                                                          color: Colors.white,
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                        child: const Center(
+                                                          child: FaIcon(
+                                                            FontAwesomeIcons.arrowUp,
+                                                            color: Color(0xFF1f1f25),
+                                                            size: 16,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                            ],
                                           ),
                                         ),
                                       ),
-                                    // Send button - only show when there's text
-                                    if (shouldShowSendButton(provider))
-                                      ValueListenableBuilder<TextEditingValue>(
-                                        valueListenable: textController,
-                                        builder: (context, value, child) {
-                                          bool hasText = value.text.trim().isNotEmpty;
-                                          if (!hasText) return const SizedBox.shrink();
-
-                                          bool canSend =
-                                              hasText &&
-                                              !provider.sendingMessage &&
-                                              !provider.isUploadingFiles &&
-                                              connectivityProvider.isConnected;
-
-                                          return GestureDetector(
-                                            onTap: canSend
-                                                ? () {
-                                                    HapticFeedback.mediumImpact();
-                                                    String message = textController.text.trim();
-                                                    if (message.isEmpty) return;
-                                                    _sendMessageUtil(message);
-                                                  }
-                                                : null,
+                                    ],
+                                  ),
+                                  // LEFT button — Stop (recording) or Plus (idle). Rendered AFTER
+                                  // the inner Row so it sits on top of the pill's shadow.
+                                  if (voiceRecorderProvider.isActive &&
+                                      voiceRecorderProvider.state == VoiceRecorderState.recording)
+                                    Positioned(
+                                      left: 0,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: Center(
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            voiceRecorderProvider.processRecording();
+                                          },
+                                          child: Container(
+                                            height: 48,
+                                            width: 48,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1F1F25),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: const Color(0xFF35343B), width: 1),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.65),
+                                                  blurRadius: 60,
+                                                  spreadRadius: 14,
+                                                  offset: const Offset(0, -16),
+                                                ),
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.45),
+                                                  blurRadius: 32,
+                                                  spreadRadius: 6,
+                                                  offset: const Offset(0, -8),
+                                                ),
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.25),
+                                                  blurRadius: 10,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Center(
+                                              child: Icon(Icons.stop, color: Colors.white, size: 18),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else if (!voiceRecorderProvider.isActive && shouldShowMenuButton())
+                                    Positioned(
+                                      left: 0,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: Center(
+                                        child: PullDownButton(
+                                          itemBuilder: (context) => [
+                                            PullDownMenuItem(
+                                              title: context.l10n.takePhoto,
+                                              iconWidget: const FaIcon(FontAwesomeIcons.camera, size: 16),
+                                              onTap: () {
+                                                HapticFeedback.selectionClick();
+                                                if (mounted) {
+                                                  this.context.read<MessageProvider>().captureImage();
+                                                }
+                                              },
+                                            ),
+                                            PullDownMenuItem(
+                                              title: context.l10n.photoLibrary,
+                                              iconWidget: const FaIcon(FontAwesomeIcons.images, size: 16),
+                                              onTap: () {
+                                                HapticFeedback.selectionClick();
+                                                if (mounted) {
+                                                  this.context.read<MessageProvider>().selectImage();
+                                                }
+                                              },
+                                            ),
+                                            PullDownMenuItem(
+                                              title: context.l10n.chooseFile,
+                                              iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
+                                              onTap: () {
+                                                HapticFeedback.selectionClick();
+                                                if (mounted) {
+                                                  this.context.read<MessageProvider>().selectFile();
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                          position: PullDownMenuPosition.automatic,
+                                          buttonBuilder: (context, showMenu) => GestureDetector(
+                                            onTap: () async {
+                                              HapticFeedback.lightImpact();
+                                              if (provider.selectedFiles.length > 3) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(context.l10n.maxFilesLimit),
+                                                    duration: const Duration(seconds: 2),
+                                                  ),
+                                                );
+                                                return;
+                                              }
+                                              if (textFieldFocusNode.hasFocus) {
+                                                FocusScope.of(context).unfocus();
+                                                await Future.delayed(const Duration(milliseconds: 280));
+                                                if (!context.mounted) return;
+                                              }
+                                              showMenu();
+                                            },
                                             child: Container(
-                                              height: 44,
-                                              width: 44,
-                                              decoration: const BoxDecoration(
-                                                color: Colors.white,
+                                              height: 48,
+                                              width: 48,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF1F1F25),
                                                 shape: BoxShape.circle,
+                                                border: Border.all(color: const Color(0xFF35343B), width: 1),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black.withValues(alpha: 0.65),
+                                                    blurRadius: 60,
+                                                    spreadRadius: 14,
+                                                    offset: const Offset(0, -16),
+                                                  ),
+                                                  BoxShadow(
+                                                    color: Colors.black.withValues(alpha: 0.45),
+                                                    blurRadius: 32,
+                                                    spreadRadius: 6,
+                                                    offset: const Offset(0, -8),
+                                                  ),
+                                                  BoxShadow(
+                                                    color: Colors.black.withValues(alpha: 0.25),
+                                                    blurRadius: 10,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
                                               ),
-                                              child: const Center(
+                                              child: Center(
                                                 child: FaIcon(
-                                                  FontAwesomeIcons.arrowUp,
-                                                  color: Color(0xFF1f1f25),
+                                                  FontAwesomeIcons.plus,
+                                                  color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
                                                   size: 18,
                                                 ),
                                               ),
                                             ),
-                                          );
-                                        },
+                                          ),
+                                        ),
                                       ),
-                                  ],
-                                ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -658,10 +891,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     },
                   ),
                 ),
-                SizedBox(height: textFieldFocusNode.hasFocus ? 12 : 0),
+                SizedBox(height: textFieldFocusNode.hasFocus ? 12 : 14),
                 if (!textFieldFocusNode.hasFocus)
                   BottomNavBar(
-                    showCenterButton: false,
                     onTabTap: (index, isRepeat) {
                       context.read<HomeProvider>().setIndex(index);
                       Navigator.of(context).pop();
@@ -675,7 +907,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     );
   }
 
-  _sendMessageUtil(String text) {
+  _sendMessageUtil(String text) async {
+    var provider = context.read<MessageProvider>();
+    // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
+    // race firing onTranscriptReady twice, etc.). Without this the chat could
+    // submit the same text twice and the AI replies twice.
+    if (provider.sendingMessage) return;
+
     String? currentContext = _selectedContext;
     setState(() {
       _allowSpacer = true;
@@ -689,7 +927,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       text = 'Context: "$currentContext"\n\n$text';
     }
 
-    var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     textController.clear();
@@ -698,9 +935,24 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       if (mounted) scrollToBottomOnSend();
     });
 
-    provider.sendMessageStreamToServer(text);
+    await provider.sendMessageStreamToServer(text);
+
+    // Plans sheet is shown reactively via _onMessageProviderChanged listener
+
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+  }
+
+  void _showPlansSheetOnQuotaExceeded() {
+    if (!mounted) return;
+    // Refresh subscription data so the plans sheet is up-to-date
+    context.read<UsageProvider>().fetchSubscription();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _PlansSheetWrapper(),
+    );
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1192,18 +1444,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
             )
           : appId != null && onConfirmDelete != null
-          ? GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = appId;
-                });
-              },
-              child: const Padding(
-                padding: EdgeInsets.only(left: 2, top: 1),
-                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-              ),
-            )
-          : null,
+              ? GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _pendingDeleteAppId = appId;
+                    });
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+                  ),
+                )
+              : null,
       selected: isSelected,
       selectedTileColor: Colors.white.withOpacity(0.1),
       onTap: onTap,
@@ -1354,5 +1606,47 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   Widget _buildDivider() {
     return Container(height: 0.5, color: Colors.grey.shade700, margin: const EdgeInsets.symmetric(horizontal: 20));
+  }
+}
+
+class _PlansSheetWrapper extends StatefulWidget {
+  const _PlansSheetWrapper();
+
+  @override
+  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
+}
+
+class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
+  late AnimationController _waveController;
+  late AnimationController _arrowController;
+  late AnimationController _notesController;
+  late Animation<double> _arrowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
+    _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
+    _arrowAnimation =
+        Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _arrowController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PlansSheet(
+      waveController: _waveController,
+      notesController: _notesController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
+    );
   }
 }

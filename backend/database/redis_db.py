@@ -93,23 +93,6 @@ def get_uid_by_username(username: str) -> str | None:
     return uid.decode() if uid else None
 
 
-def get_usernames_by_uid(uid: str) -> List[str]:
-    """Get all usernames owned by a UID"""
-    usernames = r.smembers(f'uid:{uid}:usernames')
-    return [u.decode() for u in usernames] if usernames else []
-
-
-def delete_username(username: str):
-    """Delete username and remove it from owner's set"""
-    # Get current owner
-    uid = get_uid_by_username(username)
-    if uid:
-        # Remove from owner's set
-        r.srem(f'uid:{uid}:usernames', username)
-        # Delete username:uid mapping
-        r.delete(f'username:{username}:uid')
-
-
 def save_username(username: str, uid: str):
     """Save username and add to owner's set"""
     # Save username:uid mapping
@@ -191,19 +174,6 @@ def get_specific_user_review(app_id: str, uid: str) -> dict:
     return reviews.get(uid, {})
 
 
-def migrate_user_apps_reviews(prev_uid: str, new_uid: str):
-    for key in r.scan_iter(f'plugins:*:reviews'):
-        app_id = key.decode().split(':')[1]
-        reviews = r.get(key)
-        if not reviews:
-            continue
-        reviews = eval(reviews)
-        if prev_uid in reviews:
-            reviews[new_uid] = reviews.pop(prev_uid)
-            reviews[new_uid]['uid'] = new_uid
-            r.set(f'plugins:{app_id}:reviews', str(reviews))
-
-
 def set_user_paid_app(app_id: str, uid: str, ttl: int):
     r.set(f'users:{uid}:paid_apps:{app_id}', app_id, ex=ttl)
 
@@ -277,13 +247,6 @@ def decrease_app_installs_count(app_id: str):
     r.decr(f'plugins:{app_id}:installs')
 
 
-def get_app_installs_count(app_id: str) -> int:
-    count = r.get(f'plugins:{app_id}:installs')
-    if not count:
-        return 0
-    return int(count)
-
-
 def get_apps_installs_count(app_ids: list) -> dict:
     if not app_ids:
         return {}
@@ -298,26 +261,6 @@ def get_apps_installs_count(app_ids: list) -> dict:
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
     r.set(f'users:{uid}:name', name)
     r.expire(f'users:{uid}:name', ttl)
-
-
-def get_cached_user_name(uid: str) -> str:
-    name = r.get(f'users:{uid}:name')
-    if not name:
-        return 'User'
-    return name.decode()
-
-
-# TODO: cache memories if speed improves dramatically
-def cache_memories(uid: str, memories: List[dict]):
-    r.set(f'users:{uid}:facts', str(memories))
-    r.expire(f'users:{uid}:facts', 60 * 60)  # 1 hour, most people chat during a few minutes
-
-
-def get_cached_memories(uid: str) -> List[dict]:
-    memories = r.get(f'users:{uid}:facts')
-    if not memories:
-        return []
-    return eval(memories)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60):
@@ -360,34 +303,12 @@ def get_conversation_uid(conversation_id: str) -> str:
     return uid.decode()
 
 
-def get_conversation_uids(conversation_ids: list) -> dict:
-    if not conversation_ids:
-        return {}
-
-    conversation_keys = [f'memories-visibility:{conversation_id}' for conversation_id in conversation_ids]
-    uids = r.mget(conversation_keys)
-    if uids is None:
-        return {}
-    conversation_uids = {}
-    for conversation_id, uid in zip(conversation_ids, uids):
-        if uid:
-            conversation_uids[conversation_id] = uid.decode()
-    return conversation_uids
-
-
 def add_public_conversation(conversation_id: str):
     r.sadd('public-memories', conversation_id)
 
 
 def remove_public_conversation(conversation_id: str):
     r.srem('public-memories', conversation_id)
-
-
-def get_public_conversations() -> List[str]:
-    val = r.smembers('public-memories')
-    if not val:
-        return []
-    return [x.decode() for x in val]
 
 
 def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300):
@@ -418,11 +339,6 @@ def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
     if not meeting_id:
         return None
     return meeting_id.decode()
-
-
-def remove_conversation_meeting_id(conversation_id: str):
-    """Remove the meeting_id association for a conversation."""
-    r.delete(f'conversation:{conversation_id}:meeting_id')
 
 
 def set_user_webhook_db(uid: str, wtype: str, url: str):
@@ -467,19 +383,6 @@ def get_filter_category_items(uid: str, category: str, limit: Optional[int] = No
 
 def add_filter_category_item(uid: str, category: str, item: str):
     r.sadd(f'users:{uid}:filters:{category}', item)
-
-
-def add_filter_category_items(uid: str, category: str, items: list):
-    if items:
-        r.sadd(f'users:{uid}:filters:{category}', *items)
-
-
-def remove_filter_category_item(uid: str, category: str, item: str):
-    r.srem(f'users:{uid}:filters:{category}', item)
-
-
-def remove_all_filter_category_items(uid: str, category: str):
-    r.delete(f'users:{uid}:filters:{category}')
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str):
@@ -589,16 +492,6 @@ def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]]
 
 
 @try_catch_decorator
-def get_cached_dev_api_key_user_id(hashed_key: str) -> Optional[str]:
-    """Retrieves the user_id for a given hashed Developer API key from cache."""
-    cached = r.get(f'dev_api_key:{hashed_key}')
-    if not cached:
-        return None
-    data = json.loads(cached.decode())
-    return data.get("user_id")
-
-
-@try_catch_decorator
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[dict]:
     """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
     cached = r.get(f'dev_api_key:{hashed_key}')
@@ -629,24 +522,6 @@ def set_migration_status(uid: str, status: str, processed: int = None, total: in
         data["error"] = error
 
     r.set(key, json.dumps(data), ex=3600)  # Expire after 1 hour
-
-
-def get_migration_status(uid: str) -> dict:
-    key = f"migration_status:{uid}"
-    data = r.get(key)
-    if data:
-        status_data = json.loads(data)
-        # If complete or failed, keep the status for a short time so the UI can fetch it.
-        if status_data.get('status') in ['complete', 'failed']:
-            r.expire(key, 60)  # Keep it for 1 minute
-        return status_data
-    return {"status": "idle"}
-
-
-@try_catch_decorator
-def clear_migration_status(uid: str):
-    """Clear the migration status for a user."""
-    r.delete(f'migration_status:{uid}')
 
 
 # ******************************************************
@@ -761,7 +636,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -774,7 +650,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -797,10 +674,102 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
     return allowed, remaining, retry_after
 
 
+# Atomic TTS rate-limit: burst (sliding-window ZSET) + daily char counter.
+# Returns [status, retry_after_seconds]:
+#   0 = allow, 1 = burst exceeded, 2 = daily char limit exceeded.
+# Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
+# trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
+# UTC (caller passes seconds_until_midnight_utc as the TTL).
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
+local burst_key = KEYS[1]
+local daily_key = KEYS[2]
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local burst_limit = tonumber(ARGV[3])
+local char_count = tonumber(ARGV[4])
+local daily_limit = tonumber(ARGV[5])
+local daily_ttl = tonumber(ARGV[6])
+
+redis.call('ZREMRANGEBYSCORE', burst_key, 0, now_ms - window_ms)
+local burst_current = redis.call('ZCARD', burst_key)
+if burst_current >= burst_limit then
+    return {1, math.floor(window_ms / 1000)}
+end
+
+local daily_current = tonumber(redis.call('GET', daily_key) or '0')
+if daily_current + char_count > daily_limit then
+    return {2, daily_ttl}
+end
+
+redis.call('ZADD', burst_key, now_ms, now_ms .. ':' .. math.random())
+redis.call('PEXPIRE', burst_key, window_ms)
+local new_daily = redis.call('INCRBY', daily_key, char_count)
+if new_daily == char_count then
+    redis.call('EXPIRE', daily_key, daily_ttl)
+end
+return {0, 0}
+"""
+)
+
+
+def _seconds_until_midnight_utc() -> int:
+    now = datetime.now(timezone.utc)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((tomorrow - now).total_seconds()))
+
+
+def check_tts_rate_limit(
+    uid: str,
+    char_count: int,
+    burst_limit: int = 50,
+    burst_window_secs: int = 60,
+    daily_char_limit: int = 10_000,
+) -> tuple[int, int]:
+    """Atomic per-user TTS rate limit check.
+
+    Returns (status, retry_after_seconds) where status is:
+        0  — allow
+        1  — burst window exceeded
+        2  — daily character limit exceeded
+       -1  — Redis error (fail-open: caller should allow the request)
+    """
+    try:
+        burst_key = f'tts:burst:{uid}'
+        today_utc = datetime.now(timezone.utc).strftime('%Y%m%d')
+        daily_key = f'tts:chars:{uid}:{today_utc}'
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        window_ms = burst_window_secs * 1000
+        daily_ttl = _seconds_until_midnight_utc()
+        result = _TTS_RATE_LIMIT_LUA(
+            keys=[burst_key, daily_key],
+            args=[now_ms, window_ms, burst_limit, char_count, daily_char_limit, daily_ttl],
+        )
+        return int(result[0]), int(result[1])
+    except Exception as e:
+        logger.error(f'check_tts_rate_limit: redis error uid={uid}: {e}')
+        return -1, 0
+
+
 def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:
+    """Return True once every `ttl` seconds per (uid, platform) to throttle
+    `last_active_platform` writes on chatty endpoints. The platform is part of
+    the key so switching platforms bypasses the throttle and records the
+    change immediately.
+    """
+    try:
+        result = r.set(f'users:{uid}:platform_write:{platform}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        # Fail-open: if Redis is down, let the caller write through. Firestore
+        # merge is idempotent, so worst case we write more often than intended.
+        return True
 
 
 def set_persona_update_timestamp(uid: str):
@@ -825,21 +794,6 @@ def can_update_persona(uid: str) -> bool:
 def set_speech_profile_duration(uid: str, duration: float):
     """Cache speech profile duration (write-ahead on upload)"""
     r.set(f'users:{uid}:speech_profile_duration', str(duration))
-
-
-@try_catch_decorator
-def get_speech_profile_duration(uid: str) -> Optional[float]:
-    """Get cached speech profile duration"""
-    val = r.get(f'users:{uid}:speech_profile_duration')
-    if val:
-        return float(val.decode())
-    return None
-
-
-@try_catch_decorator
-def delete_speech_profile_duration(uid: str):
-    """Delete cached speech profile duration"""
-    r.delete(f'users:{uid}:speech_profile_duration')
 
 
 # ******************************************************

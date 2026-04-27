@@ -1,0 +1,5 @@
+module CWebP [system] {
+    header "shim.h"
+    link "webp"
+    export *
+}
