@@ -145,6 +145,36 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
+def get_active_ambient_capture_controller(uid: str, device_id: str) -> Optional[dict]:
+    user_ref = db.collection('users').document(uid)
+    data = user_ref.get().to_dict() or {}
+    controllers = data.get('ambient_capture_controllers', {})
+    if not isinstance(controllers, dict):
+        return None
+    return controllers.get(device_id)
+
+
+def set_active_ambient_capture_controller(uid: str, device_id: str, app_id: str, key_fingerprint: str = None):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'ambient_capture_controllers': {
+                device_id: {
+                    'app_id': app_id,
+                    'key_fingerprint': key_fingerprint,
+                    'updated_at': datetime.now(timezone.utc),
+                }
+            }
+        },
+        merge=True,
+    )
+
+
+def revoke_active_ambient_capture_controller(uid: str, device_id: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({f'ambient_capture_controllers.{device_id}': firestore.DELETE_FIELD})
+
+
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
     user_ref = db.collection('users').document(uid)
     user_ref.set(

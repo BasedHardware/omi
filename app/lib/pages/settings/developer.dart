@@ -23,9 +23,12 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
+import 'package:omi/providers/ambient_capture_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -247,6 +250,291 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAmbientDropdown({
+    required String label,
+    required String value,
+    required List<String> values,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14))),
+        DropdownButton<String>(
+          value: value,
+          dropdownColor: const Color(0xFF2C2C2E),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          underline: const SizedBox.shrink(),
+          items: values.map((v) => DropdownMenuItem(value: v, child: Text(v.replaceAll('_', ' ')))).toList(),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAmbientNumberField({
+    required String label,
+    required int value,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextFormField(
+        key: ValueKey('ambient_$label$value'),
+        initialValue: value.toString(),
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: Colors.grey.shade400),
+          filled: true,
+          fillColor: const Color(0xFF2C2C2E),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        ),
+        onChanged: (text) {
+          final parsed = int.tryParse(text);
+          if (parsed != null && parsed > 0) onChanged(parsed);
+        },
+      ),
+    );
+  }
+
+  Widget _buildAmbientCaptureSection() {
+    final prefs = SharedPreferencesUtil();
+    return Consumer<AmbientCaptureProvider>(
+      builder: (context, ambient, _) {
+        final enabled = prefs.advancedAmbientCaptureEnabled;
+        final capture = context.watch<CaptureProvider>();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 32),
+            _buildSectionHeader(
+              'Advanced Ambient Capture',
+              subtitle: 'Android-only experimental phone microphone capture. Disabled by default.',
+            ),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildExperimentalItem(
+                    title: 'Master toggle',
+                    description: 'Requires explicit local consent before native capture can start.',
+                    icon: FontAwesomeIcons.microphone,
+                    value: enabled,
+                    onChanged: (v) async {
+                      prefs.advancedAmbientCaptureEnabled = v;
+                      if (!v && ambient.running) await ambient.stop();
+                      setState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Current state: ${ambient.health.state.wireName}',
+                    style: TextStyle(color: Colors.grey.shade300),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton(onPressed: enabled ? ambient.start : null, child: const Text('Start')),
+                      ElevatedButton(onPressed: ambient.running ? ambient.pause : null, child: const Text('Pause')),
+                      ElevatedButton(onPressed: ambient.running ? ambient.stop : null, child: const Text('Stop')),
+                      ElevatedButton(
+                        onPressed: ambient.running ? ambient.enablePrivateMode : null,
+                        child: const Text('Private Mode'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _buildAmbientDropdown(
+                    label: 'Capture mode',
+                    value: prefs.ambientCaptureMode,
+                    values: const ['off', 'normal', 'aggressive', 'work_hours', 'meeting'],
+                    onChanged: (v) {
+                      if (v != null) prefs.ambientCaptureMode = v;
+                      setState(() {});
+                    },
+                  ),
+                  _buildAmbientDropdown(
+                    label: 'Sensitivity',
+                    value: prefs.ambientCaptureSensitivity,
+                    values: const ['low', 'medium', 'high', 'custom'],
+                    onChanged: (v) {
+                      if (v != null) prefs.ambientCaptureSensitivity = v;
+                      setState(() {});
+                    },
+                  ),
+                  _buildAmbientDropdown(
+                    label: 'Call / communication mode',
+                    value: prefs.ambientCaptureCommunicationMode,
+                    values: const ['off', 'detect_only', 'detect_and_attempt_mic', 'detect_and_caption_fallback'],
+                    onChanged: (v) {
+                      if (v != null) prefs.ambientCaptureCommunicationMode = v;
+                      setState(() {});
+                    },
+                  ),
+                  Text(
+                    'Android may prevent call audio capture. This mode detects communication state and labels degraded '
+                    'or fallback segments.',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    value: prefs.ambientCapturePluginControlEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCapturePluginControlEnabled = v),
+                    title: const Text('Plugin controller', style: TextStyle(color: Colors.white)),
+                    subtitle: Text(ambient.policyStatus, style: TextStyle(color: Colors.grey.shade500)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureAccessibilityModeEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureAccessibilityModeEnabled = v),
+                    title: const Text('Accessibility-enhanced mode', style: TextStyle(color: Colors.white)),
+                    subtitle: Text(
+                      'Optional foreground-app awareness. Caption text is only used when caption fallback is enabled.',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureTextFallbackEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureTextFallbackEnabled = v),
+                    title: const Text('Text fallback queue', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureLocalSttFallbackEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureLocalSttFallbackEnabled = v),
+                    title: const Text('Local STT fallback', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureCaptionFallbackEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureCaptionFallbackEnabled = v),
+                    title: const Text('Caption/accessibility fallback', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureRawAudioUploadEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureRawAudioUploadEnabled = v),
+                    title: const Text('Raw audio upload', style: TextStyle(color: Colors.white)),
+                    subtitle: Text(
+                      'When off, audio remains queued locally in WAL.',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureDeleteSyncedAudio,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureDeleteSyncedAudio = v),
+                    title: const Text('Delete synced ambient audio', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  _buildAmbientDropdown(
+                    label: 'Raw audio retention',
+                    value: prefs.ambientCaptureRawAudioRetention,
+                    values: const ['none', 'until_synced', '24h', '7d'],
+                    onChanged: (v) {
+                      if (v != null) prefs.ambientCaptureRawAudioRetention = v;
+                      setState(() {});
+                    },
+                  ),
+                  _buildAmbientNumberField(
+                    label: 'Max ambient storage MB',
+                    value: prefs.ambientCaptureMaxStorageMb,
+                    onChanged: (v) => prefs.ambientCaptureMaxStorageMb = v,
+                  ),
+                  _buildAmbientNumberField(
+                    label: 'Minimum free storage MB',
+                    value: prefs.ambientCaptureMinFreeStorageMb,
+                    onChanged: (v) => prefs.ambientCaptureMinFreeStorageMb = v,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureVerboseAuditEnabled,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureVerboseAuditEnabled = v),
+                    title: const Text('Verbose audit log', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Storage: WAL queue ${capture.unsyncedSessionWals.length}, '
+                    'in-flight ${capture.inFlightAudioSeconds}s, '
+                    'native spool ${ambient.pendingSpoolCount} files '
+                    '(${(ambient.spoolBytes / (1024 * 1024)).toStringAsFixed(1)} MB), '
+                    'fallback text ${ambient.pendingFallbackCount}',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: (ambient.spoolBytes / (prefs.ambientCaptureMaxStorageMb * 1024 * 1024)).clamp(0.0, 1.0),
+                    backgroundColor: const Color(0xFF2A2A2E),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      ambient.health.state == AmbientCaptureHealthState.storageLimitReached
+                          ? Colors.redAccent
+                          : const Color(0xFF22C55E),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Quota ${prefs.ambientCaptureMaxStorageMb} MB, '
+                    'minimum free ${prefs.ambientCaptureMinFreeStorageMb} MB',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () async {
+                          ServiceManager.instance().wal.getSyncs().phone.deleteAllSyncedWals();
+                          await ambient.deleteNativeSpool(status: 'synced');
+                        },
+                        child: const Text('Delete synced audio'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () async {
+                          ServiceManager.instance().wal.getSyncs().phone.deleteAllPendingWals();
+                          await ambient.deleteNativeSpool(status: 'pending');
+                        },
+                        child: const Text('Delete pending audio'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () {
+                          ambient.deleteNativeSpool();
+                        },
+                        child: const Text('Delete all ambient audio'),
+                      ),
+                      OutlinedButton(
+                        onPressed: ambient.drainNativeSpool,
+                        child: const Text('Sync native spool'),
+                      ),
+                      OutlinedButton(
+                        onPressed: ambient.drainFallbackQueue,
+                        child: const Text('Sync fallback text'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1605,6 +1893,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                       ],
                     ),
                   ),
+
+                  _buildAmbientCaptureSection(),
 
                   // Home Screen Section
                   const SizedBox(height: 32),

@@ -25,6 +25,9 @@ class MainActivity: FlutterActivity() {
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
 
+        // Register Advanced Ambient Capture channels (Android-only, user-consented)
+        AmbientCaptureMethodChannel.registerWith(flutterEngine, this)
+
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
         OmiBleManager.isFlutterAlive = true

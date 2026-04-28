@@ -38,6 +38,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/ambient_capture_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -298,6 +299,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (context) => DeviceProvider(),
           update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
               (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+        ),
+        ChangeNotifierProxyProvider<CaptureProvider, AmbientCaptureProvider>(
+          create: (context) => AmbientCaptureProvider(),
+          update: (BuildContext context, captureProvider, AmbientCaptureProvider? previous) {
+            final provider = previous ?? AmbientCaptureProvider();
+            provider.setCaptureProvider(captureProvider);
+            return provider;
+          },
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),

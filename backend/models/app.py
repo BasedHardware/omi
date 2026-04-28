@@ -80,6 +80,15 @@ class ExternalIntegration(BaseModel):
     mcp_server_url: Optional[str] = None
     # OAuth tokens for MCP server authentication
     mcp_oauth_tokens: Optional[dict] = None
+    # Advanced Ambient Capture controller integration. These fields are inert
+    # unless the app also has the ambient_capture_controller capability and the
+    # user selects it locally as the active controller for a device.
+    capture_policy_url: Optional[str] = None
+    capture_telemetry_url: Optional[str] = None
+    fallback_segments_url: Optional[str] = None
+    capture_controller_public_key: Optional[str] = None
+    capture_controller_key_id: Optional[str] = None
+    capture_controller_scopes: Optional[List[str]] = []
 
 
 class ProactiveNotification(BaseModel):

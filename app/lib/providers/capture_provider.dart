@@ -110,6 +110,9 @@ class CaptureProvider extends ChangeNotifier
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
+  bool _advancedAmbientCaptureActive = false;
+
+  bool get advancedAmbientCaptureActive => _advancedAmbientCaptureActive;
 
   bool _isLoadingInProgressConversation = false;
 
@@ -990,6 +993,69 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.initialising);
       },
     );
+  }
+
+  Future<void> prepareAdvancedAmbientCapture() async {
+    if (!Platform.isAndroid || !SharedPreferencesUtil().advancedAmbientCaptureEnabled) return;
+    updateRecordingState(RecordingState.initialising);
+    await Permission.microphone.request();
+    _sendCurrentGeolocation();
+    await changeAudioRecordProfile(
+      audioCodec: BleAudioCodec.pcm16,
+      sampleRate: 16000,
+      source: ConversationSource.phone.name,
+    );
+    _activeSource = PhoneMicSource();
+    _phoneMicWalActive = true;
+    _advancedAmbientCaptureActive = true;
+    await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
+    _wal.getSyncs().phone.setDeviceInfo('android-ambient-phone-mic', 'Android Ambient Phone Microphone');
+    setIsWalSupported(true);
+    updateRecordingState(RecordingState.record);
+  }
+
+  void ingestAdvancedAmbientAudio(Uint8List bytes) {
+    if (!_advancedAmbientCaptureActive || _activeSource == null) return;
+    final frames = _activeSource!.processBytes(bytes);
+    for (final frame in frames) {
+      _wal.getSyncs().phone.onFrameCaptured(frame);
+      if (SharedPreferencesUtil().ambientCaptureRawAudioUploadEnabled &&
+          _socket?.state == SocketServiceState.connected) {
+        _socket?.send(frame.payload);
+        _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+      }
+    }
+  }
+
+  Future<void> enterAdvancedAmbientPrivateMode() async {
+    if (!_advancedAmbientCaptureActive) return;
+    await _flushAdvancedAmbientTail();
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+  }
+
+  Future<void> stopAdvancedAmbientCapture() async {
+    if (!_advancedAmbientCaptureActive) return;
+    await _flushAdvancedAmbientTail();
+    await _cleanupCurrentState();
+    updateRecordingState(RecordingState.stop);
+    await _socket?.stop(reason: 'stop advanced ambient capture');
+    _advancedAmbientCaptureActive = false;
+    _phoneMicWalActive = false;
+    _activeSource = null;
+    notifyListeners();
+  }
+
+  Future<void> _flushAdvancedAmbientTail() async {
+    final flushed = _activeSource?.flush() ?? [];
+    for (final frame in flushed) {
+      _wal.getSyncs().phone.onFrameCaptured(frame);
+      if (SharedPreferencesUtil().ambientCaptureRawAudioUploadEnabled &&
+          _socket?.state == SocketServiceState.connected) {
+        _socket?.send(frame.payload);
+        _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+      }
+    }
+    await _wal.getSyncs().phone.finalizeCurrentSession();
   }
 
   stopStreamRecording() async {
