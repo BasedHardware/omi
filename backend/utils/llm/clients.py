@@ -10,11 +10,17 @@ import tiktoken
 from models.conversation import Structured
 from utils.llm.usage_tracker import get_usage_callback
 
-# Anthropic client for chat agent
-anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+# Anthropic client for chat agent. Honors `ANTHROPIC_API_KEY` and
+# `ANTHROPIC_BASE_URL` env vars natively, so pointing it at an Anthropic-
+# compatible gateway (e.g. OpenRouter at https://openrouter.ai/api/v1) only
+# requires setting those two envs. The model id must match the gateway's
+# naming — e.g. `anthropic/claude-sonnet-4.5` on OpenRouter.
+anthropic_client = anthropic.AsyncAnthropic()
 
-ANTHROPIC_AGENT_MODEL = "claude-sonnet-4-6"
-ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-sonnet-4-6"
+ANTHROPIC_AGENT_MODEL = os.environ.get("ANTHROPIC_AGENT_MODEL", "claude-sonnet-4-6")
+ANTHROPIC_AGENT_COMPLEX_MODEL = os.environ.get(
+    "ANTHROPIC_AGENT_COMPLEX_MODEL", ANTHROPIC_AGENT_MODEL
+)
 
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()

@@ -188,13 +188,21 @@ class AuthService {
         SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
         SharedPreferencesUtil().authToken = newToken?.token ?? '';
 
-        // Save token to file for local development (desktop/iOS only, not Android)
+        // Save token to file for local development (desktop/iOS only, not Android).
+        // In debug builds also print the token to stdout so it surfaces in
+        // /tmp/flutter-run.log — `tail -f /tmp/flutter-run.log | grep '\[Auth\]'`
+        // is the easiest way to grab a fresh token for backend curls.
         if (!Platform.isAndroid) {
           try {
             final token = newToken?.token ?? '';
             final tokenFile = File('/tmp/omi_auth_token.txt');
             await tokenFile.writeAsString(token);
-            debugPrint('Auth token saved to /tmp/omi_auth_token.txt');
+            if (kDebugMode) {
+              print('[Auth] /tmp/omi_auth_token.txt updated (uid=${user.uid})');
+              print('[Auth] Bearer $token');
+            } else {
+              debugPrint('Auth token saved to /tmp/omi_auth_token.txt');
+            }
           } catch (_) {
             // Ignore file write failures — this is a dev convenience only
           }
