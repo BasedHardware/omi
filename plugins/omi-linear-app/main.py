@@ -580,35 +580,66 @@ async def tool_list_my_issues(request: Request):
                     }}
                     url
                     updatedAt
+                    dueDate
+                    team {{ key }}
+                    assignee {{ name }}
                 }}
             }}
         }}
         """
-        
+
         result = linear_graphql_request(uid, query)
-        
+
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
-        
+
         issues = result.get("issues", {}).get("nodes", [])
-        
+
         if not issues:
             filter_msg = f" with status '{status_filter}'" if status_filter else ""
-            return ChatToolResponse(result=f"📋 No issues assigned to you{filter_msg}.")
-        
-        # Format results with priority indicators
+            return ChatToolResponse(
+                result=f"📋 No issues assigned to you{filter_msg}.",
+                data={"tasks": []},
+            )
+
+        # Linear state.type → cross-plugin status_type. Mirror the keys in
+        # plugins/nooto-jira-app/routes/tools.py::_STATUS_CATEGORY_MAP and the
+        # backend's NormalizedTask model.
+        state_type_map = {
+            "backlog": "todo",
+            "unstarted": "todo",
+            "started": "in_progress",
+            "completed": "done",
+            "canceled": "canceled",
+        }
+        priority_names = {0: None, 1: "Urgent", 2: "High", 3: "Medium", 4: "Low"}
         priority_icons = {0: "⚪", 1: "🔴", 2: "🟠", 3: "🟡", 4: "🔵"}
+
+        tasks = []
         results = []
         for issue in issues:
+            state = issue.get("state") or {}
+            tasks.append({
+                "external_id": issue.get("identifier") or "",
+                "title": issue.get("title") or "",
+                "status": state.get("name") or "Unknown",
+                "status_type": state_type_map.get(state.get("type") or "", "todo"),
+                "due_at": issue.get("dueDate"),
+                "priority": priority_names.get(issue.get("priority") or 0),
+                "url": issue.get("url") or "",
+                "project": (issue.get("team") or {}).get("key"),
+                "assignee": (issue.get("assignee") or {}).get("name"),
+                "updated_at": issue.get("updatedAt"),
+            })
             priority_icon = priority_icons.get(issue.get("priority", 0), "⚪")
-            state = issue.get("state", {}).get("name", "Unknown")
             results.append(
                 f"{priority_icon} **{issue['identifier']}** - {issue['title']}\n"
-                f"   └ Status: {state}"
+                f"   └ Status: {state.get('name', 'Unknown')}"
             )
-        
+
         return ChatToolResponse(
-            result=f"📋 Your assigned issues:\n\n" + "\n\n".join(results)
+            result=f"📋 Your assigned issues:\n\n" + "\n\n".join(results),
+            data={"tasks": tasks},
         )
     
     except Exception as e:

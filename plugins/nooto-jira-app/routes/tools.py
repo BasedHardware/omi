@@ -40,8 +40,42 @@ router = APIRouter()
 log = logging.getLogger("nooto-jira-app.tools")
 
 _ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
-_DEFAULT_FIELDS = ["summary", "status", "assignee", "priority", "issuetype", "updated"]
+_DEFAULT_FIELDS = ["summary", "status", "assignee", "priority", "issuetype", "updated", "duedate"]
 _DETAIL_FIELDS = _DEFAULT_FIELDS + ["description", "reporter"]
+
+# Jira's three statusCategory keys → our 4-bucket status_type. Anything
+# unknown (custom workflow) falls back to "todo" so it still shows.
+_STATUS_CATEGORY_MAP = {
+    "new": "todo",
+    "indeterminate": "in_progress",
+    "done": "done",
+}
+
+
+def _normalize_jira_issue(it: dict, site_url: str) -> dict:
+    """Reduce a raw Jira REST issue to the cross-plugin task shape consumed
+    by the unified Plan view aggregator. Keep this in sync with the
+    `IntegrationTask` shape in the Linear plugin and the backend's
+    `NormalizedTask` model."""
+    key = it.get("key", "") or ""
+    f = (it.get("fields") or {}) or {}
+    status = f.get("status") or {}
+    category = (status.get("statusCategory") or {}).get("key")
+    project = key.split("-")[0] if "-" in key else None
+    assignee = (f.get("assignee") or {}).get("displayName")
+    priority = (f.get("priority") or {}).get("name")
+    return {
+        "external_id": key,
+        "title": (f.get("summary") or "") or key,
+        "status": status.get("name") or "Unknown",
+        "status_type": _STATUS_CATEGORY_MAP.get(category, "todo"),
+        "due_at": f.get("duedate"),
+        "priority": priority,
+        "url": f"{site_url}/browse/{key}" if site_url and key else "",
+        "project": project,
+        "assignee": assignee,
+        "updated_at": f.get("updated"),
+    }
 
 
 # ── Auth gate ──────────────────────────────────────────────────────────────
@@ -141,7 +175,7 @@ async def tool_list_my_issues(req: JiraListMyIssuesRequest) -> ChatToolResponse:
     active = _resolve_active(req.uid)
     if isinstance(active, ChatToolResponse):
         return active
-    token, cloudid, _ = active
+    token, cloudid, site_url = active
 
     jql_parts = ["assignee = currentUser()"]
     if req.status:
@@ -169,17 +203,22 @@ async def tool_list_my_issues(req: JiraListMyIssuesRequest) -> ChatToolResponse:
     issues = result.get("issues", []) or []
     if not issues:
         suffix = f" with status '{req.status}'" if req.status else ""
-        return ChatToolResponse(result=f"No issues assigned to you{suffix}.", data=result)
+        return ChatToolResponse(
+            result=f"No issues assigned to you{suffix}.",
+            data={"tasks": [], "raw": result},
+        )
 
-    lines: list[str] = []
-    for it in issues[:limit]:
-        key = it.get("key", "")
-        f = it.get("fields", {}) or {}
-        status_name = ((f.get("status") or {}).get("name")) or "Unknown"
-        summary = _truncate((f.get("summary") or ""), 80)
-        lines.append(f"- **{key}** [{status_name}] {summary}")
-
-    return ChatToolResponse(result="\n".join(lines), data=result)
+    tasks = [_normalize_jira_issue(it, site_url) for it in issues[:limit]]
+    lines = [
+        f"- **{t['external_id']}** [{t['status']}] {_truncate(t['title'], 80)}"
+        for t in tasks
+    ]
+    # `tasks` is the cross-plugin shape consumed by the Plan-view aggregator;
+    # `raw` is preserved so the chat agent can still read the full Jira payload.
+    return ChatToolResponse(
+        result="\n".join(lines),
+        data={"tasks": tasks, "raw": result},
+    )
 
 
 @router.post("/tools/search_issues", response_model=ChatToolResponse)
