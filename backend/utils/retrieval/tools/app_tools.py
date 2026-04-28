@@ -234,6 +234,17 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                         try:
                             cfg = (config or {}).get('configurable') or {}
                             buf = cfg.get('_app_tool_results')
+                            # TEMP-DEBUG-CARDS: surface what we see so we can
+                            # tell at a glance whether the configurable buffer
+                            # is reachable from inside the LangChain @tool
+                            # wrapper (revert once cards are confirmed working).
+                            logger.info(
+                                "[cards-debug] %s data_keys=%s cfg_keys=%s buf_type=%s",
+                                app_tool.name,
+                                list(result['data'].keys())[:5],
+                                list(cfg.keys())[:10] if isinstance(cfg, dict) else type(cfg).__name__,
+                                type(buf).__name__,
+                            )
                             if isinstance(buf, list):
                                 buf.append({
                                     'app_id': app_id,
