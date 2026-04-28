@@ -74,7 +74,14 @@ def build_payload(env: str) -> dict:
             "triggers_on": "memory_creation",
             "webhook_url": f"{pub}/memory_created",
             "setup_completed_url": f"{pub}/setup/jira",
-            "app_home_url": f"{pub}/auth/jira",
+            # `app_home_url` MUST be the bare plugin origin — the backend
+            # derives `chat_tools[].endpoint` URLs by joining this with
+            # `/tools/<name>`. Pointing it at `/auth/jira` (the OAuth
+            # entry, which lives in `auth_steps[0].url` instead) used to
+            # produce 404s on every tool call. The desktop client's OAuth
+            # handoff prefers `auth_steps[0].url` over `app_home_url`, so
+            # this split is safe.
+            "app_home_url": pub,
             "chat_tools_manifest_url": f"{pub}/.well-known/omi-tools.json",
             "auth_steps": [{"name": "Connect Jira", "url": f"{pub}/auth/jira"}],
             "actions": [],

@@ -28,13 +28,10 @@ except ImportError:
 # Global mapping of tool names to status messages
 _tool_status_messages: Dict[str, str] = {}
 
-# (Earlier draft used a contextvar here; we now thread structured tool
-# results through `configurable['_app_tool_results']` which propagates
-# reliably across LangChain's @tool wrapper. Kept as a no-op alias so any
-# downstream importer doesn't break.)
-last_tool_results: contextvars.ContextVar[Optional[List[Dict[str, Any]]]] = contextvars.ContextVar(
-    'last_tool_results', default=None
-)
+# Structured tool results (e.g. Jira's `data.tasks[]`) are surfaced to the
+# agentic loop via `configurable['_app_tool_results']` — see
+# `_call_tool_endpoint` and the matching drain in `agentic.py`. The shared
+# `configurable` dict round-trips reliably across LangChain's @tool wrapper.
 
 
 def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type:
@@ -234,17 +231,6 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                         try:
                             cfg = (config or {}).get('configurable') or {}
                             buf = cfg.get('_app_tool_results')
-                            # TEMP-DEBUG-CARDS: surface what we see so we can
-                            # tell at a glance whether the configurable buffer
-                            # is reachable from inside the LangChain @tool
-                            # wrapper (revert once cards are confirmed working).
-                            logger.info(
-                                "[cards-debug] %s data_keys=%s cfg_keys=%s buf_type=%s",
-                                app_tool.name,
-                                list(result['data'].keys())[:5],
-                                list(cfg.keys())[:10] if isinstance(cfg, dict) else type(cfg).__name__,
-                                type(buf).__name__,
-                            )
                             if isinstance(buf, list):
                                 buf.append({
                                     'app_id': app_id,
