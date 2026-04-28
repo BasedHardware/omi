@@ -408,8 +408,14 @@ async def _run_anthropic_agent_stream(
                 response = await stream.get_final_message()
 
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
-            await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+            logger.error(f"Anthropic API error: {type(e).__name__}: {e}")
+            # TEMP-DEBUG-OPENROUTER: surface the real error to the client so we
+            # can finish wiring up the OpenRouter base URL. Revert once chat works.
+            err_class = type(e).__name__
+            err_msg = str(e)[:600]
+            await callback.put_data(
+                f"\n\n[debug] Agent error: {err_class}: {err_msg}"
+            )
             await callback.end()
             return
 
