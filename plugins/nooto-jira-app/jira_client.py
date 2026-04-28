@@ -276,6 +276,53 @@ def add_comment(cloudid: str, token: str, *, key: str, body_adf: dict[str, Any])
     return resp.json()
 
 
+def list_versions(
+    cloudid: str,
+    token: str,
+    *,
+    project_key: Optional[str] = None,
+    include_released: bool = False,
+) -> list[dict[str, Any]]:
+    """List versions (a.k.a. releases) across the workspace.
+
+    With `project_key`, scopes to that project's `/project/{key}/versions`.
+    Without, walks every project the user can see and concatenates.
+    `include_released` defaults False — the unified Plan view only wants the
+    actively-targeted releases, archived/released ones add noise.
+    """
+    out: list[dict[str, Any]] = []
+
+    def _emit(values: list[dict[str, Any]], proj_key: str) -> None:
+        for v in values or []:
+            if not include_released and v.get("released"):
+                continue
+            if v.get("archived"):
+                continue
+            v = dict(v)
+            v["projectKey"] = proj_key
+            out.append(v)
+
+    if project_key:
+        resp = _request("GET", f"{_base(cloudid)}/project/{project_key}/versions", token)
+        _emit(resp.json() or [], project_key)
+        return out
+
+    # No filter — fan out across projects. Bounded to the projects the user can
+    # see (list_projects already filters); typical workspaces have ≲ 30 projects
+    # so this is fine without pagination/parallelization for v1.
+    for proj in list_projects(cloudid, token):
+        key = proj.get("key")
+        if not key:
+            continue
+        try:
+            resp = _request("GET", f"{_base(cloudid)}/project/{key}/versions", token)
+            _emit(resp.json() or [], key)
+        except (JiraNotFound, JiraAuthError, JiraRateLimit) as e:
+            log.warning("[jira] versions for %s failed: %s", key, e)
+            continue
+    return out
+
+
 def list_projects(
     cloudid: str,
     token: str,

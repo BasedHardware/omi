@@ -77,6 +77,15 @@ class JiraListProjectsRequest(ChatToolRequest):
     query: Optional[str] = None
 
 
+class JiraListReleasesRequest(ChatToolRequest):
+    """Lists Jira versions (releases) the user is targeting. The Plan-view
+    aggregator surfaces these as goals — one goal per unreleased version."""
+
+    project_key: Optional[str] = None
+    include_released: bool = False
+    limit: int = 50
+
+
 # ── Proactive flow models ───────────────────────────────────────────────────
 
 PriorityLiteral = Literal["Highest", "High", "Medium", "Low", "Lowest"]

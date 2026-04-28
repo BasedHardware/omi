@@ -41,3 +41,39 @@ class NormalizedTask(IntegrationTask):
 class AggregatedTasksResponse(BaseModel):
     tasks: list[NormalizedTask]
     errors: dict[str, str] = {}
+
+
+# ---------------------------------------------------------------------------
+# Goals — surfaced from each plugin's `list_releases` (or similar) chat tool.
+# Jira ships its versions; future plugins can adopt the same shape (Linear
+# milestones, GitHub releases, etc.).
+# ---------------------------------------------------------------------------
+
+
+class IntegrationGoal(BaseModel):
+    external_id: str
+    title: str
+    description: Optional[str] = None
+    goal_type: str = "boolean"  # "boolean" | "scale" | "numeric"
+    target_value: float = 1
+    current_value: float = 0
+    min_value: float = 0
+    max_value: float = 1
+    unit: Optional[str] = None
+    is_active: bool = True
+    completed_at: Optional[str] = None
+    due_at: Optional[str] = None  # release date / target date
+    start_at: Optional[str] = None
+    url: str = ""
+    project: Optional[str] = None
+
+
+class NormalizedGoal(IntegrationGoal):
+    source_app_id: str
+    source_app_name: str
+    source_app_image: Optional[str] = None
+
+
+class AggregatedGoalsResponse(BaseModel):
+    goals: list[NormalizedGoal]
+    errors: dict[str, str] = {}

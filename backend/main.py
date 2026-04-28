@@ -35,6 +35,7 @@ from routers import (
     oauth,
     auth,
     action_items,
+    aggregated_goals,
     aggregated_tasks,
     task_integrations,
     integrations,
@@ -74,6 +75,7 @@ app.include_router(transcribe.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(aggregated_tasks.router)
+app.include_router(aggregated_goals.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(memories.router)

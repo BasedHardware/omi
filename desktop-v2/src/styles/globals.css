@@ -2051,6 +2051,35 @@
   gap: 10px;
 }
 
+.goals-section-heading {
+  margin: 18px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.goal-card-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.goal-card-source-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+.goal-card-desc-body {
+  display: block;
+  margin-top: 4px;
+}
+
 .goals-limit-note {
   margin-top: 4px;
   color: var(--text-secondary);

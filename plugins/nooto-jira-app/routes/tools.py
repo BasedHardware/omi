@@ -32,6 +32,7 @@ from models import (
     JiraGetIssueRequest,
     JiraListMyIssuesRequest,
     JiraListProjectsRequest,
+    JiraListReleasesRequest,
     JiraSearchIssuesRequest,
     JiraUpdateStatusRequest,
 )
@@ -432,3 +433,89 @@ async def tool_list_projects(req: JiraListProjectsRequest) -> ChatToolResponse:
 
     lines = [f"- **{p.get('key', '')}** — {p.get('name', '')}" for p in projects]
     return ChatToolResponse(result="\n".join(lines), data={"values": projects})
+
+
+def _normalize_jira_version(v: dict, site_url: str) -> dict:
+    """Reduce a raw Jira version to the cross-plugin goal shape consumed by
+    the unified Plan-view aggregator. Mirrors `_normalize_jira_issue` but for
+    releases — `goal_type` is boolean (released or not) for v1; we can move
+    to a scale (issues-done %) once we add per-version progress lookups."""
+    project_key = v.get("projectKey") or ""
+    vid = v.get("id") or ""
+    name = v.get("name") or ""
+    description = (v.get("description") or "").strip() or None
+    released = bool(v.get("released"))
+    release_date = v.get("releaseDate") or v.get("userReleaseDate")
+    start_date = v.get("startDate") or v.get("userStartDate")
+    title = f"{project_key} {name}".strip() if project_key else name
+    url = (
+        f"{site_url}/projects/{project_key}/versions/{vid}"
+        if site_url and project_key and vid
+        else (f"{site_url}/issues/?jql=fixVersion={vid}" if site_url and vid else "")
+    )
+    return {
+        "external_id": vid,
+        "title": title,
+        "description": description,
+        "goal_type": "boolean",
+        "target_value": 1,
+        "current_value": 1 if released else 0,
+        "min_value": 0,
+        "max_value": 1,
+        "unit": None,
+        "is_active": not released,
+        "completed_at": release_date if released else None,
+        "due_at": release_date,
+        "start_at": start_date,
+        "url": url,
+        "project": project_key or None,
+    }
+
+
+@router.post("/tools/list_releases", response_model=ChatToolResponse)
+async def tool_list_releases(req: JiraListReleasesRequest) -> ChatToolResponse:
+    """List Jira versions (releases) as cross-plugin goals.
+
+    The `data.goals[]` shape is consumed by the backend's
+    `/v1/integrations/goals` aggregator and rendered as Goal rows in the
+    desktop Plan view. The chat-tool `result` markdown is what the LLM sees,
+    so we keep it terse — release name + project + due date.
+    """
+    active = _resolve_active(req.uid)
+    if isinstance(active, ChatToolResponse):
+        return active
+    token, cloudid, site_url = active
+
+    try:
+        versions = jira_client.list_versions(
+            cloudid,
+            token,
+            project_key=req.project_key,
+            include_released=req.include_released,
+        )
+    except JiraAuthError:
+        return ChatToolResponse(error="Jira auth failed.", oauth_url=_oauth_url(req.uid))
+    except JiraNotFound:
+        return ChatToolResponse(error="No releases found for that filter.")
+    except JiraRateLimit:
+        return ChatToolResponse(error="Jira is rate-limiting; try again shortly.")
+    except httpx.HTTPStatusError as e:
+        log.warning("list_releases failed: %s", e)
+        return ChatToolResponse(error=f"Failed to list releases: {e.response.status_code}")
+    except Exception as e:  # pragma: no cover
+        log.exception("list_releases unexpected error")
+        return ChatToolResponse(error=f"Failed to list releases: {e}")
+
+    if not versions:
+        return ChatToolResponse(
+            result="No upcoming releases.",
+            data={"goals": []},
+        )
+
+    limit = max(1, min(int(req.limit or 50), 100))
+    goals = [_normalize_jira_version(v, site_url) for v in versions[:limit]]
+    lines = []
+    for g in goals:
+        due = f" — releases {g['due_at']}" if g.get("due_at") else ""
+        lines.append(f"- **{g['title']}**{due}")
+    return ChatToolResponse(result="\n".join(lines), data={"goals": goals})

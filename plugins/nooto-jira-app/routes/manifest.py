@@ -196,5 +196,35 @@ async def get_omi_tools_manifest() -> dict:
                 "auth_required": True,
                 "status_message": "Listing Jira projects...",
             },
+            {
+                "name": "jira_list_releases",
+                "description": (
+                    "List upcoming Jira releases (versions) the user is targeting. Each "
+                    "release becomes a Goal in the user's Plan view; the LLM can also "
+                    "use this to summarise what's shipping next. Defaults to unreleased "
+                    "versions across every project the user can see."
+                ),
+                "endpoint": "/tools/list_releases",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "project_key": {
+                            "type": "string",
+                            "description": "Optional ProjectKey (e.g. 'WPNG') to scope the listing.",
+                        },
+                        "include_released": {
+                            "type": "boolean",
+                            "description": "When true, also include already-released versions. Default false.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of releases to return (1–100). Default 50.",
+                        },
+                    },
+                    "required": [],
+                },
+                "auth_required": True,
+                "status_message": "Listing Jira releases...",
+            },
         ]
     }

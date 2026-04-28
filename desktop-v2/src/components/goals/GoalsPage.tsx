@@ -54,7 +54,13 @@ export function GoalsPage() {
     await generateNow();
   };
 
-  const canAdd = goals.length < MAX_ACTIVE_GOALS;
+  // The 4-goal cap only applies to native goals — integration goals (Jira
+  // releases, etc.) flow in from the source tracker and shouldn't be
+  // throttled by a UI limit.
+  const isNativeGoal = (g: Goal) => !g.source_app_id;
+  const nativeGoals = useMemo(() => goals.filter(isNativeGoal), [goals]);
+  const integrationGoals = useMemo(() => goals.filter((g) => !isNativeGoal(g)), [goals]);
+  const canAdd = nativeGoals.length < MAX_ACTIVE_GOALS;
   const empty = !isLoading && goals.length === 0;
 
   const summary = useMemo(() => {
@@ -73,7 +79,9 @@ export function GoalsPage() {
         subtitle={
           goals.length === 0
             ? "Track what you're working toward"
-            : `${goals.length} of ${MAX_ACTIVE_GOALS} active`
+            : integrationGoals.length > 0
+              ? `${nativeGoals.length} of ${MAX_ACTIVE_GOALS} active · ${integrationGoals.length} from integrations`
+              : `${nativeGoals.length} of ${MAX_ACTIVE_GOALS} active`
         }
         actions={
           <>
@@ -154,7 +162,7 @@ export function GoalsPage() {
             )}
 
             <div className="goals-list">
-              {goals.map((goal) => (
+              {nativeGoals.map((goal) => (
                 <GoalRow
                   key={goal.id}
                   goal={goal}
@@ -169,6 +177,21 @@ export function GoalsPage() {
                   You've reached the {MAX_ACTIVE_GOALS}-goal limit. Complete or
                   delete one to add another.
                 </p>
+              )}
+              {integrationGoals.length > 0 && (
+                <>
+                  <h3 className="goals-section-heading">From your integrations</h3>
+                  {integrationGoals.map((goal) => (
+                    <GoalRow
+                      key={goal.id}
+                      goal={goal}
+                      onEdit={() => handleEdit(goal)}
+                      onUpdateProgress={(v) => updateGoalProgress(goal.id, v)}
+                      onDelete={() => deleteGoal(goal.id)}
+                      onGetAdvice={() => handleAdvice(goal)}
+                    />
+                  ))}
+                </>
               )}
             </div>
           </>

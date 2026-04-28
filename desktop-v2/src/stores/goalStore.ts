@@ -36,13 +36,24 @@ export interface Goal {
   unit?: string | null;
   is_active: boolean;
   completed_at?: string | null;
-  /** Local-only provenance marker: "user" | "ai" | "onboarding_step_flow". */
+  /** Local-only provenance marker: "user" | "ai" | "onboarding_step_flow",
+   *  or — for goals piped in from a third-party tracker — the tracker's
+   *  short name ("jira", "linear"). */
   source?: string | null;
   backend_id?: string | null;
   backend_synced: boolean;
   deleted: boolean;
   created_at: string;
   updated_at: string;
+
+  // Integration-only fields. Absent for native goals.
+  source_app_id?: string;
+  source_app_name?: string;
+  source_app_image?: string;
+  external_id?: string;
+  external_url?: string;
+  due_at?: string | null;
+  project?: string;
 }
 
 /** The shape the backend returns on GET/POST/PATCH. */
@@ -128,6 +139,77 @@ function toGoal(src: ServerGoal, source?: string | null): Goal {
   };
 }
 
+// Wire shape for `GET /v1/integrations/goals` (see backend NormalizedGoal).
+interface IntegrationGoalWire {
+  external_id: string;
+  title: string;
+  description?: string | null;
+  goal_type: GoalType;
+  target_value: number;
+  current_value: number;
+  min_value: number;
+  max_value: number;
+  unit?: string | null;
+  is_active: boolean;
+  completed_at?: string | null;
+  due_at?: string | null;
+  start_at?: string | null;
+  url?: string;
+  project?: string | null;
+  source_app_id: string;
+  source_app_name: string;
+  source_app_image?: string | null;
+}
+
+interface AggregatedGoalsResponse {
+  goals: IntegrationGoalWire[];
+  errors: Record<string, string>;
+}
+
+/** Map "Jira" → "jira" so callers can branch on a stable lowercase token. */
+function inferGoalSource(appName: string, appId: string): string {
+  const n = appName.toLowerCase();
+  if (n.includes("jira")) return "jira";
+  if (n.includes("linear")) return "linear";
+  return appId;
+}
+
+function integrationGoalToLocal(g: IntegrationGoalWire): Goal {
+  return {
+    id: `${g.source_app_id}:${g.external_id}`,
+    title: g.title,
+    description: g.description ?? null,
+    goal_type: g.goal_type,
+    target_value: g.target_value,
+    current_value: g.current_value,
+    min_value: g.min_value,
+    max_value: g.max_value,
+    unit: g.unit ?? null,
+    is_active: g.is_active,
+    completed_at: g.completed_at ?? null,
+    source: inferGoalSource(g.source_app_name, g.source_app_id),
+    backend_id: null,
+    backend_synced: false, // integration goals never round-trip through /v1/goals
+    deleted: false,
+    created_at: g.start_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    source_app_id: g.source_app_id,
+    source_app_name: g.source_app_name,
+    source_app_image: g.source_app_image ?? undefined,
+    external_id: g.external_id,
+    external_url: g.url || undefined,
+    due_at: g.due_at ?? null,
+    project: g.project ?? undefined,
+  };
+}
+
+/** Integration goals are read-only; the local mutators (create/update/
+ *  delete) skip them silently to avoid 404s against /v1/goals. */
+function isIntegrationGoal(g: Goal | undefined): boolean {
+  return !!g && !!g.source && g.source !== "user" && g.source !== "ai" &&
+    g.source !== "onboarding_step_flow" && !!g.source_app_id;
+}
+
 function isCompletion(before: Goal | undefined, after: Goal): boolean {
   if (!before) return false;
   if (before.completed_at) return false;
@@ -173,37 +255,66 @@ export const useGoalStore = create<GoalState>((set, get) => ({
       return;
     }
 
-    try {
-      const serverGoals = await api.get<ServerGoal[]>("/v1/goals/all");
-      const serverList = Array.isArray(serverGoals) ? serverGoals : [];
+    // Fetch native goals + integration goals in parallel — either side can
+    // fail without blocking the other (e.g. Jira plugin down shouldn't hide
+    // your native goals).
+    const [nativeRes, integrationRes] = await Promise.allSettled([
+      api.get<ServerGoal[]>("/v1/goals/all"),
+      api.get<AggregatedGoalsResponse>("/v1/integrations/goals"),
+    ]);
 
-      // 3. Reconcile into local.
-      await invoke("sync_server_goals", {
-        goals: serverList.map((g) => ({
-          id: g.id,
-          backend_id: g.id,
-          backend_synced: true,
-          title: g.title,
-          description: g.description ?? null,
-          goal_type: g.goal_type,
-          target_value: g.target_value,
-          current_value: g.current_value,
-          min_value: g.min_value,
-          max_value: g.max_value,
-          unit: g.unit ?? null,
-          is_active: g.is_active,
-          completed_at: g.completed_at ?? null,
-          source: null,
-        })),
-      });
-
-      // 4. Re-read local for final state.
-      const reconciled = await invoke<Goal[]>("get_goals");
-      set({ goals: reconciled, isLoading: false, lastFetchedAt: Date.now() });
-    } catch (err) {
-      console.warn("[GoalStore] backend sync failed, keeping local:", err);
-      set({ isLoading: false, lastFetchedAt: Date.now() });
+    if (nativeRes.status === "fulfilled") {
+      const serverList = Array.isArray(nativeRes.value) ? nativeRes.value : [];
+      try {
+        await invoke("sync_server_goals", {
+          goals: serverList.map((g) => ({
+            id: g.id,
+            backend_id: g.id,
+            backend_synced: true,
+            title: g.title,
+            description: g.description ?? null,
+            goal_type: g.goal_type,
+            target_value: g.target_value,
+            current_value: g.current_value,
+            min_value: g.min_value,
+            max_value: g.max_value,
+            unit: g.unit ?? null,
+            is_active: g.is_active,
+            completed_at: g.completed_at ?? null,
+            source: null,
+          })),
+        });
+      } catch (err) {
+        console.warn("[GoalStore] sync_server_goals failed:", err);
+      }
+    } else {
+      console.warn("[GoalStore] native goals fetch failed:", nativeRes.reason);
     }
+
+    // Re-read local for final native state.
+    let nativeReconciled: Goal[] = [];
+    try {
+      nativeReconciled = await invoke<Goal[]>("get_goals");
+    } catch (err) {
+      console.warn("[GoalStore] local re-read failed:", err);
+    }
+
+    // Map integration goals into the local Goal shape (synthetic id keyed
+    // by app+release). Read-only — the goalStore mutators (create/update/
+    // delete) check `source !== "native"` and no-op for these.
+    const integrationGoals: Goal[] =
+      integrationRes.status === "fulfilled"
+        ? (integrationRes.value?.goals ?? []).map((g) => integrationGoalToLocal(g))
+        : [];
+    if (integrationRes.status === "rejected") {
+      console.warn("[GoalStore] integration goals fetch failed:", integrationRes.reason);
+    }
+
+    set({
+      goals: [...nativeReconciled, ...integrationGoals],
+      isLoading: false,
+      lastFetchedAt: Date.now(),
+    });
   },
 
   loadCompletedGoals: async () => {
@@ -309,6 +420,9 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     const prev = get().goals;
     const current = prev.find((g) => g.id === id);
     if (!current) return;
+    // Integration goals (Jira releases, …) are read-only locally — manage
+    // them in the source tracker.
+    if (isIntegrationGoal(current)) return;
 
     // Optimistic.
     set({
@@ -350,6 +464,7 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     const prev = get().goals;
     const current = prev.find((g) => g.id === id);
     if (!current) return;
+    if (isIntegrationGoal(current)) return; // managed in source tracker
 
     // Optimistic.
     set({
@@ -411,6 +526,8 @@ export const useGoalStore = create<GoalState>((set, get) => ({
 
   deleteGoal: async (id) => {
     const prev = get().goals;
+    const target = prev.find((g) => g.id === id);
+    if (target && isIntegrationGoal(target)) return; // can't delete external releases
     set({ goals: prev.filter((g) => g.id !== id) });
     await invoke("soft_delete_goal", { id }).catch(() => {});
 

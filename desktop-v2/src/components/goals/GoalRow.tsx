@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Lightbulb, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, ExternalLink, Lightbulb, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { open as openShell } from "@tauri-apps/plugin-shell";
 import type { Goal } from "@/stores/goalStore";
 import { getEmojiForTitle } from "./emoji";
+
+function dueDateLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 interface Props {
   goal: Goal;
@@ -105,6 +113,15 @@ export function GoalRow({
   const hasDescription = Boolean(goal.description && goal.description.trim());
   const targetLabel = `${Math.round(goal.target_value)}${goal.unit ? ` ${goal.unit}` : ""}`;
   const currentLabel = `${displayCurrent}${goal.unit ? ` ${goal.unit}` : ""}`;
+  const isIntegration = !!goal.source_app_id;
+  const dueLabel = dueDateLabel(goal.due_at);
+
+  const openExternal = () => {
+    if (!goal.external_url) return;
+    void openShell(goal.external_url).catch((err) =>
+      console.warn("[GoalRow] open external failed:", err),
+    );
+  };
 
   return (
     <div className={`goal-card${isComplete ? " goal-card-complete" : ""}`}>
@@ -128,18 +145,39 @@ export function GoalRow({
           <button
             type="button"
             className="goal-card-title"
-            onClick={onEdit}
-            title="Edit goal"
+            onClick={isIntegration ? openExternal : onEdit}
+            title={isIntegration ? "Open in source" : "Edit goal"}
           >
             {goal.title}
           </button>
-          {hasDescription && (
-            <p className="goal-card-desc">{goal.description}</p>
+          {(hasDescription || isIntegration) && (
+            <p className="goal-card-desc">
+              {isIntegration && (
+                <span className="goal-card-source">
+                  {goal.source_app_image && (
+                    <img
+                      src={goal.source_app_image}
+                      alt=""
+                      aria-hidden
+                      className="goal-card-source-icon"
+                    />
+                  )}
+                  <span>{goal.source_app_name ?? "Integration"}</span>
+                  {goal.project && <span> · {goal.project}</span>}
+                  {dueLabel && <span> · Releases {dueLabel}</span>}
+                </span>
+              )}
+              {hasDescription && (
+                <span className={isIntegration ? "goal-card-desc-body" : ""}>
+                  {goal.description}
+                </span>
+              )}
+            </p>
           )}
         </div>
 
         <div className="goal-card-actions">
-          {onGetAdvice && (
+          {!isIntegration && onGetAdvice && (
             <button
               type="button"
               className="goal-card-action goal-card-action-advice"
@@ -150,24 +188,38 @@ export function GoalRow({
               <Lightbulb size={14} />
             </button>
           )}
-          <button
-            type="button"
-            className="goal-card-action"
-            onClick={onEdit}
-            aria-label="Edit goal"
-            title="Edit"
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            type="button"
-            className="goal-card-action goal-card-action-danger"
-            onClick={onDelete}
-            aria-label="Delete goal"
-            title="Delete"
-          >
-            <Trash2 size={14} />
-          </button>
+          {isIntegration ? (
+            <button
+              type="button"
+              className="goal-card-action"
+              onClick={openExternal}
+              aria-label="Open in source"
+              title={`Open in ${goal.source_app_name ?? "source"}`}
+            >
+              <ExternalLink size={14} />
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="goal-card-action"
+                onClick={onEdit}
+                aria-label="Edit goal"
+                title="Edit"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                type="button"
+                className="goal-card-action goal-card-action-danger"
+                onClick={onDelete}
+                aria-label="Delete goal"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
