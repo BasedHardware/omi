@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useAuthStore } from "./authStore";
-import { api } from "../services/api";
+import { api, dispatchIntegrationToggle } from "../services/api";
+import { useAppStore, isTwoWaySyncEnabled } from "./appStore";
 
 /** Native = Nooto action items (`/v1/action-items`). Anything else came from
  *  the integration aggregator and is read-only by default. */
@@ -146,9 +147,15 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     const task = get().tasks.find((t) => t.id === id);
     if (!task) return;
-    // Integration tasks are read-only here; Slice D of the Plan plan adds an
-    // opt-in writeback path via `appStore.twoWaySyncByAppId`.
-    if (task.source && task.source !== "native") return;
+
+    // Integration task: read-only unless the user has explicitly turned on
+    // two-way sync for this app (Settings → Apps → <app> → Two-way sync).
+    // When on, dispatch a writeback to the plugin's update_*_status tool.
+    if (task.source && task.source !== "native") {
+      if (!isTwoWaySyncEnabled(task.source_app_id)) return;
+      await syncIntegrationToggle(task, set, get);
+      return;
+    }
 
     const newCompleted = !task.completed;
 
@@ -204,3 +211,66 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     }
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Integration writeback ("two-way sync") helper. Picks the right plugin tool
+// off the app's chat_tools manifest, dispatches via the api helper, and
+// optimistically flips the local task's `completed` flag. Rolls back on error.
+// ---------------------------------------------------------------------------
+
+const _UPDATE_STATUS_SUFFIX = "update_issue_status";
+
+function _findUpdateStatusEndpoint(appId: string | undefined): string | null {
+  if (!appId) return null;
+  const app = useAppStore.getState().apps.find((a) => a.id === appId);
+  if (!app?.chat_tools) return null;
+  const tool = app.chat_tools.find((t) => (t.name || "").toLowerCase().endsWith(_UPDATE_STATUS_SUFFIX));
+  return tool?.endpoint || null;
+}
+
+async function syncIntegrationToggle(
+  task: Task,
+  set: (fn: (state: TaskState) => Partial<TaskState> | TaskState) => void,
+  _get: () => TaskState,
+) {
+  const userId = useAuthStore.getState().userId;
+  if (!userId || !task.source_app_id || !task.external_id) return;
+
+  const endpoint = _findUpdateStatusEndpoint(task.source_app_id);
+  if (!endpoint) {
+    console.warn(`[taskStore] no update_issue_status tool on ${task.source_app_name}; skipping writeback`);
+    return;
+  }
+
+  // Strip "/tools/<name>" suffix to recover the plugin's origin so we can
+  // hand the dispatch helper a clean (origin, toolName) pair.
+  const m = endpoint.match(/^(.*)\/tools\/([^/]+)$/);
+  if (!m) {
+    console.warn("[taskStore] unexpected tool endpoint shape:", endpoint);
+    return;
+  }
+  const [, appHomeUrl, toolName] = m;
+
+  // Optimistic flip — we toggle in the UI immediately and roll back if the
+  // plugin returns an error. v1 only handles "mark done"; un-completing a
+  // ticket from Plan view is left to a follow-up.
+  const newCompleted = !task.completed;
+  set((state) => ({
+    tasks: state.tasks.map((t) => (t.id === task.id ? { ...t, completed: newCompleted } : t)),
+  }));
+
+  const result = await dispatchIntegrationToggle({
+    appHomeUrl,
+    toolName,
+    uid: userId,
+    externalId: task.external_id,
+    newStatus: newCompleted ? "Done" : "To Do",
+  });
+
+  if (!result.ok) {
+    console.warn(`[taskStore] writeback to ${task.source_app_name} failed: ${result.error}`);
+    set((state) => ({
+      tasks: state.tasks.map((t) => (t.id === task.id ? { ...t, completed: task.completed } : t)),
+    }));
+  }
+}

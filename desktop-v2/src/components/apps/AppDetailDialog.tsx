@@ -6,8 +6,9 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { useAppStore } from "../../stores/appStore";
-import { CAPABILITY_LABELS } from "../../types/app";
+import { CAPABILITY_LABELS, worksExternally } from "../../types/app";
 import type { OmiApp } from "../../types/app";
 import { AppImage } from "./AppCard";
 
@@ -20,6 +21,13 @@ export function AppDetailDialog({
 }) {
   const enableApp = useAppStore((s) => s.enableApp);
   const disableApp = useAppStore((s) => s.disableApp);
+  const twoWaySync = useAppStore((s) =>
+    app ? Boolean(s.twoWaySyncByAppId[app.id]) : false,
+  );
+  const setTwoWaySync = useAppStore((s) => s.setTwoWaySync);
+  // Only external integrations (Jira/Linear/…) can write back to a source
+  // tracker, so the toggle is hidden for chat-only or persona apps.
+  const canTwoWaySync = !!app && app.enabled && worksExternally(app);
 
   return (
     <Dialog open={!!app} onOpenChange={(open) => !open && onClose()}>
@@ -74,6 +82,23 @@ export function AppDetailDialog({
               <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
                 {app.description}
               </p>
+            )}
+
+            {canTwoWaySync && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Two-way sync</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                    Let Nooto mark tickets done in {app.name} when you complete
+                    them from your Plan. Off by default.
+                  </p>
+                </div>
+                <Switch
+                  checked={twoWaySync}
+                  onCheckedChange={(on) => setTwoWaySync(app.id, on)}
+                  aria-label={`Two-way sync with ${app.name}`}
+                />
+              </div>
             )}
 
             <div className="flex justify-end gap-2 pt-2">

@@ -7,6 +7,8 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { nanoid } from "nanoid";
 import type Anthropic from "@anthropic-ai/sdk";
 
 import { CHAT_TOOLS, executeToolCall } from "@/services/chat";
@@ -85,7 +87,7 @@ interface GeminiContent {
 
 let cachedApiKey: string | null = null;
 
-async function getGeminiApiKey(): Promise<string> {
+export async function getGeminiApiKey(): Promise<string> {
   if (cachedApiKey) return cachedApiKey;
 
   const key = await invoke<string | null>("get_gemini_api_key");
@@ -239,6 +241,157 @@ async function sendChatViaGemini(
 }
 
 // ---------------------------------------------------------------------------
+// Backend chat (SSE) — routes through the Nooto backend so plugin chat tools
+// (Jira, Linear, ClickUp, …) are available. The backend agent loads enabled
+// plugins' chat_tools and dispatches calls to their `/tools/*` endpoints
+// automatically; we just need to consume the SSE stream and surface text +
+// tool-call cards. Wire format mirrors `app/lib/backend/http/api/messages.dart`.
+// ---------------------------------------------------------------------------
+
+import { useAuthStore as _useAuthStoreForChat } from "@/stores/authStore";
+
+interface BackendChatCallbacks {
+  onDelta: (text: string) => void;
+  /** Fired for each `think:` line. `appId` is null when the agent is "thinking"
+   *  outside any plugin (loading context, deciding tools). */
+  onThink?: (text: string, appId: string | null) => void;
+  /** Final ResponseMessage from `done:` — text already streamed via onDelta,
+   *  but this carries citations/memories/ask_for_nps. */
+  onDone?: (response: ServerMessage) => void;
+}
+
+interface BackendChatStreamResult {
+  status: number;
+  error_body: string | null;
+}
+
+function decodeBase64Utf8(b64: string): string {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function parseChatLine(line: string, callbacks: BackendChatCallbacks): void {
+  // `data:` and `think:` chunks have `\n` escaped to `__CRLF__` — undo that
+  // before forwarding so multi-line responses render correctly.
+  if (line.startsWith("data: ")) {
+    callbacks.onDelta(line.slice(6).replaceAll("__CRLF__", "\n"));
+    return;
+  }
+  if (line.startsWith("think: ")) {
+    const raw = line.slice(7).replaceAll("__CRLF__", "\n");
+    // Format: `<text>|app_id:<id>` (omit the suffix when no app is involved).
+    const sep = raw.lastIndexOf("|app_id:");
+    if (sep >= 0) {
+      callbacks.onThink?.(raw.slice(0, sep), raw.slice(sep + "|app_id:".length));
+    } else {
+      callbacks.onThink?.(raw, null);
+    }
+    return;
+  }
+  if (line.startsWith("done: ")) {
+    try {
+      const parsed = JSON.parse(decodeBase64Utf8(line.slice(6))) as ServerMessage;
+      callbacks.onDone?.(parsed);
+    } catch (e) {
+      console.warn("[chat] failed to decode done frame", e);
+    }
+    return;
+  }
+  if (line.startsWith("message: ")) {
+    // Voice flow only; ignore for text chat.
+    return;
+  }
+}
+
+async function sendChatViaBackendOnce(
+  text: string,
+  callbacks: BackendChatCallbacks,
+  appId: string | null,
+  token: string | null,
+): Promise<BackendChatStreamResult> {
+  const requestId = nanoid();
+  const url =
+    appId && appId !== "null" && appId !== "no_selected"
+      ? `${BACKEND_URL}/v2/messages?app_id=${encodeURIComponent(appId)}`
+      : `${BACKEND_URL}/v2/messages`;
+
+  const unlistenLine = await listen<{ request_id: string; line: string }>(
+    "chat:stream",
+    (event) => {
+      if (event.payload.request_id !== requestId) return;
+      parseChatLine(event.payload.line, callbacks);
+    },
+  );
+  let unlistenDone: (() => void) | null = null;
+  const doneSignal = new Promise<void>((resolve) => {
+    void listen<{ request_id: string }>("chat:stream:done", (event) => {
+      if (event.payload.request_id !== requestId) return;
+      resolve();
+    }).then((fn) => {
+      unlistenDone = fn as (() => void) | null;
+    });
+  });
+
+  try {
+    const result = await invoke<BackendChatStreamResult>("backend_chat_stream", {
+      args: {
+        url,
+        token,
+        body: JSON.stringify({ text }),
+        request_id: requestId,
+      },
+    });
+    if (result.status >= 200 && result.status < 300) {
+      // Wait briefly for any final `chat:stream:done` event still in flight.
+      await Promise.race([
+        doneSignal,
+        new Promise((r) => setTimeout(r, 100)),
+      ]);
+    }
+    return result;
+  } finally {
+    unlistenLine();
+    if (unlistenDone) (unlistenDone as () => void)();
+  }
+}
+
+export async function sendChatViaBackend(
+  text: string,
+  callbacks: BackendChatCallbacks,
+  options: { appId?: string | null } = {},
+): Promise<void> {
+  const authStore = _useAuthStoreForChat.getState();
+  let token = authStore.idToken;
+  if (!token) {
+    throw new Error("Sign in to chat with the Nooto agent (plugin tools require auth).");
+  }
+
+  let result = await sendChatViaBackendOnce(text, callbacks, options.appId ?? null, token);
+
+  if (result.status === 401) {
+    try {
+      const refreshed = await _useAuthStoreForChat.getState().refreshToken();
+      if (refreshed) {
+        token = _useAuthStoreForChat.getState().idToken;
+        result = await sendChatViaBackendOnce(text, callbacks, options.appId ?? null, token);
+      }
+    } catch (err) {
+      console.warn("[chat] token refresh failed:", err);
+    }
+  }
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new ApiError(
+      result.status,
+      result.error_body ?? "",
+      `Chat error: ${result.status}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Backend REST helpers — routes CRUD to the remote OMI/Nooto API
 // ---------------------------------------------------------------------------
 
@@ -260,9 +413,8 @@ interface RustBackendResponse {
 async function backendRequest<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   const { method = "GET", body } = options;
 
-  const doFetch = async (token: string | null): Promise<RustBackendResponse> => {
-    console.info(`[api] ${method} ${path} (token=${token ? "yes" : "NO"})`);
-    const resp = await invoke<RustBackendResponse>("backend_request", {
+  const doFetch = async (token: string | null): Promise<RustBackendResponse> =>
+    invoke<RustBackendResponse>("backend_request", {
       args: {
         method,
         url: `${BACKEND_URL}${path}`,
@@ -270,9 +422,6 @@ async function backendRequest<T>(path: string, options: { method?: string; body?
         body: body != null ? JSON.stringify(body) : null,
       },
     });
-    console.info(`[api] ${method} ${path} → ${resp.status}`);
-    return resp;
-  };
 
   let token = useAuthStore.getState().idToken;
   let response = await doFetch(token);
@@ -291,10 +440,95 @@ async function backendRequest<T>(path: string, options: { method?: string; body?
 
   if (response.status < 200 || response.status >= 300) {
     console.error(`[api] ${method} ${path} → ${response.status}`, response.body.slice(0, 300));
-    throw new Error(`API error: ${response.status}`);
+    throw new ApiError(response.status, response.body, `API error: ${response.status}`);
   }
 
   return response.body ? (JSON.parse(response.body) as T) : (undefined as T);
+}
+
+/** Thrown by `backendRequest` on non-2xx so callers can react to specific
+ *  status codes / detail strings (e.g. 400 "App setup is not completed"
+ *  needs to launch the plugin's OAuth start URL). */
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+  /** Best-effort access to FastAPI's `{"detail": "..."}` payload. */
+  get detail(): string | null {
+    try {
+      const parsed = JSON.parse(this.body);
+      return typeof parsed?.detail === "string" ? parsed.detail : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Integration writeback — dispatches a "mark this ticket done" call to the
+// plugin's update tool. Used by the Plan view's two-way sync toggle (Slice D).
+// Each plugin uses its own tool name; we look it up in the app's chat_tools
+// manifest so this stays generic across Jira/Linear/etc.
+// ---------------------------------------------------------------------------
+
+interface IntegrationToggleResult {
+  ok: boolean;
+  /** Human-readable error from the plugin (e.g. "Issue/project not found"). */
+  error?: string;
+}
+
+interface ChatToolWireResponse {
+  result?: string;
+  error?: string | null;
+  oauth_url?: string | null;
+  data?: unknown;
+}
+
+/** Dispatch a "complete" writeback to a plugin's `update_*_status` tool.
+ *
+ *  Caller passes the plugin's `app_home_url` (origin) and the tool name lifted
+ *  from the app's `chat_tools` manifest. We POST to `{home}/tools/{name}` with
+ *  `{uid, issue_key, new_status}` — the shape `nooto-jira-app`'s
+ *  `update_issue_status` route already accepts. The Linear plugin doesn't
+ *  expose an equivalent tool today, so callers should fall back gracefully. */
+export async function dispatchIntegrationToggle(args: {
+  appHomeUrl: string;
+  toolName: string;
+  uid: string;
+  externalId: string;
+  newStatus: string;
+}): Promise<IntegrationToggleResult> {
+  const { appHomeUrl, toolName, uid, externalId, newStatus } = args;
+  const url = `${appHomeUrl.replace(/\/$/, "")}/tools/${toolName}`;
+  try {
+    const response = await invoke<RustBackendResponse>("backend_request", {
+      args: {
+        method: "POST",
+        url,
+        token: null, // plugin tools authenticate via the `uid` body, not a bearer
+        body: JSON.stringify({
+          uid,
+          issue_key: externalId,
+          new_status: newStatus,
+        }),
+      },
+    });
+    if (response.status < 200 || response.status >= 300) {
+      return { ok: false, error: `${response.status}: ${response.body.slice(0, 200)}` };
+    }
+    const parsed = response.body
+      ? (JSON.parse(response.body) as ChatToolWireResponse)
+      : {};
+    if (parsed.error) return { ok: false, error: parsed.error };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ---------------------------------------------------------------------------

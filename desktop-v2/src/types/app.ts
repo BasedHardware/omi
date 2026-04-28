@@ -9,6 +9,33 @@
  * Field names mirror the backend JSON (snake_case).
  */
 
+export interface ExternalIntegration {
+  /**
+   * Where to send users to start the OAuth / setup flow when the backend's
+   * /v1/apps/enable rejects with "App setup is not completed". The plugin's
+   * own auth route appends ?uid=<caller-uid> and 302s to the IdP.
+   */
+  app_home_url?: string | null;
+  setup_completed_url?: string | null;
+  chat_tools_manifest_url?: string | null;
+  webhook_url?: string | null;
+  triggers_on?: string | null;
+  auth_steps?: Array<{ name: string; url: string }> | null;
+}
+
+export interface ChatTool {
+  /** Plugin-prefixed name (e.g. `jira_update_issue_status`). When picking a
+   *  writeback target we match by suffix so this stays generic across plugins. */
+  name: string;
+  description: string;
+  /** Full URL to POST tool input to (plugin origin + `/tools/...`). */
+  endpoint: string;
+  method?: string;
+  parameters?: unknown;
+  auth_required?: boolean;
+  status_message?: string | null;
+}
+
 export interface OmiApp {
   id: string;
   name: string;
@@ -27,6 +54,8 @@ export interface OmiApp {
   rating_avg?: number | null;
   rating_count?: number;
   status?: string;
+  external_integration?: ExternalIntegration | null;
+  chat_tools?: ChatTool[] | null;
 }
 
 export interface AppResponse {

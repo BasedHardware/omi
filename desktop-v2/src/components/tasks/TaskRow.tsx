@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Calendar, Link2, Trash2, X } from "lucide-react";
 import { open as openShell } from "@tauri-apps/plugin-shell";
 import type { Task } from "../../stores/taskStore";
+import { useAppStore } from "../../stores/appStore";
 import { bucketFor, dueLabel, isNew } from "./taskDates";
 import { IntegrationBadge } from "./IntegrationBadge";
 
@@ -47,14 +48,18 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
 
   const bucket = bucketFor(task);
   const fresh = !task.completed && isNew(task);
-  // Integration rows (Jira/Linear/…) are read-only here for v1 — the actual
-  // ticket lives in the source tracker. Clicking the title opens the external
-  // URL instead of toggling edit mode; date/delete affordances are hidden.
-  // Slice D will flip this once a per-app two-way-sync toggle is on.
+  // Integration rows (Jira/Linear/…) are read-only by default — the actual
+  // ticket lives in the source tracker. The user can opt in per-app via
+  // Settings → Apps → <app> → Two-way sync; when on, the checkbox dispatches
+  // a status writeback through the plugin's update_issue_status tool.
   const isIntegration = !!task.source && task.source !== "native";
+  const twoWaySync = useAppStore((s) =>
+    task.source_app_id ? Boolean(s.twoWaySyncByAppId[task.source_app_id]) : false,
+  );
+  const checkboxDisabled = isIntegration && !twoWaySync;
 
   const handleToggle = () => {
-    if (isIntegration) return; // read-only — Slice D adds opt-in writeback
+    if (checkboxDisabled) return;
     if (task.completed) {
       onToggle();
       return;
@@ -127,20 +132,26 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
         className={[
           "task-check",
           task.completed || completing ? "task-check-on" : "",
-          isIntegration ? "task-check-readonly" : "",
+          checkboxDisabled ? "task-check-readonly" : "",
         ]
           .filter(Boolean)
           .join(" ")}
         onClick={handleToggle}
-        disabled={isIntegration}
+        disabled={checkboxDisabled}
         aria-label={
-          isIntegration
+          checkboxDisabled
             ? `Manage in ${task.source_app_name ?? "the source app"}`
             : task.completed
               ? "Mark incomplete"
               : "Mark complete"
         }
-        title={isIntegration ? `Manage in ${task.source_app_name ?? "the source app"}` : undefined}
+        title={
+          checkboxDisabled
+            ? `Manage in ${task.source_app_name ?? "the source app"}`
+            : isIntegration
+              ? `Mark done in ${task.source_app_name ?? "source app"}`
+              : undefined
+        }
       >
         {(task.completed || completing) && (
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
