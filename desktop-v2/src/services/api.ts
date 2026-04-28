@@ -255,9 +255,20 @@ interface BackendChatCallbacks {
   /** Fired for each `think:` line. `appId` is null when the agent is "thinking"
    *  outside any plugin (loading context, deciding tools). */
   onThink?: (text: string, appId: string | null) => void;
+  /** Fired when the backend agent dispatches a plugin tool whose response
+   *  contained structured `data` (e.g. Jira's `data.tasks[]`). The frontend
+   *  uses this to render rich cards inline in the chat instead of falling
+   *  back to the markdown summary the LLM consumes. */
+  onToolResult?: (payload: ToolResultFrame) => void;
   /** Final ResponseMessage from `done:` — text already streamed via onDelta,
    *  but this carries citations/memories/ask_for_nps. */
   onDone?: (response: ServerMessage) => void;
+}
+
+export interface ToolResultFrame {
+  app_id: string | null;
+  tool_name: string;
+  data: Record<string, unknown>;
 }
 
 interface BackendChatStreamResult {
@@ -296,6 +307,15 @@ function parseChatLine(line: string, callbacks: BackendChatCallbacks): void {
       callbacks.onDone?.(parsed);
     } catch (e) {
       console.warn("[chat] failed to decode done frame", e);
+    }
+    return;
+  }
+  if (line.startsWith("tool_result: ")) {
+    try {
+      const parsed = JSON.parse(decodeBase64Utf8(line.slice(13))) as ToolResultFrame;
+      callbacks.onToolResult?.(parsed);
+    } catch (e) {
+      console.warn("[chat] failed to decode tool_result frame", e);
     }
     return;
   }

@@ -4,11 +4,13 @@ import { Reasoning } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import { Tool, ToolGroup } from "../ai-elements/tool";
 import { presentTool } from "./toolLabels";
+import { TaskCardsBlock } from "./TaskCardsBlock";
 
 type Group =
   | { kind: "text"; id: string; text: string; isStreaming?: boolean }
   | { kind: "reasoning"; part: Extract<ChatMessagePart, { type: "reasoning" }> }
-  | { kind: "tools"; parts: Extract<ChatMessagePart, { type: "tool" }>[] };
+  | { kind: "tools"; parts: Extract<ChatMessagePart, { type: "tool" }>[] }
+  | { kind: "task_cards"; part: Extract<ChatMessagePart, { type: "task_cards" }> };
 
 /**
  * Group consecutive tool parts into a single ToolGroup so multiple retrieval
@@ -26,6 +28,8 @@ function groupParts(parts: ChatMessagePart[], fallbackStreaming?: boolean): Grou
       }
     } else if (p.type === "reasoning") {
       groups.push({ kind: "reasoning", part: p });
+    } else if (p.type === "task_cards") {
+      groups.push({ kind: "task_cards", part: p });
     } else {
       groups.push({
         kind: "text",
@@ -83,6 +87,9 @@ export function MessageParts({ message }: { message: ChatMessage }) {
               isStreaming={g.part.isStreaming}
             />
           );
+        }
+        if (g.kind === "task_cards") {
+          return <TaskCardsBlock key={g.part.id} part={g.part} />;
         }
         return (
           <ToolGroup key={`tools-${i}`}>

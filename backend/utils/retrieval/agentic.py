@@ -179,6 +179,17 @@ class AsyncStreamingCallback:
     def put_data_nowait(self, text):
         self.queue.put_nowait(f"data: {text}")
 
+    async def put_tool_result(self, app_id: Optional[str], tool_name: str, data: dict):
+        """Stream a structured tool result frame the client can render as
+        rich cards (Jira tickets, etc.). Encoded as `tool_result: <base64>`
+        because the data may contain newlines that would collide with the
+        `\\n\\n` SSE record separator."""
+        import base64 as _b64
+        import json as _json
+        payload = {"app_id": app_id, "tool_name": tool_name, "data": data}
+        encoded = _b64.b64encode(_json.dumps(payload).encode("utf-8")).decode("utf-8")
+        await self.queue.put(f"tool_result: {encoded}")
+
     async def end(self):
         await self.queue.put(None)
 
@@ -439,12 +450,28 @@ async def _run_anthropic_agent_stream(
                 await callback.end()
                 return
 
-            # Execute tool
+            # Execute tool. App tools push a structured `data` dict into the
+            # `last_tool_results` contextvar via `_call_tool_endpoint`; we
+            # drain that buffer right after so each tool's payload reaches
+            # the client as its own `tool_result:` SSE frame, in order.
+            from utils.retrieval.tools.app_tools import last_tool_results
+            buf_token = last_tool_results.set([])
             try:
                 result = await _execute_tool(block.name, block.input, tool_registry, configurable)
             except Exception as e:
                 logger.error(f"Tool execution error ({block.name}): {e}")
                 result = f"Error executing tool: {str(e)}"
+            structured_results = last_tool_results.get() or []
+            last_tool_results.reset(buf_token)
+            for sr in structured_results:
+                try:
+                    await callback.put_tool_result(
+                        sr.get("app_id"),
+                        sr.get("tool_name") or block.name,
+                        sr.get("data") or {},
+                    )
+                except Exception as e:  # pragma: no cover — never fail the chat over a card
+                    logger.warning("[agentic] tool_result emit failed: %s", e)
 
             logger.info(f"Tool ended: {block.name}")
 

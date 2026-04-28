@@ -28,6 +28,15 @@ except ImportError:
 # Global mapping of tool names to status messages
 _tool_status_messages: Dict[str, str] = {}
 
+# Per-async-task buffer of structured tool results. Plugin tools that return
+# `ChatToolResponse(data=...)` (e.g. Jira's `data.tasks[]`) push a frame here
+# so the agentic chat loop can stream those structured payloads to the client
+# in addition to the markdown summary the LLM consumes. Cleared at the start
+# of each `execute_agentic_chat_stream` invocation.
+last_tool_results: contextvars.ContextVar[Optional[List[Dict[str, Any]]]] = contextvars.ContextVar(
+    'last_tool_results', default=None
+)
+
 
 def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type:
     """
@@ -217,6 +226,21 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                 # Try to parse JSON response, fallback to text
                 try:
                     result = response.json()
+                    # Surface structured `data` payloads (e.g. Jira's
+                    # `data.tasks[]`) to the agentic loop so the client can
+                    # render them as rich cards alongside the markdown the LLM
+                    # consumes. The contextvar is per async task so this stays
+                    # isolated between concurrent chat sessions.
+                    if isinstance(result, dict) and isinstance(result.get('data'), dict):
+                        buf = last_tool_results.get()
+                        if buf is None:
+                            buf = []
+                            last_tool_results.set(buf)
+                        buf.append({
+                            'app_id': app_id,
+                            'tool_name': app_tool.name,
+                            'data': result['data'],
+                        })
                     if isinstance(result, dict) and 'result' in result:
                         return str(result['result'])
                     elif isinstance(result, dict) and 'message' in result:

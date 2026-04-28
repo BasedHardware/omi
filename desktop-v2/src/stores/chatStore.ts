@@ -15,7 +15,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nanoid } from "nanoid";
-import { api, sendChatViaBackend } from "@/services/api";
+import { api, sendChatViaBackend, type ToolResultFrame } from "@/services/api";
 import {
   buildChatSystemPrompt,
   buildClaudeChatSystemPrompt,
@@ -51,6 +51,20 @@ export interface ToolPartInput {
   details?: string;
 }
 
+/** Compact ticket shape for in-chat cards. Subset of the unified
+ *  `IntegrationTask` schema — keeps the bytes-on-the-wire small per chat. */
+export interface ChatTaskCard {
+  external_id: string;
+  title: string;
+  status?: string;
+  status_type?: "todo" | "in_progress" | "done" | "canceled";
+  url?: string;
+  project?: string;
+  due_at?: string | null;
+  assignee?: string;
+  priority?: string;
+}
+
 export type ChatMessagePart =
   | { type: "text"; id: string; text: string }
   | {
@@ -62,7 +76,15 @@ export type ChatMessagePart =
       output?: string;
       errorMessage?: string;
     }
-  | { type: "reasoning"; id: string; text: string; isStreaming?: boolean };
+  | { type: "reasoning"; id: string; text: string; isStreaming?: boolean }
+  | {
+      type: "task_cards";
+      id: string;
+      appId: string | null;
+      appName: string;
+      appImage?: string;
+      tasks: ChatTaskCard[];
+    };
 
 export interface ChatMessage {
   id: string;
@@ -494,6 +516,52 @@ export const useChatStore = create<ChatState>()(
                     };
                   });
                 }
+              },
+              onToolResult: (frame: ToolResultFrame) => {
+                // Plugins sending `data.tasks[]` (Jira / Linear / …) get
+                // rendered as inline cards. Other shapes (data.foo, etc.) are
+                // ignored for now — we'll add card types per surface as we
+                // wire them up.
+                const rawTasks = (frame.data as { tasks?: unknown }).tasks;
+                if (!Array.isArray(rawTasks) || rawTasks.length === 0) return;
+                const tasks: ChatTaskCard[] = rawTasks
+                  .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
+                  .map((t) => ({
+                    external_id: String(t.external_id ?? ""),
+                    title: String(t.title ?? ""),
+                    status: typeof t.status === "string" ? t.status : undefined,
+                    status_type: t.status_type as ChatTaskCard["status_type"],
+                    url: typeof t.url === "string" ? t.url : undefined,
+                    project: typeof t.project === "string" ? t.project : undefined,
+                    due_at: typeof t.due_at === "string" ? t.due_at : null,
+                    assignee: typeof t.assignee === "string" ? t.assignee : undefined,
+                    priority: typeof t.priority === "string" ? t.priority : undefined,
+                  }))
+                  .filter((t) => t.external_id || t.title);
+                if (tasks.length === 0) return;
+                const cardId = nanoid();
+                const appName = appNameFor(frame.app_id);
+                const app = frame.app_id
+                  ? useAppStore.getState().apps.find((a) => a.id === frame.app_id)
+                  : null;
+                set((state) => {
+                  const updated = withMessage(state.messages, assistantId, (m) =>
+                    appendPart(m, {
+                      type: "task_cards",
+                      id: cardId,
+                      appId: frame.app_id,
+                      appName,
+                      appImage: app?.image,
+                      tasks,
+                    }),
+                  );
+                  return {
+                    messages: updated,
+                    sessionMessages: sessionId
+                      ? { ...state.sessionMessages, [sessionId]: updated }
+                      : state.sessionMessages,
+                  };
+                });
               },
               onDone: () => {
                 // Mark all running tool cards as completed once the final
