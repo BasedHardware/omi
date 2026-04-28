@@ -558,7 +558,6 @@ def extract_action_items(
         for action_item in response.action_items or []:
             if action_item.created_at is None:
                 action_item.created_at = now
-            # Post-extraction validation: clear due dates more than 1 day in the past
             if action_item.due_at is not None:
                 if action_item.due_at.tzinfo is None:
                     try:
@@ -566,13 +565,13 @@ def extract_action_items(
                         action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
                     except Exception:
                         action_item.due_at = action_item.due_at.replace(tzinfo=timezone.utc)
-            else:
-                action_item.due_at = action_item.due_at.astimezone(timezone.utc)
-            if action_item.due_at < now - timedelta(days=1):
-                logger.warning(
-                    f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
-                )
-                action_item.due_at = None
+                else:
+                    action_item.due_at = action_item.due_at.astimezone(timezone.utc)
+                if action_item.due_at < now - timedelta(days=1):
+                    logger.warning(
+                        f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
+                    )
+                    action_item.due_at = None
                 
 
         return response.action_items or []
