@@ -74,6 +74,10 @@ export type ChatMessagePart =
       type: "tool";
       id: string;
       name: string;
+      /** Optional logo URL for plugin-scoped tool cards (Jira, Linear, …).
+       *  When set, the Tool header swaps the generic wrench for the app's
+       *  marketplace icon. */
+      iconUrl?: string;
       status: ToolPartStatus;
       input?: ToolPartInput;
       output?: string;
@@ -470,14 +474,20 @@ export const useChatStore = create<ChatState>()(
             // Each `think: <text>|app_id:<id>` becomes a tool card here so
             // the UI matches the mobile app's "Loaded context" affordance.
             const thinkCardIds = new Map<string, string>();
-            // Resolve the app's friendly name from appStore so the tool card
-            // shows "Jira" instead of the raw ULID. Fall back to "Plugin" when
-            // the app hasn't been loaded yet (rare — apps load on dashboard mount).
-            const appNameFor = (appId: string | null): string => {
-              if (!appId) return "agent";
+            // Resolve the app's friendly name + logo from appStore so plugin
+            // tool cards say "Jira" with the Jira mark instead of "Plugin"
+            // with a wrench. If apps haven't been fetched yet (chat opened
+            // first), kick off a load so subsequent cards in this session
+            // benefit.
+            if (useAppStore.getState().apps.length === 0) {
+              void useAppStore.getState().loadApps().catch(() => {});
+            }
+            const appMetaFor = (appId: string | null): { name: string; image?: string } => {
+              if (!appId) return { name: "agent" };
               const app = useAppStore.getState().apps.find((a) => a.id === appId);
-              return app?.name ?? "Plugin";
+              return { name: app?.name ?? "Plugin", image: app?.image };
             };
+            const appNameFor = (appId: string | null): string => appMetaFor(appId).name;
             await sendChatViaBackend(textToSend, {
               onDelta: appendDelta,
               onThink: (text, appId) => {
@@ -486,12 +496,14 @@ export const useChatStore = create<ChatState>()(
                 if (!cardId) {
                   cardId = nanoid();
                   thinkCardIds.set(key, cardId);
+                  const meta = appMetaFor(appId);
                   set((state) => {
                     const updated = withMessage(state.messages, assistantId, (m) =>
                       appendPart(m, {
                         type: "tool",
                         id: cardId!,
-                        name: appNameFor(appId),
+                        name: meta.name,
+                        iconUrl: meta.image,
                         status: "running",
                         input: { summary: text },
                       }),

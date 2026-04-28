@@ -99,6 +99,7 @@ export function MessageParts({ message }: { message: ChatMessage }) {
                 <Tool
                   key={p.id}
                   name={presentation.title}
+                  iconUrl={p.iconUrl}
                   runningLabel={presentation.runningLabel}
                   status={p.status}
                   input={p.input?.summary}

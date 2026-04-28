@@ -21,6 +21,9 @@ export type ToolProps = HTMLAttributes<HTMLDivElement> & {
   defaultOpen?: boolean;
   /** Verb form shown while the tool is running, e.g. "Searching tasks". */
   runningLabel?: string;
+  /** Optional small image (16x16-ish) shown in place of the wrench — used to
+   *  brand plugin tool calls (Jira logo, Linear logo, etc.). */
+  iconUrl?: string;
 };
 
 const StatusIcon = ({ status }: { status: ToolStatus }) => {
@@ -45,6 +48,7 @@ export const Tool = ({
   errorMessage,
   defaultOpen = false,
   runningLabel,
+  iconUrl,
   className,
   ...props
 }: ToolProps) => {
@@ -73,7 +77,19 @@ export const Tool = ({
         aria-expanded={open}
       >
         <StatusIcon status={status} />
-        <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        {iconUrl ? (
+          <img
+            src={iconUrl}
+            alt=""
+            aria-hidden
+            className="size-3.5 shrink-0 rounded-sm object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ) : (
+          <WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
         <span className="min-w-0 flex-1 truncate font-medium text-foreground">
           {headerLabel}
         </span>
