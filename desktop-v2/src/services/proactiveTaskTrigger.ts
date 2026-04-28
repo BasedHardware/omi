@@ -29,7 +29,9 @@ import {
   shouldAnalyzeFrame,
   extractTaskFromFrame,
   persistExtractedTask,
+  MESSAGING_APPS,
 } from "@/services/taskAssistant";
+import { recordFrame as recordResearchFrame } from "@/services/researchIntent";
 import { useTaskAssistantSettings } from "@/services/taskAssistantSettings";
 import { notify } from "@/services/notifications";
 
@@ -39,21 +41,17 @@ let latestFrame: CapturedFrame | null = null;
 let lastExtractionAt = 0;
 let inflight = false;
 
-async function runExtraction(frame: CapturedFrame, reason: string): Promise<void> {
-  if (inflight) {
-    console.info(`[TaskTrigger] skip ${reason} — extraction in flight`);
-    return;
-  }
+async function runExtraction(
+  frame: CapturedFrame,
+  options: { researchHint?: string } = {},
+): Promise<void> {
+  if (inflight) return;
   if (!shouldAnalyzeFrame(frame)) return;
   inflight = true;
   lastExtractionAt = Date.now();
   try {
-    console.info(`[TaskTrigger] extract (${reason}) app=${frame.appName}`);
-    const result = await extractTaskFromFrame(frame);
+    const result = await extractTaskFromFrame(frame, options);
     if (result.hasNewTask && result.task) {
-      console.info(
-        `[TaskTrigger] extracted "${result.task.title}" (conf=${result.task.confidence.toFixed(2)})`,
-      );
       await persistExtractedTask(frame, result);
 
       if (useTaskAssistantSettings.getState().notificationsEnabled) {
@@ -73,7 +71,15 @@ export function startTaskTrigger(): void {
 
   const off = addFrameListener((frame) => {
     latestFrame = frame;
-    void runExtraction(frame, "context-switch");
+    // Multi-frame "user is researching this" detector. When it fires we
+    // bypass the normal context-switch path and analyze immediately with a
+    // hint, since single-frame heuristics miss "decide on X" tasks.
+    const research = recordResearchFrame(frame);
+    if (research.flagged) {
+      void runExtraction(frame, { researchHint: research.hint });
+      return;
+    }
+    void runExtraction(frame);
   });
   startMonitoring();
   unsubscribeFrame = () => {
@@ -82,15 +88,24 @@ export function startTaskTrigger(): void {
   };
 
   const intervalS = useTaskAssistantSettings.getState().extractionIntervalSeconds;
+  // Messaging apps get a faster cadence — when the user types a quick "I'll
+  // do that" / "vou fazer isso" we want the next sweep to catch it before
+  // they context-switch, not 10 minutes later. Cap at 1/4 the global rate
+  // so we never under-shoot it.
+  const messagingIntervalS = Math.max(60, Math.min(120, Math.floor(intervalS / 4)));
+  // Tick four times per (global) interval — same cadence as before, but the
+  // per-frame check now considers a per-app threshold.
+  const tickMs = Math.max(30, Math.floor(intervalS / 4)) * 1000;
   fallbackTimerId = setInterval(() => {
     if (!latestFrame) return;
     const elapsed = (Date.now() - lastExtractionAt) / 1000;
-    if (elapsed < intervalS) return;
-    void runExtraction(latestFrame, "fallback");
-  }, Math.max(30, Math.floor(intervalS / 4)) * 1000);
+    const threshold = MESSAGING_APPS.has(latestFrame.appName) ? messagingIntervalS : intervalS;
+    if (elapsed < threshold) return;
+    void runExtraction(latestFrame);
+  }, tickMs);
 
   console.info(
-    `[TaskTrigger] started (fallback interval=${intervalS}s)`,
+    `[TaskTrigger] started (fallback default=${intervalS}s, messaging=${messagingIntervalS}s)`,
   );
 }
 

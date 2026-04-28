@@ -331,7 +331,7 @@ async function executeKeywordSearch(query: string): Promise<SearchHit[]> {
 // Public API
 // ---------------------------------------------------------------------------
 
-const MESSAGING_APPS = new Set([
+export const MESSAGING_APPS = new Set([
   "Telegram", "WhatsApp", "\u200EWhatsApp", "Messages", "Slack", "Discord",
 ]);
 
@@ -389,10 +389,16 @@ async function buildContextBlock(): Promise<string> {
  */
 export async function extractTaskFromFrame(
   frame: CapturedFrame,
+  options: { researchHint?: string } = {},
 ): Promise<TaskExtractionResult> {
   const settings = useTaskAssistantSettings.getState();
 
   let prompt = `Screenshot from ${frame.appName}. Today is ${todayLabel()}. Analyze this screenshot for any actionable item the user should track.\n\n`;
+  if (options.researchHint) {
+    // Multi-frame signal injected by the trigger — gives the model permission
+    // to extract a "decide on X" task that single-frame heuristics would miss.
+    prompt += `${options.researchHint}\n\n`;
+  }
   prompt +=
     "WHAT COUNTS AS A TASK (any of these — not just external requests):\n" +
     "1. **Requests TO the user** that haven't been resolved (someone asks them to do something).\n" +
