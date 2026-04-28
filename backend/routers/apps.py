@@ -49,6 +49,7 @@ from database.apps import (
     search_apps_db,
 )
 from database.auth import get_user_from_uid
+from database import users as users_db
 from database.redis_db import (
     delete_generic_cache,
     get_generic_cache,
@@ -1769,6 +1770,43 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
         return {'status': 'ok'}
 
     raise HTTPException(status_code=404, detail='App not found')
+
+
+@router.get('/v1/apps/ambient-capture/controller', tags=['v1'])
+def get_ambient_capture_controller(device_id: str = Query(...), uid: str = Depends(auth.get_current_user_uid)):
+    return users_db.get_active_ambient_capture_controller(uid, device_id) or {}
+
+
+@router.post('/v1/apps/ambient-capture/controller', tags=['v1'])
+def select_ambient_capture_controller(
+    app_id: str = Query(...),
+    device_id: str = Query(...),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    app_model = App(**app)
+    if 'ambient_capture_controller' not in app_model.capabilities:
+        raise HTTPException(status_code=422, detail='App is not an ambient capture controller')
+    if not is_app_enabled(uid, app_id):
+        raise HTTPException(status_code=403, detail='Ambient capture controller app must be enabled first')
+    ext = app_model.external_integration
+    if not ext or not ext.capture_policy_url or not ext.capture_controller_public_key:
+        raise HTTPException(status_code=422, detail='Ambient capture controller policy URL and public key are required')
+    users_db.set_active_ambient_capture_controller(
+        uid,
+        device_id,
+        app_id,
+        key_fingerprint=ext.capture_controller_key_id,
+    )
+    return {'status': 'ok', 'app_id': app_id, 'device_id': device_id}
+
+
+@router.delete('/v1/apps/ambient-capture/controller', tags=['v1'])
+def revoke_ambient_capture_controller(device_id: str = Query(...), uid: str = Depends(auth.get_current_user_uid)):
+    users_db.revoke_active_ambient_capture_controller(uid, device_id)
+    return {'status': 'ok'}
 
 
 # ******************************************************

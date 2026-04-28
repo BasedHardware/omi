@@ -325,6 +325,58 @@ class SharedPreferencesUtil {
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
+  bool get advancedAmbientCaptureEnabled => getBool('advanced_ambient_capture_enabled');
+
+  set advancedAmbientCaptureEnabled(bool value) => saveBool('advanced_ambient_capture_enabled', value);
+
+  bool get ambientCapturePluginControlEnabled => getBool('ambient_capture_plugin_control_enabled');
+
+  set ambientCapturePluginControlEnabled(bool value) => saveBool('ambient_capture_plugin_control_enabled', value);
+
+  bool get ambientCaptureAccessibilityModeEnabled => getBool('ambient_capture_accessibility_mode_enabled');
+
+  set ambientCaptureAccessibilityModeEnabled(bool value) =>
+      saveBool('ambient_capture_accessibility_mode_enabled', value);
+
+  bool get ambientCaptureTextFallbackEnabled => getBool('ambient_capture_text_fallback_enabled');
+
+  set ambientCaptureTextFallbackEnabled(bool value) => saveBool('ambient_capture_text_fallback_enabled', value);
+
+  bool get ambientCaptureLocalSttFallbackEnabled => getBool('ambient_capture_local_stt_fallback_enabled');
+
+  set ambientCaptureLocalSttFallbackEnabled(bool value) =>
+      saveBool('ambient_capture_local_stt_fallback_enabled', value);
+
+  bool get ambientCaptureCaptionFallbackEnabled => getBool('ambient_capture_caption_fallback_enabled');
+
+  set ambientCaptureCaptionFallbackEnabled(bool value) =>
+      saveBool('ambient_capture_caption_fallback_enabled', value);
+
+  bool get ambientCaptureRawAudioUploadEnabled => getBool('ambient_capture_raw_audio_upload_enabled');
+
+  set ambientCaptureRawAudioUploadEnabled(bool value) => saveBool('ambient_capture_raw_audio_upload_enabled', value);
+
+  bool get ambientCaptureVerboseAuditEnabled => getBool('ambient_capture_verbose_audit_enabled');
+
+  set ambientCaptureVerboseAuditEnabled(bool value) => saveBool('ambient_capture_verbose_audit_enabled', value);
+
+  String get ambientCaptureMode => getString('ambient_capture_mode', defaultValue: 'off');
+
+  set ambientCaptureMode(String value) => saveString('ambient_capture_mode', value);
+
+  String get ambientCaptureSensitivity => getString('ambient_capture_sensitivity', defaultValue: 'medium');
+
+  set ambientCaptureSensitivity(String value) => saveString('ambient_capture_sensitivity', value);
+
+  String get ambientCaptureCommunicationMode =>
+      getString('ambient_capture_communication_mode', defaultValue: 'off');
+
+  set ambientCaptureCommunicationMode(String value) => saveString('ambient_capture_communication_mode', value);
+
+  String get ambientCaptureActiveControllerAppId => getString('ambient_capture_active_controller_app_id');
+
+  set ambientCaptureActiveControllerAppId(String value) => saveString('ambient_capture_active_controller_app_id', value);
+
   // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
   String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
 

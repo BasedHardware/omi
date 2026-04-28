@@ -20,6 +20,7 @@ from utils.executors import critical_executor, storage_executor
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from opuslib import Decoder
+from pydantic import BaseModel, Field
 from pydub import AudioSegment
 
 from database import conversations as conversations_db
@@ -34,7 +35,8 @@ from database.sync_jobs import (
     mark_job_failed,
 )
 from models.conversation import Conversation, CreateConversation
-from models.conversation_enums import ConversationSource
+from models.conversation_enums import ConversationSource, ConversationStatus
+from models.structured import Structured
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -78,6 +80,106 @@ logger = logging.getLogger(__name__)
 AUDIO_SAMPLE_RATE = 16000
 
 router = APIRouter()
+
+
+class AmbientFallbackSegmentIn(BaseModel):
+    text: str = Field(default='', max_length=10000)
+    source: str
+    start: datetime
+    end: datetime
+    confidence: Optional[float] = None
+    health_state: str
+    foreground_app_package: Optional[str] = None
+    raw_audio_available: bool = False
+    uploaded_to_omi: bool = False
+
+
+class AmbientFallbackSegmentsRequest(BaseModel):
+    device_id: str
+    conversation_id: Optional[str] = None
+    segments: List[AmbientFallbackSegmentIn]
+
+
+class AmbientTelemetryEventIn(BaseModel):
+    type: str
+    timestamp: datetime
+    metadata: dict = {}
+
+
+@router.post("/v1/ambient-capture/telemetry", tags=['v1'])
+def ingest_ambient_capture_telemetry(
+    event: AmbientTelemetryEventIn,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    safe_metadata = {
+        key: value
+        for key, value in event.metadata.items()
+        if key not in {'text', 'transcript', 'audio', 'raw_audio', 'payload'}
+    }
+    logger.info(
+        "ambient_capture_telemetry uid=%s type=%s metadata=%s",
+        uid,
+        sanitize(event.type),
+        sanitize(str(safe_metadata))[:1000],
+    )
+    return {'status': 'ok'}
+
+
+@router.post("/v1/ambient-capture/fallback-segments", tags=['v1'])
+def ingest_ambient_fallback_segments(
+    request: AmbientFallbackSegmentsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if not request.segments:
+        return {'status': 'ok', 'conversation_id': request.conversation_id, 'segments': 0}
+
+    conversation_id = request.conversation_id or str(_uuid.uuid4())
+    existing = conversations_db.get_conversation(uid, conversation_id)
+    started_at = min(segment.start for segment in request.segments)
+    finished_at = max(segment.end for segment in request.segments)
+
+    def to_transcript_segment(segment: AmbientFallbackSegmentIn) -> dict:
+        return TranscriptSegment(
+            text=f"[{segment.source}] {segment.text}".strip(),
+            speaker='SPEAKER_00',
+            is_user=False,
+            start=max(0.0, (segment.start - started_at).total_seconds()),
+            end=max(0.0, (segment.end - started_at).total_seconds()),
+            stt_provider=f"ambient_fallback:{segment.source}",
+        ).model_dump()
+
+    new_segments = [to_transcript_segment(segment) for segment in request.segments if segment.text.strip()]
+    if not new_segments:
+        return {'status': 'ok', 'conversation_id': conversation_id, 'segments': 0}
+
+    if existing:
+        segments = existing.get('transcript_segments', [])
+        segments.extend(new_segments)
+        conversations_db.update_conversation_segments(uid, conversation_id, segments, finished_at=finished_at)
+    else:
+        conversation = Conversation(
+            id=conversation_id,
+            created_at=datetime.now(timezone.utc),
+            started_at=started_at,
+            finished_at=finished_at,
+            source=ConversationSource.phone,
+            structured=Structured(
+                title='Ambient fallback capture',
+                overview='Created from explicitly enabled Advanced Ambient Capture fallback segments.',
+            ),
+            transcript_segments=[TranscriptSegment(**segment) for segment in new_segments],
+            status=ConversationStatus.completed,
+            external_data={
+                'ambient_capture': {
+                    'device_id': request.device_id,
+                    'fallback_only': True,
+                    'degraded': True,
+                }
+            },
+        )
+        conversations_db.upsert_conversation(uid, conversation.model_dump())
+
+    return {'status': 'ok', 'conversation_id': conversation_id, 'segments': len(new_segments)}
 
 
 # **********************************************

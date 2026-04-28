@@ -91,6 +91,27 @@
             tools:node="merge" />
 
         <service
+            android:name="com.friend.ios.AmbientCaptureForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
+            android:name="com.friend.ios.AmbientAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ambient_accessibility_service" />
+        </service>
+
+        <receiver
+            android:name="com.friend.ios.CaptureNotificationActionReceiver"
+            android:exported="false" />
+
+        <service
             android:name=".NotificationOnKillService"
             android:enabled="true"
             android:exported="false"/>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ambient_accessibility_service_description">Optional Advanced Ambient Capture support for foreground-app awareness and user-enabled visible caption fallback.</string>
+</resources>
