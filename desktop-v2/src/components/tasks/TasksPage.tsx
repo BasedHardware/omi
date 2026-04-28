@@ -7,6 +7,7 @@ import { BUCKET_META, bucketFor, type DueBucket } from "./taskDates";
 import { TaskRow } from "./TaskRow";
 import { TaskSection } from "./TaskSection";
 import { TasksHeader, type FilterKey, type SourceKey } from "./TasksHeader";
+import { TaskDetailPanel } from "./TaskDetailPanel";
 
 const VALID_FILTERS: FilterKey[] = [
   "all",
@@ -35,6 +36,10 @@ export function TasksPage() {
     deleteTask,
   } = useTaskStore();
   const [newTaskText, setNewTaskText] = useState("");
+  // Inline detail panel — clicking a row opens a side pane to its right
+  // instead of editing or popping the source ticket. Track the id rather
+  // than the object so it stays in sync as `tasks` re-fetches.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const paramFilter = searchParams.get("filter") as FilterKey | null;
   const filter: FilterKey =
@@ -117,6 +122,9 @@ export function TasksPage() {
   }, [filtered]);
 
   const empty = !isLoading && tasks.length === 0;
+  // Resolve the selected task each render so the panel stays consistent when
+  // `tasks` re-loads from the backend mid-view.
+  const selectedTask = selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null;
 
   return (
     <div className="tasks-page">
@@ -129,7 +137,8 @@ export function TasksPage() {
         onSourceFilter={setSourceFilter}
       />
 
-      <div className="tasks-content">
+      <div className="tasks-split">
+        <div className="tasks-content">
         <div className="tasks-create-bar">
           <Plus size={14} className="tasks-create-icon" />
           <input
@@ -169,6 +178,8 @@ export function TasksPage() {
                 <TaskRow
                   key={task.id}
                   task={task}
+                  selected={task.id === selectedTaskId}
+                  onSelect={() => setSelectedTaskId(task.id)}
                   onToggle={() => toggleTask(task.id)}
                   onUpdate={() => {}}
                   onDelete={() => deleteTask(task.id)}
@@ -194,6 +205,8 @@ export function TasksPage() {
                   <TaskRow
                     key={task.id}
                     task={task}
+                    selected={task.id === selectedTaskId}
+                    onSelect={() => setSelectedTaskId(task.id)}
                     onToggle={() => toggleTask(task.id)}
                     onUpdate={() => {}}
                     onDelete={() => deleteTask(task.id)}
@@ -202,6 +215,15 @@ export function TasksPage() {
               </TaskSection>
             );
           })
+        )}
+        </div>
+        {selectedTask && (
+          <TaskDetailPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            onClose={() => setSelectedTaskId(null)}
+            onToggle={() => toggleTask(selectedTask.id)}
+          />
         )}
       </div>
     </div>

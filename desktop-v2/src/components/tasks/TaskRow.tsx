@@ -8,6 +8,11 @@ import { IntegrationBadge } from "./IntegrationBadge";
 
 interface Props {
   task: Task;
+  /** When provided, clicking the row title opens the side detail panel
+   *  instead of toggling inline edit / opening the source ticket. The panel
+   *  surfaces the same actions; the row just becomes a selector. */
+  selected?: boolean;
+  onSelect?: () => void;
   onToggle: () => void;
   onUpdate: (patch: { description?: string; due_at?: string | null }) => void;
   onDelete: () => void;
@@ -30,7 +35,15 @@ function toDateInput(iso: string | null | undefined): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation }: Props) {
+export function TaskRow({
+  task,
+  selected = false,
+  onSelect,
+  onToggle,
+  onUpdate,
+  onDelete,
+  onOpenConversation,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.description);
   const [completing, setCompleting] = useState(false);
@@ -123,6 +136,7 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
         "task-row",
         task.completed ? "task-row-done" : "",
         completing ? "task-row-completing" : "",
+        selected ? "task-row-selected" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -185,6 +199,18 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
               }
             }}
           />
+        ) : onSelect ? (
+          // When the page wants a detail panel, hand off the click to it.
+          // The panel surfaces edit + open-external + complete affordances,
+          // so the row stays a one-click "select me" affordance.
+          <button
+            type="button"
+            className="task-text"
+            onClick={onSelect}
+            title="Open details"
+          >
+            {task.description}
+          </button>
         ) : isIntegration ? (
           <button
             type="button"

@@ -372,14 +372,148 @@
   min-height: 0;
 }
 
+/* Split row: list on the left, detail panel on the right. The list keeps
+ * its own scroll; the panel scrolls independently so users can compare a
+ * long ticket description with the surrounding bucket. */
+.tasks-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
 .tasks-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 16px 24px 32px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* ---------- Detail panel ---------- */
+
+.task-detail-panel {
+  width: 380px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--app-border);
+  background: var(--bg-primary);
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.task-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-detail-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.task-detail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.task-detail-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.task-detail-title {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.task-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.task-detail-field {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-detail-field dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.task-detail-field dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.task-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-detail-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-detail-action:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.task-row-selected {
+  background: rgba(59, 130, 246, 0.08);
 }
 
 /* ---------- Create bar ---------- */

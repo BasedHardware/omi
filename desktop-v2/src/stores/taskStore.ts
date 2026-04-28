@@ -30,6 +30,7 @@ export interface Task {
   status_type?: "todo" | "in_progress" | "done" | "canceled";
   priority?: string;
   project?: string;
+  assignee?: string;
 }
 
 // Wire shape returned by `GET /v1/integrations/tasks` (see backend's
@@ -129,6 +130,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         status_type: t.status_type,
         priority: t.priority ?? undefined,
         project: t.project ?? undefined,
+        assignee: t.assignee ?? undefined,
       }));
     } else {
       console.warn("Failed to load integration tasks:", integrationsRes.reason);
