@@ -49,7 +49,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, ANTHROPIC_GATEWAY_MODE
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
@@ -212,7 +212,9 @@ def _langchain_tool_to_anthropic(lc_tool, defer_loading: bool = False) -> dict:
             "required": required,
         },
     }
-    if defer_loading:
+    # `defer_loading` is an Anthropic-only beta feature; gateways like
+    # OpenRouter reject it with an invalid_union schema error.
+    if defer_loading and not ANTHROPIC_GATEWAY_MODE:
         tool_def["defer_loading"] = True
     return tool_def
 
@@ -237,8 +239,10 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """
     schemas = []
 
-    # Add tool search tool if there are app tools to discover
-    if app_tools:
+    # Anthropic's server-side tool search is not available on gateways
+    # (OpenRouter / Bedrock proxies). On those we register every app tool
+    # eagerly instead of using deferred discovery.
+    if app_tools and not ANTHROPIC_GATEWAY_MODE:
         schemas.append(TOOL_SEARCH_TOOL)
 
     # Core tools — always visible
@@ -409,13 +413,7 @@ async def _run_anthropic_agent_stream(
 
         except Exception as e:
             logger.error(f"Anthropic API error: {type(e).__name__}: {e}")
-            # TEMP-DEBUG-OPENROUTER: surface the real error to the client so we
-            # can finish wiring up the OpenRouter base URL. Revert once chat works.
-            err_class = type(e).__name__
-            err_msg = str(e)[:600]
-            await callback.put_data(
-                f"\n\n[debug] Agent error: {err_class}: {err_msg}"
-            )
+            await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
             await callback.end()
             return
 

@@ -22,6 +22,16 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = os.environ.get(
     "ANTHROPIC_AGENT_COMPLEX_MODEL", ANTHROPIC_AGENT_MODEL
 )
 
+# When the SDK is pointed at a non-Anthropic gateway (OpenRouter, Bedrock proxy,
+# …) we skip Anthropic-only beta features (`tool_search_tool_regex_20251119`
+# + `defer_loading`) that the gateway will reject as invalid. Auto-detected
+# from `ANTHROPIC_BASE_URL`; can be forced via `ANTHROPIC_GATEWAY_MODE=1|0`.
+_gateway_default = "1" if os.environ.get("ANTHROPIC_BASE_URL") else "0"
+ANTHROPIC_GATEWAY_MODE = (
+    os.environ.get("ANTHROPIC_GATEWAY_MODE", _gateway_default).lower()
+    in ("1", "true", "yes")
+)
+
 # Get the usage tracking callback
 _usage_callback = get_usage_callback()
 
