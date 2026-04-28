@@ -28,11 +28,10 @@ except ImportError:
 # Global mapping of tool names to status messages
 _tool_status_messages: Dict[str, str] = {}
 
-# Per-async-task buffer of structured tool results. Plugin tools that return
-# `ChatToolResponse(data=...)` (e.g. Jira's `data.tasks[]`) push a frame here
-# so the agentic chat loop can stream those structured payloads to the client
-# in addition to the markdown summary the LLM consumes. Cleared at the start
-# of each `execute_agentic_chat_stream` invocation.
+# (Earlier draft used a contextvar here; we now thread structured tool
+# results through `configurable['_app_tool_results']` which propagates
+# reliably across LangChain's @tool wrapper. Kept as a no-op alias so any
+# downstream importer doesn't break.)
 last_tool_results: contextvars.ContextVar[Optional[List[Dict[str, Any]]]] = contextvars.ContextVar(
     'last_tool_results', default=None
 )
@@ -228,19 +227,21 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                     result = response.json()
                     # Surface structured `data` payloads (e.g. Jira's
                     # `data.tasks[]`) to the agentic loop so the client can
-                    # render them as rich cards alongside the markdown the LLM
-                    # consumes. The contextvar is per async task so this stays
-                    # isolated between concurrent chat sessions.
+                    # render them as rich cards alongside the markdown the
+                    # LLM consumes. Threaded through the shared `configurable`
+                    # dict (the agent loop pre-seeds an empty list there).
                     if isinstance(result, dict) and isinstance(result.get('data'), dict):
-                        buf = last_tool_results.get()
-                        if buf is None:
-                            buf = []
-                            last_tool_results.set(buf)
-                        buf.append({
-                            'app_id': app_id,
-                            'tool_name': app_tool.name,
-                            'data': result['data'],
-                        })
+                        try:
+                            cfg = (config or {}).get('configurable') or {}
+                            buf = cfg.get('_app_tool_results')
+                            if isinstance(buf, list):
+                                buf.append({
+                                    'app_id': app_id,
+                                    'tool_name': app_tool.name,
+                                    'data': result['data'],
+                                })
+                        except Exception as e:
+                            logger.warning("[app_tools] failed to capture tool result: %s", e)
                     if isinstance(result, dict) and 'result' in result:
                         return str(result['result'])
                     elif isinstance(result, dict) and 'message' in result:

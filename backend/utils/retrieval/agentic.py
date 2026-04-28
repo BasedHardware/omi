@@ -450,20 +450,21 @@ async def _run_anthropic_agent_stream(
                 await callback.end()
                 return
 
-            # Execute tool. App tools push a structured `data` dict into the
-            # `last_tool_results` contextvar via `_call_tool_endpoint`; we
-            # drain that buffer right after so each tool's payload reaches
-            # the client as its own `tool_result:` SSE frame, in order.
-            from utils.retrieval.tools.app_tools import last_tool_results
-            buf_token = last_tool_results.set([])
+            # Execute tool. App tools push structured `data` dicts into
+            # `configurable['_app_tool_results']` (see app_tools.py); we
+            # drain that buffer right after so each payload reaches the
+            # client as its own `tool_result:` SSE frame, in order. This
+            # uses the shared `configurable` dict (not a contextvar) because
+            # LangChain's @tool wrapper occasionally crosses task contexts.
+            tool_buf = configurable.get("_app_tool_results")
+            if isinstance(tool_buf, list):
+                tool_buf.clear()
             try:
                 result = await _execute_tool(block.name, block.input, tool_registry, configurable)
             except Exception as e:
                 logger.error(f"Tool execution error ({block.name}): {e}")
                 result = f"Error executing tool: {str(e)}"
-            structured_results = last_tool_results.get() or []
-            last_tool_results.reset(buf_token)
-            for sr in structured_results:
+            for sr in tool_buf or []:
                 try:
                     await callback.put_tool_result(
                         sr.get("app_id"),
@@ -588,6 +589,10 @@ async def execute_agentic_chat_stream(
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "tools": core_tools + app_tools,
+        # App tools push structured `data` dicts here (Jira's data.tasks[],
+        # Linear's data.tasks[], etc.) so the agent loop can stream them as
+        # `tool_result:` frames after each tool execution.
+        "_app_tool_results": [],
     }
 
     # Store config in context variable for tools that use agent_config_context
