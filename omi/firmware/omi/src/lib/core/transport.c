@@ -933,6 +933,28 @@ static void update_mtu(struct bt_conn *conn)
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
+static void log_local_ble_addresses(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+
+    if (count == 0U) {
+        LOG_WRN("No local BLE identity address found");
+        printk("BLE_ADDR: unavailable (count=0)\n");
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        char addr[BT_ADDR_LE_STR_LEN];
+
+        bt_addr_le_to_str(&addrs[i], addr, sizeof(addr));
+        LOG_INF("BLE identity[%u]: %s", (unsigned int)i, addr);
+        printk("BLE_ADDR[%u]: %s\n", (unsigned int)i, addr);
+    }
+}
+
 //
 // Ring Buffer
 //
@@ -1301,6 +1323,9 @@ int transport_start()
     if (err) {
         LOG_WRN("BLE settings_load failed (err %d), advertising may fail", err);
     }
+
+    // Production-line helper: emit local BLE addresses on UART for fixture parsing.
+    log_local_ble_addresses();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();
