@@ -6,7 +6,7 @@ import type { Task } from "../../stores/taskStore";
 import { BUCKET_META, bucketFor, type DueBucket } from "./taskDates";
 import { TaskRow } from "./TaskRow";
 import { TaskSection } from "./TaskSection";
-import { TasksHeader, type FilterKey } from "./TasksHeader";
+import { TasksHeader, type FilterKey, type SourceKey } from "./TasksHeader";
 
 const VALID_FILTERS: FilterKey[] = [
   "all",
@@ -40,12 +40,27 @@ export function TasksPage() {
   const filter: FilterKey =
     paramFilter && VALID_FILTERS.includes(paramFilter) ? paramFilter : "all";
 
+  // Independent of `filter` — pick a tracker (Nooto / Jira / Linear / …) to
+  // scope the open-task list. Stored in its own URL param so the date filter
+  // and source filter compose ("Today + Jira" is a real query).
+  const sourceFilter: SourceKey = (searchParams.get("source") as SourceKey | null) ?? "all";
+
   const setFilter = (next: FilterKey) => {
     const params = new URLSearchParams(searchParams);
     if (next === "all") {
       params.delete("filter");
     } else {
       params.set("filter", next);
+    }
+    setSearchParams(params, { replace: true });
+  };
+
+  const setSourceFilter = (next: SourceKey) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "all") {
+      params.delete("source");
+    } else {
+      params.set("source", next);
     }
     setSearchParams(params, { replace: true });
   };
@@ -69,8 +84,13 @@ export function TasksPage() {
   };
 
   const filtered = useMemo(() => {
-    if (filter === "done") return tasks.filter((t) => t.completed);
-    const open = tasks.filter((t) => !t.completed);
+    const matchesSource = (t: Task) => {
+      if (sourceFilter === "all") return true;
+      const src = t.source && t.source !== "native" ? t.source : "native";
+      return src === sourceFilter;
+    };
+    if (filter === "done") return tasks.filter((t) => t.completed && matchesSource(t));
+    const open = tasks.filter((t) => !t.completed && matchesSource(t));
     if (filter === "all") return open;
     return open.filter((t) => {
       const b = bucketFor(t);
@@ -79,7 +99,7 @@ export function TasksPage() {
       if (filter === "nodate") return b === "noDate";
       return true;
     });
-  }, [tasks, filter]);
+  }, [tasks, filter, sourceFilter]);
 
   const buckets = useMemo(() => {
     const map: Record<DueBucket, Task[]> = {
@@ -105,6 +125,8 @@ export function TasksPage() {
         stagedCount={0}
         filter={filter}
         onFilter={setFilter}
+        sourceFilter={sourceFilter}
+        onSourceFilter={setSourceFilter}
       />
 
       <div className="tasks-content">
