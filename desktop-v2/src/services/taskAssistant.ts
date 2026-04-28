@@ -392,22 +392,39 @@ export async function extractTaskFromFrame(
 ): Promise<TaskExtractionResult> {
   const settings = useTaskAssistantSettings.getState();
 
-  let prompt = `Screenshot from ${frame.appName}. Today is ${todayLabel()}. Analyze this screenshot for any unaddressed request directed at the user.\n\n`;
+  let prompt = `Screenshot from ${frame.appName}. Today is ${todayLabel()}. Analyze this screenshot for any actionable item the user should track.\n\n`;
+  prompt +=
+    "WHAT COUNTS AS A TASK (any of these — not just external requests):\n" +
+    "1. **Requests TO the user** that haven't been resolved (someone asks them to do something).\n" +
+    "2. **Commitments FROM the user** in their own messages — explicit \"I'll do X\", \"I'm going to do that\",\n" +
+    "   \"Let me handle it\", \"Vou fazer isso\", \"Eu vou comprar Y\", \"Voy a hacerlo\", or any first-person\n" +
+    "   statement of intent regardless of language. The user said it, so they own it.\n" +
+    "3. **Self-notes / TODOs** — text the user is typing in a notes app, scratchpad, or sticky that reads\n" +
+    "   like an action item: \"TODO: …\", \"need to …\", \"buy …\", \"call …\", \"book …\", \"fix …\".\n" +
+    "4. **Research / shopping intent** — clear signals the user is deciding whether to act: a product page\n" +
+    "   they're studying, a comparison view, a tab with a clear decision to make. Title it as the decision\n" +
+    "   (e.g., \"Decide on standing desk: Uplift v Fully\"), not the page contents. Be conservative — a\n" +
+    "   single search isn't enough; only flag when the screen shows commitment-shaped behavior\n" +
+    "   (cart, side-by-side compare, repeated investigation cues).\n" +
+    "5. **External-system action items** — a Linear/Jira/PR/email that's clearly waiting on the user.\n\n" +
+    "Default to no_task_found when in doubt. Better to miss one than nag the user with junk.\n\n";
   if (MESSAGING_APPS.has(frame.appName)) {
     prompt +=
       "REMINDER — THIS IS A MESSAGING APP:\n" +
       "- If this screenshot shows a chat sidebar/conversation list rather than an open conversation, SKIP entirely.\n" +
       "- If it shows an open conversation, read the FULL conversation flow between the user and the other person.\n" +
       "- LEFT-SIDE messages = from the other person. RIGHT-SIDE/colored = from the user.\n" +
-      "- PRIORITY: Look for where the user AGREED or COMMITTED to doing something the other person asked.\n" +
-      "  Example: Other person says \"Can you send me the report?\" → User replies \"Sure, will do\" → Extract task: \"Send [person] the report\"\n" +
-      "- ALSO: Look for incoming requests the user hasn't responded to yet.\n" +
-      "- The task title should describe what was asked for, naming the other person in the conversation.\n\n";
+      "- HIGH PRIORITY: any user message expressing commitment or intent — \"I'll …\", \"I'm going to …\",\n" +
+      "  \"Vou fazer …\", \"Voy a …\". Extract these even if no one asked — the user said it, so they own it.\n" +
+      "- ALSO: requests the user hasn't replied to yet, or things they agreed to ('Sure, will do').\n" +
+      "- Title naming: when there's another person in the thread, name them in the title. For pure\n" +
+      "  self-statements, omit the recipient.\n\n";
   }
   prompt += await buildContextBlock();
   prompt +=
-    "Analyze this screenshot. If you see a potential request, search for duplicates first.\n" +
-    "If there is clearly no request on screen (~90% of screenshots), call no_task_found immediately.";
+    "Analyze this screenshot. If you see a potential task (any of the 5 categories above), search for\n" +
+    "duplicates first. If the screen is just code, settings, dashboards, or media with no actionable item,\n" +
+    "call no_task_found immediately. Most screenshots (~85%) should still produce no_task_found.";
 
   const contents: GeminiContent[] = [
     {
@@ -429,10 +446,7 @@ export async function extractTaskFromFrame(
       break;
     }
     const fnCall = parts.find((p) => p.functionCall)?.functionCall;
-    if (!fnCall) {
-      console.info("[TaskAssistant] no tool call on iteration", iter, "— stopping");
-      break;
-    }
+    if (!fnCall) break;
     const args = (fnCall.args ?? {}) as Record<string, unknown>;
 
     switch (fnCall.name) {
@@ -458,7 +472,6 @@ export async function extractTaskFromFrame(
         const title = String(args.title ?? "");
         const validationError = validateTaskTitle(title);
         if (validationError) {
-          console.info(`[TaskAssistant] title rejected (${validationError}): "${title}"`);
           contents.push({ role: "model", parts: [{ functionCall: fnCall }] });
           contents.push({
             role: "user",
@@ -544,7 +557,6 @@ export async function extractTaskFromFrame(
       }
 
       default:
-        console.info("[TaskAssistant] unknown tool:", fnCall.name);
         return { hasNewTask: false, task: null, contextSummary: "", currentActivity: "", searchCount };
     }
   }
@@ -566,12 +578,7 @@ export async function persistExtractedTask(
 ): Promise<void> {
   if (!result.hasNewTask || !result.task) return;
   const settings = useTaskAssistantSettings.getState();
-  if (result.task.confidence < settings.minConfidence) {
-    console.info(
-      `[TaskAssistant] filtered ${(result.task.confidence * 100).toFixed(0)}% < ${(settings.minConfidence * 100).toFixed(0)}%: "${result.task.title}"`,
-    );
-    return;
-  }
+  if (result.task.confidence < settings.minConfidence) return;
 
   const t = result.task;
   const metadata = {
