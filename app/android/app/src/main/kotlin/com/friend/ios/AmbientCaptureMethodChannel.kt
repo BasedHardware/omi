@@ -11,6 +11,7 @@ object AmbientCaptureMethodChannel {
     const val AUDIO_CHANNEL = "omi/ambient_capture/audio"
     const val HEALTH_CHANNEL = "omi/ambient_capture/health"
     const val POLICY_CHANNEL = "omi/ambient_capture/policy"
+    const val POLICY_EVENTS_CHANNEL = "omi/ambient_capture/policy_events"
     const val TELEMETRY_CHANNEL = "omi/ambient_capture/telemetry"
 
     private var audioSink: EventChannel.EventSink? = null
@@ -18,6 +19,8 @@ object AmbientCaptureMethodChannel {
     private var policySink: EventChannel.EventSink? = null
     private var telemetrySink: EventChannel.EventSink? = null
     private var appContext: Context? = null
+    @Volatile
+    private var audioListenerActive = false
 
     fun registerWith(flutterEngine: FlutterEngine, context: Context) {
         appContext = context.applicationContext
@@ -65,6 +68,26 @@ object AmbientCaptureMethodChannel {
                     )
                     result.success(true)
                 }
+                "setPolicyConfig" -> {
+                    val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
+                    AmbientPolicyVerifier.configure(ctx, args)
+                    AmbientCaptureForegroundService.applyPolicyConfig(args)
+                    result.success(true)
+                }
+                "listSpoolFiles" -> result.success(AmbientCaptureForegroundService.listSpoolFiles(ctx))
+                "getSpoolStats" -> result.success(AmbientCaptureForegroundService.spoolStats(ctx))
+                "markSpoolFiles" -> {
+                    val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
+                    val paths = (args["paths"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+                    val status = args["status"]?.toString() ?: "synced"
+                    AmbientCaptureForegroundService.markSpoolFiles(ctx, paths, status)
+                    result.success(true)
+                }
+                "deleteSpoolFiles" -> {
+                    val status = call.argument<String>("status")
+                    AmbientCaptureForegroundService.deleteSpoolFiles(ctx, status)
+                    result.success(true)
+                }
                 "isAccessibilityEnabled" -> result.success(AmbientAccessibilityService.isEnabled)
                 "openAccessibilitySettings" -> {
                     ctx.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -84,9 +107,15 @@ object AmbientCaptureMethodChannel {
             }
         }
 
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, AUDIO_CHANNEL).setStreamHandler(simpleHandler { audioSink = it })
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, AUDIO_CHANNEL).setStreamHandler(
+            simpleHandler {
+                audioSink = it
+                audioListenerActive = it != null
+                AmbientCaptureForegroundService.onFlutterAudioListenerChanged(audioListenerActive)
+            },
+        )
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, HEALTH_CHANNEL).setStreamHandler(simpleHandler { healthSink = it })
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, POLICY_CHANNEL).setStreamHandler(simpleHandler { policySink = it })
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, POLICY_EVENTS_CHANNEL).setStreamHandler(simpleHandler { policySink = it })
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, TELEMETRY_CHANNEL).setStreamHandler(simpleHandler { telemetrySink = it })
     }
 
@@ -100,6 +129,8 @@ object AmbientCaptureMethodChannel {
     fun emitAudio(bytes: ByteArray) {
         android.os.Handler(android.os.Looper.getMainLooper()).post { audioSink?.success(bytes) }
     }
+
+    fun hasAudioListener(): Boolean = audioListenerActive
 
     fun emitHealth(event: Map<String, Any?>) {
         android.os.Handler(android.os.Looper.getMainLooper()).post { healthSink?.success(event) }

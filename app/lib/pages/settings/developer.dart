@@ -274,6 +274,34 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  Widget _buildAmbientNumberField({
+    required String label,
+    required int value,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextFormField(
+        key: ValueKey('ambient_$label$value'),
+        initialValue: value.toString(),
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: Colors.grey.shade400),
+          filled: true,
+          fillColor: const Color(0xFF2C2C2E),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+        ),
+        onChanged: (text) {
+          final parsed = int.tryParse(text);
+          if (parsed != null && parsed > 0) onChanged(parsed);
+        },
+      ),
+    );
+  }
+
   Widget _buildAmbientCaptureSection() {
     final prefs = SharedPreferencesUtil();
     return Consumer<AmbientCaptureProvider>(
@@ -306,7 +334,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  Text('Current state: ${ambient.health.state.wireName}', style: TextStyle(color: Colors.grey.shade300)),
+                  Text(
+                    'Current state: ${ambient.health.state.wireName}',
+                    style: TextStyle(color: Colors.grey.shade300),
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -350,7 +381,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     },
                   ),
                   Text(
-                    'Android may prevent call audio capture. This mode detects communication state and labels degraded or fallback segments.',
+                    'Android may prevent call audio capture. This mode detects communication state and labels degraded '
+                    'or fallback segments.',
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
@@ -398,9 +430,38 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     value: prefs.ambientCaptureRawAudioUploadEnabled,
                     onChanged: (v) => setState(() => prefs.ambientCaptureRawAudioUploadEnabled = v),
                     title: const Text('Raw audio upload', style: TextStyle(color: Colors.white)),
-                    subtitle: Text('When off, audio remains queued locally in WAL.', style: TextStyle(color: Colors.grey.shade500)),
+                    subtitle: Text(
+                      'When off, audio remains queued locally in WAL.',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
                     activeColor: const Color(0xFF22C55E),
                     contentPadding: EdgeInsets.zero,
+                  ),
+                  SwitchListTile(
+                    value: prefs.ambientCaptureDeleteSyncedAudio,
+                    onChanged: (v) => setState(() => prefs.ambientCaptureDeleteSyncedAudio = v),
+                    title: const Text('Delete synced ambient audio', style: TextStyle(color: Colors.white)),
+                    activeColor: const Color(0xFF22C55E),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  _buildAmbientDropdown(
+                    label: 'Raw audio retention',
+                    value: prefs.ambientCaptureRawAudioRetention,
+                    values: const ['none', 'until_synced', '24h', '7d'],
+                    onChanged: (v) {
+                      if (v != null) prefs.ambientCaptureRawAudioRetention = v;
+                      setState(() {});
+                    },
+                  ),
+                  _buildAmbientNumberField(
+                    label: 'Max ambient storage MB',
+                    value: prefs.ambientCaptureMaxStorageMb,
+                    onChanged: (v) => prefs.ambientCaptureMaxStorageMb = v,
+                  ),
+                  _buildAmbientNumberField(
+                    label: 'Minimum free storage MB',
+                    value: prefs.ambientCaptureMinFreeStorageMb,
+                    onChanged: (v) => prefs.ambientCaptureMinFreeStorageMb = v,
                   ),
                   SwitchListTile(
                     value: prefs.ambientCaptureVerboseAuditEnabled,
@@ -411,24 +472,60 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Storage: WAL queue ${capture.unsyncedSessionWals.length}, in-flight ${capture.inFlightAudioSeconds}s',
+                    'Storage: WAL queue ${capture.unsyncedSessionWals.length}, '
+                    'in-flight ${capture.inFlightAudioSeconds}s, '
+                    'native spool ${ambient.pendingSpoolCount} files '
+                    '(${(ambient.spoolBytes / (1024 * 1024)).toStringAsFixed(1)} MB), '
+                    'fallback text ${ambient.pendingFallbackCount}',
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: (ambient.spoolBytes / (prefs.ambientCaptureMaxStorageMb * 1024 * 1024)).clamp(0.0, 1.0),
+                    backgroundColor: const Color(0xFF2A2A2E),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      ambient.health.state == AmbientCaptureHealthState.storageLimitReached
+                          ? Colors.redAccent
+                          : const Color(0xFF22C55E),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Quota ${prefs.ambientCaptureMaxStorageMb} MB, '
+                    'minimum free ${prefs.ambientCaptureMinFreeStorageMb} MB',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     children: [
                       OutlinedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           ServiceManager.instance().wal.getSyncs().phone.deleteAllSyncedWals();
+                          await ambient.deleteNativeSpool(status: 'synced');
                         },
                         child: const Text('Delete synced audio'),
                       ),
                       OutlinedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           ServiceManager.instance().wal.getSyncs().phone.deleteAllPendingWals();
+                          await ambient.deleteNativeSpool(status: 'pending');
                         },
                         child: const Text('Delete pending audio'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () {
+                          ambient.deleteNativeSpool();
+                        },
+                        child: const Text('Delete all ambient audio'),
+                      ),
+                      OutlinedButton(
+                        onPressed: ambient.drainNativeSpool,
+                        child: const Text('Sync native spool'),
+                      ),
+                      OutlinedButton(
+                        onPressed: ambient.drainFallbackQueue,
+                        child: const Text('Sync fallback text'),
                       ),
                     ],
                   ),

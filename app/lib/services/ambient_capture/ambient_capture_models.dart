@@ -109,3 +109,35 @@ class AmbientCaptureTelemetryEvent {
     );
   }
 }
+
+class AmbientSpoolFile {
+  final String sessionId;
+  final DateTime startedAt;
+  final String filePath;
+  final int bytes;
+  final double durationEstimate;
+  final String status;
+
+  const AmbientSpoolFile({
+    required this.sessionId,
+    required this.startedAt,
+    required this.filePath,
+    required this.bytes,
+    required this.durationEstimate,
+    required this.status,
+  });
+
+  bool get isPending => status != 'synced' && status != 'imported';
+
+  factory AmbientSpoolFile.fromJson(Map<dynamic, dynamic> json) {
+    final started = (json['started_at'] as num?)?.toInt() ?? 0;
+    return AmbientSpoolFile(
+      sessionId: json['session_id']?.toString() ?? '',
+      startedAt: DateTime.fromMillisecondsSinceEpoch(started * 1000),
+      filePath: json['file_path']?.toString() ?? '',
+      bytes: (json['bytes'] as num?)?.toInt() ?? 0,
+      durationEstimate: (json['duration_estimate'] as num?)?.toDouble() ?? 0,
+      status: json['status']?.toString() ?? 'pending',
+    );
+  }
+}

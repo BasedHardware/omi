@@ -22,14 +22,17 @@ void main() {
     );
 
     await queue.enqueue(segment);
+    await queue.enqueue(segment);
     final pending = await queue.loadPending();
 
     expect(pending, hasLength(1));
     expect(pending.first.text, 'Visible caption text');
     expect(pending.first.source, AmbientFallbackSource.accessibilityCaption);
 
-    await queue.replaceAll([pending.first.copyWith(uploadedToOmi: true)]);
+    await queue.markUploaded(pending);
     expect(await queue.loadPending(), isEmpty);
+    await queue.clearUploaded();
+    expect(await file.readAsString(), isEmpty);
 
     await queue.clear();
     expect(await file.exists(), isFalse);

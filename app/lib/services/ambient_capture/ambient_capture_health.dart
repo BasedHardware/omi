@@ -12,6 +12,8 @@ enum AmbientCaptureHealthState {
   permissionMissing('PERMISSION_MISSING'),
   accessibilityDisabled('ACCESSIBILITY_DISABLED'),
   serviceKilled('SERVICE_KILLED'),
+  storageLimitReached('STORAGE_LIMIT_REACHED'),
+  serviceRunningButNoFlutterListener('SERVICE_RUNNING_BUT_NO_FLUTTER_LISTENER'),
   recoveryNeeded('RECOVERY_NEEDED'),
   unknownDegraded('UNKNOWN_DEGRADED');
 

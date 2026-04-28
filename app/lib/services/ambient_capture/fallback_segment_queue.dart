@@ -18,19 +18,43 @@ class FallbackSegmentQueue {
   }
 
   Future<void> enqueue(AmbientFallbackSegment segment) async {
+    final existing = await _loadAll();
+    final key = _dedupeKey(segment);
+    if (existing.any((item) => _dedupeKey(item) == key)) return;
     final file = await _queueFile;
     await file.parent.create(recursive: true);
     await file.writeAsString('${jsonEncode(segment.toJson())}\n', mode: FileMode.append, flush: true);
   }
 
   Future<List<AmbientFallbackSegment>> loadPending() async {
+    return (await _loadAll()).where((segment) => !segment.uploadedToOmi).toList();
+  }
+
+  Future<void> markUploaded(List<AmbientFallbackSegment> uploaded) async {
+    final uploadedKeys = uploaded.map(_dedupeKey).toSet();
+    final all = await _loadAll();
+    await replaceAll(
+      all
+          .map(
+            (segment) => uploadedKeys.contains(_dedupeKey(segment))
+                ? segment.copyWith(uploadedToOmi: true)
+                : segment,
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> clearUploaded() async {
+    await replaceAll((await _loadAll()).where((segment) => !segment.uploadedToOmi).toList());
+  }
+
+  Future<List<AmbientFallbackSegment>> _loadAll() async {
     final file = await _queueFile;
     if (!await file.exists()) return [];
     final lines = await file.readAsLines();
     return lines
         .where((line) => line.trim().isNotEmpty)
         .map((line) => AmbientFallbackSegment.fromJson(jsonDecode(line) as Map<String, dynamic>))
-        .where((segment) => !segment.uploadedToOmi)
         .toList();
   }
 
@@ -44,5 +68,14 @@ class FallbackSegmentQueue {
   Future<void> clear() async {
     final file = await _queueFile;
     if (await file.exists()) await file.delete();
+  }
+
+  String _dedupeKey(AmbientFallbackSegment segment) {
+    return [
+      segment.source.name,
+      segment.text.trim(),
+      segment.start.toUtc().toIso8601String(),
+      segment.end.toUtc().toIso8601String(),
+    ].join('|');
   }
 }

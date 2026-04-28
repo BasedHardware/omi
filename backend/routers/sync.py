@@ -9,7 +9,7 @@ import threading
 import time
 import uuid as _uuid
 import wave
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -81,6 +81,16 @@ AUDIO_SAMPLE_RATE = 16000
 
 router = APIRouter()
 
+AMBIENT_TELEMETRY_FORBIDDEN_FIELDS = {'text', 'transcript', 'audio', 'raw_audio', 'payload'}
+AMBIENT_FALLBACK_MAX_SEGMENT_SECONDS = 12 * 60 * 60
+AMBIENT_FALLBACK_ALLOWED_SOURCES = {
+    'local_stt',
+    'accessibility_caption',
+    'live_caption',
+    'manual_note',
+    'gap_marker',
+}
+
 
 class AmbientFallbackSegmentIn(BaseModel):
     text: str = Field(default='', max_length=10000)
@@ -103,7 +113,7 @@ class AmbientFallbackSegmentsRequest(BaseModel):
 class AmbientTelemetryEventIn(BaseModel):
     type: str
     timestamp: datetime
-    metadata: dict = {}
+    metadata: dict = Field(default_factory=dict)
 
 
 @router.post("/v1/ambient-capture/telemetry", tags=['v1'])
@@ -111,16 +121,15 @@ def ingest_ambient_capture_telemetry(
     event: AmbientTelemetryEventIn,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    safe_metadata = {
-        key: value
-        for key, value in event.metadata.items()
-        if key not in {'text', 'transcript', 'audio', 'raw_audio', 'payload'}
-    }
+    forbidden = AMBIENT_TELEMETRY_FORBIDDEN_FIELDS.intersection(event.metadata.keys())
+    if forbidden:
+        raise HTTPException(status_code=422, detail=f"Ambient telemetry cannot include {', '.join(sorted(forbidden))}")
+
     logger.info(
         "ambient_capture_telemetry uid=%s type=%s metadata=%s",
         uid,
         sanitize(event.type),
-        sanitize(str(safe_metadata))[:1000],
+        sanitize(str(event.metadata))[:1000],
     )
     return {'status': 'ok'}
 
@@ -138,24 +147,77 @@ def ingest_ambient_fallback_segments(
     started_at = min(segment.start for segment in request.segments)
     finished_at = max(segment.end for segment in request.segments)
 
+    def validate_segment(segment: AmbientFallbackSegmentIn):
+        if segment.source not in AMBIENT_FALLBACK_ALLOWED_SOURCES:
+            raise HTTPException(status_code=422, detail=f"Unsupported fallback source {segment.source}")
+        if segment.end < segment.start:
+            raise HTTPException(status_code=422, detail="Fallback segment end must be after start")
+        duration = (segment.end - segment.start).total_seconds()
+        if duration > AMBIENT_FALLBACK_MAX_SEGMENT_SECONDS:
+            raise HTTPException(status_code=422, detail="Fallback segment duration is too long")
+        if segment.start > datetime.now(timezone.utc) + timedelta(minutes=10):
+            raise HTTPException(status_code=422, detail="Fallback segment starts too far in the future")
+
+    def segment_metadata(segment: AmbientFallbackSegmentIn) -> dict:
+        return {
+            'source': segment.source,
+            'fallback_source': segment.source,
+            'health_state': segment.health_state,
+            'confidence': segment.confidence,
+            'foreground_app_package': segment.foreground_app_package,
+            'raw_audio_available': segment.raw_audio_available,
+            'degraded': True,
+            'uploaded_to_omi': segment.uploaded_to_omi,
+        }
+
+    def ambient_key(segment: dict) -> tuple:
+        return (
+            segment.get('text', '').strip(),
+            round(float(segment.get('start', 0)), 3),
+            round(float(segment.get('end', 0)), 3),
+            segment.get('stt_provider', ''),
+        )
+
     def to_transcript_segment(segment: AmbientFallbackSegmentIn) -> dict:
-        return TranscriptSegment(
-            text=f"[{segment.source}] {segment.text}".strip(),
+        dumped = TranscriptSegment(
+            text=segment.text.strip(),
             speaker='SPEAKER_00',
             is_user=False,
             start=max(0.0, (segment.start - started_at).total_seconds()),
             end=max(0.0, (segment.end - started_at).total_seconds()),
             stt_provider=f"ambient_fallback:{segment.source}",
         ).model_dump()
+        dumped['external_data'] = {'ambient_capture': segment_metadata(segment)}
+        return dumped
+
+    for segment in request.segments:
+        validate_segment(segment)
 
     new_segments = [to_transcript_segment(segment) for segment in request.segments if segment.text.strip()]
+    fallback_metadata = [segment_metadata(segment) for segment in request.segments if segment.text.strip()]
     if not new_segments:
         return {'status': 'ok', 'conversation_id': conversation_id, 'segments': 0}
 
     if existing:
         segments = existing.get('transcript_segments', [])
+        existing_keys = {ambient_key(segment) for segment in segments}
+        new_segments = [segment for segment in new_segments if ambient_key(segment) not in existing_keys]
+        if not new_segments:
+            return {'status': 'ok', 'conversation_id': conversation_id, 'segments': 0}
         segments.extend(new_segments)
         conversations_db.update_conversation_segments(uid, conversation_id, segments, finished_at=finished_at)
+        external_data = existing.get('external_data') or {}
+        ambient_data = external_data.get('ambient_capture') or {}
+        ambient_data.update(
+            {
+                'device_id': request.device_id,
+                'fallback_only': ambient_data.get('fallback_only', True),
+                'degraded': True,
+                'fallback_segments': (ambient_data.get('fallback_segments') or []) + fallback_metadata,
+            }
+        )
+        external_data['ambient_capture'] = ambient_data
+        conversations_db.update_conversation(uid, conversation_id, {'external_data': external_data})
     else:
         conversation = Conversation(
             id=conversation_id,
@@ -174,10 +236,16 @@ def ingest_ambient_fallback_segments(
                     'device_id': request.device_id,
                     'fallback_only': True,
                     'degraded': True,
+                    'fallback_segments': fallback_metadata,
                 }
             },
         )
         conversations_db.upsert_conversation(uid, conversation.model_dump())
+
+    try:
+        _reprocess_conversation_after_update(uid, conversation_id, 'en')
+    except Exception as e:
+        logger.warning("ambient fallback conversation processing skipped for %s: %s", conversation_id, sanitize(str(e)))
 
     return {'status': 'ok', 'conversation_id': conversation_id, 'segments': len(new_segments)}
 
@@ -591,10 +659,29 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
 
 
 def get_timestamp_from_path(path: str):
-    timestamp = int(path.split('/')[-1].split('_')[-1].split('.')[0])
+    filename = os.path.basename(path)
+    parts = filename.split('_')
+    if filename.startswith('ambient_android_pcm16_16000_1_') and len(parts) >= 7:
+        timestamp_token = parts[-2]
+    else:
+        timestamp_token = parts[-1].split('.')[0]
+    timestamp = int(timestamp_token)
     if timestamp > 1e10:
         return int(timestamp / 1000)
     return timestamp
+
+
+def _detect_source_from_files(files: List[UploadFile]) -> ConversationSource:
+    source = ConversationSource.omi
+    for file in files:
+        filename = (file.filename or '').lower()
+        if 'ambient_android_pcm16' in filename or 'phone' in filename:
+            source = ConversationSource.phone
+            break
+        if 'limitless' in filename:
+            source = ConversationSource.limitless
+            break
+    return source
 
 
 def retrieve_file_paths(files: List[UploadFile], uid: str):
@@ -1201,12 +1288,7 @@ async def sync_local_files(
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
     should_lock = not has_transcription_credits(uid)
 
-    # Detect source from filenames
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = _detect_source_from_files(files)
 
     paths = []
     wav_paths = []
@@ -1528,12 +1610,7 @@ async def sync_local_files_v2(
 
     should_lock = not has_transcription_credits(uid)
 
-    # Detect source
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = _detect_source_from_files(files)
 
     # Create job_id early so we have it for the directory
     job_id = str(_uuid.uuid4())

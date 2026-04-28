@@ -5,7 +5,14 @@ from fastapi import HTTPException
 
 from models.app import App
 from routers import apps as apps_router
-from routers.sync import AmbientFallbackSegmentsRequest, AmbientFallbackSegmentIn, ingest_ambient_fallback_segments
+from routers.sync import (
+    AmbientFallbackSegmentsRequest,
+    AmbientFallbackSegmentIn,
+    AmbientTelemetryEventIn,
+    get_timestamp_from_path,
+    ingest_ambient_capture_telemetry,
+    ingest_ambient_fallback_segments,
+)
 
 
 def _controller_app(capability=True):
@@ -74,6 +81,10 @@ def test_fallback_segment_route_creates_conversation(monkeypatch):
         'routers.sync.conversations_db.upsert_conversation',
         lambda uid, conversation: stored.update({'uid': uid, 'conversation': conversation}),
     )
+    monkeypatch.setattr(
+        'routers.sync._reprocess_conversation_after_update',
+        lambda uid, conversation_id, language: None,
+    )
 
     now = datetime.now(timezone.utc)
     request = AmbientFallbackSegmentsRequest(
@@ -94,4 +105,26 @@ def test_fallback_segment_route_creates_conversation(monkeypatch):
     assert result['segments'] == 1
     assert stored['uid'] == 'user-1'
     assert stored['conversation']['external_data']['ambient_capture']['fallback_only'] is True
+    assert (
+        stored['conversation']['external_data']['ambient_capture']['fallback_segments'][0]['source']
+        == 'accessibility_caption'
+    )
     assert stored['conversation']['transcript_segments'][0]['stt_provider'] == 'ambient_fallback:accessibility_caption'
+
+
+def test_ambient_spool_timestamp_parser_uses_session_start():
+    assert get_timestamp_from_path('ambient_android_pcm16_16000_1_1767225600_0000.bin') == 1767225600
+    assert get_timestamp_from_path('/tmp/audio_pcm16_16000_1_1767225600000.bin') == 1767225600
+
+
+def test_ambient_telemetry_rejects_transcript_payload():
+    event = AmbientTelemetryEventIn(
+        type='policy_rejected',
+        timestamp=datetime.now(timezone.utc),
+        metadata={'transcript': 'should-not-be-here'},
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        ingest_ambient_capture_telemetry(event, uid='user-1')
+
+    assert exc.value.status_code == 422

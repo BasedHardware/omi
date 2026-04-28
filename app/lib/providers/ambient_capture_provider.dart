@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/api/ambient_capture.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/ambient_capture/ambient_capture_health.dart';
@@ -20,6 +23,10 @@ class AmbientCaptureProvider extends ChangeNotifier {
   StreamSubscription? _audioSub;
   StreamSubscription? _healthSub;
   StreamSubscription? _telemetrySub;
+  Timer? _fallbackDrainTimer;
+  Timer? _spoolDrainTimer;
+  int _fallbackBackoffSeconds = 5;
+  int _spoolBackoffSeconds = 10;
 
   AmbientCaptureHealth _health = AmbientCaptureHealth(
     state: AmbientCaptureHealthState.policyDisabled,
@@ -29,6 +36,9 @@ class AmbientCaptureProvider extends ChangeNotifier {
   bool _privateMode = false;
   String _policyStatus = 'No controller selected';
   DateTime? _lastPolicySync;
+  int _pendingFallbackCount = 0;
+  int _pendingSpoolCount = 0;
+  int _spoolBytes = 0;
 
   AmbientCaptureProvider({AmbientCaptureService? service, FallbackSegmentQueue? fallbackQueue})
       : service = service ?? AmbientCaptureService(),
@@ -40,6 +50,9 @@ class AmbientCaptureProvider extends ChangeNotifier {
   AmbientCaptureHealth get health => _health;
   String get policyStatus => _policyStatus;
   DateTime? get lastPolicySync => _lastPolicySync;
+  int get pendingFallbackCount => _pendingFallbackCount;
+  int get pendingSpoolCount => _pendingSpoolCount;
+  int get spoolBytes => _spoolBytes;
 
   void setCaptureProvider(CaptureProvider provider) {
     _captureProvider = provider;
@@ -52,12 +65,17 @@ class AmbientCaptureProvider extends ChangeNotifier {
       notifyListeners();
     });
     _telemetrySub ??= service.telemetryStream.listen(_handleTelemetry);
+    await _syncNativePolicyConfig();
+    await refreshSpoolStats();
+    _fallbackDrainTimer ??= Timer.periodic(const Duration(seconds: 30), (_) => drainFallbackQueue());
+    _spoolDrainTimer ??= Timer.periodic(const Duration(minutes: 2), (_) => drainNativeSpool());
   }
 
   Future<void> start() async {
     if (!SharedPreferencesUtil().advancedAmbientCaptureEnabled || !isSupported) return;
     await initialize();
     await _captureProvider?.prepareAdvancedAmbientCapture();
+    await _syncNativePolicyConfig();
     _audioSub ??= service.audioStream.listen((bytes) {
       _captureProvider?.ingestAdvancedAmbientAudio(bytes);
     });
@@ -111,6 +129,18 @@ class AmbientCaptureProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _syncNativePolicyConfig() async {
+    final prefs = SharedPreferencesUtil();
+    await service.setPolicyConfig(
+      activePluginId: prefs.ambientCaptureActiveControllerAppId,
+      publicKey: prefs.ambientCaptureControllerPublicKey,
+      keyId: prefs.ambientCaptureControllerKeyId,
+      policyUrl: prefs.ambientCapturePolicyUrl,
+      userId: prefs.uid,
+      deviceId: prefs.ambientCaptureRegisteredDeviceId,
+    );
+  }
+
   Future<void> _handleTelemetry(AmbientCaptureTelemetryEvent event) async {
     if (event.type == 'fallback_segment_queued' && SharedPreferencesUtil().ambientCaptureTextFallbackEnabled) {
       final text = event.metadata['text']?.toString();
@@ -127,8 +157,73 @@ class AmbientCaptureProvider extends ChangeNotifier {
             rawAudioAvailable: false,
           ),
         );
+        await _refreshPendingFallbackCount();
+        await drainFallbackQueue();
       }
     }
+  }
+
+  Future<void> drainFallbackQueue() async {
+    if (!SharedPreferencesUtil().ambientCaptureTextFallbackEnabled) return;
+    final pending = await fallbackQueue.loadPending();
+    _pendingFallbackCount = pending.length;
+    notifyListeners();
+    if (pending.isEmpty || !ConnectivityService().isConnected) return;
+    try {
+      final conversationId = await uploadAmbientFallbackSegments(
+        deviceId: 'android-ambient-phone-mic',
+        segments: pending,
+      );
+      if (conversationId == null) throw Exception('fallback upload failed');
+      await fallbackQueue.markUploaded(pending);
+      await fallbackQueue.clearUploaded();
+      _fallbackBackoffSeconds = 5;
+      _pendingFallbackCount = (await fallbackQueue.loadPending()).length;
+      notifyListeners();
+    } catch (e) {
+      Logger.debug('Ambient fallback drain failed: $e');
+      final delay = _fallbackBackoffSeconds;
+      _fallbackBackoffSeconds = (_fallbackBackoffSeconds * 2).clamp(5, 300).toInt();
+      Future.delayed(Duration(seconds: delay), drainFallbackQueue);
+    }
+  }
+
+  Future<void> drainNativeSpool() async {
+    if (!ConnectivityService().isConnected || !SharedPreferencesUtil().ambientCaptureRawAudioUploadEnabled) return;
+    final files = (await service.listSpoolFiles()).where((file) => file.isPending && file.bytes > 0).toList();
+    _pendingSpoolCount = files.length;
+    notifyListeners();
+    if (files.isEmpty) return;
+    try {
+      final diskFiles = files.map((file) => File(file.filePath)).where((file) => file.existsSync()).toList();
+      if (diskFiles.isEmpty) return;
+      await syncLocalFilesV2(diskFiles);
+      await service.markSpoolFiles(files.map((file) => file.filePath).toList(), 'synced');
+      _spoolBackoffSeconds = 10;
+      await refreshSpoolStats();
+    } catch (e) {
+      Logger.debug('Ambient native spool drain failed: $e');
+      final delay = _spoolBackoffSeconds;
+      _spoolBackoffSeconds = (_spoolBackoffSeconds * 2).clamp(10, 600).toInt();
+      Future.delayed(Duration(seconds: delay), drainNativeSpool);
+    }
+  }
+
+  Future<void> refreshSpoolStats() async {
+    final stats = await service.getSpoolStats();
+    _pendingSpoolCount = (stats['pendingCount'] as num?)?.toInt() ?? 0;
+    _spoolBytes = (stats['totalBytes'] as num?)?.toInt() ?? 0;
+    await _refreshPendingFallbackCount();
+    notifyListeners();
+  }
+
+  Future<void> deleteNativeSpool({String? status}) async {
+    await service.deleteSpoolFiles(status: status);
+    await refreshSpoolStats();
+  }
+
+  Future<void> _refreshPendingFallbackCount() async {
+    _pendingFallbackCount = (await fallbackQueue.loadPending()).length;
   }
 
   void markPolicyStatus(String status) {
@@ -142,6 +237,8 @@ class AmbientCaptureProvider extends ChangeNotifier {
     _audioSub?.cancel();
     _healthSub?.cancel();
     _telemetrySub?.cancel();
+    _fallbackDrainTimer?.cancel();
+    _spoolDrainTimer?.cancel();
     super.dispose();
   }
 }

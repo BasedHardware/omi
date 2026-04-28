@@ -23,6 +23,8 @@ enum class AmbientHealthState {
     PERMISSION_MISSING,
     ACCESSIBILITY_DISABLED,
     SERVICE_KILLED,
+    STORAGE_LIMIT_REACHED,
+    SERVICE_RUNNING_BUT_NO_FLUTTER_LISTENER,
     RECOVERY_NEEDED,
     UNKNOWN_DEGRADED,
 }
@@ -37,9 +39,14 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
     private var networkAvailable = true
     private var socketConnected = false
     private var walQueueDepth = 0
+    private var lastAudioChunkAtMs = 0L
+    private var lastEmittedState: AmbientHealthState? = null
+    private var lastHeartbeatAtMs = 0L
+    private var watchdog: Runnable? = null
     var silenceThresholdSeconds = 12
     var rmsSilenceDbfsThreshold = -75.0
     var zeroFrameThreshold = 0.98
+    var communicationMode = "detect_only"
     var highRiskApps = setOf(
         "com.microsoft.teams",
         "us.zoom.videomeetings",
@@ -62,11 +69,15 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
 
     fun start() {
         audioManager.registerAudioRecordingCallback(callback, mainHandler)
+        lastAudioChunkAtMs = System.currentTimeMillis()
+        startWatchdog()
         evaluate("monitor_started")
     }
 
     fun stop() {
         audioManager.unregisterAudioRecordingCallback(callback)
+        watchdog?.let { mainHandler.removeCallbacks(it) }
+        watchdog = null
     }
 
     fun updateFlutterState(socketConnected: Boolean?, networkAvailable: Boolean?, walQueueDepth: Int?) {
@@ -77,6 +88,7 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
     }
 
     fun updateAudioLevel(dbfs: Double, zeroRatio: Double) {
+        lastAudioChunkAtMs = System.currentTimeMillis()
         lastDbfs = dbfs
         lastZeroRatio = zeroRatio
         evaluate("audio_level")
@@ -86,6 +98,20 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
     fun setPaused() = setState(AmbientHealthState.PAUSED_BY_USER, "paused_by_user")
     fun setPermissionMissing() = setState(AmbientHealthState.PERMISSION_MISSING, "permission_missing")
     fun setServiceKilled() = setState(AmbientHealthState.SERVICE_KILLED, "service_killed")
+    fun setStorageLimitReached(reason: String) = setState(AmbientHealthState.STORAGE_LIMIT_REACHED, reason)
+    fun setNoFlutterListener() =
+        setState(AmbientHealthState.SERVICE_RUNNING_BUT_NO_FLUTTER_LISTENER, "native_spool_no_flutter_listener")
+
+    fun applyPolicy(policy: Map<String, Any?>) {
+        silenceThresholdSeconds = (policy["silence_detection_seconds"] as? Number)?.toInt() ?: silenceThresholdSeconds
+        rmsSilenceDbfsThreshold =
+            (policy["rms_silence_dbfs_threshold"] as? Number)?.toDouble() ?: rmsSilenceDbfsThreshold
+        zeroFrameThreshold = (policy["zero_frame_threshold"] as? Number)?.toDouble() ?: zeroFrameThreshold
+        communicationMode = policy["communication_mode"]?.toString() ?: communicationMode
+        val apps = policy["high_risk_apps"] as? List<*>
+        if (apps != null) highRiskApps = apps.mapNotNull { it?.toString() }.toSet()
+        evaluate("policy_applied")
+    }
 
     fun currentMap(): Map<String, Any?> = mapOf(
         "state" to state.name,
@@ -105,7 +131,7 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
         val nowNetwork = networkAvailableNow()
         networkAvailable = nowNetwork
 
-        if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION) {
+        if (communicationMode != "off" && (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION)) {
             setState(AmbientHealthState.CALL_OR_COMMUNICATION_MODE, reason)
             return
         }
@@ -136,7 +162,26 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
 
     private fun setState(next: AmbientHealthState, reason: String) {
         state = next
+        val now = System.currentTimeMillis()
+        val shouldEmit = next != lastEmittedState || now - lastHeartbeatAtMs >= HEARTBEAT_MS
+        if (!shouldEmit) return
+        lastEmittedState = next
+        lastHeartbeatAtMs = now
         onHealth(currentMap() + mapOf("reason" to reason))
+    }
+
+    private fun startWatchdog() {
+        watchdog?.let { mainHandler.removeCallbacks(it) }
+        watchdog = Runnable {
+            val ageMs = System.currentTimeMillis() - lastAudioChunkAtMs
+            if (ageMs > NO_AUDIO_WATCHDOG_MS) {
+                setState(AmbientHealthState.RECOVERY_NEEDED, "no_audio_chunks_received")
+            } else {
+                evaluate("watchdog")
+            }
+            watchdog?.let { mainHandler.postDelayed(it, WATCHDOG_INTERVAL_MS) }
+        }
+        watchdog?.let { mainHandler.postDelayed(it, WATCHDOG_INTERVAL_MS) }
     }
 
     private fun networkAvailableNow(): Boolean {
@@ -152,5 +197,11 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
         AudioManager.MODE_IN_COMMUNICATION -> "MODE_IN_COMMUNICATION"
         AudioManager.MODE_RINGTONE -> "MODE_RINGTONE"
         else -> "MODE_UNKNOWN"
+    }
+
+    companion object {
+        private const val HEARTBEAT_MS = 20_000L
+        private const val WATCHDOG_INTERVAL_MS = 5_000L
+        private const val NO_AUDIO_WATCHDOG_MS = 15_000L
     }
 }

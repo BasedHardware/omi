@@ -6,7 +6,9 @@ import android.view.accessibility.AccessibilityEvent
 class AmbientAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         isEnabled = true
-        AmbientCaptureMethodChannel.emitTelemetry(mapOf("type" to "accessibility_enabled", "timestamp" to System.currentTimeMillis()))
+        AmbientCaptureMethodChannel.emitTelemetry(
+            mapOf("type" to "accessibility_enabled", "timestamp" to System.currentTimeMillis()),
+        )
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -32,13 +34,29 @@ class AmbientAccessibilityService : AccessibilityService() {
     private fun maybeEmitCaptionText(event: AccessibilityEvent) {
         val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
         val captionEnabled = prefs.getBoolean("flutter.ambient_capture_caption_fallback_enabled", false)
-        if (!captionEnabled) return
+        if (!captionEnabled) {
+            if (fallbackActive) {
+                fallbackActive = false
+                AmbientCaptureMethodChannel.emitTelemetry(
+                    mapOf("type" to "fallback_stopped", "timestamp" to System.currentTimeMillis()),
+                )
+            }
+            return
+        }
         val packageName = event.packageName?.toString() ?: return
+        if (!captionPackageAllowlist.contains(packageName)) return
         val className = event.className?.toString()?.lowercase() ?: ""
-        val looksLikeCaption = className.contains("caption") || className.contains("subtitle") || className.contains("transcript")
+        val looksLikeCaption = captionClassTokens.any { className.contains(it) }
         if (!looksLikeCaption) return
         val text = event.text?.joinToString(" ")?.trim().orEmpty()
-        if (text.isBlank()) return
+        if (text.isBlank() || text == lastCaptionText) return
+        lastCaptionText = text
+        if (!fallbackActive) {
+            fallbackActive = true
+            AmbientCaptureMethodChannel.emitTelemetry(
+                mapOf("type" to "fallback_started", "timestamp" to System.currentTimeMillis()),
+            )
+        }
         AmbientCaptureMethodChannel.emitTelemetry(
             mapOf(
                 "type" to "fallback_segment_queued",
@@ -53,5 +71,15 @@ class AmbientAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile
         var isEnabled = false
+        private val captionPackageAllowlist = setOf(
+            "com.microsoft.teams",
+            "us.zoom.videomeetings",
+            "com.google.android.apps.meetings",
+            "com.slack",
+            "com.Slack",
+        )
+        private val captionClassTokens = listOf("caption", "subtitle", "transcript")
+        private var lastCaptionText: String? = null
+        private var fallbackActive = false
     }
 }

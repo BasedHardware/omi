@@ -360,6 +360,23 @@ class SharedPreferencesUtil {
 
   set ambientCaptureVerboseAuditEnabled(bool value) => saveBool('ambient_capture_verbose_audit_enabled', value);
 
+  int get ambientCaptureMaxStorageMb => getInt('ambient_capture_max_storage_mb', defaultValue: 1024);
+
+  set ambientCaptureMaxStorageMb(int value) => saveInt('ambient_capture_max_storage_mb', value);
+
+  int get ambientCaptureMinFreeStorageMb => getInt('ambient_capture_min_free_storage_mb', defaultValue: 512);
+
+  set ambientCaptureMinFreeStorageMb(int value) => saveInt('ambient_capture_min_free_storage_mb', value);
+
+  bool get ambientCaptureDeleteSyncedAudio => getBool('ambient_capture_delete_synced_audio', defaultValue: true);
+
+  set ambientCaptureDeleteSyncedAudio(bool value) => saveBool('ambient_capture_delete_synced_audio', value);
+
+  String get ambientCaptureRawAudioRetention =>
+      getString('ambient_capture_raw_audio_retention', defaultValue: 'until_synced');
+
+  set ambientCaptureRawAudioRetention(String value) => saveString('ambient_capture_raw_audio_retention', value);
+
   String get ambientCaptureMode => getString('ambient_capture_mode', defaultValue: 'off');
 
   set ambientCaptureMode(String value) => saveString('ambient_capture_mode', value);
@@ -376,6 +393,22 @@ class SharedPreferencesUtil {
   String get ambientCaptureActiveControllerAppId => getString('ambient_capture_active_controller_app_id');
 
   set ambientCaptureActiveControllerAppId(String value) => saveString('ambient_capture_active_controller_app_id', value);
+
+  String get ambientCapturePolicyUrl => getString('ambient_capture_policy_url');
+
+  set ambientCapturePolicyUrl(String value) => saveString('ambient_capture_policy_url', value);
+
+  String get ambientCaptureControllerPublicKey => getString('ambient_capture_controller_public_key');
+
+  set ambientCaptureControllerPublicKey(String value) => saveString('ambient_capture_controller_public_key', value);
+
+  String get ambientCaptureControllerKeyId => getString('ambient_capture_controller_key_id');
+
+  set ambientCaptureControllerKeyId(String value) => saveString('ambient_capture_controller_key_id', value);
+
+  String get ambientCaptureRegisteredDeviceId => getString('ambient_capture_registered_device_id');
+
+  set ambientCaptureRegisteredDeviceId(String value) => saveString('ambient_capture_registered_device_id', value);
 
   // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
   String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');

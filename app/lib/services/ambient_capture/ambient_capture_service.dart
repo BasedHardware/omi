@@ -86,6 +86,48 @@ class AmbientCaptureService {
     });
   }
 
+  Future<void> setPolicyConfig({
+    String? activePluginId,
+    String? publicKey,
+    String? keyId,
+    String? policyUrl,
+    String? userId,
+    String? deviceId,
+    bool? revoked,
+  }) async {
+    if (!isSupported) return;
+    await _control.invokeMethod('setPolicyConfig', {
+      if (activePluginId != null) 'activePluginId': activePluginId,
+      if (publicKey != null) 'publicKey': publicKey,
+      if (keyId != null) 'keyId': keyId,
+      if (policyUrl != null) 'policyUrl': policyUrl,
+      if (userId != null) 'userId': userId,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (revoked != null) 'revoked': revoked,
+    });
+  }
+
+  Future<List<AmbientSpoolFile>> listSpoolFiles() async {
+    if (!isSupported) return [];
+    final files = await _control.invokeMethod<List<dynamic>>('listSpoolFiles') ?? [];
+    return files.map((file) => AmbientSpoolFile.fromJson(file as Map<dynamic, dynamic>)).toList();
+  }
+
+  Future<Map<dynamic, dynamic>> getSpoolStats() async {
+    if (!isSupported) return {};
+    return await _control.invokeMethod<Map<dynamic, dynamic>>('getSpoolStats') ?? {};
+  }
+
+  Future<void> markSpoolFiles(List<String> paths, String status) async {
+    if (!isSupported) return;
+    await _control.invokeMethod('markSpoolFiles', {'paths': paths, 'status': status});
+  }
+
+  Future<void> deleteSpoolFiles({String? status}) async {
+    if (!isSupported) return;
+    await _control.invokeMethod('deleteSpoolFiles', {'status': status});
+  }
+
   Future<bool> isAccessibilityEnabled() async {
     if (!isSupported) return false;
     return await _control.invokeMethod<bool>('isAccessibilityEnabled') ?? false;

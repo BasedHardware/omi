@@ -1,0 +1,17 @@
+{
+  "id": "ambient_second_brain_controller",
+  "name": "Ambient Second Brain Controller",
+  "description": "Issues signed Advanced Ambient Capture policies and extracts tasks, reminders, commitments, and accountability prompts from Omi conversations.",
+  "capabilities": ["ambient_capture_controller", "chat_tools", "external_integration"],
+  "app_home_url": "https://your-controller.example.com/",
+  "webhook_url": "https://your-controller.example.com/webhooks/omi/transcript-processed",
+  "chat_tools_url": "https://your-controller.example.com/.well-known/omi-tools.json",
+  "external_integration": {
+    "capture_policy_url": "https://your-controller.example.com/capture/policy/current",
+    "capture_telemetry_url": "https://your-controller.example.com/capture/telemetry",
+    "fallback_segments_url": "https://your-controller.example.com/capture/fallback-segments",
+    "capture_controller_public_key": "base64-der-ed25519-public-key",
+    "capture_controller_key_id": "ambient-controller-key-1",
+    "capture_controller_scopes": ["ambient_capture_controller"]
+  }
+}

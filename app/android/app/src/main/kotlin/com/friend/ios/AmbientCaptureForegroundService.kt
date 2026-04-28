@@ -8,18 +8,28 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 class AmbientCaptureForegroundService : Service() {
     private var recorder: AmbientAudioRecorder? = null
     private var healthMonitor: AmbientCaptureHealthMonitor? = null
+    private var spoolStore: AmbientSpoolStore? = null
+    private var policyClient: AmbientPolicyClient? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var policyLoop: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         createNotificationChannel()
+        spoolStore = AmbientSpoolStore(this)
+        policyClient = AmbientPolicyClient(this)
+        AmbientPolicyVerifier.configure(this, emptyMap<String, Any>())
         healthMonitor = AmbientCaptureHealthMonitor(this) { event ->
             lastHealth = event
             AmbientCaptureMethodChannel.emitHealth(event)
@@ -30,10 +40,10 @@ class AmbientCaptureForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action ?: ACTION_START) {
             ACTION_START -> startCapture()
-            ACTION_PAUSE -> pauseCapture()
-            ACTION_RESUME -> resumeCapture()
-            ACTION_STOP -> stopCapture()
-            ACTION_PRIVATE_MODE -> enablePrivateMode()
+            ACTION_PAUSE -> if (isRunning) pauseCapture() else safeNoop(intent.action)
+            ACTION_RESUME -> if (isRunning) resumeCapture() else safeNoop(intent.action)
+            ACTION_STOP -> if (isRunning) stopCapture() else safeNoop(intent.action)
+            ACTION_PRIVATE_MODE -> if (isRunning) enablePrivateMode() else safeNoop(intent.action)
         }
         return START_NOT_STICKY
     }
@@ -42,6 +52,8 @@ class AmbientCaptureForegroundService : Service() {
 
     override fun onDestroy() {
         recorder?.stop()
+        spoolStore?.closeSession()
+        stopPolicyLoop()
         healthMonitor?.setServiceKilled()
         healthMonitor?.stop()
         isRunning = false
@@ -55,10 +67,13 @@ class AmbientCaptureForegroundService : Service() {
         isPaused = false
         privateMode = false
         startForeground(NOTIFICATION_ID, buildNotification("Recording"))
+        spoolStore?.startSession()
+        spoolStore?.enforceRetention()
         healthMonitor?.start()
+        startPolicyLoop(active = true)
         recorder = AmbientAudioRecorder(
             this,
-            onChunk = { bytes -> AmbientCaptureMethodChannel.emitAudio(bytes) },
+            onChunk = { bytes -> handleAudioChunk(bytes) },
             onLevel = { dbfs, zero -> healthMonitor?.updateAudioLevel(dbfs, zero) },
             onError = { error ->
                 if (error == "permission_missing") healthMonitor?.setPermissionMissing()
@@ -68,6 +83,26 @@ class AmbientCaptureForegroundService : Service() {
         )
         if (recorder?.start() == true) {
             emitTelemetry("capture_started")
+        }
+    }
+
+    private fun handleAudioChunk(bytes: ByteArray) {
+        val result = spoolStore?.writeChunk(bytes) ?: AmbientSpoolWriteResult(false, "spool_unavailable")
+        if (!result.written) {
+            Log.w(TAG, "Pausing ambient capture: ${result.reason}")
+            recorder?.pause()
+            isPaused = true
+            healthMonitor?.setStorageLimitReached(result.reason)
+            updateNotification("Storage limit reached")
+            emitTelemetry("storage_limit_reached")
+            return
+        }
+
+        if (AmbientCaptureMethodChannel.hasAudioListener()) {
+            AmbientCaptureMethodChannel.emitAudio(bytes)
+        } else {
+            healthMonitor?.setNoFlutterListener()
+            emitTelemetry("native_spool_no_flutter_listener")
         }
     }
 
@@ -103,6 +138,8 @@ class AmbientCaptureForegroundService : Service() {
     private fun stopCapture() {
         recorder?.stop()
         recorder = null
+        spoolStore?.closeSession()
+        stopPolicyLoop()
         healthMonitor?.stop()
         isRunning = false
         isPaused = false
@@ -110,6 +147,11 @@ class AmbientCaptureForegroundService : Service() {
         emitTelemetry("capture_stopped")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun safeNoop(action: String?) {
+        Log.i(TAG, "Ignoring ambient command while service is not running: $action")
+        emitTelemetry("command_ignored_service_not_running")
     }
 
     private fun updateNotification(text: String) {
@@ -145,7 +187,12 @@ class AmbientCaptureForegroundService : Service() {
 
     private fun actionIntent(action: String, requestCode: Int): PendingIntent {
         val intent = Intent(this, CaptureNotificationActionReceiver::class.java).setAction(action)
-        return PendingIntent.getBroadcast(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return PendingIntent.getBroadcast(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun createNotificationChannel() {
@@ -166,6 +213,52 @@ class AmbientCaptureForegroundService : Service() {
         )
     }
 
+    private fun startPolicyLoop(active: Boolean) {
+        stopPolicyLoop()
+        val intervalMs = if (active) POLICY_ACTIVE_INTERVAL_MS else POLICY_IDLE_INTERVAL_MS
+        policyLoop = Runnable {
+            policyClient?.fetchVerifyAndApply { policy ->
+                healthMonitor?.applyPolicy(policy)
+                applyPolicySettings(policy)
+                AmbientCaptureMethodChannel.emitPolicy(
+                    mapOf("type" to "policy_applied", "timestamp" to System.currentTimeMillis()),
+                )
+            }
+            policyLoop?.let { mainHandler.postDelayed(it, intervalMs) }
+        }
+        policyLoop?.run()
+    }
+
+    private fun stopPolicyLoop() {
+        policyLoop?.let { mainHandler.removeCallbacks(it) }
+        policyLoop = null
+    }
+
+    private fun applyPolicySettings(policy: Map<String, Any?>) {
+        val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+        val editor = prefs.edit()
+        policy["capture_mode"]?.toString()?.let { editor.putString("flutter.ambient_capture_mode", it) }
+        policy["sensitivity"]?.toString()?.let { editor.putString("flutter.ambient_capture_sensitivity", it) }
+        policy["communication_mode"]?.toString()?.let {
+            editor.putString("flutter.ambient_capture_communication_mode", it)
+        }
+        policy["raw_audio_retention"]?.toString()?.let {
+            editor.putString("flutter.ambient_capture_raw_audio_retention", it)
+        }
+        (policy["allow_local_stt_fallback"] as? Boolean)?.let {
+            editor.putBoolean("flutter.ambient_capture_local_stt_fallback_enabled", it)
+        }
+        (policy["allow_caption_fallback"] as? Boolean)?.let {
+            editor.putBoolean("flutter.ambient_capture_caption_fallback_enabled", it)
+        }
+        (policy["allow_audio_upload"] as? Boolean)?.let {
+            if (prefs.getBoolean("flutter.ambient_capture_raw_audio_upload_enabled", false)) {
+                editor.putBoolean("flutter.ambient_capture_raw_audio_upload_enabled", it)
+            }
+        }
+        editor.apply()
+    }
+
     companion object {
         const val ACTION_START = "com.friend.ios.ambient.START"
         const val ACTION_STOP = "com.friend.ios.ambient.STOP"
@@ -175,6 +268,9 @@ class AmbientCaptureForegroundService : Service() {
         private const val CHANNEL_ID = "ambient_capture"
         private const val NOTIFICATION_ID = 44072
 
+        private const val TAG = "AmbientCapture"
+        private const val POLICY_ACTIVE_INTERVAL_MS = 60_000L
+        private const val POLICY_IDLE_INTERVAL_MS = 5L * 60L * 1000L
         private var instance: AmbientCaptureForegroundService? = null
         private var isRunning = false
         private var isPaused = false
@@ -189,12 +285,36 @@ class AmbientCaptureForegroundService : Service() {
         fun stop(context: Context) = command(context, ACTION_STOP)
 
         fun command(context: Context, action: String) {
-            val intent = Intent(context, AmbientCaptureForegroundService::class.java).setAction(action)
-            ContextCompat.startForegroundService(context, intent)
+            val service = instance
+            if (service == null || !isRunning) {
+                Log.i(TAG, "Ignoring ambient command while service is not running: $action")
+                return
+            }
+            service.onStartCommand(Intent(context, AmbientCaptureForegroundService::class.java).setAction(action), 0, 0)
         }
 
         fun updateFlutterState(socketConnected: Boolean?, networkAvailable: Boolean?, walQueueDepth: Int?) {
             instance?.healthMonitor?.updateFlutterState(socketConnected, networkAvailable, walQueueDepth)
+        }
+
+        fun onFlutterAudioListenerChanged(active: Boolean) {
+            if (!active && isRunning) instance?.healthMonitor?.setNoFlutterListener()
+        }
+
+        fun applyPolicyConfig(config: Map<*, *>) {
+            instance?.healthMonitor?.applyPolicy(config.entries.associate { it.key.toString() to it.value })
+        }
+
+        fun listSpoolFiles(context: Context): List<Map<String, Any?>> = AmbientSpoolStore(context).listMetadata()
+
+        fun spoolStats(context: Context): Map<String, Any?> = AmbientSpoolStore(context).stats()
+
+        fun markSpoolFiles(context: Context, paths: List<String>, status: String) {
+            AmbientSpoolStore(context).markStatus(paths, status)
+        }
+
+        fun deleteSpoolFiles(context: Context, status: String?) {
+            AmbientSpoolStore(context).deleteByStatus(status)
         }
 
         fun statusMap(): Map<String, Any?> = mapOf(
