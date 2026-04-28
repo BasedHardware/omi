@@ -42,6 +42,7 @@
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.5.0",
     "recharts": "^3.8.1",
+    "remark-breaks": "^4.0.0",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",

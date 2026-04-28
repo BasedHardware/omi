@@ -15,7 +15,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { nanoid } from "nanoid";
-import { api } from "@/services/api";
+import { api, sendChatViaBackend } from "@/services/api";
 import {
   buildChatSystemPrompt,
   buildClaudeChatSystemPrompt,
@@ -23,6 +23,8 @@ import {
   invalidateChatContext,
 } from "@/services/chatContext";
 import { createClient, sendMessageStreaming } from "@/services/chat";
+import { useAppStore } from "@/stores/appStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useClaudeStore } from "@/stores/claudeStore";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
@@ -179,10 +181,13 @@ function makeSession(initialMessageText?: string): ChatSession {
 // ---------------------------------------------------------------------------
 
 /** Which LLM the chat should route through.
- *  - "auto": use Claude when a token is available, else fall back to Gemini.
- *  - "claude": always use Claude (tool-use enabled). If no token, sendMessage surfaces an error.
- *  - "gemini": always use Gemini (no tools). */
-export type ChatModelPreference = "auto" | "claude" | "gemini";
+ *  - "auto": when signed-in to Nooto → backend agent (plugin tools available);
+ *    else Claude when its token is connected; else Gemini local fallback.
+ *  - "backend": always use the Nooto backend agent (Claude with full tool access
+ *    + plugin chat tools like Jira/Linear). Requires sign-in.
+ *  - "claude": always use the user's local Claude account (no plugin tools).
+ *  - "gemini": always use Gemini direct (no plugin tools, no Nooto backend). */
+export type ChatModelPreference = "auto" | "backend" | "claude" | "gemini";
 
 interface ChatState {
   /** Only the messages for the currently selected session. */
@@ -294,26 +299,42 @@ export const useChatStore = create<ChatState>()(
         abortController = new AbortController();
 
         const claudeToken = useClaudeStore.getState().accessToken;
+        const idToken = useAuthStore.getState().idToken;
         const modelPref = get().model;
-        const useClaude =
-          modelPref === "claude"
-            ? Boolean(claudeToken)
-            : modelPref === "gemini"
-              ? false
-              : Boolean(claudeToken); // "auto"
+
+        // Routing: "auto" prefers the backend (plugin tools) when signed in,
+        // then Claude, then Gemini. Explicit choices fall back to the next
+        // available path on missing credentials so the user is never stuck.
+        type Route = "backend" | "claude" | "gemini";
+        const route: Route =
+          modelPref === "backend"
+            ? "backend"
+            : modelPref === "claude"
+              ? "claude"
+              : modelPref === "gemini"
+                ? "gemini"
+                : idToken
+                  ? "backend"
+                  : claudeToken
+                    ? "claude"
+                    : "gemini";
 
         try {
+          if (modelPref === "backend" && !idToken) {
+            throw new Error(
+              "The Nooto agent is selected but you're signed out. Sign in to use plugin tools.",
+            );
+          }
           if (modelPref === "claude" && !claudeToken) {
             throw new Error(
               "Claude is selected but not connected. Open the model picker and connect your Claude account.",
             );
           }
 
-          // Once per session, surface a "Loaded context" card so the user
-          // can see the goals/tasks/memories snapshot the model received.
-          // The data is in the system prompt (not a real tool call), but
-          // the user shouldn't have to know that distinction.
-          if (!contextCardShown.has(sessionId)) {
+          // The backend agent builds its own context (memories, goals,
+          // conversations) and emits its own `think:` cards via SSE — skip
+          // the local "Loaded context" preamble for that path.
+          if (route !== "backend" && !contextCardShown.has(sessionId)) {
             try {
               const counts = await getContextSnapshotCounts(sessionId);
               const total = counts.memories + counts.goals + counts.tasks;
@@ -417,7 +438,86 @@ export const useChatStore = create<ChatState>()(
             });
           };
 
-          if (useClaude && claudeToken) {
+          if (route === "backend") {
+            // ----- Nooto backend agent: plugin tools (Jira, Linear, …) + Claude -----
+            // The backend dispatches tool calls automatically and streams
+            // `think:` lines for status cards (e.g. "Listing Jira projects…").
+            // Each `think: <text>|app_id:<id>` becomes a tool card here so
+            // the UI matches the mobile app's "Loaded context" affordance.
+            const thinkCardIds = new Map<string, string>();
+            // Resolve the app's friendly name from appStore so the tool card
+            // shows "Jira" instead of the raw ULID. Fall back to "Plugin" when
+            // the app hasn't been loaded yet (rare — apps load on dashboard mount).
+            const appNameFor = (appId: string | null): string => {
+              if (!appId) return "agent";
+              const app = useAppStore.getState().apps.find((a) => a.id === appId);
+              return app?.name ?? "Plugin";
+            };
+            await sendChatViaBackend(textToSend, {
+              onDelta: appendDelta,
+              onThink: (text, appId) => {
+                const key = appId ?? "_agent";
+                let cardId = thinkCardIds.get(key);
+                if (!cardId) {
+                  cardId = nanoid();
+                  thinkCardIds.set(key, cardId);
+                  set((state) => {
+                    const updated = withMessage(state.messages, assistantId, (m) =>
+                      appendPart(m, {
+                        type: "tool",
+                        id: cardId!,
+                        name: appNameFor(appId),
+                        status: "running",
+                        input: { summary: text },
+                      }),
+                    );
+                    return {
+                      messages: updated,
+                      sessionMessages: sessionId
+                        ? { ...state.sessionMessages, [sessionId]: updated }
+                        : state.sessionMessages,
+                    };
+                  });
+                } else {
+                  // Subsequent think lines for the same app: refine the summary.
+                  set((state) => {
+                    const updated = withMessage(state.messages, assistantId, (m) =>
+                      mutatePart(m, cardId!, (p) =>
+                        p.type === "tool" ? { ...p, input: { summary: text } } : p,
+                      ),
+                    );
+                    return {
+                      messages: updated,
+                      sessionMessages: sessionId
+                        ? { ...state.sessionMessages, [sessionId]: updated }
+                        : state.sessionMessages,
+                    };
+                  });
+                }
+              },
+              onDone: () => {
+                // Mark all running tool cards as completed once the final
+                // ResponseMessage arrives.
+                set((state) => {
+                  const updated = withMessage(state.messages, assistantId, (m) => {
+                    if (!m.parts) return m;
+                    const parts = m.parts.map((p) =>
+                      p.type === "tool" && p.status === "running"
+                        ? { ...p, status: "completed" as const }
+                        : p,
+                    );
+                    return { ...m, parts };
+                  });
+                  return {
+                    messages: updated,
+                    sessionMessages: sessionId
+                      ? { ...state.sessionMessages, [sessionId]: updated }
+                      : state.sessionMessages,
+                  };
+                });
+              },
+            });
+          } else if (route === "claude" && claudeToken) {
             // ----- Claude path: tool-use enabled -----
             const systemPrompt = await buildClaudeChatSystemPrompt(sessionId);
             const client = createClient(claudeToken);

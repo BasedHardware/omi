@@ -29,6 +29,7 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+import remarkBreaks from "remark-breaks";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -323,6 +324,12 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
+// `remark-breaks` makes single newlines render as `<br>`. Without it,
+// streamed bullet lists from the chat agent (which often emit `•` items
+// separated by single \n) collapse onto one line because CommonMark treats
+// single newlines as whitespace.
+const messageRemarkPlugins = [remarkBreaks];
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -337,6 +344,7 @@ export const MessageResponse = memo(
         className
       )}
       plugins={streamdownPlugins}
+      remarkPlugins={messageRemarkPlugins}
       {...props}
     />
   ),
