@@ -56,6 +56,9 @@ export interface ToolPartInput {
 export interface ChatTaskCard {
   external_id: string;
   title: string;
+  /** Short plain-text snippet of the source body (Jira ADF flattened, etc.).
+   *  Plugins truncate to ~240 chars before sending. */
+  description?: string;
   status?: string;
   status_type?: "todo" | "in_progress" | "done" | "canceled";
   url?: string;
@@ -529,6 +532,7 @@ export const useChatStore = create<ChatState>()(
                   .map((t) => ({
                     external_id: String(t.external_id ?? ""),
                     title: String(t.title ?? ""),
+                    description: typeof t.description === "string" ? t.description : undefined,
                     status: typeof t.status === "string" ? t.status : undefined,
                     status_type: t.status_type as ChatTaskCard["status_type"],
                     url: typeof t.url === "string" ? t.url : undefined,

@@ -18,6 +18,10 @@ from pydantic import BaseModel
 class IntegrationTask(BaseModel):
     external_id: str
     title: str
+    # Short plain-text snippet of the source description (plugins truncate
+    # before sending — usually ~240 chars). Optional; not every plugin
+    # surfaces it.
+    description: Optional[str] = None
     status: str
     status_type: Optional[str] = None  # "todo" | "in_progress" | "done" | "canceled"
     due_at: Optional[str] = None

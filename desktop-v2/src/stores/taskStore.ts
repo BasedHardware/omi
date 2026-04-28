@@ -26,6 +26,7 @@ export interface Task {
   source_app_image?: string;
   external_id?: string;
   external_url?: string;
+  external_description?: string;
   status_label?: string;
   status_type?: "todo" | "in_progress" | "done" | "canceled";
   priority?: string;
@@ -39,6 +40,7 @@ export interface Task {
 interface IntegrationTaskWire {
   external_id: string;
   title: string;
+  description?: string | null;
   status: string;
   status_type?: "todo" | "in_progress" | "done" | "canceled";
   due_at?: string | null;
@@ -126,6 +128,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         source_app_image: t.source_app_image ?? undefined,
         external_id: t.external_id,
         external_url: t.url || undefined,
+        external_description: t.description ?? undefined,
         status_label: t.status,
         status_type: t.status_type,
         priority: t.priority ?? undefined,

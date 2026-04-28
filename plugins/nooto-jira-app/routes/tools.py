@@ -40,8 +40,19 @@ router = APIRouter()
 log = logging.getLogger("nooto-jira-app.tools")
 
 _ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
-_DEFAULT_FIELDS = ["summary", "status", "assignee", "priority", "issuetype", "updated", "duedate"]
-_DETAIL_FIELDS = _DEFAULT_FIELDS + ["description", "reporter"]
+_DEFAULT_FIELDS = [
+    "summary",
+    "status",
+    "assignee",
+    "priority",
+    "issuetype",
+    "updated",
+    "duedate",
+    # Pulled into list_my_issues so the desktop chat / Plan view can show a
+    # short snippet under the title without a follow-up `get_issue` call.
+    "description",
+]
+_DETAIL_FIELDS = _DEFAULT_FIELDS + ["reporter"]
 
 # Jira's three statusCategory keys → our 4-bucket status_type. Anything
 # unknown (custom workflow) falls back to "todo" so it still shows.
@@ -64,9 +75,16 @@ def _normalize_jira_issue(it: dict, site_url: str) -> dict:
     project = key.split("-")[0] if "-" in key else None
     assignee = (f.get("assignee") or {}).get("displayName")
     priority = (f.get("priority") or {}).get("name")
+    # Jira stores description as ADF (Atlassian Document Format) — flatten
+    # to plain text and cap so chat pills / cards aren't dominated by long
+    # bodies. Caller can hit `get_issue` for the full thing when needed.
+    description = _adf_to_text(f.get("description"))
+    if description and len(description) > 240:
+        description = description[:239].rstrip() + "…"
     return {
         "external_id": key,
         "title": (f.get("summary") or "") or key,
+        "description": description or None,
         "status": status.get("name") or "Unknown",
         "status_type": _STATUS_CATEGORY_MAP.get(category, "todo"),
         "due_at": f.get("duedate"),

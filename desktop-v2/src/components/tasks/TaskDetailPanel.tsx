@@ -127,6 +127,10 @@ export function TaskDetailPanel({ task, onClose, onToggle, onOpenConversation }:
         )}
       </div>
 
+      {task.external_description && (
+        <p className="task-detail-description">{task.external_description}</p>
+      )}
+
       <dl className="task-detail-fields">
         {!isIntegration && task.completed && (
           <div className="task-detail-field">
