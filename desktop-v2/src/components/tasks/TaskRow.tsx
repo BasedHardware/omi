@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Calendar, Link2, Trash2, X } from "lucide-react";
+import { open as openShell } from "@tauri-apps/plugin-shell";
 import type { Task } from "../../stores/taskStore";
 import { bucketFor, dueLabel, isNew } from "./taskDates";
+import { IntegrationBadge } from "./IntegrationBadge";
 
 interface Props {
   task: Task;
@@ -45,8 +47,14 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
 
   const bucket = bucketFor(task);
   const fresh = !task.completed && isNew(task);
+  // Integration rows (Jira/Linear/…) are read-only here for v1 — the actual
+  // ticket lives in the source tracker. Clicking the title opens the external
+  // URL instead of toggling edit mode; date/delete affordances are hidden.
+  // Slice D will flip this once a per-app two-way-sync toggle is on.
+  const isIntegration = !!task.source && task.source !== "native";
 
   const handleToggle = () => {
+    if (isIntegration) return; // read-only — Slice D adds opt-in writeback
     if (task.completed) {
       onToggle();
       return;
@@ -56,6 +64,13 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
       onToggle();
       setCompleting(false);
     }, 320);
+  };
+
+  const openExternal = () => {
+    if (!task.external_url) return;
+    void openShell(task.external_url).catch((err) =>
+      console.warn("[TaskRow] open external failed:", err),
+    );
   };
 
   const saveDraft = () => {
@@ -112,11 +127,20 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
         className={[
           "task-check",
           task.completed || completing ? "task-check-on" : "",
+          isIntegration ? "task-check-readonly" : "",
         ]
           .filter(Boolean)
           .join(" ")}
         onClick={handleToggle}
-        aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
+        disabled={isIntegration}
+        aria-label={
+          isIntegration
+            ? `Manage in ${task.source_app_name ?? "the source app"}`
+            : task.completed
+              ? "Mark incomplete"
+              : "Mark complete"
+        }
+        title={isIntegration ? `Manage in ${task.source_app_name ?? "the source app"}` : undefined}
       >
         {(task.completed || completing) && (
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -150,6 +174,15 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
               }
             }}
           />
+        ) : isIntegration ? (
+          <button
+            type="button"
+            className="task-text"
+            onClick={openExternal}
+            title={task.external_url ? `Open in ${task.source_app_name ?? "source app"}` : undefined}
+          >
+            {task.description}
+          </button>
         ) : (
           <button
             type="button"
@@ -162,19 +195,21 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
         )}
 
         <div className="task-chips">
+          <IntegrationBadge task={task} />
           {fresh && <span className="task-chip task-chip-new">New</span>}
           {task.due_at && (
             <button
               type="button"
               className={dueClass}
-              onClick={pickDate}
-              title="Change due date"
+              onClick={isIntegration ? undefined : pickDate}
+              title={isIntegration ? "Due date set in source app" : "Change due date"}
+              disabled={isIntegration}
             >
               <Calendar size={11} />
               <span>{dueLabel(task.due_at)}</span>
             </button>
           )}
-          {task.conversation_id && onOpenConversation && (
+          {!isIntegration && task.conversation_id && onOpenConversation && (
             <button
               type="button"
               className="task-chip task-chip-link"
@@ -185,11 +220,16 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
               <span>Conversation</span>
             </button>
           )}
+          {isIntegration && task.status_label && (
+            <span className="task-chip" title="Status in source app">
+              {task.status_label}
+            </span>
+          )}
         </div>
       </div>
 
       <div className="task-actions">
-        {!task.due_at && !task.completed && (
+        {!isIntegration && !task.due_at && !task.completed && (
           <button
             type="button"
             className="task-action"
@@ -200,7 +240,7 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
             <Calendar size={14} />
           </button>
         )}
-        {task.due_at && !task.completed && (
+        {!isIntegration && task.due_at && !task.completed && (
           <button
             type="button"
             className="task-action"
@@ -211,15 +251,17 @@ export function TaskRow({ task, onToggle, onUpdate, onDelete, onOpenConversation
             <X size={14} />
           </button>
         )}
-        <button
-          type="button"
-          className="task-action task-action-danger"
-          onClick={onDelete}
-          aria-label="Delete task"
-          title="Delete"
-        >
-          <Trash2 size={14} />
-        </button>
+        {!isIntegration && (
+          <button
+            type="button"
+            className="task-action task-action-danger"
+            onClick={onDelete}
+            aria-label="Delete task"
+            title="Delete"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
 
       {showDate && (
