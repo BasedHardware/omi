@@ -46,6 +46,11 @@ class JiraCreateIssueRequest(ChatToolRequest):
 class JiraListMyIssuesRequest(ChatToolRequest):
     status: Optional[str] = None
     limit: int = 10
+    # When true, exclude tickets in the "Done" Jira status category (Resolved /
+    # Closed / Done / Won't Do / etc.). The Plan-view aggregator passes this so
+    # only open work shows up; chat-tool callers default to false to preserve
+    # backwards compatibility ("show me everything assigned" answers).
+    open_only: bool = False
 
 
 class JiraSearchIssuesRequest(ChatToolRequest):

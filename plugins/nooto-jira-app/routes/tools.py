@@ -182,6 +182,11 @@ async def tool_list_my_issues(req: JiraListMyIssuesRequest) -> ChatToolResponse:
         safe_status = (req.status or "").replace('"', '\\"').strip()
         if safe_status:
             jql_parts.append(f'status = "{safe_status}"')
+    elif req.open_only:
+        # `statusCategory` is the standard JQL field for grouping workflows
+        # across projects (To Do / In Progress / Done). Excluding Done filters
+        # Resolved/Closed/Won't Do uniformly, regardless of custom status names.
+        jql_parts.append("statusCategory != Done")
     jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
     limit = max(1, min(int(req.limit or 10), 50))
 

@@ -543,14 +543,17 @@ async def tool_list_my_issues(request: Request):
         uid = body.get("uid")
         limit = body.get("limit", 10)
         status_filter = body.get("status")  # Optional: filter by status
-        
+        # Plan-view aggregator passes this to suppress Done/Cancelled tickets;
+        # chat callers leave it false ("show me everything assigned").
+        open_only = bool(body.get("open_only", False))
+
         if not uid:
             return ChatToolResponse(error="User ID is required")
-        
+
         # Check authentication
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
-        
+
         # Build filter
         filter_clause = '{ assignee: { isMe: { eq: true } } }'
         if status_filter:
@@ -565,6 +568,13 @@ async def tool_list_my_issues(request: Request):
             state_type = state_types.get(status_lower)
             if state_type:
                 filter_clause = f'{{ assignee: {{ isMe: {{ eq: true }} }}, state: {{ type: {{ eq: "{state_type}" }} }} }}'
+        elif open_only:
+            # Linear's `state.type` enum has 5 values; we exclude the two
+            # terminal ones using the GraphQL `nin` ("not in") operator.
+            filter_clause = (
+                '{ assignee: { isMe: { eq: true } }, '
+                'state: { type: { nin: ["completed", "canceled"] } } }'
+            )
         
         query = f"""
         query {{

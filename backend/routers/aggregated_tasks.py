@@ -50,9 +50,13 @@ async def _fetch_app_tasks(
         return [], None  # silently skip — app doesn't expose a list tool
 
     try:
+        # `open_only` filters out Done/Cancelled tickets at the source so we
+        # don't waste the limit budget on closed work. Plugins that don't yet
+        # honor the flag (older deploys) just ignore it — they'll over-fetch
+        # and the frontend's `t.completed` filter still hides closed rows.
         resp = await client.post(
             tool["endpoint"],
-            json={"uid": uid, "limit": 50},
+            json={"uid": uid, "limit": 50, "open_only": True},
             timeout=_PER_APP_TIMEOUT_S,
         )
     except (httpx.TimeoutException, httpx.RequestError) as e:
