@@ -49,7 +49,7 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, Props>(
 
     if (items.length === 0) {
       return (
-        <div className="mb-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-sm">
+        <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
           No commands match <span className="font-mono">/{query}</span>
         </div>
       );
@@ -63,7 +63,7 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, Props>(
 
     let runningIndex = 0;
     return (
-      <div className="mb-2 max-h-[22rem] overflow-y-auto rounded-lg border border-border bg-popover shadow-sm">
+      <div className="max-h-[22rem] overflow-y-auto rounded-lg border border-border bg-popover shadow-md">
         {Object.entries(grouped).map(([group, cmds], gi) => (
           <div key={group} className={cn(gi > 0 && "border-t border-border")}>
             <div className="sticky top-0 z-10 bg-popover px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

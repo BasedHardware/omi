@@ -286,7 +286,16 @@ export function CodingAgentSession() {
 
       <TerminalPane sessionId={sessionId} />
       <AgentStatusStrip status={status} onStop={handleStop} />
-      <div className="shrink-0 px-5 pb-5 pt-3">
+      <div className="shrink-0 px-5 pb-5 pt-3 relative">
+        {slashQuery !== null && (
+          <div className="absolute bottom-full left-5 right-5 mb-2 z-20">
+            <SlashCommandMenu
+              ref={slashMenuRef}
+              query={slashQuery}
+              onSelect={(cmd) => setInputText(`/${cmd.name} `)}
+            />
+          </div>
+        )}
         <PromptInput
           onSubmit={handleSubmit}
           className="w-full"
@@ -295,13 +304,6 @@ export function CodingAgentSession() {
         >
           <PromptInputBody>
             <AttachedImagesDisplay />
-            {slashQuery !== null && (
-              <SlashCommandMenu
-                ref={slashMenuRef}
-                query={slashQuery}
-                onSelect={(cmd) => setInputText(`/${cmd.name} `)}
-              />
-            )}
             <PromptInputTextarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
