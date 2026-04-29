@@ -7,6 +7,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../../ai-elements/conversation";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import { Message, MessageContent } from "../../ai-elements/message";
 import { Tool, ToolGroup, type ToolStatus } from "../../ai-elements/tool";
 import {
@@ -30,7 +31,7 @@ import {
   Attachments,
 } from "../../ai-elements/attachments";
 import { GenerativeMarkdown } from "../../generative-ui/GenerativeMarkdown";
-import { useCodingAgent, type AttachedImage } from "@/hooks/useCodingAgent";
+import { useCodingAgent, type AttachedImage, type AgentEvent } from "@/hooks/useCodingAgent";
 import { buildTurns, type Turn, type TextChunk, type ToolSlot, type ImageChunk } from "./buildTurns";
 import { OPENROUTER_MODELS, DEFAULT_MODEL_ID, findModel } from "./openrouterModels";
 import { AgentStatusStrip } from "./AgentStatusStrip";
@@ -230,6 +231,7 @@ export function CodingAgentSession() {
           {turns.map((turn) => (
             <TurnView key={turn.id} turn={turn} isStreaming={isStreaming && turn.isOpen} />
           ))}
+          <AutoScrollOnEvents events={events} />
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -284,6 +286,35 @@ export function CodingAgentSession() {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Force StickToBottom to scroll on every events change. Streaming text deltas
+ * sometimes don't trip the library's ResizeObserver fast enough to keep the
+ * tail visible. Mounting this inside <ConversationContent> gives it access to
+ * the StickToBottom context.
+ */
+function AutoScrollOnEvents({ events }: { events: AgentEvent[] }) {
+  const { scrollToBottom, isAtBottom } = useStickToBottomContext();
+  // Hash recent text length so streaming deltas re-trigger the effect even
+  // when events.length doesn't change (the last assistant turn grows).
+  const tailKey = events.length === 0
+    ? "empty"
+    : `${events.length}:${eventTailLength(events[events.length - 1])}`;
+
+  useEffect(() => {
+    if (isAtBottom) {
+      scrollToBottom();
+    }
+  }, [tailKey, isAtBottom, scrollToBottom]);
+  return null;
+}
+
+function eventTailLength(ev: AgentEvent | undefined): number {
+  if (!ev) return 0;
+  if (ev.type === "text" || ev.type === "user_text") return ev.text.length;
+  if (ev.type === "tool_result") return ev.output.length;
+  return 0;
+}
 
 /**
  * Renders the in-prompt preview of attachments the user has staged. Must be a
