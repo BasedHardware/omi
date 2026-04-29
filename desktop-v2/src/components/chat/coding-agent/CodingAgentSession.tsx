@@ -66,6 +66,7 @@ export function CodingAgentSession() {
     events,
     isStreaming,
     status,
+    currentSession,
   } = useCodingAgent();
 
   // Folder is the active session's working directory. Lifted into the
@@ -74,6 +75,8 @@ export function CodingAgentSession() {
   const folder = useCodingAgentSessionsStore((s) => s.currentCwd);
   const setFolder = useCodingAgentSessionsStore((s) => s.setCurrentCwd);
   const currentFilePath = useCodingAgentSessionsStore((s) => s.currentFilePath);
+  const selectStoreSession = useCodingAgentSessionsStore((s) => s.selectSession);
+  const refreshSessions = useCodingAgentSessionsStore((s) => s.refresh);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
@@ -124,6 +127,21 @@ export function CodingAgentSession() {
       }
     })();
   }, [currentFilePath, folder, model, startSession, pushError]);
+
+  // After a fresh prompt creates a new Pi session, write its JSONL path back
+  // into the store so (a) the sidebar lists it and (b) re-mounting the chat
+  // (e.g., after Chat→Code tab flip) loads the just-created history instead
+  // of starting blank.
+  useEffect(() => {
+    const file = currentSession?.file;
+    if (!file) return;
+    if (currentFilePath === file) return;
+    // Mark this file as already-loaded so the watcher above doesn't try to
+    // reload it (events are already in memory from the live stream).
+    loadedFilePathRef.current = file;
+    selectStoreSession(file, folder ?? null);
+    void refreshSessions();
+  }, [currentSession?.file, currentFilePath, folder, selectStoreSession, refreshSessions]);
 
   const turns = buildTurns(events);
 
