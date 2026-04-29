@@ -212,7 +212,6 @@ function SessionRow({
 // ---------------------------------------------------------------------------
 
 const RECENT_COUNT = 5;
-const MODEL_STORAGE_KEY = "coding-agent:model";
 
 export function CodingAgentSessionsSidebar() {
   const sessions = useCodingAgentSessionsStore((s) => s.sessions);
@@ -222,30 +221,21 @@ export function CodingAgentSessionsSidebar() {
   const rename = useCodingAgentSessionsStore((s) => s.rename);
   const remove = useCodingAgentSessionsStore((s) => s.remove);
 
-  const { pickFolder, startSession } = useCodingAgent();
+  const { pickFolder } = useCodingAgent();
 
   // Refresh on mount so the list is current after the app re-opens.
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const model =
-    typeof window !== "undefined"
-      ? (localStorage.getItem(MODEL_STORAGE_KEY) ?? undefined)
-      : undefined;
-
   const handleSelectSession = useCallback(
-    async (meta: CodingAgentSessionMeta) => {
-      // Update both pointers — the CodingAgentSession reads currentCwd from
-      // the store to render its folder pill.
+    (meta: CodingAgentSessionMeta) => {
+      // Sidebar only updates shared store state. CodingAgentSession watches
+      // currentFilePath and triggers startSession itself — running the load
+      // in its own hook instance so the events land where the chat reads.
       selectSession(meta.filePath, meta.cwd);
-      try {
-        await startSession(meta.cwd, "", model, meta.filePath);
-      } catch (err) {
-        console.error("[CodingAgentSessionsSidebar] startSession failed:", err);
-      }
     },
-    [selectSession, startSession, model],
+    [selectSession],
   );
 
   const handleNewSession = useCallback(async () => {

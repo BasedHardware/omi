@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Code2, Cpu, FolderOpen } from "lucide-react";
 import {
@@ -72,9 +72,13 @@ export function CodingAgentSession() {
   // and the choice survives app restart.
   const folder = useCodingAgentSessionsStore((s) => s.currentCwd);
   const setFolder = useCodingAgentSessionsStore((s) => s.setCurrentCwd);
+  const currentFilePath = useCodingAgentSessionsStore((s) => s.currentFilePath);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
+  // Track which session file we last loaded so the watcher below doesn't
+  // re-spawn Pi every render or reload the same session twice in a row.
+  const loadedFilePathRef = useRef<string | null>(null);
   const [model, setModelState] = useState<string>(() => {
     const stored = typeof window !== "undefined" ? localStorage.getItem(MODEL_STORAGE_KEY) : null;
     return stored && findModel(stored) ? stored : DEFAULT_MODEL_ID;
@@ -99,6 +103,26 @@ export function CodingAgentSession() {
     // model. Pi binds the model at sidecar spawn time, so we cannot live-swap.
     setSessionId(null);
   }, []);
+
+  // Watch the sessions store for a session selection. When the sidebar picks
+  // one, we — running inside the same hook instance the chat reads from —
+  // call startSession with the file path. That triggers the JSONL replay so
+  // the chat repopulates with the prior conversation.
+  useEffect(() => {
+    if (!currentFilePath || !folder) return;
+    if (loadedFilePathRef.current === currentFilePath) return;
+    loadedFilePathRef.current = currentFilePath;
+
+    void (async () => {
+      try {
+        const id = await startSession(folder, "", model, currentFilePath);
+        setSessionId(id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        pushError(`Failed to load session: ${message}`);
+      }
+    })();
+  }, [currentFilePath, folder, model, startSession, pushError]);
 
   const turns = buildTurns(events);
 
