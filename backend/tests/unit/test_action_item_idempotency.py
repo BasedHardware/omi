@@ -94,6 +94,9 @@ def _stub_collection(monkeypatch, existing_docs):
     captured = {'added': []}
 
     fake_query = MagicMock()
+    # Chain: .where(...).where(...).limit(N).stream() — every intermediate
+    # call returns the same fake so we don't have to model a query builder.
+    fake_query.where.return_value = fake_query
     fake_query.limit.return_value = fake_query
     fake_query.stream.return_value = iter(existing_docs)
 
@@ -127,13 +130,32 @@ def test_no_idempotency_key_creates_new_doc(monkeypatch):
     assert 'idempotency_key' not in captured['added'][0]
 
 
-def test_idempotency_hit_returns_existing_id(monkeypatch):
-    captured = _stub_collection(monkeypatch, [_make_doc('existing-id')])
+def test_idempotency_hit_on_active_returns_existing_id(monkeypatch):
+    """Hit on an active (non-completed, non-deleted) doc collapses the call."""
+    captured = _stub_collection(
+        monkeypatch,
+        [_make_doc('existing-id', {'completed': False, 'deleted': False})],
+    )
     result = action_items_db.create_action_item(
         'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
     )
     assert result == 'existing-id'
     assert captured['added'] == [], "no new document should be created on idempotency hit"
+
+
+def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
+    """A soft-deleted match must not block recreation — the user explicitly
+    deleted it, so a fresh POST is a recreation, not a retry."""
+    captured = _stub_collection(
+        monkeypatch,
+        [_make_doc('deleted-id', {'completed': False, 'deleted': True})],
+    )
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    assert result == 'newly-created-id', "deleted match must not short-circuit"
+    assert len(captured['added']) == 1
+    assert captured['added'][0].get('idempotency_key') == 'abc123'
 
 
 def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
@@ -214,4 +236,14 @@ def test_content_key_separates_descriptions():
     router = _import_router_helper()
     a = router._content_idempotency_key('uid-1', 'Buy milk')
     b = router._content_idempotency_key('uid-1', 'Buy bread')
+    assert a != b
+
+
+def test_content_key_avoids_separator_collision():
+    """Length-prefixed encoding must distinguish (uid='org', desc='user:task')
+    from (uid='org:user', desc='task'). A naive ``f"{uid}:{desc}"`` encoding
+    would collapse both to the same hash; the length prefix prevents this."""
+    router = _import_router_helper()
+    a = router._content_idempotency_key('org', 'user:task')
+    b = router._content_idempotency_key('org:user', 'task')
     assert a != b
