@@ -115,8 +115,21 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
 def promote_staged_task(uid: str) -> Optional[dict]:
     """Promote the top-scored staged task to an action_item.
 
-    Returns the new action_item dict or None if no staged tasks exist.
-    Uses database.action_items.create_action_item() for consistent field handling.
+    Returns the new (or pre-existing) action_item dict, or None if no staged
+    tasks exist. Uses ``database.action_items.create_action_item()`` for
+    consistent field handling.
+
+    Deduplicates against the live ``action_items`` collection: if a user
+    already has an active (uncompleted, undeleted) action_item with the same
+    normalized description, the staged task is closed (``completed=True``,
+    ``promotion_skipped='duplicate'``, ``promoted_to`` pointing at the existing
+    item) and the existing item is returned instead of creating a fresh row.
+
+    Without this guard, every conversation that re-mentions the same task is
+    extracted into a new staged task and promoted into a fresh action_item
+    document — Firestore allocates a new id on each ``add()``, so the user's
+    list accumulates 5–6 duplicates per task description over the course of
+    a few hours of activity.
     """
     col = _user_col(uid, 'staged_tasks')
     query = (
@@ -130,6 +143,26 @@ def promote_staged_task(uid: str) -> Optional[dict]:
 
     staged = docs[0].to_dict()
     staged['id'] = docs[0].id
+
+    # Dedup: skip promotion if an active action_item with the same description
+    # already exists. Close the staged task pointing at the existing item.
+    existing = action_items_db.get_active_action_item_by_description(uid, staged['description'])
+    if existing is not None:
+        col.document(staged['id']).update(
+            {
+                'completed': True,
+                'promoted_at': datetime.now(timezone.utc),
+                'promotion_skipped': 'duplicate',
+                'promoted_to': existing['id'],
+            }
+        )
+        logger.info(
+            "Skipped promotion of staged task %s for user %s — duplicate of action_item %s",
+            staged['id'],
+            uid,
+            existing['id'],
+        )
+        return existing
 
     # Build action_item data from staged task fields
     action_data = {

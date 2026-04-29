@@ -246,6 +246,54 @@ def get_action_items(
     return action_items
 
 
+def _normalize_description(desc: Optional[str]) -> str:
+    """Normalize a task description for case-insensitive duplicate matching.
+
+    Strips whitespace + the legacy ``[screen]`` prefix/suffix marker that the
+    AI promotion pipeline used to add to AI-generated tasks (still appears in
+    historical data and on tasks that round-tripped through ``migrate_ai_tasks``).
+    """
+    if not desc:
+        return ''
+    s = desc.strip()
+    if s.startswith('[screen] '):
+        s = s[len('[screen] ') :]
+    if s.endswith(' [screen]'):
+        s = s[: -len(' [screen]')]
+    return s.strip().lower()
+
+
+def get_active_action_item_by_description(uid: str, description: str) -> Optional[dict]:
+    """Find an active (not completed, not deleted) action_item with a matching
+    description for the given user, or return None.
+
+    Match is case-insensitive and ignores ``[screen]`` markers and surrounding
+    whitespace, mirroring ``database.staged_tasks.create_staged_task``'s
+    dedup logic so that the staged → action_item promotion path can avoid
+    creating semantic duplicates.
+
+    Streams active items (typically a small bounded set per user) rather than
+    relying on a Firestore equality filter, because Firestore cannot do
+    case-insensitive matching natively without a normalized companion field.
+    """
+    target = _normalize_description(description)
+    if not target:
+        return None
+
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+
+    for doc in query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        if _normalize_description(data.get('description')) == target:
+            data['id'] = doc.id
+            return _prepare_action_item_for_read(data)
+
+    return None
+
+
 def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dict]:
     """
     Get all action items for a specific conversation.
