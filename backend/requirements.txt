@@ -145,7 +145,7 @@ posthog==3.5.2
 primePy==1.3
 prompt_toolkit==3.0.47
 proto-plus==1.24.0
-protobuf==4.25.4
+protobuf==4.25.8
 ptyprocess==0.7.0
 pure_eval==0.2.3
 pyarrow==17.0.0
