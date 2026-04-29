@@ -93,11 +93,20 @@ function translatePiEvent(line: unknown): AgentEvent | null {
     return { type: "error", message: String(event.finalError ?? "Agent retry failed") };
   }
 
+  // Agent ended — if it carries an error payload, surface it so silent
+  // terminations are visible.
+  if (piType === "agent_end") {
+    const errMsg = (event.error ?? event.errorMessage) as string | undefined;
+    if (typeof errMsg === "string" && errMsg.length > 0) {
+      return { type: "error", message: errMsg };
+    }
+    return null;
+  }
+
   // Internal terminal events and other lifecycle events: do not surface as
   // AgentEvents but also do not classify as `raw` — just drop them silently.
   const silentTypes = new Set([
     "agent_start",
-    "agent_end",
     "turn_start",
     "turn_end",
     "message_start",
@@ -157,6 +166,11 @@ export function useCodingAgent(): UseCodingAgent {
       (e) => {
         const { session_id, line } = e.payload;
         if (session_id !== activeSessionRef.current) return;
+
+        // Always log raw events to the console so silent failures are visible
+        // in DevTools without rebuilding.
+        // eslint-disable-next-line no-console
+        console.log("[coding-agent] raw event:", line);
 
         if (isStreamEndEvent(line) || isErrorEvent(line)) {
           setIsStreaming(false);

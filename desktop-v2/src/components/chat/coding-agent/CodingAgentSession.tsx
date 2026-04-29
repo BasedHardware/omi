@@ -118,6 +118,21 @@ export function CodingAgentSession() {
           {turns.map((turn) => (
             <TurnView key={turn.id} turn={turn} isStreaming={isStreaming && turn.isOpen} />
           ))}
+
+          {/* Thinking indicator — shown while a turn is in flight but the
+              assistant hasn't produced any visible output yet. Without this,
+              long cold starts (5-10s on OpenRouter Parasail routing) look
+              like a hung session. */}
+          {isStreaming && !hasOpenAssistantTurn(turns) && (
+            <Message from="assistant">
+              <MessageContent>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="size-3.5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-foreground" />
+                  Thinking…
+                </div>
+              </MessageContent>
+            </Message>
+          )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
@@ -276,6 +291,11 @@ function runningLabelFor(tool: string): string {
     default:
       return `Running ${tool}`;
   }
+}
+
+function hasOpenAssistantTurn(turns: Turn[]): boolean {
+  const last = turns[turns.length - 1];
+  return Boolean(last && last.role === "assistant" && last.items.length > 0);
 }
 
 function safeStringify(value: unknown): string {
