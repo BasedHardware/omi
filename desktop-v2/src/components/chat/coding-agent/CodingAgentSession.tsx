@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Code2, Cpu, FolderOpen } from "lucide-react";
 import {
@@ -145,7 +145,9 @@ export function CodingAgentSession() {
     void refreshSessions();
   }, [currentSession?.file, currentFilePath, folder, selectStoreSession, refreshSessions]);
 
-  const turns = buildTurns(events);
+  // Recompute only when the events array reference changes — typing in the
+  // textarea doesn't touch events, so the chat doesn't re-render per-keystroke.
+  const turns = useMemo(() => buildTurns(events), [events]);
 
   const handlePickFolder = useCallback(async () => {
     const chosen = await pickFolder();
@@ -479,7 +481,13 @@ function FolderPickerButton({
 
 // ---------------------------------------------------------------------------
 
-function TurnView({ turn, isStreaming }: { turn: Turn; isStreaming: boolean }) {
+// Memoized — only re-renders when this turn's identity or its streaming flag
+// changes. Otherwise typing in the prompt input would re-render every prior
+// turn (each with potentially expensive markdown).
+const TurnView = memo(function TurnView({
+  turn,
+  isStreaming,
+}: { turn: Turn; isStreaming: boolean }) {
   if (turn.role === "user") {
     const text = turn.items
       .filter((i): i is TextChunk => i.kind === "text")
@@ -552,11 +560,11 @@ function TurnView({ turn, isStreaming }: { turn: Turn; isStreaming: boolean }) {
       <MessageContent>{blocks}</MessageContent>
     </Message>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 
-function ToolCallView({ slot }: { slot: ToolSlot }) {
+const ToolCallView = memo(function ToolCallView({ slot }: { slot: ToolSlot }) {
   const { call, result } = slot;
   const status: ToolStatus = result?.isError
     ? "error"
@@ -580,7 +588,7 @@ function ToolCallView({ slot }: { slot: ToolSlot }) {
       runningLabel={runningLabelFor(call.tool)}
     />
   );
-}
+});
 
 function runningLabelFor(tool: string): string {
   switch (tool) {
