@@ -71,7 +71,27 @@ async def proxy_chat_completion(payload: dict, usage: StreamUsage) -> AsyncItera
 
     async with httpx.AsyncClient(timeout=OPENROUTER_TIMEOUT_SECONDS) as client:
         async with client.stream("POST", url, json=payload, headers=headers) as resp:
-            resp.raise_for_status()
+            # When OpenRouter returns a non-2xx, raise_for_status() raises mid-stream
+            # which FastAPI surfaces as a silent connection close to the client. Read
+            # the body and emit it as an SSE error event so Pi can render the failure
+            # instead of hanging.
+            if resp.status_code >= 400:
+                try:
+                    body_bytes = await resp.aread()
+                    body_text = body_bytes.decode("utf-8", errors="replace")[:1000]
+                except Exception:
+                    body_text = ""
+                logger.error(
+                    "agent_code upstream error: status=%s body=%s",
+                    resp.status_code,
+                    body_text,
+                )
+                err_payload = json.dumps(
+                    {"error": {"message": f"upstream {resp.status_code}: {body_text}", "code": resp.status_code}}
+                )
+                yield f"data: {err_payload}\n\n".encode("utf-8")
+                yield b"data: [DONE]\n\n"
+                return
             async for line in resp.aiter_lines():
                 if line == "":
                     yield b"\n"
