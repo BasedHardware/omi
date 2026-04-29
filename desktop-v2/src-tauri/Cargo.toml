@@ -30,6 +30,7 @@ urlencoding = "2"
 regex = "1"
 base64 = "0.22"
 sha2 = "0.10"
+libc = "0.2"
 url = "2"
 dotenvy = "0.15"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }

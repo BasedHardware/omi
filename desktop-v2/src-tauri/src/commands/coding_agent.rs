@@ -278,6 +278,23 @@ pub async fn coding_agent_start_session(
     .stdout(std::process::Stdio::piped())
     .stderr(std::process::Stdio::piped());
 
+    // Detach Pi (and every process Pi spawns — including dispatch_bash dev
+    // servers) into its own session/process group. Without this, killing Pi
+    // can cascade signals back through Tauri's group and take the whole app
+    // down. With it, we can SIGTERM the Pi group cleanly and Tauri stays up.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn Pi sidecar: {e}"))?;
     let mut stdin = child.stdin.take().ok_or("Pi sidecar stdin unavailable")?;
     let stdout = child.stdout.take().ok_or("Pi sidecar stdout unavailable")?;
@@ -432,20 +449,21 @@ pub async fn coding_agent_stop_session(session_id: String, app: AppHandle) -> Re
     };
 
     if let Some(mut child) = child_opt {
+        let pid = child.id() as i32;
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         loop {
             match child.try_wait() {
                 Ok(Some(_)) => break,
                 Ok(None) => {
                     if std::time::Instant::now() >= deadline {
-                        let _ = child.kill();
+                        kill_process_group(pid);
                         break;
                     }
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
                 Err(e) => {
                     tracing::warn!("[coding_agent] try_wait error: {e}");
-                    let _ = child.kill();
+                    kill_process_group(pid);
                     break;
                 }
             }
@@ -453,4 +471,27 @@ pub async fn coding_agent_stop_session(session_id: String, app: AppHandle) -> Re
     }
 
     Ok(())
+}
+
+/// Send SIGTERM (then SIGKILL after 500ms) to the entire process group whose
+/// leader is `pid`. Pi was spawned with `setsid()` so this group includes Pi
+/// AND every shell/dev-server it dispatched, but NOT the Tauri host. Without
+/// the negative-pid form, an orphaned `npm run dev` would survive Stop and
+/// keep its port bound.
+#[cfg(unix)]
+fn kill_process_group(pid: i32) {
+    unsafe {
+        // negative pid = process group
+        libc::kill(-pid, libc::SIGTERM);
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    unsafe {
+        libc::kill(-pid, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn kill_process_group(_pid: i32) {
+    // Windows: process groups work differently; fall back to per-process kill.
+    // Implement when we ship Windows builds.
 }
