@@ -81,11 +81,22 @@ def create_action_item(uid: str, action_item_data: dict, idempotency_key: Option
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    # Idempotency check: if the caller supplied a key and we already have a
-    # document with that key, return its id rather than creating a duplicate.
+    # Idempotency check: if the caller supplied a key and we already have an
+    # *active* (not completed, not soft-deleted) document with that key,
+    # return its id rather than creating a duplicate. Completed/deleted
+    # matches are treated as "the user is recreating the task" and we fall
+    # through to the normal create path — otherwise a permanent content hash
+    # would silently swallow legitimate re-creation of recurring tasks.
     if idempotency_key:
-        existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).limit(1)
+        existing_query = (
+            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
+            .where(filter=FieldFilter('completed', '==', False))
+            .limit(5)
+        )
         for doc in existing_query.stream():
+            data = doc.to_dict() or {}
+            if data.get('deleted'):
+                continue
             logger.info(
                 "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
                 uid,
