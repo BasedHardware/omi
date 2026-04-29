@@ -17,6 +17,8 @@ import { AppsPage } from "./components/apps/AppsPage";
 import { DeviceSettingsPage } from "./components/devices/DeviceSettingsPage";
 import { LibraryPage } from "./components/library/LibraryPage";
 import { PlanPage } from "./components/plan/PlanPage";
+import { CodingAgentSession } from "./components/chat/coding-agent/CodingAgentSession";
+import { CODING_AGENT_ENABLED } from "./config/codingAgentFeatureFlag";
 import { MemoryIndicator } from "./components/settings/MemoryIndicator";
 import {
   startTaskDeduplication,
@@ -28,6 +30,7 @@ import { useGoalStore } from "./stores/goalStore";
 import { useFocusStore } from "./stores/focusStore";
 import { useRewindStore } from "./stores/rewindStore";
 import { useChatStore } from "./stores/chatStore";
+import { attachAppSetupListener } from "./stores/appStore";
 import {
   initMemoryAssistant,
   stopMemoryAssistant,
@@ -87,6 +90,15 @@ function App() {
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
+
+  // Wire the OAuth handoff listener: when a plugin's auth flow completes the
+  // browser deep-links back to `nooto://app-setup-complete?app_id=…`, the Rust
+  // side emits `apps:setup-complete`, and this listener retries enable.
+  useEffect(() => {
+    attachAppSetupListener().catch((err) =>
+      console.warn("[apps] setup listener failed:", err),
+    );
+  }, []);
 
   // Sync the persisted PTT key to the Rust listener on every boot. The
   // listener is opt-in (see ptt::start_listener) and defaults to AltGr —
@@ -234,6 +246,9 @@ function KeepAliveRoutes() {
       <KeepAlivePane active={match("/library")}><LibraryPage /></KeepAlivePane>
       <KeepAlivePane active={match("/plan")}><PlanPage /></KeepAlivePane>
       <KeepAlivePane active={match("/goals/history")}><GoalsHistoryPage /></KeepAlivePane>
+      {CODING_AGENT_ENABLED && (
+        <KeepAlivePane active={match("/coding-agent")}><CodingAgentSession /></KeepAlivePane>
+      )}
       <KeepAlivePane active={match("/apps")}><AppsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/devices")}><DeviceSettingsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/settings")}><SettingsPage /></KeepAlivePane>

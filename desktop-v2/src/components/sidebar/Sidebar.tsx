@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   ChevronsUpDown,
   Bluetooth,
+  Code2,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useSidebarStore } from "../../stores/sidebarStore";
@@ -41,9 +42,12 @@ import {
 } from "../feedback/OrbIndicator";
 import { useElapsed } from "../../hooks/useElapsed";
 
+import { CODING_AGENT_ENABLED } from "@/config/codingAgentFeatureFlag";
+
 const primaryNav = [
   { to: "/dashboard", label: "Home", icon: Home },
   { to: "/chat", label: "Chat", icon: MessageSquare },
+  ...(CODING_AGENT_ENABLED ? [{ to: "/coding-agent", label: "Coding Agent", icon: Code2 }] : []),
   { to: "/library", label: "Library", icon: Library },
   { to: "/plan", label: "Plan", icon: CalendarCheck },
 ];
