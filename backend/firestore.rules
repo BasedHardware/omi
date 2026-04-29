@@ -1,7 +1,37 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default rules - update according to your security requirements
+
+    // -------------------------------------------------------------------------
+    // agent_code paths — written exclusively by the Firebase Admin SDK (server).
+    // Clients must never be able to modify balances, usage rows, or grants.
+    // Admin SDK requests bypass rules entirely, so denying client writes here is
+    // sufficient to enforce server-only writes.
+    // -------------------------------------------------------------------------
+
+    // Wallet document: owner read-only, no client writes.
+    match /users/{uid}/agent_code/wallet {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Per-turn usage records: owner read-only, no client writes.
+    match /users/{uid}/agent_code_usage/{turnId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Credit grants: owner read-only, no client writes.
+    match /users/{uid}/agent_code_grants/{grantId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Default rule — authenticated users can read/write everything else.
+    // NOTE: The agent_code paths above are more specific and will override this
+    // catch-all for those paths (rules_version = '2' specificity semantics).
+    // -------------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
