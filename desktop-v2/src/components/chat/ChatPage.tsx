@@ -61,6 +61,9 @@ import type { ChatStatus } from "ai";
 import { CitationList } from "./CitationList";
 import { ChatSessionsSidebar } from "./ChatSessionsSidebar";
 import { TaskChatPanel } from "./TaskChatPanel";
+import { CodingAgentSession } from "./coding-agent/CodingAgentSession";
+import { CODING_AGENT_ENABLED } from "@/config/codingAgentFeatureFlag";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Attachments display (must be inside PromptInput)
@@ -194,6 +197,15 @@ export function ChatPage() {
 
   const [inputText, setInputText] = useState("");
   const [taskPanelMessageId, setTaskPanelMessageId] = useState<string | null>(null);
+  const [mode, setMode] = useState<"chat" | "code">(() => {
+    const stored = typeof window !== "undefined" ? sessionStorage.getItem("chat:mode") : null;
+    return stored === "code" && CODING_AGENT_ENABLED ? "code" : "chat";
+  });
+
+  const setModeAndPersist = useCallback((next: "chat" | "code") => {
+    setMode(next);
+    if (typeof window !== "undefined") sessionStorage.setItem("chat:mode", next);
+  }, []);
 
   const chatStatus: ChatStatus = isStreaming ? "streaming" : "ready";
 
@@ -228,13 +240,100 @@ export function ChatPage() {
     setTaskPanelMessageId((cur) => (cur === id ? null : id));
   }, []);
 
-  const handleCitationSelect = useCallback((c: Citation) => {
-    // Consumers can wire navigation here. For now we log + rely on default.
-    console.log("[ChatPage] citation selected", c);
+  const handleCitationSelect = useCallback((_c: Citation) => {
+    // Navigation hook — consumers wire it here.
   }, []);
 
   return (
-    <div className="flex h-full min-w-0 flex-row">
+    <div className="flex h-full min-w-0 flex-col">
+      {CODING_AGENT_ENABLED && <ChatModeTabs mode={mode} onChange={setModeAndPersist} />}
+      {mode === "code" ? (
+        <div className="flex flex-1 min-h-0">
+          <CodingAgentSession />
+        </div>
+      ) : (
+        <ChatModeBody
+          messages={messages}
+          isStreaming={isStreaming}
+          sendMessage={sendMessage}
+          stopStreaming={stopStreaming}
+          clearMessages={clearMessages}
+          inputText={inputText}
+          setInputText={setInputText}
+          taskPanelMessageId={taskPanelMessageId}
+          handleSubmit={handleSubmit}
+          handleSuggestion={handleSuggestion}
+          handleRetry={handleRetry}
+          handleToggleTaskPanel={handleToggleTaskPanel}
+          handleCitationSelect={handleCitationSelect}
+          chatStatus={chatStatus}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChatModeTabs({
+  mode,
+  onChange,
+}: {
+  mode: "chat" | "code";
+  onChange: (m: "chat" | "code") => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 border-b border-border px-5 py-2 shrink-0">
+      {(["chat", "code"] as const).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          className={cn(
+            "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+            mode === m
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          )}
+        >
+          {m === "chat" ? "Chat" : "Code"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface ChatModeBodyProps {
+  messages: ChatMessage[];
+  isStreaming: boolean;
+  sendMessage: (text: string) => void | Promise<void>;
+  stopStreaming: () => void;
+  clearMessages: () => void;
+  inputText: string;
+  setInputText: (s: string) => void;
+  taskPanelMessageId: string | null;
+  handleSubmit: (m: PromptInputMessage) => void;
+  handleSuggestion: (s: string) => void;
+  handleRetry: () => void;
+  handleToggleTaskPanel: (id: string) => void;
+  handleCitationSelect: (c: Citation) => void;
+  chatStatus: ChatStatus;
+}
+
+function ChatModeBody({
+  messages,
+  isStreaming,
+  stopStreaming,
+  clearMessages,
+  inputText,
+  setInputText,
+  taskPanelMessageId,
+  handleSubmit,
+  handleSuggestion,
+  handleRetry,
+  handleToggleTaskPanel,
+  handleCitationSelect,
+  chatStatus,
+}: ChatModeBodyProps) {
+  return (
+    <div className="flex flex-1 min-h-0 min-w-0 flex-row">
       {/* Sessions rail */}
       <ChatSessionsSidebar />
 

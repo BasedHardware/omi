@@ -17,8 +17,6 @@ import { AppsPage } from "./components/apps/AppsPage";
 import { DeviceSettingsPage } from "./components/devices/DeviceSettingsPage";
 import { LibraryPage } from "./components/library/LibraryPage";
 import { PlanPage } from "./components/plan/PlanPage";
-import { CodingAgentSession } from "./components/chat/coding-agent/CodingAgentSession";
-import { CODING_AGENT_ENABLED } from "./config/codingAgentFeatureFlag";
 import { MemoryIndicator } from "./components/settings/MemoryIndicator";
 import {
   startTaskDeduplication,
@@ -246,9 +244,6 @@ function KeepAliveRoutes() {
       <KeepAlivePane active={match("/library")}><LibraryPage /></KeepAlivePane>
       <KeepAlivePane active={match("/plan")}><PlanPage /></KeepAlivePane>
       <KeepAlivePane active={match("/goals/history")}><GoalsHistoryPage /></KeepAlivePane>
-      {CODING_AGENT_ENABLED && (
-        <KeepAlivePane active={match("/coding-agent")}><CodingAgentSession /></KeepAlivePane>
-      )}
       <KeepAlivePane active={match("/apps")}><AppsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/devices")}><DeviceSettingsPage /></KeepAlivePane>
       <KeepAlivePane active={match("/settings")}><SettingsPage /></KeepAlivePane>
