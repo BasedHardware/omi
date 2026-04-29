@@ -1295,6 +1295,48 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_allows_empty_contents_without_role_injection() {
+        let body = serde_json::json!({
+            "contents": []
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert!(parsed["contents"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn sanitize_preserves_null_role() {
+        // role key exists but is null — preserves it (no override of explicit values)
+        let body = serde_json::json!({
+            "contents": [{"role": null, "parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // key exists so we don't inject — preserves explicit null
+        assert!(parsed["contents"][0]["role"].is_null());
+    }
+
+    #[test]
+    fn sanitize_preserves_empty_string_role() {
+        // role key exists but is "" — preserves it (no override of explicit values)
+        let body = serde_json::json!({
+            "contents": [{"role": "", "parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "");
+    }
+
+    #[test]
     fn sanitize_preserves_tools_field() {
         let body = serde_json::json!({
             "contents": [{"parts": [{"text": "hello"}]}],
