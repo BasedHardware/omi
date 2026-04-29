@@ -272,6 +272,120 @@ def test_promote_creates_when_no_duplicate(monkeypatch):
     assert isinstance(update_calls.get('promoted_at'), datetime)
 
 
+def test_promote_merges_missing_fields_on_dedup(monkeypatch):
+    """When dedup hits, fields the existing action_item is MISSING that the
+    staged task carries (e.g. a due_at from a later conversation) should be
+    merged onto the existing item rather than silently dropped."""
+    _stub_top_staged(
+        monkeypatch,
+        {
+            'id': 'staged-3',
+            'description': 'Email John',
+            'relevance_score': 1,
+            'due_at': '2026-05-01T10:00:00Z',
+            'priority': 'high',
+            'category': 'work',
+        },
+    )
+
+    existing = {
+        'id': 'existing-id-3',
+        'description': 'Email John',
+        'completed': False,
+        'priority': 'low',  # already set — must NOT be overwritten
+        # due_at and category missing — both should be merged in
+    }
+    monkeypatch.setattr(
+        action_items_db,
+        'get_active_action_item_by_description',
+        lambda uid, desc: existing,
+    )
+
+    update_calls = []
+    monkeypatch.setattr(
+        action_items_db,
+        'update_action_item',
+        lambda uid, action_id, data: update_calls.append((action_id, data)) or True,
+    )
+    monkeypatch.setattr(action_items_db, 'create_action_item', lambda uid, data: 'should-not-be-called')
+
+    result = staged_tasks_db.promote_staged_task('uid')
+
+    assert result['id'] == 'existing-id-3'
+    assert len(update_calls) == 1
+    target_id, merged = update_calls[0]
+    assert target_id == 'existing-id-3'
+    assert merged.get('due_at') == '2026-05-01T10:00:00Z'
+    assert merged.get('category') == 'work'
+    # priority was already set on existing — must not be overwritten
+    assert 'priority' not in merged
+    # The merged fields must also be reflected on the returned dict so the
+    # caller doesn't need to re-fetch.
+    assert result['due_at'] == '2026-05-01T10:00:00Z'
+    assert result['category'] == 'work'
+
+
+def test_promote_dedup_no_merge_when_existing_already_has_fields(monkeypatch):
+    """If the existing action_item already has every field the staged task
+    carries, the merge step should be a no-op (no update_action_item call)."""
+    _stub_top_staged(
+        monkeypatch,
+        {
+            'id': 'staged-4',
+            'description': 'Email John',
+            'relevance_score': 1,
+            'due_at': '2026-05-01T10:00:00Z',
+            'priority': 'high',
+        },
+    )
+
+    existing = {
+        'id': 'existing-id-4',
+        'description': 'Email John',
+        'completed': False,
+        'due_at': '2026-04-30T10:00:00Z',  # already set
+        'priority': 'low',  # already set
+    }
+    monkeypatch.setattr(
+        action_items_db,
+        'get_active_action_item_by_description',
+        lambda uid, desc: existing,
+    )
+
+    update_calls = []
+    monkeypatch.setattr(
+        action_items_db,
+        'update_action_item',
+        lambda uid, action_id, data: update_calls.append((action_id, data)) or True,
+    )
+    monkeypatch.setattr(action_items_db, 'create_action_item', lambda uid, data: 'should-not-be-called')
+
+    result = staged_tasks_db.promote_staged_task('uid')
+
+    assert result == existing
+    assert update_calls == [], "no merge call expected when existing has all fields"
+
+
+def test_create_staged_task_uses_normalized_dedup(monkeypatch):
+    """Regression for the normalization-divergence review note: an "[screen]"-
+    prefixed description should match an existing staged task whose
+    description omits the marker, so we don't end up with two staged
+    candidates that resolve to the same action_item."""
+    existing_doc = _make_doc(
+        'staged-existing',
+        {'description': 'Email John', 'completed': False},
+    )
+
+    fake_col = MagicMock()
+    fake_col.stream.return_value = iter([existing_doc])
+
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: fake_col)
+
+    result = staged_tasks_db.create_staged_task('uid', '[screen] Email John')
+    assert result['id'] == 'staged-existing'
+    fake_col.document.assert_not_called()  # no new doc written
+
+
 def test_promote_returns_none_when_no_staged(monkeypatch):
     fake_query = MagicMock()
     fake_query.where.return_value = fake_query
