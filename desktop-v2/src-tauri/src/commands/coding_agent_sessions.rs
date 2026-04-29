@@ -173,6 +173,35 @@ pub fn coding_agent_delete_session(file_path: String) -> Result<(), String> {
     std::fs::remove_file(&file_path).map_err(|e| format!("Failed to delete session: {e}"))
 }
 
+/// Read a session JSONL and return every entry whose `type === "message"`,
+/// stripped down to the `message` payload. The frontend translates these into
+/// AgentEvents so the chat repopulates when a session is restored.
+///
+/// Pi's switch_session loads state internally without re-emitting message
+/// events, which is why we have to load history on the client side.
+#[tauri::command]
+pub fn coding_agent_load_session_messages(file_path: String) -> Result<Vec<serde_json::Value>, String> {
+    let f = std::fs::File::open(&file_path).map_err(|e| format!("Failed to open session file: {e}"))?;
+    let reader = std::io::BufReader::new(f);
+    let mut out = Vec::new();
+    for line in reader.lines() {
+        let line = line.map_err(|e| format!("Read error: {e}"))?;
+        if line.is_empty() {
+            continue;
+        }
+        let val: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if val.get("type").and_then(|v| v.as_str()) == Some("message") {
+            if let Some(msg) = val.get("message").cloned() {
+                out.push(msg);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Rename a session by updating the `name` field in the header line.
 /// Writes atomically via a temp-file + rename.
 #[tauri::command]

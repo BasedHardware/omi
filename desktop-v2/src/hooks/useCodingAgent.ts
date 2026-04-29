@@ -169,6 +169,59 @@ function isErrorEvent(line: unknown): boolean {
   return false;
 }
 
+// Convert a Pi `Message` JSON object (from a JSONL session entry's
+// `message` field) into the AgentEvent[] our UI renders. Used to replay
+// history when a session is restored — Pi's switch_session loads state
+// silently, so we have to reconstruct the chat ourselves.
+function piMessageToEvents(msg: unknown): AgentEvent[] {
+  if (typeof msg !== "object" || msg === null) return [];
+  const m = msg as Record<string, unknown>;
+  const role = m.role as string | undefined;
+  const contentArr = (m.content as Array<Record<string, unknown>> | undefined) ?? [];
+
+  if (role === "user") {
+    const text = contentArr
+      .filter((c) => c.type === "text" && typeof c.text === "string")
+      .map((c) => String(c.text))
+      .join("");
+    return text ? [{ type: "user_text", text }] : [];
+  }
+
+  if (role === "assistant") {
+    const out: AgentEvent[] = [];
+    for (const c of contentArr) {
+      if (c.type === "text" && typeof c.text === "string" && c.text.length > 0) {
+        out.push({ type: "text", text: String(c.text) });
+      } else if (c.type === "toolCall") {
+        out.push({
+          type: "tool_call",
+          tool: String(c.name ?? ""),
+          input: c.arguments,
+          id: String(c.id ?? ""),
+        });
+      }
+    }
+    return out;
+  }
+
+  if (role === "toolResult") {
+    const text = contentArr
+      .filter((c) => c.type === "text" && typeof c.text === "string")
+      .map((c) => String(c.text))
+      .join("");
+    return [
+      {
+        type: "tool_result",
+        id: String(m.toolCallId ?? ""),
+        output: text,
+        isError: Boolean(m.isError),
+      },
+    ];
+  }
+
+  return [];
+}
+
 // Extract session metadata from a Pi `get_state` response event.
 // Pi responds with `{ type: "response", command: "get_state", state: { sessionFile, sessionId, sessionName, … } }`.
 function extractGetStateSession(line: unknown): CurrentSession | null {
@@ -271,9 +324,26 @@ export function useCodingAgent(): UseCodingAgent {
 
       const sessionId = crypto.randomUUID();
       activeSessionRef.current = sessionId;
-      setEvents([]);
       setCurrentSession(null);
       setIsStreaming(true);
+
+      // Replay prior history when restoring an existing session, otherwise
+      // start with an empty chat.
+      if (sessionPath) {
+        try {
+          const messages = await invoke<unknown[]>("coding_agent_load_session_messages", {
+            filePath: sessionPath,
+          });
+          const replayed = messages.flatMap(piMessageToEvents);
+          setEvents(replayed);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn("[coding-agent] failed to load session history:", err);
+          setEvents([]);
+        }
+      } else {
+        setEvents([]);
+      }
 
       await invoke("coding_agent_start_session", {
         folder,
