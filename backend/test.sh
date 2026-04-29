@@ -73,6 +73,7 @@ pytest tests/unit/test_action_item_date_validation.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v
 pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
+pytest tests/unit/test_action_item_idempotency.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
