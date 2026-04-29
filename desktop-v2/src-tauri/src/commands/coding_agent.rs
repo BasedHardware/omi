@@ -326,7 +326,12 @@ pub async fn coding_agent_start_session(
         .map_err(|e| format!("Failed to write switch_session RPC: {e}"))?;
     }
 
-    {
+    // An empty prompt with a session_path = pure restore: load the JSONL via
+    // switch_session above, but don't kick off an agent turn. Pi would
+    // otherwise call the model with an empty user message and the chat would
+    // hang at "Starting agent…" forever (no turn_start, no text_delta).
+    let send_initial = !prompt.is_empty() || images.as_ref().map_or(false, |v| !v.is_empty());
+    if send_initial {
         let mut prompt_json = serde_json::json!({
             "id": "r1",
             "type": "prompt",

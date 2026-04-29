@@ -546,6 +546,16 @@ export function useCodingAgent(): UseCodingAgent {
         // Non-fatal: session metadata just won't be populated.
       });
 
+      // Pure restore (sessionPath set, no prompt and no images) — Pi just
+      // loaded the JSONL via switch_session and is sitting idle. Mark the
+      // session ready so the strip stops saying "Starting agent…".
+      const isPureRestore =
+        Boolean(sessionPath) && !prompt && (!images || images.length === 0);
+      if (isPureRestore) {
+        setIsStreaming(false);
+        setStatus({ kind: "idle" });
+      }
+
       return sessionId;
     },
     [idToken, refreshToken],
