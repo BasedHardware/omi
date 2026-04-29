@@ -57,36 +57,41 @@ impl Default for CodingAgentState {
 
 /// Resolve the `pi-agent/` resource directory.
 ///
+/// Debug: source dir at `<CARGO_MANIFEST_DIR>/sidecar/pi-agent/`. We do NOT
+/// fall back to `<resource_dir>/pi-agent/` because Tauri may have populated a
+/// stale partial copy there from `bundle.resources`, missing newly-added
+/// extensions.
+///
 /// Release: `Contents/Resources/pi-agent/` (Tauri resource bundler).
-/// Debug: walks up from `resource_dir` to find `sidecar/pi-agent/` in the repo.
+#[cfg(debug_assertions)]
+fn pi_resource_dir(_app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let candidate = std::path::Path::new(manifest_dir).join("sidecar/pi-agent");
+    if candidate.exists() {
+        Ok(candidate)
+    } else {
+        Err(format!(
+            "sidecar/pi-agent not found at {} (CARGO_MANIFEST_DIR + sidecar/pi-agent)",
+            candidate.display()
+        ))
+    }
+}
+
+#[cfg(not(debug_assertions))]
 fn pi_resource_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     let resource_dir = app
         .path()
         .resource_dir()
         .map_err(|e| format!("resource_dir unavailable: {e}"))?;
-
-    let release_candidate = resource_dir.join("pi-agent");
-    if release_candidate.exists() {
-        return Ok(release_candidate);
+    let candidate = resource_dir.join("pi-agent");
+    if candidate.exists() {
+        Ok(candidate)
+    } else {
+        Err(format!(
+            "pi-agent resource bundle not found at {}",
+            candidate.display()
+        ))
     }
-
-    // Dev: walk up from the debug resource dir to the repo root.
-    let mut dir = resource_dir.as_path();
-    for _ in 0..8 {
-        let candidate = dir.join("sidecar/pi-agent");
-        if candidate.exists() {
-            return Ok(candidate);
-        }
-        match dir.parent() {
-            Some(p) => dir = p,
-            None => break,
-        }
-    }
-
-    Err(format!(
-        "Could not locate pi-agent resource directory relative to {}",
-        resource_dir.display()
-    ))
 }
 
 /// Convert a `PathBuf` to `&str`, returning an error instead of silently
