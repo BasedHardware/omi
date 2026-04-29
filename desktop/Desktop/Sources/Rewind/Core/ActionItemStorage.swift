@@ -571,11 +571,15 @@ actor ActionItemStorage {
                     .filter(Column("backendSynced") == false)
                     .filter(Column("backendId") == nil || Column("backendId") == "")
                     .filter(Column("description") == item.description)
-                    .filter(Column("source") == (item.source ?? ""))
                     .fetchOne(database) {
                     // Adopt orphaned local record: link it to the backend ID.
                     // This heals records where saveTaskToSQLite succeeded but
                     // markSynced failed (e.g. app crash between backend sync and local update).
+                    // Match by description only — backend may not preserve the client's
+                    // `source` (manual tasks frequently come back with source=nil),
+                    // and a stricter match here causes the orphan to never be adopted,
+                    // leaving the manual unsynced and producing a duplicate row on every
+                    // pull that returns the same task.
                     orphan.backendId = item.id
                     orphan.backendSynced = true
                     orphan.updateFrom(item)
