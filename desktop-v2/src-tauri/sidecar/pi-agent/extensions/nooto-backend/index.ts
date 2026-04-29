@@ -9,7 +9,7 @@
  *    on the local GPU box.
  *
  *    Required env:
- *      NOOTO_DIRECT_LLM_URL   e.g. http://192.168.86.23:8000/v1
+ *      NOOTO_DIRECT_LLM_URL   e.g. http://<vllm-host>:<port>/v1
  *    Optional env:
  *      NOOTO_DIRECT_LLM_MODEL served model name (default "qwen3.6-35b-a3b")
  *

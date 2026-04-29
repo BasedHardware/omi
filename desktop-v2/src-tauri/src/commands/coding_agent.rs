@@ -259,7 +259,7 @@ pub async fn coding_agent_start_session(
         .env("NOOTO_BACKEND_URL", &backend_url)
         .env("NOOTO_ID_TOKEN", &id_token);
 
-    // When set in the parent shell (e.g. `NOOTO_DIRECT_LLM_URL=http://192.168.86.23:8000/v1`),
+    // When set in the parent shell (e.g. `NOOTO_DIRECT_LLM_URL=http://<vllm-host>:<port>/v1`),
     // the Pi extension switches to direct mode and bypasses the cloud backend
     // entirely — pointing Pi straight at a self-hosted vLLM/Ollama endpoint.
     if let Ok(direct_url) = std::env::var("NOOTO_DIRECT_LLM_URL") {
