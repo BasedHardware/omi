@@ -43,6 +43,7 @@ fal_client==0.4.1
 fastapi==0.112.0
 fastapi-cli==0.0.5
 fastapi-utilities==0.2.0
+filetype==1.2.0
 filelock==3.15.4
 firebase-admin==6.5.0
 flatbuffers==24.3.25
@@ -51,6 +52,7 @@ frozenlist==1.4.1
 fsspec==2024.6.1
 gitdb==4.0.11
 GitPython==3.1.43
+google-ai-generativelanguage==0.11.0
 google-api-core==2.19.1
 google-api-python-client==2.139.0
 google-auth==2.32.0
@@ -93,6 +95,7 @@ kiwisolver==1.4.5
 langchain==0.3.27
 langchain-community==0.3.31
 langchain-core==0.3.79
+langchain-google-genai==2.1.12
 langchain-openai==0.3.35
 langchain-pinecone==0.2.12
 pinecone==7.3.0
