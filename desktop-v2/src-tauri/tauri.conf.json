@@ -115,7 +115,8 @@
       "sidecar/pi-agent/dist/export-html": "pi-agent/export-html",
       "sidecar/pi-agent/dist/photon_rs_bg.wasm": "pi-agent/photon_rs_bg.wasm",
       "sidecar/pi-agent/extensions/nooto-backend": "pi-agent/extensions/nooto-backend",
-      "sidecar/pi-agent/extensions/nooto-permissions": "pi-agent/extensions/nooto-permissions"
+      "sidecar/pi-agent/extensions/nooto-permissions": "pi-agent/extensions/nooto-permissions",
+      "sidecar/pi-agent/extensions/nooto-td": "pi-agent/extensions/nooto-td"
     },
     "macOS": {
       "minimumSystemVersion": "12.0"
