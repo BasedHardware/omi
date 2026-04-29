@@ -18,4 +18,4 @@ pub const COMPANION_CUTOVER_ENABLED: bool = true;
 /// is hidden — the underlying code still ships, just dark.
 ///
 /// Default: `false` until the feature has soaked in internal dogfood.
-pub const CODING_AGENT_ENABLED: bool = false;
+pub const CODING_AGENT_ENABLED: bool = true;

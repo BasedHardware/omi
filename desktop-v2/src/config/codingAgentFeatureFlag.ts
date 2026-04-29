@@ -8,4 +8,4 @@
  * When `false`: the nav entry is hidden and the route mount is skipped, so the
  * feature is dark even though the components still ship.
  */
-export const CODING_AGENT_ENABLED = false;
+export const CODING_AGENT_ENABLED = true;
