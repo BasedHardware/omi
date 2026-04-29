@@ -1,0 +1,8 @@
+{
+  "name": "nooto-pi-extension-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extension that provides dispatch_bash — a non-blocking shell execution tool that streams output to the Nooto TerminalPane.",
+  "type": "module",
+  "main": "index.ts"
+}

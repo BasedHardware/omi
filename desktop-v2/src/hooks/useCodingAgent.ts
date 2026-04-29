@@ -15,15 +15,28 @@ export type AgentEvent =
   | { type: "error"; message: string }
   | { type: "raw"; payload: unknown };
 
+/** Metadata about the Pi session that is currently loaded in the sidecar. */
+export interface CurrentSession {
+  /** Absolute path to the JSONL session file on disk. */
+  file?: string;
+  /** Pi's internal session UUID. */
+  id?: string;
+  /** Human-readable session name (set by Pi or renamed by user). */
+  name?: string;
+}
+
 export interface UseCodingAgent {
   pickFolder: () => Promise<string | null>;
-  startSession: (folder: string, prompt: string, model?: string) => Promise<string>;
+  startSession: (folder: string, prompt: string, model?: string, sessionPath?: string) => Promise<string>;
   sendMessage: (sessionId: string, message: string) => Promise<void>;
+  sendRawRpc: (sessionId: string, jsonValue: unknown) => Promise<void>;
   stopSession: (sessionId: string) => Promise<void>;
   pushUserText: (text: string) => void;
   pushError: (message: string) => void;
   events: AgentEvent[];
   isStreaming: boolean;
+  /** Metadata about the Pi session resolved after `startSession`. */
+  currentSession: CurrentSession | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,6 +44,20 @@ export interface UseCodingAgent {
 // ---------------------------------------------------------------------------
 
 const BACKEND_URL = "https://nooto-dev.togodynamics.com";
+
+// Pi event types that carry no displayable content — silently dropped.
+const SILENT_PI_TYPES = new Set([
+  "agent_start",
+  "turn_start",
+  "turn_end",
+  "tool_execution_start",
+  "tool_execution_update",
+  "queue_update",
+  "compaction_start",
+  "compaction_end",
+  "auto_retry_start",
+  "auto_retry_end",
+]);
 
 // ---------------------------------------------------------------------------
 // Pi RPC event translation
@@ -120,21 +147,7 @@ function translatePiEvent(line: unknown): AgentEvent | null {
     return null;
   }
 
-  // Internal terminal events and other lifecycle events: do not surface as
-  // AgentEvents but also do not classify as `raw` — just drop them silently.
-  const silentTypes = new Set([
-    "agent_start",
-    "turn_start",
-    "turn_end",
-    "tool_execution_start",
-    "tool_execution_update",
-    "queue_update",
-    "compaction_start",
-    "compaction_end",
-    "auto_retry_start",
-    "auto_retry_end", // success=true branch
-  ]);
-  if (piType && silentTypes.has(piType)) return null;
+  if (piType && SILENT_PI_TYPES.has(piType)) return null;
 
   // Unrecognised: pass through for debugging.
   return { type: "raw", payload: line };
@@ -156,6 +169,21 @@ function isErrorEvent(line: unknown): boolean {
   return false;
 }
 
+// Extract session metadata from a Pi `get_state` response event.
+// Pi responds with `{ type: "response", command: "get_state", state: { sessionFile, sessionId, sessionName, … } }`.
+function extractGetStateSession(line: unknown): CurrentSession | null {
+  if (typeof line !== "object" || line === null) return null;
+  const event = line as Record<string, unknown>;
+  if (event.type !== "response" || event.command !== "get_state") return null;
+  const state = event.state as Record<string, unknown> | undefined;
+  if (!state) return null;
+  return {
+    file: typeof state.sessionFile === "string" ? state.sessionFile : undefined,
+    id: typeof state.sessionId === "string" ? state.sessionId : undefined,
+    name: typeof state.sessionName === "string" ? state.sessionName : undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -166,6 +194,7 @@ export function useCodingAgent(): UseCodingAgent {
 
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [currentSession, setCurrentSession] = useState<CurrentSession | null>(null);
 
   // Track which session is currently active so the event listener can filter.
   const activeSessionRef = useRef<string | null>(null);
@@ -189,6 +218,12 @@ export function useCodingAgent(): UseCodingAgent {
 
         if (isStreamEndEvent(line) || isErrorEvent(line)) {
           setIsStreaming(false);
+        }
+
+        const sessionMeta = extractGetStateSession(line);
+        if (sessionMeta !== null) {
+          setCurrentSession(sessionMeta);
+          return; // `get_state` response is internal; don't surface to events[]
         }
 
         const translated = translatePiEvent(line);
@@ -225,7 +260,7 @@ export function useCodingAgent(): UseCodingAgent {
   }, []);
 
   const startSession = useCallback(
-    async (folder: string, prompt: string, model?: string): Promise<string> => {
+    async (folder: string, prompt: string, model?: string, sessionPath?: string): Promise<string> => {
       let token = idToken;
       if (!token) {
         const ok = await refreshToken();
@@ -237,6 +272,7 @@ export function useCodingAgent(): UseCodingAgent {
       const sessionId = crypto.randomUUID();
       activeSessionRef.current = sessionId;
       setEvents([]);
+      setCurrentSession(null);
       setIsStreaming(true);
 
       await invoke("coding_agent_start_session", {
@@ -246,6 +282,17 @@ export function useCodingAgent(): UseCodingAgent {
         idToken: token,
         backendUrl: BACKEND_URL,
         model,
+        sessionPath: sessionPath ?? null,
+      });
+
+      // Ask Pi to report the resolved session metadata (file path, id, name).
+      // The response arrives as a `coding-agent:event` with type="response",
+      // command="get_state" and is captured by the listener above.
+      await invoke("coding_agent_send_raw_rpc", {
+        sessionId,
+        jsonValue: { type: "get_state" },
+      }).catch(() => {
+        // Non-fatal: session metadata just won't be populated.
       });
 
       return sessionId;
@@ -256,6 +303,10 @@ export function useCodingAgent(): UseCodingAgent {
   const sendMessage = useCallback(async (sessionId: string, message: string): Promise<void> => {
     setIsStreaming(true);
     await invoke("coding_agent_send_message", { sessionId, message });
+  }, []);
+
+  const sendRawRpc = useCallback(async (sessionId: string, jsonValue: unknown): Promise<void> => {
+    await invoke("coding_agent_send_raw_rpc", { sessionId, jsonValue });
   }, []);
 
   const stopSession = useCallback(async (sessionId: string): Promise<void> => {
@@ -279,10 +330,12 @@ export function useCodingAgent(): UseCodingAgent {
     pickFolder,
     startSession,
     sendMessage,
+    sendRawRpc,
     stopSession,
     pushUserText,
     pushError,
     events,
     isStreaming,
+    currentSession,
   };
 }

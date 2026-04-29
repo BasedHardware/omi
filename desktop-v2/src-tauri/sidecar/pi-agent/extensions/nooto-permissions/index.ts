@@ -147,9 +147,9 @@ export default function registerNootoPermissions(pi: ExtensionAPI): void {
         return {
           block: true,
           reason:
-            `'${longRunning[0]}' starts a long-running server that never returns — the bash tool would hang. ` +
-            `To inspect the project, try 'cat package.json', 'ls', or run 'npm run' (no script) to list available scripts. ` +
-            `If you genuinely need to start a server, ask the user to start it in another terminal and then continue.`,
+            `'${longRunning[0]}' starts a long-running server that never returns — the bash tool would hang indefinitely. ` +
+            `Use the \`dispatch_bash\` tool instead: it runs the command in the background and streams output to the UI terminal pane. ` +
+            `To inspect scripts first, try 'cat package.json' or 'npm run' (no args) to list available scripts.`,
         };
       }
       return;

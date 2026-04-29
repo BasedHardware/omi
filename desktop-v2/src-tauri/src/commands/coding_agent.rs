@@ -23,6 +23,7 @@ use std::process::{Child, ChildStdin};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -101,6 +102,33 @@ fn path_str(p: &std::path::Path) -> Result<&str, String> {
         .ok_or_else(|| format!("Path is not valid UTF-8: {}", p.display()))
 }
 
+/// Compute the per-project session directory:
+/// `~/.nooto/coding-agent/sessions/<sha256(folder)[:12]>/`
+///
+/// Using a hash of the absolute folder path keeps the directory name
+/// path-safe (no slashes, fixed length) while still being scoped per project.
+pub fn session_dir_for_folder(folder: &str) -> Result<std::path::PathBuf, String> {
+    let home = std::env::var("HOME")
+        .map(std::path::PathBuf::from)
+        .map_err(|_| "HOME environment variable not set".to_string())?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(folder.as_bytes());
+    let hash_bytes = hasher.finalize();
+    // Take the first 12 hex characters (6 bytes).
+    let hash_prefix: String = hash_bytes
+        .iter()
+        .take(6)
+        .map(|b| format!("{:02x}", b))
+        .collect();
+
+    Ok(home
+        .join(".nooto")
+        .join("coding-agent")
+        .join("sessions")
+        .join(&hash_prefix))
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -130,6 +158,10 @@ pub fn coding_agent_get_mode_info() -> serde_json::Value {
 /// Spawn the Pi sidecar, write the initial prompt, and start streaming events
 /// back to the frontend as `"coding-agent:event"` with payload
 /// `{ session_id, line }`.
+///
+/// When `session_path` is `Some`, Pi is asked to resume an existing session
+/// via the RPC `switch_session` command (written to stdin before the prompt).
+/// When `None`, Pi creates a fresh session in the per-project session-dir.
 #[tauri::command]
 pub async fn coding_agent_start_session(
     folder: String,
@@ -138,6 +170,7 @@ pub async fn coding_agent_start_session(
     id_token: String,
     backend_url: String,
     model: Option<String>,
+    session_path: Option<String>,
     app: AppHandle,
 ) -> Result<(), String> {
     // In direct mode (NOOTO_DIRECT_LLM_URL set), the Pi extension only
@@ -157,12 +190,14 @@ pub async fn coding_agent_start_session(
     let ext_backend = pi_dir.join("extensions/nooto-backend/index.ts");
     let ext_perms = pi_dir.join("extensions/nooto-permissions/index.ts");
     let ext_td = pi_dir.join("extensions/nooto-td/index.ts");
+    let ext_terminal = pi_dir.join("extensions/nooto-terminal/index.ts");
 
     // Validate extensions exist before spawning so the error is actionable.
     for (label, path) in [
         ("nooto-backend", &ext_backend),
         ("nooto-permissions", &ext_perms),
         ("nooto-td", &ext_td),
+        ("nooto-terminal", &ext_terminal),
     ] {
         if !path.exists() {
             return Err(format!("{label} extension not found at {}", path.display()));
@@ -224,14 +259,20 @@ pub async fn coding_agent_start_session(
     #[cfg(not(debug_assertions))]
     cmd.env("PI_PACKAGE_DIR", path_str(&pi_dir)?);
 
+    let sess_dir = session_dir_for_folder(&folder)?;
+    std::fs::create_dir_all(&sess_dir)
+        .map_err(|e| format!("Cannot create session dir {}: {e}", sess_dir.display()))?;
+    let sess_dir_str = path_str(&sess_dir)?.to_string();
+
     cmd.args([
         "--mode", "rpc",
         "-e", path_str(&ext_backend)?,
         "-e", path_str(&ext_perms)?,
         "-e", path_str(&ext_td)?,
+        "-e", path_str(&ext_terminal)?,
         "--provider", "nooto-backend",
         "--model", &model_arg,
-        "--no-session",
+        "--session-dir", &sess_dir_str,
     ])
     .stdin(std::process::Stdio::piped())
     .stdout(std::process::Stdio::piped())
@@ -241,6 +282,17 @@ pub async fn coding_agent_start_session(
     let mut stdin = child.stdin.take().ok_or("Pi sidecar stdin unavailable")?;
     let stdout = child.stdout.take().ok_or("Pi sidecar stdout unavailable")?;
     let stderr = child.stderr.take().ok_or("Pi sidecar stderr unavailable")?;
+
+    // If a specific session file was requested, send `switch_session` first so
+    // Pi loads the prior conversation before accepting the new prompt.
+    if let Some(ref sp) = session_path {
+        writeln!(
+            stdin,
+            "{}",
+            serde_json::json!({ "type": "switch_session", "sessionPath": sp })
+        )
+        .map_err(|e| format!("Failed to write switch_session RPC: {e}"))?;
+    }
 
     writeln!(
         stdin,
@@ -318,6 +370,18 @@ pub async fn coding_agent_start_session(
     Ok(())
 }
 
+/// Write a single JSONL line to the stdin of a running session.
+fn write_stdin_line(
+    stdins: &mut std::sync::MutexGuard<HashMap<String, ChildStdin>>,
+    session_id: &str,
+    json_value: &Value,
+) -> Result<(), String> {
+    let stdin = stdins
+        .get_mut(session_id)
+        .ok_or_else(|| format!("No active session: {session_id}"))?;
+    writeln!(stdin, "{json_value}").map_err(|e| format!("Failed to write to Pi stdin: {e}"))
+}
+
 /// Write a follow-up prompt to a running session's stdin.
 #[tauri::command]
 pub async fn coding_agent_send_message(
@@ -327,15 +391,25 @@ pub async fn coding_agent_send_message(
 ) -> Result<(), String> {
     let state: State<CodingAgentState> = app.state();
     let mut stdins = state.stdins.lock().map_err(|e| format!("lock poisoned: {e}"))?;
-    let stdin = stdins
-        .get_mut(&session_id)
-        .ok_or_else(|| format!("No active session: {session_id}"))?;
-    writeln!(
-        stdin,
-        "{}",
-        serde_json::json!({ "type": "prompt", "message": message, "streamingBehavior": "steer" })
+    write_stdin_line(
+        &mut stdins,
+        &session_id,
+        &serde_json::json!({ "type": "prompt", "message": message, "streamingBehavior": "steer" }),
     )
-    .map_err(|e| format!("Failed to write to Pi stdin: {e}"))
+}
+
+/// Write a raw JSON value as a newline-terminated JSONL line to a running
+/// session's stdin.  Used by the frontend to send Pi RPC commands that are
+/// not prompts (e.g. `get_state`, `switch_session`, `set_session_name`).
+#[tauri::command]
+pub async fn coding_agent_send_raw_rpc(
+    session_id: String,
+    json_value: Value,
+    app: AppHandle,
+) -> Result<(), String> {
+    let state: State<CodingAgentState> = app.state();
+    let mut stdins = state.stdins.lock().map_err(|e| format!("lock poisoned: {e}"))?;
+    write_stdin_line(&mut stdins, &session_id, &json_value)
 }
 
 /// Gracefully shut down a session: send `{"type":"shutdown"}`, wait up to 2 s,

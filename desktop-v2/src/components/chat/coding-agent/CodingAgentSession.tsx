@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { TerminalPane } from "./TerminalPane";
 
 const MODEL_STORAGE_KEY = "coding-agent:model";
 
@@ -172,6 +173,7 @@ export function CodingAgentSession() {
         <ConversationScrollButton />
       </Conversation>
 
+      <TerminalPane sessionId={sessionId} />
       <div className="shrink-0 px-5 pb-5 pt-3">
         <PromptInput onSubmit={handleSubmit} className="w-full">
           <PromptInputBody>
