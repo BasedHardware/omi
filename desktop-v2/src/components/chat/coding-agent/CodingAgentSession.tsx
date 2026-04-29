@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import { Code2, FolderOpen } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { Code2, Cpu, FolderOpen } from "lucide-react";
 import {
   Conversation,
   ConversationContent,
@@ -58,6 +59,18 @@ export function CodingAgentSession() {
     const stored = typeof window !== "undefined" ? localStorage.getItem(MODEL_STORAGE_KEY) : null;
     return stored && findModel(stored) ? stored : DEFAULT_MODEL_ID;
   });
+
+  // Fetch the runtime mode (direct vs cloud) once on mount so we can swap the
+  // model dropdown for a static badge when direct mode is active — the picker
+  // is irrelevant there because the spawn always uses NOOTO_DIRECT_LLM_MODEL.
+  const [modeInfo, setModeInfo] = useState<{ direct: boolean; directModel?: string }>({ direct: false });
+  useEffect(() => {
+    invoke<{ direct: boolean; directModel?: string }>("coding_agent_get_mode_info")
+      .then(setModeInfo)
+      .catch(() => {
+        /* keep cloud-mode default */
+      });
+  }, []);
 
   const setModel = useCallback((next: string) => {
     setModelState(next);
@@ -176,7 +189,11 @@ export function CodingAgentSession() {
           <PromptInputFooter>
             <PromptInputTools>
               <FolderPickerButton folder={folder} onPick={() => void handlePickFolder()} />
-              <ModelSelector value={model} onChange={setModel} />
+              {modeInfo.direct ? (
+                <DirectModeBadge model={modeInfo.directModel ?? "qwen3.6-35b-a3b"} />
+              ) : (
+                <ModelSelector value={model} onChange={setModel} />
+              )}
             </PromptInputTools>
             <PromptInputSubmit
               status={isStreaming ? "streaming" : "ready"}
@@ -191,6 +208,18 @@ export function CodingAgentSession() {
 }
 
 // ---------------------------------------------------------------------------
+
+function DirectModeBadge({ model }: { model: string }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-600 dark:text-emerald-400"
+      title={`Direct mode — calling ${model} on your local vLLM (NOOTO_DIRECT_LLM_URL)`}
+    >
+      <Cpu className="size-3.5" />
+      <span className="font-mono">{model} · local</span>
+    </div>
+  );
+}
 
 function ModelSelector({
   value,

@@ -113,6 +113,20 @@ pub async fn coding_agent_pick_folder(app: AppHandle) -> Result<Option<String>, 
     Ok(app.dialog().file().blocking_pick_folder().map(|p| p.to_string()))
 }
 
+/// Report whether the agent is in direct (self-hosted) or cloud mode, plus the
+/// model id that direct mode will use. Lets the UI swap the dropdown for a
+/// static badge when the picker is meaningless.
+#[tauri::command]
+pub fn coding_agent_get_mode_info() -> serde_json::Value {
+    let direct_url = std::env::var("NOOTO_DIRECT_LLM_URL").ok();
+    let direct_model = std::env::var("NOOTO_DIRECT_LLM_MODEL").ok();
+    serde_json::json!({
+        "direct": direct_url.is_some(),
+        "directUrl": direct_url,
+        "directModel": direct_model,
+    })
+}
+
 /// Spawn the Pi sidecar, write the initial prompt, and start streaming events
 /// back to the frontend as `"coding-agent:event"` with payload
 /// `{ session_id, line }`.
