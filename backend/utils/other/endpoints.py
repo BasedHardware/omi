@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -13,6 +15,19 @@ from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
+
+_ADMIN_KEY = os.getenv('ADMIN_KEY', '')
+
+
+def verify_admin_key_header(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
+    """FastAPI dependency: validate X-Admin-Key using constant-time comparison.
+
+    Returns a short hash of the key for audit logging — never the raw key.
+    Raises HTTP 403 if the key is missing or wrong.
+    """
+    if not _ADMIN_KEY or not hmac.compare_digest(x_admin_key, _ADMIN_KEY):
+        raise HTTPException(status_code=403, detail='Invalid admin key')
+    return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
 
 
 def get_user(uid: str):

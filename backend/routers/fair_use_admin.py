@@ -1,16 +1,13 @@
 """Admin endpoints for fair-use management."""
 
-import hashlib
-import hmac
 import logging
-import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 import database.fair_use as fair_use_db
 from database._client import db
-from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
+from utils.other.endpoints import get_current_user_uid, rate_limit_dependency, verify_admin_key_header
 from utils.fair_use import (
     get_rolling_speech_ms,
     get_dg_budget_status,
@@ -25,17 +22,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-ADMIN_KEY = os.getenv('ADMIN_KEY', '')
-
-
-def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
-    """Validate admin key from request header using constant-time comparison.
-
-    Returns a short hash of the key for audit logging (not the key itself).
-    """
-    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
-        raise HTTPException(status_code=403, detail='Invalid admin key')
-    return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
+_verify_admin_key = verify_admin_key_header
 
 
 # ---------------------------------------------------------------------------
