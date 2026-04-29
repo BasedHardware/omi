@@ -627,16 +627,54 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     obj.remove("cached_content");
     obj.remove("cachedContent");
 
-    // Inject missing "role" field into contents array.
-    // Vertex AI requires each content object to have a "role" field ("user" or "model"),
-    // while AI Studio defaults to "user" when absent. Old Swift app versions send
-    // contents without role, causing Vertex AI to return 400 INVALID_ARGUMENT.
+    // Sanitize role fields in contents array:
+    // 1. Inject missing "role" → default to "user" (Vertex AI requires it)
+    // 2. Move "role":"system" contents → systemInstruction (Vertex AI rejects "system" role)
+    //
+    // Vertex AI only accepts "user" or "model" in contents[].role.
+    // AI Studio silently handles missing roles and "system", but Vertex does not.
     if let Some(contents) = obj.get_mut("contents").and_then(|v| v.as_array_mut()) {
+        // First pass: inject missing roles
         for content in contents.iter_mut() {
             if let Some(content_obj) = content.as_object_mut() {
                 if !content_obj.contains_key("role") {
                     content_obj.insert("role".to_string(), serde_json::Value::String("user".to_string()));
                 }
+            }
+        }
+
+        // Second pass: extract "system" role contents → systemInstruction
+        let mut system_parts: Vec<serde_json::Value> = Vec::new();
+        contents.retain(|content| {
+            if let Some(role) = content.get("role").and_then(|r| r.as_str()) {
+                if role == "system" {
+                    if let Some(parts) = content.get("parts") {
+                        if let Some(arr) = parts.as_array() {
+                            system_parts.extend(arr.iter().cloned());
+                        }
+                    }
+                    return false; // remove from contents
+                }
+            }
+            true
+        });
+
+        if !system_parts.is_empty() {
+            // Merge into existing systemInstruction or create new one
+            let si_key = if obj.contains_key("system_instruction") {
+                "system_instruction"
+            } else {
+                "systemInstruction"
+            };
+            if let Some(existing) = obj.get_mut(si_key).and_then(|v| v.as_object_mut()) {
+                if let Some(existing_parts) = existing.get_mut("parts").and_then(|v| v.as_array_mut()) {
+                    existing_parts.extend(system_parts);
+                }
+            } else {
+                obj.insert(
+                    "systemInstruction".to_string(),
+                    serde_json::json!({"parts": system_parts}),
+                );
             }
         }
     }
@@ -1334,6 +1372,113 @@ mod tests {
         ).unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"][0]["role"], "");
+    }
+
+    #[test]
+    fn sanitize_moves_system_role_to_system_instruction() {
+        // role:"system" in contents should be moved to systemInstruction
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "system", "parts": [{"text": "You are a helpful assistant."}]},
+                {"role": "user", "parts": [{"text": "Hello"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // System content removed from contents
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        // Moved to systemInstruction
+        assert_eq!(
+            parsed["systemInstruction"]["parts"][0]["text"],
+            "You are a helpful assistant."
+        );
+    }
+
+    #[test]
+    fn sanitize_merges_system_role_into_existing_system_instruction() {
+        // When systemInstruction already exists, system-role parts are appended
+        let body = serde_json::json!({
+            "systemInstruction": {"parts": [{"text": "Be concise."}]},
+            "contents": [
+                {"role": "system", "parts": [{"text": "Always respond in English."}]},
+                {"role": "user", "parts": [{"text": "Hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        let si_parts = parsed["systemInstruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Be concise.");
+        assert_eq!(si_parts[1]["text"], "Always respond in English.");
+    }
+
+    #[test]
+    fn sanitize_merges_system_role_into_snake_case_system_instruction() {
+        // system_instruction (snake_case) should also work
+        let body = serde_json::json!({
+            "system_instruction": {"parts": [{"text": "Be concise."}]},
+            "contents": [
+                {"role": "system", "parts": [{"text": "Extra instruction."}]},
+                {"role": "user", "parts": [{"text": "Hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let si_parts = parsed["system_instruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Be concise.");
+        assert_eq!(si_parts[1]["text"], "Extra instruction.");
+    }
+
+    #[test]
+    fn sanitize_handles_multiple_system_role_contents() {
+        // Multiple system-role contents should all be collected
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "system", "parts": [{"text": "Instruction 1"}]},
+                {"role": "user", "parts": [{"text": "Hello"}]},
+                {"role": "system", "parts": [{"text": "Instruction 2"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        let si_parts = parsed["systemInstruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Instruction 1");
+        assert_eq!(si_parts[1]["text"], "Instruction 2");
+    }
+
+    #[test]
+    fn sanitize_no_system_role_no_system_instruction_added() {
+        // When no system role exists, systemInstruction should not be created
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "user", "parts": [{"text": "Hello"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert!(parsed.get("systemInstruction").is_none());
+        assert!(parsed.get("system_instruction").is_none());
     }
 
     #[test]
