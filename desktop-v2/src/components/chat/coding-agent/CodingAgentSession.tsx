@@ -12,15 +12,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useCodingAgent } from "@/hooks/useCodingAgent";
 import { ToolCallBubble } from "./ToolCallBubble";
 import { ModelMessage } from "./ModelMessage";
-import { WalletBadge } from "./WalletBadge";
-import { EmptyCreditsState } from "./EmptyCreditsState";
 import { cn } from "@/lib/utils";
 import { buildTurns, type Turn, type TextChunk } from "./buildTurns";
-
-// Flip to true to surface the per-user credit balance + 402 empty-credits gate.
-// While dogfooding internally we accumulate usage on the backend ledger but
-// don't bother the user with a wallet UI.
-const SHOW_USAGE_TRACKER = false;
 
 // ---------------------------------------------------------------------------
 // CodingAgentSession
@@ -33,8 +26,6 @@ export function CodingAgentSession() {
   const [folder, setFolder] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [outOfCredits, setOutOfCredits] = useState(false);
-  const [walletRefetchKey, setWalletRefetchKey] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -45,15 +36,6 @@ export function CodingAgentSession() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [events]);
-
-  // Bump wallet refetch key when a turn finishes.
-  const prevIsStreaming = useRef(isStreaming);
-  useEffect(() => {
-    if (prevIsStreaming.current && !isStreaming) {
-      setWalletRefetchKey((k) => k + 1);
-    }
-    prevIsStreaming.current = isStreaming;
-  }, [isStreaming]);
 
   const handlePickFolder = useCallback(async () => {
     const chosen = await pickFolder();
@@ -95,29 +77,8 @@ export function CodingAgentSession() {
 
   const turns = buildTurns(events);
 
-  if (SHOW_USAGE_TRACKER && outOfCredits) {
-    return (
-      <div className="flex h-full flex-col">
-        <CodingAgentHeader
-          folder={folder}
-          onPickFolder={handlePickFolder}
-          walletRefetchKey={walletRefetchKey}
-          onOutOfCredits={() => setOutOfCredits(true)}
-        />
-        <EmptyCreditsState />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col min-w-0">
-      <CodingAgentHeader
-        folder={folder}
-        onPickFolder={handlePickFolder}
-        walletRefetchKey={walletRefetchKey}
-        onOutOfCredits={() => setOutOfCredits(true)}
-      />
-
       {/* Message list */}
       <div
         ref={scrollRef}
@@ -208,39 +169,6 @@ export function CodingAgentSession() {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function CodingAgentHeader({
-  folder,
-  onPickFolder,
-  walletRefetchKey,
-  onOutOfCredits,
-}: {
-  folder: string | null;
-  onPickFolder: () => void;
-  walletRefetchKey: number;
-  onOutOfCredits: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border shrink-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <h2 className="text-base font-semibold text-foreground shrink-0">Coding Agent</h2>
-        {folder && (
-          <button
-            onClick={onPickFolder}
-            className="flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground hover:bg-accent/70 hover:text-foreground transition-colors max-w-[220px] truncate"
-            title={folder}
-          >
-            <FolderOpen className="size-3 shrink-0" />
-            <span className="truncate">{folder.split("/").pop()}</span>
-          </button>
-        )}
-      </div>
-      {SHOW_USAGE_TRACKER && (
-        <WalletBadge refetchKey={walletRefetchKey} onOutOfCredits={onOutOfCredits} />
-      )}
-    </div>
-  );
-}
 
 function TurnRow({ turn, isStreaming }: { turn: Turn; isStreaming: boolean }) {
   if (turn.role === "user") {
