@@ -18,7 +18,15 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-MODEL_ID = os.environ.get("AGENT_CODE_MODEL_ID", "qwen/qwen3.6-35b-a3b")
+# Resolve in order: AGENT_CODE_MODEL_ID (explicit override) → ANTHROPIC_AGENT_MODEL
+# (existing infra convention) → tool-capable default. Qwen3.6 has no
+# tool-supporting providers on OpenRouter, so we cannot default to it for an
+# agent that needs read/edit/bash tools.
+MODEL_ID = (
+    os.environ.get("AGENT_CODE_MODEL_ID")
+    or os.environ.get("ANTHROPIC_AGENT_MODEL")
+    or "anthropic/claude-sonnet-4.5"
+)
 
 DEFAULT_INPUT_USD_PER_M = Decimal("0.1612")
 DEFAULT_OUTPUT_USD_PER_M = Decimal("0.9653")
