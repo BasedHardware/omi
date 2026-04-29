@@ -248,7 +248,7 @@ export function ChatPage() {
     <div className="flex h-full min-w-0 flex-col">
       {CODING_AGENT_ENABLED && <ChatModeTabs mode={mode} onChange={setModeAndPersist} />}
       {mode === "code" ? (
-        <div className="flex flex-1 min-h-0">
+        <div className="flex-1 min-h-0">
           <CodingAgentSession />
         </div>
       ) : (
