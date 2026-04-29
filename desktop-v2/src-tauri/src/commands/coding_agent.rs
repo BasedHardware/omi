@@ -126,8 +126,17 @@ pub async fn coding_agent_start_session(
     model: Option<String>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4.5".to_string());
-    let model_arg = format!("nooto-backend/{}", model);
+    // In direct mode (NOOTO_DIRECT_LLM_URL set), the Pi extension only
+    // registers the single model named by NOOTO_DIRECT_LLM_MODEL — the
+    // dropdown selection from the UI is irrelevant because the local server
+    // probably doesn't serve Claude/GPT/etc. Override here so --model matches
+    // what the extension registered.
+    let resolved_model = if std::env::var("NOOTO_DIRECT_LLM_URL").is_ok() {
+        std::env::var("NOOTO_DIRECT_LLM_MODEL").unwrap_or_else(|_| "qwen3.6-35b-a3b".to_string())
+    } else {
+        model.unwrap_or_else(|| "anthropic/claude-sonnet-4.5".to_string())
+    };
+    let model_arg = format!("nooto-backend/{}", resolved_model);
     let state: State<CodingAgentState> = app.state();
 
     let pi_dir = pi_resource_dir(&app)?;
