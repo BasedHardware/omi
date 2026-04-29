@@ -25,6 +25,19 @@ export interface CurrentSession {
   name?: string;
 }
 
+/**
+ * Single source of truth for "what is the agent doing right now".
+ * Drives the always-visible AgentStatusStrip so the chat never looks frozen.
+ */
+export type AgentStatus =
+  | { kind: "idle" }
+  | { kind: "starting" }
+  | { kind: "thinking" }
+  | { kind: "running_tool"; tool: string; preview?: string }
+  | { kind: "reviewing" }
+  | { kind: "completed"; durationMs: number }
+  | { kind: "error"; message: string };
+
 export interface UseCodingAgent {
   pickFolder: () => Promise<string | null>;
   startSession: (folder: string, prompt: string, model?: string, sessionPath?: string) => Promise<string>;
@@ -35,6 +48,7 @@ export interface UseCodingAgent {
   pushError: (message: string) => void;
   events: AgentEvent[];
   isStreaming: boolean;
+  status: AgentStatus;
   /** Metadata about the Pi session resolved after `startSession`. */
   currentSession: CurrentSession | null;
 }
@@ -222,6 +236,103 @@ function piMessageToEvents(msg: unknown): AgentEvent[] {
   return [];
 }
 
+// Map a single Pi RPC event to the AgentStatus the UI should switch into.
+// Returns null when the event has no status implication.
+function deriveStatusFromEvent(line: unknown): AgentStatus | null {
+  if (typeof line !== "object" || line === null) return null;
+  const ev = line as Record<string, unknown>;
+  const t = ev.type as string | undefined;
+
+  // Terminal errors first — they outrank everything else.
+  if (t === "extension_error") {
+    return { kind: "error", message: String(ev.error ?? "Extension error") };
+  }
+  if (t === "auto_retry_end" && ev.success === false) {
+    return { kind: "error", message: String(ev.finalError ?? "Agent retry failed") };
+  }
+  if (t === "agent_end") {
+    const errMsg = (ev.error ?? ev.errorMessage) as string | undefined;
+    if (typeof errMsg === "string" && errMsg.length > 0) {
+      return { kind: "error", message: errMsg };
+    }
+    return { kind: "completed", durationMs: 0 };
+  }
+  if (t === "message_start" || t === "message_end") {
+    const msg = ev.message as Record<string, unknown> | undefined;
+    const errMsg = (msg?.errorMessage ?? msg?.error) as string | undefined;
+    if (typeof errMsg === "string" && errMsg.length > 0) {
+      return { kind: "error", message: errMsg };
+    }
+  }
+
+  // Tool lifecycle.
+  if (t === "tool_execution_start") {
+    const toolName = String(ev.toolName ?? ev.tool ?? "tool");
+    const preview = previewForTool(toolName, ev.input);
+    return { kind: "running_tool", tool: toolName, preview };
+  }
+  if (t === "tool_execution_end") {
+    return { kind: "reviewing" };
+  }
+
+  // Model output deltas — text streaming.
+  if (t === "message_update") {
+    const ame = ev.assistantMessageEvent as Record<string, unknown> | undefined;
+    if (ame?.type === "text_delta") return { kind: "thinking" };
+    if (ame?.type === "toolcall_start") return { kind: "thinking" };
+  }
+
+  // Turn boundaries (success-only — error branch handled above).
+  if (t === "turn_start") return { kind: "thinking" };
+  if (t === "turn_end") return { kind: "completed", durationMs: 0 };
+
+  return null;
+}
+
+// Build a short human-readable preview line for a running tool, e.g.
+// "Reading lib/index.ts" or "Running: ls -la". Falls back to the tool name.
+function previewForTool(toolName: string, input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const i = input as Record<string, unknown>;
+  const path = (i.path ?? i.file_path ?? i.filePath) as string | undefined;
+  const cmd = (i.command ?? i.cmd) as string | undefined;
+  const pattern = (i.pattern ?? i.query ?? i.regex) as string | undefined;
+
+  switch (toolName) {
+    case "read":
+      return path ? `Reading ${shortPath(path)}` : undefined;
+    case "write":
+      return path ? `Writing ${shortPath(path)}` : undefined;
+    case "edit":
+      return path ? `Editing ${shortPath(path)}` : undefined;
+    case "bash":
+      return cmd ? `Running: ${truncate(cmd, 80)}` : undefined;
+    case "dispatch_bash":
+      return cmd ? `Dispatching: ${truncate(cmd, 80)}` : undefined;
+    case "grep":
+      return pattern ? `Searching for ${truncate(JSON.stringify(pattern), 60)}` : undefined;
+    case "find":
+      return pattern ? `Finding ${truncate(String(pattern), 60)}` : undefined;
+    case "ls":
+      return path ? `Listing ${shortPath(path)}` : "Listing directory";
+    case "td":
+      return "Querying td";
+    default:
+      return undefined;
+  }
+}
+
+function shortPath(p: string): string {
+  // Trim long paths to the last 2 segments.
+  const parts = p.split("/").filter(Boolean);
+  if (parts.length <= 2) return p;
+  return ".../" + parts.slice(-2).join("/");
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
 // Extract session metadata from a Pi `get_state` response event.
 // Pi responds with `{ type: "response", command: "get_state", state: { sessionFile, sessionId, sessionName, … } }`.
 function extractGetStateSession(line: unknown): CurrentSession | null {
@@ -248,9 +359,22 @@ export function useCodingAgent(): UseCodingAgent {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentSession, setCurrentSession] = useState<CurrentSession | null>(null);
+  const [status, setStatus] = useState<AgentStatus>({ kind: "idle" });
 
   // Track which session is currently active so the event listener can filter.
   const activeSessionRef = useRef<string | null>(null);
+  // Wall-clock when the current turn started — used to report duration on
+  // the `completed` status so the user sees "Done in 4.2s".
+  const turnStartRef = useRef<number | null>(null);
+  // Auto-clear timer for the `completed` flash so it fades back to idle.
+  const completedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCompletedTimer = () => {
+    if (completedTimerRef.current !== null) {
+      clearTimeout(completedTimerRef.current);
+      completedTimerRef.current = null;
+    }
+  };
 
   // Wire the Tauri event listener once for the component lifetime.
   // Filtering by session_id means old events from completed sessions are ignored.
@@ -271,6 +395,26 @@ export function useCodingAgent(): UseCodingAgent {
 
         if (isStreamEndEvent(line) || isErrorEvent(line)) {
           setIsStreaming(false);
+        }
+
+        // Drive the AgentStatus state machine alongside events[].
+        const nextStatus = deriveStatusFromEvent(line);
+        if (nextStatus) {
+          if (nextStatus.kind === "completed") {
+            const startedAt = turnStartRef.current;
+            const durationMs = startedAt != null ? Date.now() - startedAt : 0;
+            setStatus({ kind: "completed", durationMs });
+            clearCompletedTimer();
+            completedTimerRef.current = setTimeout(() => {
+              setStatus({ kind: "idle" });
+            }, 2000);
+          } else if (nextStatus.kind === "error") {
+            clearCompletedTimer();
+            setStatus(nextStatus);
+          } else {
+            clearCompletedTimer();
+            setStatus(nextStatus);
+          }
         }
 
         const sessionMeta = extractGetStateSession(line);
@@ -326,6 +470,9 @@ export function useCodingAgent(): UseCodingAgent {
       activeSessionRef.current = sessionId;
       setCurrentSession(null);
       setIsStreaming(true);
+      clearCompletedTimer();
+      turnStartRef.current = Date.now();
+      setStatus({ kind: "starting" });
 
       // Replay prior history when restoring an existing session, otherwise
       // start with an empty chat.
@@ -372,6 +519,9 @@ export function useCodingAgent(): UseCodingAgent {
 
   const sendMessage = useCallback(async (sessionId: string, message: string): Promise<void> => {
     setIsStreaming(true);
+    clearCompletedTimer();
+    turnStartRef.current = Date.now();
+    setStatus({ kind: "thinking" });
     await invoke("coding_agent_send_message", { sessionId, message });
   }, []);
 
@@ -381,6 +531,8 @@ export function useCodingAgent(): UseCodingAgent {
 
   const stopSession = useCallback(async (sessionId: string): Promise<void> => {
     setIsStreaming(false);
+    clearCompletedTimer();
+    setStatus({ kind: "idle" });
     if (activeSessionRef.current === sessionId) {
       activeSessionRef.current = null;
     }
@@ -394,9 +546,12 @@ export function useCodingAgent(): UseCodingAgent {
   const pushError = useCallback((message: string): void => {
     setEvents((prev) => [...prev, { type: "error", message }]);
     setIsStreaming(false);
+    clearCompletedTimer();
+    setStatus({ kind: "error", message });
   }, []);
 
   return {
+    status,
     pickFolder,
     startSession,
     sendMessage,
