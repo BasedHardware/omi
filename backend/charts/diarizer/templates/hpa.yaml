@@ -12,6 +12,10 @@ spec:
     name: {{ include "diarizer.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  {{- if .Values.autoscaling.behavior }}
+  behavior:
+    {{- toYaml .Values.autoscaling.behavior | nindent 4 }}
+  {{- end }}
   metrics:
     {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
     - type: Resource
@@ -28,5 +32,14 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.requestLatencyP99 }}
+    - type: External
+      external:
+        metric:
+          name: diarizer_request_latency_p99
+        target:
+          type: Value
+          value: {{ .Values.autoscaling.requestLatencyP99 }}
     {{- end }}
 {{- end }}
