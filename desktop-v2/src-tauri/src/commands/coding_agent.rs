@@ -194,11 +194,12 @@ pub async fn coding_agent_start_session(
     ])
     .stdin(std::process::Stdio::piped())
     .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::null());
+    .stderr(std::process::Stdio::piped());
 
     let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn Pi sidecar: {e}"))?;
     let mut stdin = child.stdin.take().ok_or("Pi sidecar stdin unavailable")?;
     let stdout = child.stdout.take().ok_or("Pi sidecar stdout unavailable")?;
+    let stderr = child.stderr.take().ok_or("Pi sidecar stderr unavailable")?;
 
     writeln!(
         stdin,
@@ -246,6 +247,31 @@ pub async fn coding_agent_start_session(
             }),
         );
         tracing::info!("[coding_agent] session {sid} reader exited");
+    });
+
+    // Forward Pi sidecar stderr to the frontend as `extension_error` events so
+    // spawn failures (Node missing, extension crash, etc.) surface in the UI
+    // instead of being silently discarded.
+    let app_handle_err = app.clone();
+    let sid_err = session_id.clone();
+    tauri::async_runtime::spawn(async move {
+        use std::io::BufRead;
+        for raw_line in std::io::BufReader::new(stderr).lines() {
+            match raw_line {
+                Ok(line) if !line.is_empty() => {
+                    tracing::warn!("[coding_agent stderr] {line}");
+                    let _ = app_handle_err.emit(
+                        "coding-agent:event",
+                        serde_json::json!({
+                            "session_id": sid_err,
+                            "line": { "type": "extension_error", "error": line }
+                        }),
+                    );
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
     });
 
     Ok(())
