@@ -142,6 +142,7 @@ fn main() {
                 })
                 .build(),
         )
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_audio_capture::init())
@@ -184,6 +185,35 @@ fn main() {
                         }
                         let _ = deep_link_handle.emit("notification:click", ());
                     }
+                    // Plugin OAuth handoff: when a plugin's setup page redirects
+                    // to `nooto://app-setup-complete?app_id=<id>&status=success`,
+                    // bring the window back, parse `app_id`, and notify the
+                    // frontend so it can re-attempt enable.
+                    if url.scheme() == "nooto" && raw.contains("app-setup-complete") {
+                        let mut app_id = String::new();
+                        let mut status = String::from("success");
+                        for (k, v) in url.query_pairs() {
+                            match k.as_ref() {
+                                "app_id" => app_id = v.into_owned(),
+                                "status" => status = v.into_owned(),
+                                _ => {}
+                            }
+                        }
+                        tracing::info!(
+                            "Deep link: dispatching apps:setup-complete app_id={} status={}",
+                            app_id,
+                            status
+                        );
+                        if let Some(window) = deep_link_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                        let _ = deep_link_handle.emit(
+                            "apps:setup-complete",
+                            serde_json::json!({ "app_id": app_id, "status": status }),
+                        );
+                    }
                 }
             });
 
@@ -209,6 +239,9 @@ fn main() {
             // step calls `ensure_ptt_listener` after granting, and the
             // Settings page can too — so real users get PTT exactly when
             // the OS will cooperate.
+
+            // Coding agent: running Pi child processes keyed by session_id.
+            app.manage(commands::coding_agent::CodingAgentState::default());
 
             // Onboarding file-scan state (snapshot + running flag).
             app.manage(commands::onboarding::ScanState {
@@ -248,6 +281,7 @@ fn main() {
             commands::config::get_gemini_api_key,
             commands::debug::debug_backend_ping,
             commands::debug::backend_request,
+            commands::debug::backend_chat_stream,
             commands::insight_sql::execute_insight_sql,
             commands::system::get_active_app,
             commands::system::get_dock_icons,
@@ -351,6 +385,11 @@ fn main() {
             // Tray menu updates (check marks + label changes)
             commands::tray::update_tray_menu,
             commands::tray::set_tray_ask_label,
+            // Coding agent
+            commands::coding_agent::coding_agent_pick_folder,
+            commands::coding_agent::coding_agent_start_session,
+            commands::coding_agent::coding_agent_send_message,
+            commands::coding_agent::coding_agent_stop_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

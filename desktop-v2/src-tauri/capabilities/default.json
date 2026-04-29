@@ -10,6 +10,7 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
+    "shell:allow-execute",
     "opener:default",
     "deep-link:default",
     "store:default",
@@ -23,6 +24,7 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
+    "dialog:allow-open",
     "screen-capture:default",
     "audio-capture:default",
     "tts:default",

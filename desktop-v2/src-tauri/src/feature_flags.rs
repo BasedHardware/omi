@@ -12,3 +12,10 @@
 ///
 /// Set to `false` to revert for one release.
 pub const COMPANION_CUTOVER_ENABLED: bool = true;
+
+/// When `true`, the Coding Agent surface (Pi sidecar + chat UI) is shown in the
+/// sidebar and routable. When `false`, the route is unmounted and the nav entry
+/// is hidden — the underlying code still ships, just dark.
+///
+/// Default: `false` until the feature has soaked in internal dogfood.
+pub const CODING_AGENT_ENABLED: bool = false;

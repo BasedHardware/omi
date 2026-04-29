@@ -105,6 +105,18 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "externalBin": [
+      "sidecar/pi-agent/dist/nooto-pi-agent"
+    ],
+    "resources": {
+      "sidecar/pi-agent/dist/package.json": "pi-agent/package.json",
+      "sidecar/pi-agent/dist/theme": "pi-agent/theme",
+      "sidecar/pi-agent/dist/assets": "pi-agent/assets",
+      "sidecar/pi-agent/dist/export-html": "pi-agent/export-html",
+      "sidecar/pi-agent/dist/photon_rs_bg.wasm": "pi-agent/photon_rs_bg.wasm",
+      "sidecar/pi-agent/extensions/nooto-backend": "pi-agent/extensions/nooto-backend",
+      "sidecar/pi-agent/extensions/nooto-permissions": "pi-agent/extensions/nooto-permissions"
+    },
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
