@@ -151,8 +151,8 @@ impl Config {
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
             use_vertex_ai: env::var("USE_VERTEX_AI")
-                .map(|v| v == "true" || v == "1")
-                .unwrap_or(false),
+                .map(|v| v != "false" && v != "0")
+                .unwrap_or(true),
             vertex_project_id: env::var("GCP_PROJECT_ID")
                 .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
                 .ok(),
