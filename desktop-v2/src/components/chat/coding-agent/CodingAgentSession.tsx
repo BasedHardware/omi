@@ -17,6 +17,11 @@ import { EmptyCreditsState } from "./EmptyCreditsState";
 import { cn } from "@/lib/utils";
 import { buildTurns, type Turn, type TextChunk } from "./buildTurns";
 
+// Flip to true to surface the per-user credit balance + 402 empty-credits gate.
+// While dogfooding internally we accumulate usage on the backend ledger but
+// don't bother the user with a wallet UI.
+const SHOW_USAGE_TRACKER = false;
+
 // ---------------------------------------------------------------------------
 // CodingAgentSession
 // ---------------------------------------------------------------------------
@@ -90,7 +95,7 @@ export function CodingAgentSession() {
 
   const turns = buildTurns(events);
 
-  if (outOfCredits) {
+  if (SHOW_USAGE_TRACKER && outOfCredits) {
     return (
       <div className="flex h-full flex-col">
         <CodingAgentHeader
@@ -230,7 +235,9 @@ function CodingAgentHeader({
           </button>
         )}
       </div>
-      <WalletBadge refetchKey={walletRefetchKey} onOutOfCredits={onOutOfCredits} />
+      {SHOW_USAGE_TRACKER && (
+        <WalletBadge refetchKey={walletRefetchKey} onOutOfCredits={onOutOfCredits} />
+      )}
     </div>
   );
 }
