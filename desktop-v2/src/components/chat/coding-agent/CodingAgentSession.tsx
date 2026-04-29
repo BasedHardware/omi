@@ -85,17 +85,34 @@ export function CodingAgentSession() {
         className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0"
       >
         {turns.length === 0 && !isStreaming && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-16">
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-              <Code2 className="size-5 text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
+              <Code2 className="size-6 text-primary" />
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Coding Agent</p>
-              <p className="text-xs text-muted-foreground max-w-xs">
-                Pick a project folder, then describe what you want to build or fix.
-                The agent reads, edits, and runs code on your machine.
+            <div className="space-y-1.5 max-w-sm">
+              <p className="text-base font-semibold text-foreground">Coding Agent</p>
+              <p className="text-sm text-muted-foreground">
+                {folder
+                  ? "Describe what you want to build or fix. The agent reads, edits, and runs code in your folder."
+                  : "Pick a project folder to get started. The agent reads, edits, and runs code on your machine."}
               </p>
             </div>
+            {!folder && (
+              <Button
+                size="sm"
+                onClick={() => void handlePickFolder()}
+                className="gap-1.5"
+              >
+                <FolderOpen className="size-3.5" />
+                Pick folder
+              </Button>
+            )}
+            {folder && (
+              <div className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-mono text-primary">
+                <FolderOpen className="size-3.5" />
+                <span className="max-w-[280px] truncate">{folder.split("/").pop()}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -127,9 +144,10 @@ export function CodingAgentSession() {
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
                 folder
-                  ? "bg-primary/10 text-primary hover:bg-primary/20"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  ? "bg-muted text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                  : "border border-dashed border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
+              title={folder ?? "Pick a project folder"}
             >
               <FolderOpen className="size-3.5" />
               <span className="max-w-[200px] truncate font-mono">
