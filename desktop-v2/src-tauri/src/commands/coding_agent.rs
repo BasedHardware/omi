@@ -183,6 +183,16 @@ pub async fn coding_agent_start_session(
         .env("NOOTO_BACKEND_URL", &backend_url)
         .env("NOOTO_ID_TOKEN", &id_token);
 
+    // When set in the parent shell (e.g. `NOOTO_DIRECT_LLM_URL=http://192.168.86.23:8000/v1`),
+    // the Pi extension switches to direct mode and bypasses the cloud backend
+    // entirely — pointing Pi straight at a self-hosted vLLM/Ollama endpoint.
+    if let Ok(direct_url) = std::env::var("NOOTO_DIRECT_LLM_URL") {
+        cmd.env("NOOTO_DIRECT_LLM_URL", direct_url);
+    }
+    if let Ok(direct_model) = std::env::var("NOOTO_DIRECT_LLM_MODEL") {
+        cmd.env("NOOTO_DIRECT_LLM_MODEL", direct_model);
+    }
+
     // Release only: redirect Pi's asset resolver to the bundled resource dir.
     // Not needed in debug because the Node.js wrapper walks its own package root.
     #[cfg(not(debug_assertions))]
