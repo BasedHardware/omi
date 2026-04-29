@@ -201,9 +201,16 @@ def _content_idempotency_key(uid: str, description: str) -> str:
     Two POSTs from the same user with the same description (modulo case +
     surrounding whitespace) collapse to the same key, so a flaky-network
     retry no longer creates a duplicate Firestore document.
+
+    Uses a length-prefixed encoding so the boundary between ``uid`` and
+    ``description`` is unambiguous: ``f"{len(uid)}:{uid}:{description}"``.
+    Without this, a uid containing ``:`` (federated identities, future
+    multi-tenant ids) could collide with a different ``(uid, description)``
+    pair after concatenation.
     """
     normalized = (description or '').strip().lower()
-    return hashlib.sha256(f"{uid}:{normalized}".encode('utf-8')).hexdigest()
+    payload = f"{len(uid)}:{uid}:{normalized}"
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
 
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
