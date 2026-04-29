@@ -103,14 +103,29 @@ function translatePiEvent(line: unknown): AgentEvent | null {
     return null;
   }
 
+  // The AssistantMessage carried by message_start/message_end can include
+  // errorMessage + stopReason="error" when the upstream call fails before
+  // (or instead of) emitting any text deltas. Surface that error here —
+  // otherwise the chat just shows "Thinking…" and ends with no feedback.
+  if (piType === "message_start" || piType === "message_end") {
+    const msg = event.message as Record<string, unknown> | undefined;
+    const errMsg = (msg?.errorMessage ?? msg?.error) as string | undefined;
+    const stopReason = msg?.stopReason as string | undefined;
+    if (typeof errMsg === "string" && errMsg.length > 0) {
+      return { type: "error", message: errMsg };
+    }
+    if (stopReason === "error" || stopReason === "aborted") {
+      return { type: "error", message: `Agent ended with stopReason=${stopReason}` };
+    }
+    return null;
+  }
+
   // Internal terminal events and other lifecycle events: do not surface as
   // AgentEvents but also do not classify as `raw` — just drop them silently.
   const silentTypes = new Set([
     "agent_start",
     "turn_start",
     "turn_end",
-    "message_start",
-    "message_end",
     "tool_execution_start",
     "tool_execution_update",
     "queue_update",
