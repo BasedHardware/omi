@@ -98,6 +98,7 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
     fun setPaused() = setState(AmbientHealthState.PAUSED_BY_USER, "paused_by_user")
     fun setPermissionMissing() = setState(AmbientHealthState.PERMISSION_MISSING, "permission_missing")
     fun setServiceKilled() = setState(AmbientHealthState.SERVICE_KILLED, "service_killed")
+    fun setPolicyDisabled(reason: String) = setState(AmbientHealthState.POLICY_DISABLED, reason)
     fun setStorageLimitReached(reason: String) = setState(AmbientHealthState.STORAGE_LIMIT_REACHED, reason)
     fun setNoFlutterListener() =
         setState(AmbientHealthState.SERVICE_RUNNING_BUT_NO_FLUTTER_LISTENER, "native_spool_no_flutter_listener")

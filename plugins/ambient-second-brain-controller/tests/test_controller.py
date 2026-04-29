@@ -52,7 +52,9 @@ def policy_headers(token):
 
 def test_policy_signing_and_verification_fixture(client):
     registration = register(client)
-    client.post("/settings", json={"omi_user_id": "user-1", "advanced_capture_enabled": True, "default_capture_mode": "normal"})
+    client.post(
+        "/settings", json={"omi_user_id": "user-1", "advanced_capture_enabled": True, "default_capture_mode": "normal"}
+    )
 
     response = client.get("/capture/policy/current", headers=policy_headers(registration["device_token"]))
 
@@ -62,6 +64,23 @@ def test_policy_signing_and_verification_fixture(client):
     assert decision["accepted"] is True
     assert decision["payload"]["plugin_id"] == "ambient_second_brain_controller"
     assert body["structured_payload"]["capture_mode"] == "normal"
+
+
+def test_policy_requires_valid_device_token(client):
+    registration = register(client)
+
+    missing = client.get(
+        "/capture/policy/current",
+        headers={k: v for k, v in policy_headers(registration["device_token"]).items() if k != "Authorization"},
+    )
+    invalid = client.get("/capture/policy/current", headers=policy_headers("wrong-token"))
+    valid = client.get("/capture/policy/current", headers=policy_headers(registration["device_token"]))
+
+    assert missing.status_code == 401
+    assert missing.json()["detail"] == "missing_device_token"
+    assert invalid.status_code == 401
+    assert invalid.json()["detail"] == "invalid_device_token"
+    assert valid.status_code == 200
 
 
 def test_expired_policy_and_replayed_sequence_rejected(client):

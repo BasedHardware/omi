@@ -135,6 +135,7 @@ class AmbientCaptureProvider extends ChangeNotifier {
       activePluginId: prefs.ambientCaptureActiveControllerAppId,
       publicKey: prefs.ambientCaptureControllerPublicKey,
       keyId: prefs.ambientCaptureControllerKeyId,
+      deviceToken: prefs.ambientCaptureControllerDeviceToken,
       policyUrl: prefs.ambientCapturePolicyUrl,
       userId: prefs.uid,
       deviceId: prefs.ambientCaptureRegisteredDeviceId,

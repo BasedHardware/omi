@@ -1,0 +1,197 @@
+name: Android Test APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: Flutter flavor to build.
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
+      target_platform:
+        description: Android target platform. Use arm64 for most physical phones.
+        required: true
+        default: android-arm64
+        type: choice
+        options:
+          - android-arm64
+          - android-arm
+          - android-x64
+          - android-arm,android-arm64,android-x64
+      run_build_runner:
+        description: Regenerate Dart build outputs before building.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-test-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ inputs.flavor }} debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      FLUTTER_VERSION: 3.35.3
+      JAVA_VERSION: 21
+      ANDROID_API_LEVEL: 36
+      ANDROID_BUILD_TOOLS: 36.0.0
+      ANDROID_NDK_VERSION: 28.2.13676358
+      ANDROID_CMAKE_VERSION: 3.22.1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-${ANDROID_API_LEVEL}" \
+            "build-tools;${ANDROID_BUILD_TOOLS}" \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/**/*.gradle', 'app/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Prepare checked-in dev build config
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/android/app/src/dev app/android/app/src/prod
+          cp app/setup/prebuilt/firebase_options.dart app/lib/firebase_options_dev.dart
+          cp app/setup/prebuilt/firebase_options.dart app/lib/firebase_options_prod.dart
+          cp app/setup/prebuilt/google-services.json app/android/app/src/dev/google-services.json
+          cp app/setup/prebuilt/google-services.json app/android/app/src/prod/google-services.json
+          cp app/setup/prebuilt/key.properties app/android/key.properties
+          {
+            echo "API_BASE_URL=https://api.omiapi.com/"
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+          } > app/.dev.env
+          cp app/.dev.env app/.env
+
+      - name: Sanitize whisper_flutter_new dependency for Flutter 3.35
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          git clone --depth 1 https://github.com/BasedHardware/whisper_flutter_new.git .ci/whisper_flutter_new
+          git -C .ci/whisper_flutter_new fetch --depth 1 origin 684fb43710dd4de5538ac2da7d0b1fa405363212
+          git -C .ci/whisper_flutter_new checkout 684fb43710dd4de5538ac2da7d0b1fa405363212
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          whisper_pubspec = Path(".ci/whisper_flutter_new/pubspec.yaml")
+          text = whisper_pubspec.read_text(encoding="utf-8", errors="replace")
+          text = re.sub(
+              r"^description:.*$",
+              "description: A Flutter library for offline speech-to-text using whisper.cpp models.",
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          whisper_pubspec.write_text(text, encoding="utf-8")
+
+          app_pubspec = Path("app/pubspec.yaml")
+          text = app_pubspec.read_text(encoding="utf-8")
+          text = re.sub(
+              r"  whisper_flutter_new:\n    git:\n      url: https://github\.com/BasedHardware/whisper_flutter_new\.git\n      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212",
+              "  whisper_flutter_new:\n    path: ../.ci/whisper_flutter_new",
+              text,
+          )
+          app_pubspec.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        shell: bash
+        run: flutter pub get
+
+      - name: Generate Dart build outputs
+        if: inputs.run_build_runner
+        working-directory: app
+        shell: bash
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build debug APK
+        working-directory: app
+        shell: bash
+        env:
+          NDK_VERSION: ${{ env.ANDROID_NDK_VERSION }}
+        run: |
+          set -euo pipefail
+          # GitHub Actions sets CI=true. This Gradle project treats any CI value
+          # as Codemagic signing and expects CM_* secrets, so unset it here.
+          env -u CI flutter build apk \
+            --debug \
+            --flavor "${{ inputs.flavor }}" \
+            --target-platform "${{ inputs.target_platform }}" \
+            --no-pub
+
+      - name: Verify APK and write report
+        working-directory: app
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build/app/outputs/apk/${{ inputs.flavor }}/debug/app-${{ inputs.flavor }}-debug.apk"
+          if [ ! -f "$APK" ]; then
+            echo "APK not found at $APK" >&2
+            find build/app/outputs -name "*.apk" -print >&2 || true
+            exit 1
+          fi
+          mkdir -p build/reports/android-test-apk
+          sha256sum "$APK" | tee build/reports/android-test-apk/sha256.txt
+          "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/apksigner" verify --verbose "$APK" \
+            | tee build/reports/android-test-apk/apksigner.txt
+          "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/aapt" dump badging "$APK" \
+            | tee build/reports/android-test-apk/badging.txt
+          ls -lh "$APK" | tee build/reports/android-test-apk/ls.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omi-${{ inputs.flavor }}-debug-${{ inputs.target_platform }}-${{ github.run_number }}
+          path: |
+            app/build/app/outputs/apk/${{ inputs.flavor }}/debug/*.apk
+            app/build/app/outputs/apk/${{ inputs.flavor }}/debug/output-metadata.json
+            app/build/reports/android-test-apk/**
+          if-no-files-found: error
+          retention-days: 14
