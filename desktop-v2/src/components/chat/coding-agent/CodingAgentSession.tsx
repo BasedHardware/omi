@@ -22,6 +22,7 @@ import { GenerativeMarkdown } from "../../generative-ui/GenerativeMarkdown";
 import { useCodingAgent } from "@/hooks/useCodingAgent";
 import { buildTurns, type Turn, type TextChunk, type ToolSlot } from "./buildTurns";
 import { OPENROUTER_MODELS, DEFAULT_MODEL_ID, findModel } from "./openrouterModels";
+import { useCodingAgentSessionsStore } from "./codingAgentSessionsStore";
 import {
   Select,
   SelectContent,
@@ -53,7 +54,12 @@ export function CodingAgentSession() {
     isStreaming,
   } = useCodingAgent();
 
-  const [folder, setFolder] = useState<string | null>(null);
+  // Folder is the active session's working directory. Lifted into the
+  // sessions store so picking a session from the sidebar updates the pill,
+  // and the choice survives app restart.
+  const folder = useCodingAgentSessionsStore((s) => s.currentCwd);
+  const setFolder = useCodingAgentSessionsStore((s) => s.setCurrentCwd);
+
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
   const [model, setModelState] = useState<string>(() => {

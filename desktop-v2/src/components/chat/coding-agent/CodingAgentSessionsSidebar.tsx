@@ -236,7 +236,9 @@ export function CodingAgentSessionsSidebar() {
 
   const handleSelectSession = useCallback(
     async (meta: CodingAgentSessionMeta) => {
-      selectSession(meta.filePath);
+      // Update both pointers — the CodingAgentSession reads currentCwd from
+      // the store to render its folder pill.
+      selectSession(meta.filePath, meta.cwd);
       try {
         await startSession(meta.cwd, "", model, meta.filePath);
       } catch (err) {
@@ -247,11 +249,11 @@ export function CodingAgentSessionsSidebar() {
   );
 
   const handleNewSession = useCallback(async () => {
-    selectSession(null);
     const folder = await pickFolder();
     if (!folder) return;
-    // No prompt yet — the user types it in the main panel.
-    // Just clear the current session pointer so CodingAgentSession starts fresh.
+    // Clear the active session pointer but pin the new folder so the user
+    // can start typing immediately in the main panel.
+    selectSession(null, folder);
   }, [selectSession, pickFolder]);
 
   // ---------------------------------------------------------------------------

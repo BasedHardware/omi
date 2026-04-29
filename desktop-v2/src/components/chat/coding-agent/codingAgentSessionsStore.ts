@@ -28,8 +28,13 @@ export interface CodingAgentSessionMeta {
 interface CodingAgentSessionsState {
   sessions: CodingAgentSessionMeta[];
   currentFilePath: string | null;
+  /** Folder the active session is operating against. Lifted out of
+   *  CodingAgentSession's local state so picking a session from the sidebar
+   *  also updates the folder pill. Survives app restart via persist. */
+  currentCwd: string | null;
   refresh: (folder?: string) => Promise<void>;
-  selectSession: (filePath: string | null) => void;
+  selectSession: (filePath: string | null, cwd?: string | null) => void;
+  setCurrentCwd: (cwd: string | null) => void;
   rename: (filePath: string, name: string) => Promise<void>;
   remove: (filePath: string) => Promise<void>;
 }
@@ -64,6 +69,7 @@ export const useCodingAgentSessionsStore = create<CodingAgentSessionsState>()(
     (set, _get) => ({
       sessions: [],
       currentFilePath: null,
+      currentCwd: null,
 
       refresh: async (folder?: string) => {
         const sessions = await invoke<CodingAgentSessionMeta[]>(
@@ -73,9 +79,14 @@ export const useCodingAgentSessionsStore = create<CodingAgentSessionsState>()(
         set({ sessions });
       },
 
-      selectSession: (filePath: string | null) => {
-        set({ currentFilePath: filePath });
+      selectSession: (filePath: string | null, cwd?: string | null) => {
+        set((s) => ({
+          currentFilePath: filePath,
+          currentCwd: cwd === undefined ? s.currentCwd : cwd,
+        }));
       },
+
+      setCurrentCwd: (cwd: string | null) => set({ currentCwd: cwd }),
 
       rename: async (filePath: string, name: string) => {
         await invoke("coding_agent_rename_session", { filePath, name });
@@ -102,6 +113,7 @@ export const useCodingAgentSessionsStore = create<CodingAgentSessionsState>()(
       partialize: (s) => ({
         sessions: s.sessions,
         currentFilePath: s.currentFilePath,
+        currentCwd: s.currentCwd,
       }),
     },
   ),
