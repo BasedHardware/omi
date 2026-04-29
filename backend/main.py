@@ -52,6 +52,7 @@ from routers import (
     announcements,
     phone_calls,
     agent_tools,
+    agent_code,
     metrics,
     fair_use_admin,
 )
@@ -105,6 +106,7 @@ app.include_router(auth.router)  # Added auth router (for the main Omi App, this
 
 
 app.include_router(payment.router)
+app.include_router(agent_code.router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(developer.router)
