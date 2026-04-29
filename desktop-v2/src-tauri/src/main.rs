@@ -395,6 +395,7 @@ fn main() {
             commands::coding_agent_sessions::coding_agent_list_sessions,
             commands::coding_agent_sessions::coding_agent_delete_session,
             commands::coding_agent_sessions::coding_agent_rename_session,
+            commands::coding_agent_sessions::coding_agent_load_session_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
