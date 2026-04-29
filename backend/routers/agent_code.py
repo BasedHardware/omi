@@ -76,6 +76,10 @@ class WalletGrantRequest(BaseModel):
 
 class AgentCompletionRequest(BaseModel):
     messages: List[Dict[str, Any]]
+    # When provided, overrides the env-driven default model. Pi sends the
+    # OpenRouter slug (e.g. "anthropic/claude-sonnet-4.5") so the user-facing
+    # picker controls routing without a redeploy.
+    model: Optional[str] = None
     session_id: Optional[str] = Field(default=None)
     tools: Optional[List[Dict[str, Any]]] = None
     tool_choice: Optional[Any] = None
@@ -121,8 +125,9 @@ async def agent_code_completions(
         raise HTTPException(status_code=402, detail="Insufficient agent code credits")
 
     session_id = body.session_id or str(uuid.uuid4())
+    model = body.model or MODEL_ID
 
-    payload: Dict[str, Any] = {"model": MODEL_ID, "messages": body.messages}
+    payload: Dict[str, Any] = {"model": model, "messages": body.messages}
     for field in ("tools", "tool_choice", "temperature", "top_p", "max_tokens"):
         value = getattr(body, field)
         if value is not None:
@@ -149,7 +154,7 @@ async def agent_code_completions(
                     agent_code_db.record_turn(
                         uid=uid,
                         session_id=session_id,
-                        model=usage.model or MODEL_ID,
+                        model=usage.model or model,
                         input_tokens=usage.input_tokens,
                         output_tokens=usage.output_tokens,
                         cost_cents=cost_cents,
