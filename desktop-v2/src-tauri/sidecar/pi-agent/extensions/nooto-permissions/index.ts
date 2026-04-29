@@ -65,6 +65,32 @@ const DESTRUCTIVE_RE = new RegExp(
 );
 
 // ---------------------------------------------------------------------------
+// Long-running server pattern
+// ---------------------------------------------------------------------------
+
+/**
+ * Commands that start a long-running dev server / watcher and never return on
+ * their own. The bash tool blocks until exit, so these hang the whole agent
+ * turn. Reject up front and tell the model to use a non-blocking alternative.
+ */
+const LONG_RUNNING_RE = new RegExp(
+  [
+    String.raw`\b(?:npm|pnpm|yarn|bun|deno)\s+(?:run\s+)?(?:dev|start|serve|watch)\b`,
+    String.raw`\b(?:next|vite|nuxt|astro|remix|gatsby|webpack)\s+dev\b`,
+    String.raw`\bnodemon\b`,
+    String.raw`\btsx\s+watch\b`,
+    String.raw`\btsc\s+--watch\b`,
+    String.raw`\bvitest(?!\s+run\b)\b`, // `vitest` alone is watch mode; `vitest run` is fine
+    String.raw`\bjest\s+--watch`,
+    String.raw`\bflask\s+run\b`,
+    String.raw`\buvicorn\s+`,
+    String.raw`\bpython\s+-m\s+http\.server\b`,
+    String.raw`\bhttp-server\b`,
+    String.raw`\brails\s+(?:s|server)\b`,
+  ].join("|"),
+);
+
+// ---------------------------------------------------------------------------
 // Journal helpers
 // ---------------------------------------------------------------------------
 
@@ -111,9 +137,20 @@ export default function registerNootoPermissions(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event, _ctx): Promise<ToolCallEventResult | void> => {
     if (isToolCallEventType("bash", event)) {
-      const matched = DESTRUCTIVE_RE.exec(event.input.command ?? "");
-      if (matched) {
-        return { block: true, reason: `destructive pattern matched: ${matched[0]}` };
+      const command = event.input.command ?? "";
+      const destructive = DESTRUCTIVE_RE.exec(command);
+      if (destructive) {
+        return { block: true, reason: `destructive pattern matched: ${destructive[0]}` };
+      }
+      const longRunning = LONG_RUNNING_RE.exec(command);
+      if (longRunning) {
+        return {
+          block: true,
+          reason:
+            `'${longRunning[0]}' starts a long-running server that never returns — the bash tool would hang. ` +
+            `To inspect the project, try 'cat package.json', 'ls', or run 'npm run' (no script) to list available scripts. ` +
+            `If you genuinely need to start a server, ask the user to start it in another terminal and then continue.`,
+        };
       }
       return;
     }
