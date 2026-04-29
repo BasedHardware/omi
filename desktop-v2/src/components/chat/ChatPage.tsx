@@ -62,6 +62,7 @@ import { CitationList } from "./CitationList";
 import { ChatSessionsSidebar } from "./ChatSessionsSidebar";
 import { TaskChatPanel } from "./TaskChatPanel";
 import { CodingAgentSession } from "./coding-agent/CodingAgentSession";
+import { CodingAgentSessionsSidebar } from "./coding-agent/CodingAgentSessionsSidebar";
 import { CODING_AGENT_ENABLED } from "@/config/codingAgentFeatureFlag";
 import { cn } from "@/lib/utils";
 
@@ -248,8 +249,11 @@ export function ChatPage() {
     <div className="flex h-full min-w-0 flex-col">
       {CODING_AGENT_ENABLED && <ChatModeTabs mode={mode} onChange={setModeAndPersist} />}
       {mode === "code" ? (
-        <div className="flex-1 min-h-0">
-          <CodingAgentSession />
+        <div className="flex flex-row flex-1 min-h-0 min-w-0">
+          <CodingAgentSessionsSidebar />
+          <div className="flex-1 min-h-0 min-w-0">
+            <CodingAgentSession />
+          </div>
         </div>
       ) : (
         <ChatModeBody

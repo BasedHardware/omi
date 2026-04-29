@@ -389,7 +389,12 @@ fn main() {
             commands::coding_agent::coding_agent_pick_folder,
             commands::coding_agent::coding_agent_start_session,
             commands::coding_agent::coding_agent_send_message,
+            commands::coding_agent::coding_agent_send_raw_rpc,
             commands::coding_agent::coding_agent_stop_session,
+            // Coding agent sessions
+            commands::coding_agent_sessions::coding_agent_list_sessions,
+            commands::coding_agent_sessions::coding_agent_delete_session,
+            commands::coding_agent_sessions::coding_agent_rename_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

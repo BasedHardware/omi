@@ -2,6 +2,7 @@ pub mod auth;
 pub mod bluetooth;
 pub mod claude_oauth;
 pub mod coding_agent;
+pub mod coding_agent_sessions;
 pub mod companion;
 pub mod config;
 pub mod debug;
