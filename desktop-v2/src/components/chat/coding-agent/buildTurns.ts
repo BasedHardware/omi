@@ -69,7 +69,17 @@ export function buildTurns(events: AgentEvent[]): Turn[] {
   };
 
   for (const ev of events) {
-    if (ev.type === "text") {
+    if (ev.type === "user_text") {
+      // Close any open assistant turn first.
+      const last = turns[turns.length - 1];
+      if (last && last.role === "assistant") last.isOpen = false;
+      turns.push({
+        id: nextId(),
+        role: "user",
+        items: [{ kind: "text", id: nextId(), text: ev.text }],
+        isOpen: false,
+      });
+    } else if (ev.type === "text") {
       const turn = ensureAssistantTurn();
       const last = turn.items[turn.items.length - 1];
       if (last && last.kind === "text") {

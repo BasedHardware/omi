@@ -30,8 +30,16 @@ import { cn } from "@/lib/utils";
 // ---------------------------------------------------------------------------
 
 export function CodingAgentSession() {
-  const { pickFolder, startSession, sendMessage, stopSession, events, isStreaming } =
-    useCodingAgent();
+  const {
+    pickFolder,
+    startSession,
+    sendMessage,
+    stopSession,
+    pushUserText,
+    pushError,
+    events,
+    isStreaming,
+  } = useCodingAgent();
 
   const [folder, setFolder] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -54,18 +62,30 @@ export function CodingAgentSession() {
       let workingFolder = folder;
       if (!workingFolder) {
         workingFolder = (await pickFolder()) ?? null;
-        if (!workingFolder) return;
+        if (!workingFolder) {
+          pushError("Pick a project folder before sending a prompt.");
+          return;
+        }
         setFolder(workingFolder);
       }
 
-      if (!sessionId) {
-        const id = await startSession(workingFolder, text);
-        setSessionId(id);
-      } else {
-        await sendMessage(sessionId, text);
+      // Show the user's prompt immediately so the chat doesn't sit empty
+      // while the sidecar is starting up.
+      pushUserText(text);
+
+      try {
+        if (!sessionId) {
+          const id = await startSession(workingFolder, text);
+          setSessionId(id);
+        } else {
+          await sendMessage(sessionId, text);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        pushError(`Failed to send to coding agent: ${message}`);
       }
     },
-    [folder, isStreaming, pickFolder, sendMessage, sessionId, startSession],
+    [folder, isStreaming, pickFolder, pushError, pushUserText, sendMessage, sessionId, startSession],
   );
 
   const handleStop = useCallback(() => {

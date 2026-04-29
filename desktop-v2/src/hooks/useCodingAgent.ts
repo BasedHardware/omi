@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/authStore";
 // ---------------------------------------------------------------------------
 
 export type AgentEvent =
+  | { type: "user_text"; text: string }
   | { type: "text"; text: string }
   | { type: "tool_call"; tool: string; input: unknown; id: string }
   | { type: "tool_result"; id: string; output: string; isError: boolean }
@@ -19,6 +20,8 @@ export interface UseCodingAgent {
   startSession: (folder: string, prompt: string) => Promise<string>;
   sendMessage: (sessionId: string, message: string) => Promise<void>;
   stopSession: (sessionId: string) => Promise<void>;
+  pushUserText: (text: string) => void;
+  pushError: (message: string) => void;
   events: AgentEvent[];
   isStreaming: boolean;
 }
@@ -233,5 +236,23 @@ export function useCodingAgent(): UseCodingAgent {
     await invoke("coding_agent_stop_session", { sessionId });
   }, []);
 
-  return { pickFolder, startSession, sendMessage, stopSession, events, isStreaming };
+  const pushUserText = useCallback((text: string): void => {
+    setEvents((prev) => [...prev, { type: "user_text", text }]);
+  }, []);
+
+  const pushError = useCallback((message: string): void => {
+    setEvents((prev) => [...prev, { type: "error", message }]);
+    setIsStreaming(false);
+  }, []);
+
+  return {
+    pickFolder,
+    startSession,
+    sendMessage,
+    stopSession,
+    pushUserText,
+    pushError,
+    events,
+    isStreaming,
+  };
 }
