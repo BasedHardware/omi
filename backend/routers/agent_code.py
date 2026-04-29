@@ -10,6 +10,7 @@ Flow per turn:
 """
 
 import logging
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -33,6 +34,11 @@ router = APIRouter()
 
 MIN_BALANCE_CENTS_TO_START = 1
 GRANT_MAX_CENTS = 100_000  # $1 000 per single grant
+
+# When false (default), the route skips the wallet pre-flight check and lets
+# any authenticated user run a turn. Usage is still recorded to the ledger so
+# we can review spend, but no 402 is raised. Flip to "1"/"true" to enforce.
+ENFORCE_CREDITS = os.environ.get("AGENT_CODE_ENFORCE_CREDITS", "").lower() in ("1", "true", "yes")
 
 _verify_admin_key = verify_admin_key_header
 
@@ -111,7 +117,7 @@ async def agent_code_completions(
     body: AgentCompletionRequest,
     uid: str = Depends(get_current_user_uid),
 ):
-    if agent_code_db.get_balance_cents(uid) < MIN_BALANCE_CENTS_TO_START:
+    if ENFORCE_CREDITS and agent_code_db.get_balance_cents(uid) < MIN_BALANCE_CENTS_TO_START:
         raise HTTPException(status_code=402, detail="Insufficient agent code credits")
 
     session_id = body.session_id or str(uuid.uuid4())
