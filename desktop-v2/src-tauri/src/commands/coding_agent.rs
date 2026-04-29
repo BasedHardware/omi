@@ -123,8 +123,11 @@ pub async fn coding_agent_start_session(
     session_id: String,
     id_token: String,
     backend_url: String,
+    model: Option<String>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let model = model.unwrap_or_else(|| "anthropic/claude-sonnet-4.5".to_string());
+    let model_arg = format!("nooto-backend/{}", model);
     let state: State<CodingAgentState> = app.state();
 
     let pi_dir = pi_resource_dir(&app)?;
@@ -204,7 +207,7 @@ pub async fn coding_agent_start_session(
         "-e", path_str(&ext_perms)?,
         "-e", path_str(&ext_td)?,
         "--provider", "nooto-backend",
-        "--model", "nooto-backend/qwen3.6-35b-a3b",
+        "--model", &model_arg,
         "--no-session",
     ])
     .stdin(std::process::Stdio::piped())

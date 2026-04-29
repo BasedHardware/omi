@@ -28,6 +28,25 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 const PROVIDER_ID = "nooto-backend";
 const DEFAULT_MODEL_ID = "qwen3.6-35b-a3b";
 
+// Curated list of OpenRouter models offered in the cloud-mode picker.
+// `id` is the slug Pi sends in the chat-completions `model` field — the
+// backend forwards it as-is to OpenRouter. Pricing is informational only;
+// real charges come from OpenRouter's `usage.cost` per request.
+const CLOUD_MODELS: Array<{
+  id: string;
+  name: string;
+  input: number;
+  output: number;
+  contextWindow: number;
+  reasoning: boolean;
+}> = [
+  { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", input: 3, output: 15, contextWindow: 200_000, reasoning: false },
+  { id: "anthropic/claude-opus-4-7", name: "Claude Opus 4.7", input: 15, output: 75, contextWindow: 200_000, reasoning: false },
+  { id: "openai/gpt-4o", name: "GPT-4o", input: 2.5, output: 10, contextWindow: 128_000, reasoning: false },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o-mini", input: 0.15, output: 0.6, contextWindow: 128_000, reasoning: false },
+  { id: "qwen/qwen3-coder", name: "Qwen3-Coder", input: 0.2, output: 0.8, contextWindow: 262_144, reasoning: false },
+];
+
 export default function registerNootoBackend(pi: ExtensionAPI): void {
   const directUrl = process.env.NOOTO_DIRECT_LLM_URL;
 
@@ -74,17 +93,15 @@ export default function registerNootoBackend(pi: ExtensionAPI): void {
     apiKey: "NOOTO_ID_TOKEN",
     api: "openai-completions",
     authHeader: true,
-    models: [
-      {
-        id: DEFAULT_MODEL_ID,
-        name: "Qwen3.6 35B-A3B (Nooto)",
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0.2418, output: 1.4480, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 262_144,
-        maxTokens: 8192,
-        compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, maxTokensField: "max_tokens" },
-      },
-    ],
+    models: CLOUD_MODELS.map((m) => ({
+      id: m.id,
+      name: m.name,
+      reasoning: m.reasoning,
+      input: ["text"],
+      cost: { input: m.input, output: m.output, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: m.contextWindow,
+      maxTokens: 8192,
+      compat: { supportsDeveloperRole: false, supportsReasoningEffort: false, maxTokensField: "max_tokens" },
+    })),
   });
 }

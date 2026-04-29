@@ -20,7 +20,17 @@ import {
 import { GenerativeMarkdown } from "../../generative-ui/GenerativeMarkdown";
 import { useCodingAgent } from "@/hooks/useCodingAgent";
 import { buildTurns, type Turn, type TextChunk, type ToolSlot } from "./buildTurns";
+import { OPENROUTER_MODELS, DEFAULT_MODEL_ID, findModel } from "./openrouterModels";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const MODEL_STORAGE_KEY = "coding-agent:model";
 
 // ---------------------------------------------------------------------------
 // CodingAgentSession — coding-agent surface inside the /chat page (Code mode).
@@ -44,6 +54,18 @@ export function CodingAgentSession() {
   const [folder, setFolder] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [inputText, setInputText] = useState("");
+  const [model, setModelState] = useState<string>(() => {
+    const stored = typeof window !== "undefined" ? localStorage.getItem(MODEL_STORAGE_KEY) : null;
+    return stored && findModel(stored) ? stored : DEFAULT_MODEL_ID;
+  });
+
+  const setModel = useCallback((next: string) => {
+    setModelState(next);
+    if (typeof window !== "undefined") localStorage.setItem(MODEL_STORAGE_KEY, next);
+    // Force a fresh session on model change so the next prompt uses the new
+    // model. Pi binds the model at sidecar spawn time, so we cannot live-swap.
+    setSessionId(null);
+  }, []);
 
   const turns = buildTurns(events);
 
@@ -75,7 +97,7 @@ export function CodingAgentSession() {
 
       try {
         if (!sessionId) {
-          const id = await startSession(workingFolder, text);
+          const id = await startSession(workingFolder, text, model);
           setSessionId(id);
         } else {
           await sendMessage(sessionId, text);
@@ -85,7 +107,7 @@ export function CodingAgentSession() {
         pushError(`Failed to send to coding agent: ${message}`);
       }
     },
-    [folder, isStreaming, pickFolder, pushError, pushUserText, sendMessage, sessionId, startSession],
+    [folder, isStreaming, model, pickFolder, pushError, pushUserText, sendMessage, sessionId, startSession],
   );
 
   const handleStop = useCallback(() => {
@@ -154,6 +176,7 @@ export function CodingAgentSession() {
           <PromptInputFooter>
             <PromptInputTools>
               <FolderPickerButton folder={folder} onPick={() => void handlePickFolder()} />
+              <ModelSelector value={model} onChange={setModel} />
             </PromptInputTools>
             <PromptInputSubmit
               status={isStreaming ? "streaming" : "ready"}
@@ -168,6 +191,29 @@ export function CodingAgentSession() {
 }
 
 // ---------------------------------------------------------------------------
+
+function ModelSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-7 gap-1.5 border-dashed text-xs px-2.5 py-1 [&>svg]:size-3">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {OPENROUTER_MODELS.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            <span className="text-xs">{m.name}</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 function FolderPickerButton({
   folder,

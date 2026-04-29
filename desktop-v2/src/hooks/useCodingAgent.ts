@@ -17,7 +17,7 @@ export type AgentEvent =
 
 export interface UseCodingAgent {
   pickFolder: () => Promise<string | null>;
-  startSession: (folder: string, prompt: string) => Promise<string>;
+  startSession: (folder: string, prompt: string, model?: string) => Promise<string>;
   sendMessage: (sessionId: string, message: string) => Promise<void>;
   stopSession: (sessionId: string) => Promise<void>;
   pushUserText: (text: string) => void;
@@ -225,7 +225,7 @@ export function useCodingAgent(): UseCodingAgent {
   }, []);
 
   const startSession = useCallback(
-    async (folder: string, prompt: string): Promise<string> => {
+    async (folder: string, prompt: string, model?: string): Promise<string> => {
       let token = idToken;
       if (!token) {
         const ok = await refreshToken();
@@ -245,6 +245,7 @@ export function useCodingAgent(): UseCodingAgent {
         sessionId,
         idToken: token,
         backendUrl: BACKEND_URL,
+        model,
       });
 
       return sessionId;
