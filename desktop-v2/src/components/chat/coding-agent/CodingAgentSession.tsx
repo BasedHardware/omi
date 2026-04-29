@@ -8,7 +8,7 @@ import {
   ConversationScrollButton,
 } from "../../ai-elements/conversation";
 import { Message, MessageContent } from "../../ai-elements/message";
-import { Tool, type ToolStatus } from "../../ai-elements/tool";
+import { Tool, ToolGroup, type ToolStatus } from "../../ai-elements/tool";
 import {
   PromptInput,
   PromptInputBody,
@@ -296,33 +296,49 @@ function TurnView({ turn, isStreaming }: { turn: Turn; isStreaming: boolean }) {
     );
   }
 
+  // Bunch consecutive tool calls into a ToolGroup so the chat doesn't show
+  // five separate cards for "agent did 5 reads in a row".
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  while (i < turn.items.length) {
+    const item = turn.items[i]!;
+    if (item.kind === "tool") {
+      const tools: ToolSlot[] = [];
+      while (i < turn.items.length && turn.items[i]!.kind === "tool") {
+        tools.push(turn.items[i] as ToolSlot);
+        i++;
+      }
+      blocks.push(
+        <ToolGroup key={`tg-${tools[0]!.call.id}`} className="my-2">
+          {tools.map((t) => (
+            <ToolCallView key={t.call.id} slot={t} />
+          ))}
+        </ToolGroup>,
+      );
+      continue;
+    }
+    if (item.kind === "text") {
+      const isLast = i === turn.items.length - 1;
+      blocks.push(
+        <GenerativeMarkdown
+          key={item.id}
+          content={item.text}
+          isAnimating={isStreaming && isLast}
+        />,
+      );
+    } else if (item.kind === "error") {
+      blocks.push(
+        <p key={item.id} className="text-sm text-destructive">
+          {item.message}
+        </p>,
+      );
+    }
+    i++;
+  }
+
   return (
     <Message from="assistant">
-      <MessageContent>
-        {turn.items.map((item, i) => {
-          if (item.kind === "text") {
-            const isLast = i === turn.items.length - 1;
-            return (
-              <GenerativeMarkdown
-                key={item.id}
-                content={item.text}
-                isAnimating={isStreaming && isLast}
-              />
-            );
-          }
-          if (item.kind === "tool") {
-            return <ToolCallView key={item.call.id} slot={item} />;
-          }
-          if (item.kind === "error") {
-            return (
-              <p key={item.id} className="text-sm text-destructive">
-                {item.message}
-              </p>
-            );
-          }
-          return null;
-        })}
-      </MessageContent>
+      <MessageContent>{blocks}</MessageContent>
     </Message>
   );
 }
@@ -343,6 +359,8 @@ function ToolCallView({ slot }: { slot: ToolSlot }) {
 
   return (
     <Tool
+      // Drop the default my-2 — ToolGroup controls spacing between siblings.
+      className="my-0"
       name={call.tool}
       status={status}
       input={inputStr}
