@@ -62,6 +62,16 @@ async def proxy_chat_completion(payload: dict, usage: StreamUsage) -> AsyncItera
     stream_options["include_usage"] = True
     payload["stream_options"] = stream_options
 
+    # When the request includes tools, ask OpenRouter to filter routing to
+    # providers that support every parameter in the request — otherwise the
+    # default route may land on a provider that ignores tools and returns a
+    # 404 ("No endpoints found that support tool use").
+    # https://openrouter.ai/docs/guides/routing/provider-selection
+    if payload.get("tools"):
+        provider_cfg = dict(payload.get("provider") or {})
+        provider_cfg.setdefault("require_parameters", True)
+        payload["provider"] = provider_cfg
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
