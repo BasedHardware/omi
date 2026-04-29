@@ -233,7 +233,9 @@ async function connectServer(
   clients.push(client);
 
   const { tools } = await client.listTools();
-  console.log(`[nooto-mcp] ${serverName}: connected, ${tools.length} tools`);
+  // Intentionally silent on success — Pi's stderr pipe is forwarded to the
+  // chat as red error bubbles, so any console output here surfaces as a
+  // false positive in the UI.
 
   for (const tool of tools) {
     const piName = `${serverName}__${tool.name}`;
