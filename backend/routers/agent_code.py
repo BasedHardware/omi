@@ -112,7 +112,7 @@ def grant_wallet_credits(body: WalletGrantRequest, admin_id: str = Depends(_veri
     return {"balance_cents": new_balance, "grant_id": grant_id}
 
 
-@router.post("/v1/agent/code/completions")
+@router.post("/v1/agent/code/chat/completions")
 async def agent_code_completions(
     body: AgentCompletionRequest,
     uid: str = Depends(get_current_user_uid),
