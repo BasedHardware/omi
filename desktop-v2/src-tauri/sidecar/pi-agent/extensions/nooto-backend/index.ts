@@ -45,6 +45,8 @@ const CLOUD_MODELS: Array<{
   { id: "openai/gpt-4o", name: "GPT-4o", input: 2.5, output: 10, contextWindow: 128_000, reasoning: false },
   { id: "openai/gpt-4o-mini", name: "GPT-4o-mini", input: 0.15, output: 0.6, contextWindow: 128_000, reasoning: false },
   { id: "qwen/qwen3-coder", name: "Qwen3-Coder", input: 0.2, output: 0.8, contextWindow: 262_144, reasoning: false },
+  { id: "local/qwen3.6-27b", name: "Qwen3.6 27B (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: false },
+  { id: "local/qwen3.6-27b-thinking", name: "Qwen3.6 27B Thinking (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: true },
 ];
 
 export default function registerNootoBackend(pi: ExtensionAPI): void {

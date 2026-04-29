@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "https://openrouter.ai/api/"
 OPENROUTER_TIMEOUT_SECONDS = 600
 
+LOCAL_MODEL_PREFIX = "local/"
+
 
 def _resolve_api_key() -> str:
     key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
@@ -40,6 +42,28 @@ def _resolve_api_key() -> str:
 def _resolve_completions_url() -> str:
     base = (os.environ.get("ANTHROPIC_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     return f"{base}/v1/chat/completions"
+
+
+def _resolve_local_route(model: str) -> Optional[tuple[str, str, str]]:
+    """If `model` starts with `local/`, return (url, api_key, real_model_id).
+
+    Routes such requests to AGENT_CODE_LOCAL_LLM_URL (a self-hosted
+    OpenAI-compatible endpoint, e.g. vLLM) instead of OpenRouter. The
+    `local/` prefix is stripped before forwarding so the upstream sees the
+    actual served-model name.
+    """
+    if not model.startswith(LOCAL_MODEL_PREFIX):
+        return None
+    base = (os.environ.get("AGENT_CODE_LOCAL_LLM_URL") or "").rstrip("/")
+    if not base:
+        raise RuntimeError(
+            "AGENT_CODE_LOCAL_LLM_URL not configured — model "
+            f"{model!r} requires a local LLM endpoint"
+        )
+    api_key = os.environ.get("AGENT_CODE_LOCAL_LLM_API_KEY") or "EMPTY"
+    real_model = model[len(LOCAL_MODEL_PREFIX) :]
+    url = f"{base}/chat/completions" if base.endswith("/v1") else f"{base}/v1/chat/completions"
+    return url, api_key, real_model
 
 
 class StreamUsage:
@@ -54,8 +78,14 @@ class StreamUsage:
 
 
 async def proxy_chat_completion(payload: dict, usage: StreamUsage) -> AsyncIterator[bytes]:
-    api_key = _resolve_api_key()
-    url = _resolve_completions_url()
+    requested_model = str(payload.get("model") or "")
+    local_route = _resolve_local_route(requested_model)
+    if local_route is not None:
+        url, api_key, real_model = local_route
+        payload = {**payload, "model": real_model}
+    else:
+        api_key = _resolve_api_key()
+        url = _resolve_completions_url()
 
     payload = {**payload, "stream": True}
     stream_options = dict(payload.get("stream_options") or {})
