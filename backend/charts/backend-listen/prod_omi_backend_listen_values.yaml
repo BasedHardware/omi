@@ -80,7 +80,7 @@ ingress:
 
 env:
   - name: USE_VERTEX_AI
-    value: "false"
+    value: "true"
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
