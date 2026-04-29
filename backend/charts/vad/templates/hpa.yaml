@@ -39,7 +39,7 @@ spec:
         metric:
           name: vad_request_latency_p99
         target:
-          type: Value
+          type: AverageValue
           value: {{ .Values.autoscaling.requestLatencyP99 }}
     {{- end }}
 
