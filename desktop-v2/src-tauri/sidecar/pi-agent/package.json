@@ -1,0 +1,17 @@
+{
+  "name": "nooto-pi-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vendored Pi coding-agent + Nooto backend extension. Tauri spawns `pi --mode rpc` from this directory and talks JSONL to the agent.",
+  "type": "module",
+  "scripts": {
+    "rpc": "pi --mode rpc -e ./extensions/nooto-backend/index.ts --provider nooto-backend --model nooto-backend/qwen3.6-35b-a3b",
+    "smoke": "scripts/smoke.sh"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "0.68.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

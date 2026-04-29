@@ -1,0 +1,8 @@
+{
+  "name": "nooto-pi-extension-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extension that registers the Nooto backend as an OpenAI-compatible provider.",
+  "type": "module",
+  "main": "index.ts"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "nooto-pi-extension-permissions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extension: permission gate + session journal for write/edit/bash tool calls.",
+  "type": "module",
+  "main": "index.ts"
+}

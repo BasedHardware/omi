@@ -1,0 +1,8 @@
+{
+  "name": "nooto-pi-extension-td",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extension: exposes the td CLI (Jira/Bitbucket/worktrees) as an LLM-callable tool.",
+  "type": "module",
+  "main": "index.ts"
+}
