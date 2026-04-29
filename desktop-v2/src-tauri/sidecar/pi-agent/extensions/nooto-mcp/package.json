@@ -1,0 +1,8 @@
+{
+  "name": "nooto-pi-extension-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi extension: spawns MCP servers and registers every discovered tool with Pi (context7, playwright by default).",
+  "type": "module",
+  "main": "index.ts"
+}

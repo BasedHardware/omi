@@ -206,6 +206,7 @@ pub async fn coding_agent_start_session(
     let ext_perms = pi_dir.join("extensions/nooto-permissions/index.ts");
     let ext_td = pi_dir.join("extensions/nooto-td/index.ts");
     let ext_terminal = pi_dir.join("extensions/nooto-terminal/index.ts");
+    let ext_mcp = pi_dir.join("extensions/nooto-mcp/index.ts");
 
     // Validate extensions exist before spawning so the error is actionable.
     for (label, path) in [
@@ -213,6 +214,7 @@ pub async fn coding_agent_start_session(
         ("nooto-permissions", &ext_perms),
         ("nooto-td", &ext_td),
         ("nooto-terminal", &ext_terminal),
+        ("nooto-mcp", &ext_mcp),
     ] {
         if !path.exists() {
             return Err(format!("{label} extension not found at {}", path.display()));
@@ -285,6 +287,7 @@ pub async fn coding_agent_start_session(
         "-e", path_str(&ext_perms)?,
         "-e", path_str(&ext_td)?,
         "-e", path_str(&ext_terminal)?,
+        "-e", path_str(&ext_mcp)?,
         "--provider", "nooto-backend",
         "--model", &model_arg,
         "--session-dir", &sess_dir_str,

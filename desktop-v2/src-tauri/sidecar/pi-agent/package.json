@@ -9,7 +9,8 @@
     "smoke": "scripts/smoke.sh"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.68.1"
+    "@mariozechner/pi-coding-agent": "0.68.1",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "engines": {
     "node": ">=20.0.0"
