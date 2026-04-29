@@ -39,14 +39,15 @@ const CLOUD_MODELS: Array<{
   output: number;
   contextWindow: number;
   reasoning: boolean;
+  vision: boolean;
 }> = [
-  { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", input: 3, output: 15, contextWindow: 200_000, reasoning: false },
-  { id: "anthropic/claude-opus-4-7", name: "Claude Opus 4.7", input: 15, output: 75, contextWindow: 200_000, reasoning: false },
-  { id: "openai/gpt-4o", name: "GPT-4o", input: 2.5, output: 10, contextWindow: 128_000, reasoning: false },
-  { id: "openai/gpt-4o-mini", name: "GPT-4o-mini", input: 0.15, output: 0.6, contextWindow: 128_000, reasoning: false },
-  { id: "qwen/qwen3-coder", name: "Qwen3-Coder", input: 0.2, output: 0.8, contextWindow: 262_144, reasoning: false },
-  { id: "local/qwen3.6-27b", name: "Qwen3.6 27B (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: false },
-  { id: "local/qwen3.6-27b-thinking", name: "Qwen3.6 27B Thinking (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: true },
+  { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", input: 3, output: 15, contextWindow: 200_000, reasoning: false, vision: true },
+  { id: "anthropic/claude-opus-4-7", name: "Claude Opus 4.7", input: 15, output: 75, contextWindow: 200_000, reasoning: false, vision: true },
+  { id: "openai/gpt-4o", name: "GPT-4o", input: 2.5, output: 10, contextWindow: 128_000, reasoning: false, vision: true },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o-mini", input: 0.15, output: 0.6, contextWindow: 128_000, reasoning: false, vision: true },
+  { id: "qwen/qwen3-coder", name: "Qwen3-Coder", input: 0.2, output: 0.8, contextWindow: 262_144, reasoning: false, vision: false },
+  { id: "local/qwen3.6-27b", name: "Qwen3.6 27B (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: false, vision: false },
+  { id: "local/qwen3.6-27b-thinking", name: "Qwen3.6 27B Thinking (local)", input: 0, output: 0, contextWindow: 131_072, reasoning: true, vision: false },
 ];
 
 export default function registerNootoBackend(pi: ExtensionAPI): void {
@@ -99,7 +100,7 @@ export default function registerNootoBackend(pi: ExtensionAPI): void {
       id: m.id,
       name: m.name,
       reasoning: m.reasoning,
-      input: ["text"],
+      input: m.vision ? ["text", "image"] : ["text"],
       cost: { input: m.input, output: m.output, cacheRead: 0, cacheWrite: 0 },
       contextWindow: m.contextWindow,
       maxTokens: 8192,

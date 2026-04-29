@@ -7,8 +7,16 @@ import { useAuthStore } from "@/stores/authStore";
 // Public types
 // ---------------------------------------------------------------------------
 
+/** Image content forwarded to Pi via the RPC `images` field. */
+export interface AttachedImage {
+  /** Raw base64 (no `data:` URL prefix). */
+  data: string;
+  /** MIME type, e.g. `image/png`. */
+  mimeType: string;
+}
+
 export type AgentEvent =
-  | { type: "user_text"; text: string }
+  | { type: "user_text"; text: string; images?: AttachedImage[] }
   | { type: "text"; text: string }
   | { type: "tool_call"; tool: string; input: unknown; id: string }
   | { type: "tool_result"; id: string; output: string; isError: boolean }
@@ -40,11 +48,17 @@ export type AgentStatus =
 
 export interface UseCodingAgent {
   pickFolder: () => Promise<string | null>;
-  startSession: (folder: string, prompt: string, model?: string, sessionPath?: string) => Promise<string>;
-  sendMessage: (sessionId: string, message: string) => Promise<void>;
+  startSession: (
+    folder: string,
+    prompt: string,
+    model?: string,
+    sessionPath?: string,
+    images?: AttachedImage[],
+  ) => Promise<string>;
+  sendMessage: (sessionId: string, message: string, images?: AttachedImage[]) => Promise<void>;
   sendRawRpc: (sessionId: string, jsonValue: unknown) => Promise<void>;
   stopSession: (sessionId: string) => Promise<void>;
-  pushUserText: (text: string) => void;
+  pushUserText: (text: string, images?: AttachedImage[]) => void;
   pushError: (message: string) => void;
   events: AgentEvent[];
   isStreaming: boolean;
@@ -198,7 +212,14 @@ function piMessageToEvents(msg: unknown): AgentEvent[] {
       .filter((c) => c.type === "text" && typeof c.text === "string")
       .map((c) => String(c.text))
       .join("");
-    return text ? [{ type: "user_text", text }] : [];
+    const images = contentArr
+      .filter((c) => c.type === "image" && typeof c.data === "string")
+      .map((c) => ({
+        data: String(c.data),
+        mimeType: typeof c.mimeType === "string" ? c.mimeType : "image/png",
+      }));
+    if (!text && images.length === 0) return [];
+    return [{ type: "user_text", text, images: images.length > 0 ? images : undefined }];
   }
 
   if (role === "assistant") {
@@ -320,6 +341,12 @@ function previewForTool(toolName: string, input: unknown): string | undefined {
     default:
       return undefined;
   }
+}
+
+// Pi's RPC expects `{type:"image", data:..., mimeType:...}` per item; our hook
+// uses a leaner `{data, mimeType}` shape. Wrap before invoke().
+function toRpcImages(images: AttachedImage[]): Array<{ type: "image"; data: string; mimeType: string }> {
+  return images.map((img) => ({ type: "image", data: img.data, mimeType: img.mimeType }));
 }
 
 function shortPath(p: string): string {
@@ -457,7 +484,13 @@ export function useCodingAgent(): UseCodingAgent {
   }, []);
 
   const startSession = useCallback(
-    async (folder: string, prompt: string, model?: string, sessionPath?: string): Promise<string> => {
+    async (
+      folder: string,
+      prompt: string,
+      model?: string,
+      sessionPath?: string,
+      images?: AttachedImage[],
+    ): Promise<string> => {
       let token = idToken;
       if (!token) {
         const ok = await refreshToken();
@@ -500,6 +533,7 @@ export function useCodingAgent(): UseCodingAgent {
         backendUrl: BACKEND_URL,
         model,
         sessionPath: sessionPath ?? null,
+        images: images && images.length > 0 ? toRpcImages(images) : null,
       });
 
       // Ask Pi to report the resolved session metadata (file path, id, name).
@@ -517,13 +551,20 @@ export function useCodingAgent(): UseCodingAgent {
     [idToken, refreshToken],
   );
 
-  const sendMessage = useCallback(async (sessionId: string, message: string): Promise<void> => {
-    setIsStreaming(true);
-    clearCompletedTimer();
-    turnStartRef.current = Date.now();
-    setStatus({ kind: "thinking" });
-    await invoke("coding_agent_send_message", { sessionId, message });
-  }, []);
+  const sendMessage = useCallback(
+    async (sessionId: string, message: string, images?: AttachedImage[]): Promise<void> => {
+      setIsStreaming(true);
+      clearCompletedTimer();
+      turnStartRef.current = Date.now();
+      setStatus({ kind: "thinking" });
+      await invoke("coding_agent_send_message", {
+        sessionId,
+        message,
+        images: images && images.length > 0 ? toRpcImages(images) : null,
+      });
+    },
+    [],
+  );
 
   const sendRawRpc = useCallback(async (sessionId: string, jsonValue: unknown): Promise<void> => {
     await invoke("coding_agent_send_raw_rpc", { sessionId, jsonValue });
@@ -539,8 +580,11 @@ export function useCodingAgent(): UseCodingAgent {
     await invoke("coding_agent_stop_session", { sessionId });
   }, []);
 
-  const pushUserText = useCallback((text: string): void => {
-    setEvents((prev) => [...prev, { type: "user_text", text }]);
+  const pushUserText = useCallback((text: string, images?: AttachedImage[]): void => {
+    setEvents((prev) => [
+      ...prev,
+      { type: "user_text", text, images: images && images.length > 0 ? images : undefined },
+    ]);
   }, []);
 
   const pushError = useCallback((message: string): void => {

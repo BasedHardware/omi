@@ -16,11 +16,22 @@ import {
   PromptInputFooter,
   PromptInputTools,
   PromptInputSubmit,
+  PromptInputActionMenu,
+  PromptInputActionMenuTrigger,
+  PromptInputActionMenuContent,
+  PromptInputActionAddAttachments,
+  usePromptInputAttachments,
   type PromptInputMessage,
 } from "../../ai-elements/prompt-input";
+import {
+  Attachment,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+} from "../../ai-elements/attachments";
 import { GenerativeMarkdown } from "../../generative-ui/GenerativeMarkdown";
-import { useCodingAgent } from "@/hooks/useCodingAgent";
-import { buildTurns, type Turn, type TextChunk, type ToolSlot } from "./buildTurns";
+import { useCodingAgent, type AttachedImage } from "@/hooks/useCodingAgent";
+import { buildTurns, type Turn, type TextChunk, type ToolSlot, type ImageChunk } from "./buildTurns";
 import { OPENROUTER_MODELS, DEFAULT_MODEL_ID, findModel } from "./openrouterModels";
 import { AgentStatusStrip } from "./AgentStatusStrip";
 import { useCodingAgentSessionsStore } from "./codingAgentSessionsStore";
@@ -100,8 +111,41 @@ export function CodingAgentSession() {
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
       const text = message.text.trim();
-      if (!text || isStreaming) return;
+      const fileList = message.files ?? [];
+      if (!text && fileList.length === 0) return;
+      if (isStreaming) return;
       setInputText("");
+
+      // Convert any attached images to base64 for Pi's RPC `images` field.
+      // Filter to image MIME types — Pi only handles images today; PDFs would
+      // need text extraction first.
+      const imageFiles = fileList.filter((f) => f.mediaType?.startsWith("image/"));
+      const skipped = fileList.length - imageFiles.length;
+      if (skipped > 0) {
+        pushError(`${skipped} non-image attachment ignored — only images are supported right now.`);
+      }
+
+      // Warn if the selected model can't actually use images.
+      if (imageFiles.length > 0 && !modeInfo.direct) {
+        const m = findModel(model);
+        if (m && !m.vision) {
+          pushError(`${m.name} doesn't accept images. Pick a vision-capable model (Claude / GPT-4o) or remove the attachment.`);
+          return;
+        }
+      }
+
+      let images: AttachedImage[] = [];
+      try {
+        images = await Promise.all(
+          imageFiles.map(async (f) => ({
+            data: await fileToBase64(f as unknown as File),
+            mimeType: f.mediaType ?? "image/png",
+          })),
+        );
+      } catch (err) {
+        pushError(`Failed to read attached image: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
 
       let workingFolder = folder;
       if (!workingFolder) {
@@ -115,21 +159,21 @@ export function CodingAgentSession() {
 
       // Show the user's prompt immediately so the chat doesn't sit empty
       // while the sidecar is starting up.
-      pushUserText(text);
+      pushUserText(text, images);
 
       try {
         if (!sessionId) {
-          const id = await startSession(workingFolder, text, model);
+          const id = await startSession(workingFolder, text, model, undefined, images);
           setSessionId(id);
         } else {
-          await sendMessage(sessionId, text);
+          await sendMessage(sessionId, text, images);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         pushError(`Failed to send to coding agent: ${message}`);
       }
     },
-    [folder, isStreaming, model, pickFolder, pushError, pushUserText, sendMessage, sessionId, startSession],
+    [folder, isStreaming, model, modeInfo.direct, pickFolder, pushError, pushUserText, sendMessage, sessionId, setFolder, startSession],
   );
 
   const handleStop = useCallback(() => {
@@ -169,14 +213,20 @@ export function CodingAgentSession() {
       <TerminalPane sessionId={sessionId} />
       <AgentStatusStrip status={status} onStop={handleStop} />
       <div className="shrink-0 px-5 pb-5 pt-3">
-        <PromptInput onSubmit={handleSubmit} className="w-full">
+        <PromptInput
+          onSubmit={handleSubmit}
+          className="w-full"
+          accept="image/*"
+          multiple
+        >
           <PromptInputBody>
+            <AttachedImagesDisplay />
             <PromptInputTextarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder={
                 folder
-                  ? "Describe the change or task…"
+                  ? "Describe the change or task… (drop a screenshot to attach)"
                   : "Pick a folder, then describe the task…"
               }
               autoFocus
@@ -184,6 +234,12 @@ export function CodingAgentSession() {
           </PromptInputBody>
           <PromptInputFooter>
             <PromptInputTools>
+              <PromptInputActionMenu>
+                <PromptInputActionMenuTrigger />
+                <PromptInputActionMenuContent>
+                  <PromptInputActionAddAttachments label="Attach screenshot" />
+                </PromptInputActionMenuContent>
+              </PromptInputActionMenu>
               <FolderPickerButton folder={folder} onPick={() => void handlePickFolder()} />
               {modeInfo.direct ? (
                 <DirectModeBadge model={modeInfo.directModel ?? "qwen3.6-35b-a3b"} />
@@ -204,6 +260,47 @@ export function CodingAgentSession() {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Renders the in-prompt preview of attachments the user has staged. Must be a
+ * descendant of `<PromptInput>` because `usePromptInputAttachments()` reads
+ * from a context that PromptInput provides.
+ */
+function AttachedImagesDisplay() {
+  const attachments = usePromptInputAttachments();
+  if (attachments.files.length === 0) return null;
+  return (
+    <Attachments variant="inline">
+      {attachments.files.map((file) => (
+        <Attachment data={file} key={file.id} onRemove={() => attachments.remove(file.id)}>
+          <AttachmentPreview />
+          <AttachmentRemove />
+        </Attachment>
+      ))}
+    </Attachments>
+  );
+}
+
+/**
+ * Read a File into a raw base64 string (no `data:image/...;base64,` prefix).
+ * Pi expects raw base64 in the `images[].data` field.
+ */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("FileReader returned non-string"));
+        return;
+      }
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
+    reader.readAsDataURL(file);
+  });
+}
 
 function DirectModeBadge({ model }: { model: string }) {
   return (
@@ -275,10 +372,23 @@ function TurnView({ turn, isStreaming }: { turn: Turn; isStreaming: boolean }) {
       .filter((i): i is TextChunk => i.kind === "text")
       .map((i) => i.text)
       .join("");
+    const images = turn.items.filter((i): i is ImageChunk => i.kind === "image");
     return (
       <Message from="user">
         <MessageContent>
-          <p className="whitespace-pre-wrap">{text}</p>
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {images.map((img) => (
+                <img
+                  key={img.id}
+                  src={`data:${img.mimeType};base64,${img.data}`}
+                  alt="attachment"
+                  className="max-h-48 max-w-xs rounded-lg border border-border object-cover"
+                />
+              ))}
+            </div>
+          )}
+          {text && <p className="whitespace-pre-wrap">{text}</p>}
         </MessageContent>
       </Message>
     );

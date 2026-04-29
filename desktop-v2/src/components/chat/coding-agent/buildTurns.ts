@@ -4,7 +4,7 @@
  * without a DOM or React context.
  */
 
-import type { AgentEvent } from "@/hooks/useCodingAgent";
+import type { AgentEvent, AttachedImage } from "@/hooks/useCodingAgent";
 import type { ToolCall, ToolResult } from "./ToolCallBubble";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +29,14 @@ export interface ErrorSlot {
   message: string;
 }
 
-export type TurnItem = TextChunk | ToolSlot | ErrorSlot;
+export interface ImageChunk {
+  kind: "image";
+  id: string;
+  data: string;       // base64
+  mimeType: string;
+}
+
+export type TurnItem = TextChunk | ToolSlot | ErrorSlot | ImageChunk;
 
 export interface Turn {
   id: string;
@@ -73,10 +80,20 @@ export function buildTurns(events: AgentEvent[]): Turn[] {
       // Close any open assistant turn first.
       const last = turns[turns.length - 1];
       if (last && last.role === "assistant") last.isOpen = false;
+      const items: TurnItem[] = [];
+      if (ev.images && ev.images.length > 0) {
+        for (const img of ev.images as AttachedImage[]) {
+          items.push({ kind: "image", id: nextId(), data: img.data, mimeType: img.mimeType });
+        }
+      }
+      if (ev.text) {
+        items.push({ kind: "text", id: nextId(), text: ev.text });
+      }
+      if (items.length === 0) continue; // empty user message → don't render an empty bubble
       turns.push({
         id: nextId(),
         role: "user",
-        items: [{ kind: "text", id: nextId(), text: ev.text }],
+        items,
         isOpen: false,
       });
     } else if (ev.type === "text") {

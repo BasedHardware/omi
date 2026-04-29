@@ -162,6 +162,20 @@ pub fn coding_agent_get_mode_info() -> serde_json::Value {
 /// When `session_path` is `Some`, Pi is asked to resume an existing session
 /// via the RPC `switch_session` command (written to stdin before the prompt).
 /// When `None`, Pi creates a fresh session in the per-project session-dir.
+/// Image attachment forwarded into Pi's RPC `prompt` command.
+/// Field names match Pi's expected `ImageContent` shape exactly.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachedImage {
+    /// Always "image" — kept explicit for the JSON shape.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// Base64-encoded image bytes (no data: prefix).
+    pub data: String,
+    /// MIME type, e.g. "image/png".
+    pub mime_type: String,
+}
+
 #[tauri::command]
 pub async fn coding_agent_start_session(
     folder: String,
@@ -171,6 +185,7 @@ pub async fn coding_agent_start_session(
     backend_url: String,
     model: Option<String>,
     session_path: Option<String>,
+    images: Option<Vec<AttachedImage>>,
     app: AppHandle,
 ) -> Result<(), String> {
     // In direct mode (NOOTO_DIRECT_LLM_URL set), the Pi extension only
@@ -311,12 +326,21 @@ pub async fn coding_agent_start_session(
         .map_err(|e| format!("Failed to write switch_session RPC: {e}"))?;
     }
 
-    writeln!(
-        stdin,
-        "{}",
-        serde_json::json!({ "id": "r1", "type": "prompt", "message": prompt })
-    )
-    .map_err(|e| format!("Failed to write initial prompt: {e}"))?;
+    {
+        let mut prompt_json = serde_json::json!({
+            "id": "r1",
+            "type": "prompt",
+            "message": prompt,
+        });
+        if let Some(imgs) = images {
+            if !imgs.is_empty() {
+                prompt_json["images"] = serde_json::to_value(&imgs)
+                    .map_err(|e| format!("Failed to serialize images: {e}"))?;
+            }
+        }
+        writeln!(stdin, "{}", prompt_json)
+            .map_err(|e| format!("Failed to write initial prompt: {e}"))?;
+    }
 
     {
         let mut children = state.children.lock().map_err(|e| format!("lock poisoned: {e}"))?;
@@ -399,20 +423,30 @@ fn write_stdin_line(
     writeln!(stdin, "{json_value}").map_err(|e| format!("Failed to write to Pi stdin: {e}"))
 }
 
-/// Write a follow-up prompt to a running session's stdin.
+/// Write a follow-up prompt to a running session's stdin. Optional image
+/// attachments forward into Pi's RPC `images` field, which Pi includes in the
+/// outgoing `UserMessage.content` to the model.
 #[tauri::command]
 pub async fn coding_agent_send_message(
     session_id: String,
     message: String,
+    images: Option<Vec<AttachedImage>>,
     app: AppHandle,
 ) -> Result<(), String> {
     let state: State<CodingAgentState> = app.state();
     let mut stdins = state.stdins.lock().map_err(|e| format!("lock poisoned: {e}"))?;
-    write_stdin_line(
-        &mut stdins,
-        &session_id,
-        &serde_json::json!({ "type": "prompt", "message": message, "streamingBehavior": "steer" }),
-    )
+    let mut prompt_json = serde_json::json!({
+        "type": "prompt",
+        "message": message,
+        "streamingBehavior": "steer",
+    });
+    if let Some(imgs) = images {
+        if !imgs.is_empty() {
+            prompt_json["images"] = serde_json::to_value(&imgs)
+                .map_err(|e| format!("Failed to serialize images: {e}"))?;
+        }
+    }
+    write_stdin_line(&mut stdins, &session_id, &prompt_json)
 }
 
 /// Write a raw JSON value as a newline-terminated JSONL line to a running
