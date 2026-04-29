@@ -36,6 +36,8 @@ import { buildTurns, type Turn, type TextChunk, type ToolSlot, type ImageChunk }
 import { OPENROUTER_MODELS, DEFAULT_MODEL_ID, findModel } from "./openrouterModels";
 import { AgentStatusStrip } from "./AgentStatusStrip";
 import { useCodingAgentSessionsStore } from "./codingAgentSessionsStore";
+import { SlashCommandMenu, type SlashCommandMenuHandle } from "./SlashCommandMenu";
+import { parseSlashQuery } from "./slashCommands";
 import {
   Select,
   SelectContent,
@@ -226,6 +228,34 @@ export function CodingAgentSession() {
     }
   }, [sessionId, stopSession]);
 
+  // Slash-command autocomplete state. The menu opens whenever the input is
+  // a leading-slash command in progress (`/rev` etc.) and closes once the
+  // user types a space or sends.
+  const slashQuery = parseSlashQuery(inputText);
+  const slashMenuRef = useRef<SlashCommandMenuHandle | null>(null);
+
+  const handleTextareaKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (slashQuery === null) return;
+      if (e.key === "ArrowDown") {
+        if (slashMenuRef.current?.move(1)) e.preventDefault();
+      } else if (e.key === "ArrowUp") {
+        if (slashMenuRef.current?.move(-1)) e.preventDefault();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        const cmd = slashMenuRef.current?.selectActive();
+        if (cmd) {
+          e.preventDefault();
+          setInputText(`/${cmd.name} `);
+        }
+      } else if (e.key === "Escape") {
+        // Drop the slash so the menu closes; user keeps typing freely.
+        setInputText("");
+        e.preventDefault();
+      }
+    },
+    [slashQuery],
+  );
+
   return (
     <div className="flex h-full min-w-0 flex-col">
       <Conversation className="flex-1">
@@ -265,12 +295,20 @@ export function CodingAgentSession() {
         >
           <PromptInputBody>
             <AttachedImagesDisplay />
+            {slashQuery !== null && (
+              <SlashCommandMenu
+                ref={slashMenuRef}
+                query={slashQuery}
+                onSelect={(cmd) => setInputText(`/${cmd.name} `)}
+              />
+            )}
             <PromptInputTextarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleTextareaKeyDown}
               placeholder={
                 folder
-                  ? "Describe the change or task… (drop a screenshot to attach)"
+                  ? "Describe the change or task… (try / for commands, drop a screenshot to attach)"
                   : "Pick a folder, then describe the task…"
               }
               autoFocus
