@@ -63,10 +63,10 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, Props>(
 
     let runningIndex = 0;
     return (
-      <div className="mb-2 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover shadow-sm">
+      <div className="mb-2 max-h-[22rem] overflow-y-auto rounded-lg border border-border bg-popover shadow-sm">
         {Object.entries(grouped).map(([group, cmds], gi) => (
           <div key={group} className={cn(gi > 0 && "border-t border-border")}>
-            <div className="px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="sticky top-0 z-10 bg-popover px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {group}
             </div>
             {cmds.map((cmd) => {
@@ -79,12 +79,12 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, Props>(
                   onMouseEnter={() => setActive(idx)}
                   onClick={() => onSelect(cmd)}
                   className={cn(
-                    "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left transition-colors",
+                    "flex w-full items-baseline gap-3 px-3 py-1.5 text-left transition-colors",
                     isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
                   )}
                 >
-                  <span className="font-mono text-xs text-foreground">/{cmd.name}</span>
-                  <span className="text-xs text-muted-foreground">{cmd.description}</span>
+                  <span className="font-mono text-xs text-foreground shrink-0">/{cmd.name}</span>
+                  <span className="text-xs text-muted-foreground truncate">{cmd.description}</span>
                 </button>
               );
             })}
