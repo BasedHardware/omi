@@ -627,6 +627,20 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     obj.remove("cached_content");
     obj.remove("cachedContent");
 
+    // Inject missing "role" field into contents array.
+    // Vertex AI requires each content object to have a "role" field ("user" or "model"),
+    // while AI Studio defaults to "user" when absent. Old Swift app versions send
+    // contents without role, causing Vertex AI to return 400 INVALID_ARGUMENT.
+    if let Some(contents) = obj.get_mut("contents").and_then(|v| v.as_array_mut()) {
+        for content in contents.iter_mut() {
+            if let Some(content_obj) = content.as_object_mut() {
+                if !content_obj.contains_key("role") {
+                    content_obj.insert("role".to_string(), serde_json::Value::String("user".to_string()));
+                }
+            }
+        }
+    }
+
     // Generation-specific validation (not for embed actions)
     let is_embed = action == "embedContent" || action == "batchEmbedContents";
     if !is_embed {
@@ -1227,6 +1241,57 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("cachedContent").is_none());
         assert!(parsed.get("cached_content").is_none());
+    }
+
+    #[test]
+    fn sanitize_injects_role_when_missing() {
+        // Old Swift app versions send contents without role field.
+        // Vertex AI requires role ("user"/"model"), AI Studio defaults to "user".
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+    }
+
+    #[test]
+    fn sanitize_preserves_existing_role() {
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "user", "parts": [{"text": "hello"}]},
+                {"role": "model", "parts": [{"text": "hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        assert_eq!(parsed["contents"][1]["role"], "model");
+    }
+
+    #[test]
+    fn sanitize_injects_role_for_multiple_contents() {
+        let body = serde_json::json!({
+            "contents": [
+                {"parts": [{"text": "hello"}]},
+                {"role": "model", "parts": [{"text": "hi"}]},
+                {"parts": [{"text": "thanks"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        assert_eq!(parsed["contents"][1]["role"], "model");
+        assert_eq!(parsed["contents"][2]["role"], "user");
     }
 
     #[test]
