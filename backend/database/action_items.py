@@ -55,21 +55,44 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: dict) -> str:
+def create_action_item(uid: str, action_item_data: dict, idempotency_key: Optional[str] = None) -> str:
     """
     Create a new action item for a user.
 
     Args:
         uid: User ID
         action_item_data: Action item data including description, dates, etc.
+        idempotency_key: Optional opaque key. When supplied, the function looks
+            for an existing action_item with the same key (any state) and returns
+            its id without creating a new document. This makes the call safe to
+            retry on flaky networks or duplicate event delivery — the previous
+            behaviour silently allocated a fresh Firestore id on every call,
+            producing user-visible duplicates. The key is stored on the
+            document so future calls can find it. Callers that want
+            content-based idempotency typically pass
+            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
 
     Returns:
-        The ID of the created action item
+        The ID of the created (or pre-existing, when idempotency_key matches)
+        action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
+
+    # Idempotency check: if the caller supplied a key and we already have a
+    # document with that key, return its id rather than creating a duplicate.
+    if idempotency_key:
+        existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).limit(1)
+        for doc in existing_query.stream():
+            logger.info(
+                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
+                uid,
+                idempotency_key,
+                doc.id,
+            )
+            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -79,6 +102,9 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     # Set completed_at if the item is being created as completed
     if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
         action_item_data['completed_at'] = datetime.now(timezone.utc)
+
+    if idempotency_key:
+        action_item_data['idempotency_key'] = idempotency_key
 
     doc_ref = action_items_ref.add(action_item_data)[1]
 
