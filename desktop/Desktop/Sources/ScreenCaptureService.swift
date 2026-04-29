@@ -75,6 +75,35 @@ final class ScreenCaptureService: Sendable {
 
   init() {}
 
+  static func configurationSize(forWindowFrame frame: CGRect, maxSize: CGFloat) -> CGSize? {
+    let windowWidth = frame.width
+    let windowHeight = frame.height
+    guard windowWidth.isFinite,
+      windowHeight.isFinite,
+      maxSize.isFinite,
+      windowWidth > 0,
+      windowHeight > 0,
+      maxSize > 0
+    else {
+      return nil
+    }
+
+    let scale = min(1, maxSize / max(windowWidth, windowHeight))
+    let configWidth = floor(windowWidth * scale)
+    let configHeight = floor(windowHeight * scale)
+    guard configWidth.isFinite,
+      configHeight.isFinite,
+      configWidth >= 1,
+      configHeight >= 1,
+      configWidth <= CGFloat(Int.max),
+      configHeight <= CGFloat(Int.max)
+    else {
+      return nil
+    }
+
+    return CGSize(width: configWidth, height: configHeight)
+  }
+
   /// Check whether macOS TCC says this app has Screen Recording permission.
   ///
   /// Do not spawn `/usr/sbin/screencapture` here. That helper process can fail
@@ -718,18 +747,15 @@ final class ScreenCaptureService: Sendable {
       let config = SCStreamConfiguration()
       config.scalesToFit = true
       config.showsCursor = false
-      // Calculate dimensions maintaining aspect ratio (don't create square canvas)
-      let windowWidth = window.frame.width
-      let windowHeight = window.frame.height
-      let aspectRatio = windowWidth / windowHeight
-      var configWidth = min(windowWidth, maxSize)
-      var configHeight = configWidth / aspectRatio
-      if configHeight > maxSize {
-        configHeight = maxSize
-        configWidth = configHeight * aspectRatio
+      guard let configSize = Self.configurationSize(forWindowFrame: window.frame, maxSize: maxSize)
+      else {
+        log(
+          "Skipping ScreenCaptureKit capture for window \(windowID) with invalid frame \(window.frame)"
+        )
+        return nil
       }
-      config.width = Int(configWidth)
-      config.height = Int(configHeight)
+      config.width = Int(configSize.width)
+      config.height = Int(configSize.height)
 
       let image = try await SCScreenshotManager.captureImage(
         contentFilter: filter,
@@ -786,17 +812,16 @@ final class ScreenCaptureService: Sendable {
         let config = SCStreamConfiguration()
         config.scalesToFit = true
         config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
+        guard
+          let configSize = Self.configurationSize(forWindowFrame: window.frame, maxSize: maxSize)
+        else {
+          log(
+            "Skipping ScreenCaptureKit CGImage capture for window \(windowID) with invalid frame \(window.frame)"
+          )
+          return nil
         }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
+        config.width = Int(configSize.width)
+        config.height = Int(configSize.height)
         return (filter, config)
       }
 
@@ -804,7 +829,7 @@ final class ScreenCaptureService: Sendable {
         // Window ID no longer exists — the user closed a tab, dismissed a modal,
         // or the app destroyed the window between resolution and capture. This is
         // routine, not a capture failure. Caller should re-resolve and retry.
-        log("Window \(windowID) not found in SCShareableContent (window closed)")
+        log("Window \(windowID) unavailable or has invalid ScreenCaptureKit frame")
         return .windowGone
       }
 
@@ -845,22 +870,21 @@ final class ScreenCaptureService: Sendable {
         let config = SCStreamConfiguration()
         config.scalesToFit = true
         config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
+        guard
+          let configSize = Self.configurationSize(forWindowFrame: window.frame, maxSize: maxSize)
+        else {
+          log(
+            "Skipping active-window CGImage capture for window \(windowID) with invalid frame \(window.frame)"
+          )
+          return nil
         }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
+        config.width = Int(configSize.width)
+        config.height = Int(configSize.height)
         return (filter, config)
       }
 
       guard let (filter, config) = filterAndConfig else {
-        log("Window not found in SCShareableContent")
+        log("Window not found in SCShareableContent or invalid capture frame")
         return nil
       }
 
