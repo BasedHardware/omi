@@ -106,6 +106,10 @@ export default function registerNootoTerminal(pi: ExtensionAPI): void {
       let outputBuffer = "";
       let bytesAccumulated = 0;
       let truncated = false;
+      // Pi throws "Agent listener invoked outside active run" if onUpdate
+      // fires after `execute` returns. We hand off long-running output to
+      // the log file at that point (the TerminalPane tails the file).
+      let executeActive = true;
 
       const handleChunk = (chunk: string): void => {
         if (!truncated) {
@@ -121,6 +125,8 @@ export default function registerNootoTerminal(pi: ExtensionAPI): void {
         }
 
         appendLog(logPath, chunk);
+
+        if (!executeActive) return;
 
         onUpdate?.({
           content: [
@@ -190,6 +196,10 @@ export default function registerNootoTerminal(pi: ExtensionAPI): void {
         });
       });
 
+      // Mark execute inactive *before* returning so any chunks that arrive
+      // between the resolve and Pi processing the result don't try to call
+      // back into a closed agent run.
+      executeActive = false;
       return result;
     },
   });
