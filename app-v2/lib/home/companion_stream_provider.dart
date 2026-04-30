@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
-import 'package:nooto_v2/home/cards/action_item_card.dart';
+import 'package:nooto_v2/home/cards/today_card.dart';
 import 'package:nooto_v2/home/cards/welcome_card.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_storage.dart';
@@ -96,9 +96,19 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// dismissed in `home.actions.v1`.
   void _runGenerators() {
     _maybeEmit(welcomeCardFor(_signals));
-    for (final card in actionItemCardsFor(_actionItems)) {
-      _maybeEmit(card);
-    }
+    _replaceOrEmit(todayCardFor(_actionItems));
+  }
+
+  /// Today card is regenerated each pass with fresh content, so unlike most
+  /// cards we want the latest copy in the stream — drop any prior instance
+  /// before emitting the new one. Dismiss/snooze suppression still applies.
+  void _replaceOrEmit(CompanionCard? card) {
+    if (card == null) return;
+    if (_isDismissed(card.id)) return;
+    if (_isSnoozed(card.id)) return;
+    _cards.removeWhere((c) => c.id == card.id);
+    _cards.add(card);
+    _cards.sort((a, b) => b.priority.compareTo(a.priority));
   }
 
   void _maybeEmit(CompanionCard? card) {
@@ -186,7 +196,7 @@ CompanionCard? _fromJson(Map<String, dynamic> json) {
     case CardKind.welcome:
       return WelcomeCard.fromJson(json);
     case CardKind.actionItem:
-      return ActionItemCard.fromJson(json);
+      return TodayCard.fromJson(json);
     case CardKind.brief:
     case CardKind.commitmentCapture:
     case CardKind.focusBlock:
