@@ -403,6 +403,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This screen lands in a future phase. For now, the morning brief and today\'s commitments are on Home.'**
   String get shellComingSoonBody;
+
+  /// No description provided for @todayCardHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get todayCardHeader;
+
+  /// No description provided for @todayCardCountPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'{visible} of {total}'**
+  String todayCardCountPartial(int visible, int total);
+
+  /// No description provided for @todayCardCountFull.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 item} other{{count} items}}'**
+  String todayCardCountFull(int count);
+
+  /// No description provided for @todayCardSeeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'See all'**
+  String get todayCardSeeAll;
+
+  /// No description provided for @todayCardSeeAllSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'See all action items, opens Plan tab'**
+  String get todayCardSeeAllSemantics;
 }
 
 class _AppLocalizationsDelegate
