@@ -28,6 +28,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/services/ambient_capture/ambient_capture_health.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';

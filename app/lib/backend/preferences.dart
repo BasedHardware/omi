@@ -45,7 +45,7 @@ class SharedPreferencesUtil {
   }
 
   BtDevice get btDevice {
-    final String device = getString('btDevice') ?? '';
+    final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
   }
@@ -349,8 +349,7 @@ class SharedPreferencesUtil {
 
   bool get ambientCaptureCaptionFallbackEnabled => getBool('ambient_capture_caption_fallback_enabled');
 
-  set ambientCaptureCaptionFallbackEnabled(bool value) =>
-      saveBool('ambient_capture_caption_fallback_enabled', value);
+  set ambientCaptureCaptionFallbackEnabled(bool value) => saveBool('ambient_capture_caption_fallback_enabled', value);
 
   bool get ambientCaptureRawAudioUploadEnabled => getBool('ambient_capture_raw_audio_upload_enabled');
 
@@ -385,14 +384,14 @@ class SharedPreferencesUtil {
 
   set ambientCaptureSensitivity(String value) => saveString('ambient_capture_sensitivity', value);
 
-  String get ambientCaptureCommunicationMode =>
-      getString('ambient_capture_communication_mode', defaultValue: 'off');
+  String get ambientCaptureCommunicationMode => getString('ambient_capture_communication_mode', defaultValue: 'off');
 
   set ambientCaptureCommunicationMode(String value) => saveString('ambient_capture_communication_mode', value);
 
   String get ambientCaptureActiveControllerAppId => getString('ambient_capture_active_controller_app_id');
 
-  set ambientCaptureActiveControllerAppId(String value) => saveString('ambient_capture_active_controller_app_id', value);
+  set ambientCaptureActiveControllerAppId(String value) =>
+      saveString('ambient_capture_active_controller_app_id', value);
 
   String get ambientCapturePolicyUrl => getString('ambient_capture_policy_url');
 
@@ -405,6 +404,10 @@ class SharedPreferencesUtil {
   String get ambientCaptureControllerKeyId => getString('ambient_capture_controller_key_id');
 
   set ambientCaptureControllerKeyId(String value) => saveString('ambient_capture_controller_key_id', value);
+
+  String get ambientCaptureControllerDeviceToken => getString('ambient_capture_controller_device_token');
+
+  set ambientCaptureControllerDeviceToken(String value) => saveString('ambient_capture_controller_device_token', value);
 
   String get ambientCaptureRegisteredDeviceId => getString('ambient_capture_registered_device_id');
 

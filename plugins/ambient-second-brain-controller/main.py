@@ -27,7 +27,6 @@ from models import (
     TelemetryIn,
 )
 
-
 load_dotenv()
 
 app = FastAPI(
@@ -112,6 +111,13 @@ def omi_tools_manifest():
 def register_device(request: DeviceRegisterRequest):
     token = storage.register_device(request.model_dump(mode="json"))
     public_key = security.get_public_key_b64()
+    storage.audit(
+        request.omi_user_id,
+        request.device_id,
+        "controller_registered",
+        {"plugin_id": os.getenv("AMBIENT_PLUGIN_ID", PLUGIN_ID)},
+    )
+    storage.audit(request.omi_user_id, request.device_id, "controller_key_pinned", {"key_id": security.get_key_id()})
     return DeviceRegisterResponse(
         device_registered=True,
         policy_url=f"{base_url()}/capture/policy/current",

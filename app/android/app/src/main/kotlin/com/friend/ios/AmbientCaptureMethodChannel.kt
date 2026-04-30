@@ -90,6 +90,10 @@ object AmbientCaptureMethodChannel {
                 }
                 "isAccessibilityEnabled" -> result.success(AmbientAccessibilityService.isEnabled)
                 "openAccessibilitySettings" -> {
+                    if (call.argument<Boolean>("localUserAction") != true) {
+                        result.error("ambient_local_user_action_required", "Accessibility settings require local UI action", null)
+                        return@setMethodCallHandler
+                    }
                     ctx.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     result.success(true)
                 }

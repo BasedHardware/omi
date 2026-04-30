@@ -65,8 +65,10 @@ class AmbientCapturePolicy {
       userId: json['user_id']?.toString() ?? '',
       deviceId: json['device_id']?.toString() ?? '',
       sequence: json['sequence'] as int? ?? 0,
-      issuedAt: DateTime.parse(json['issued_at']?.toString() ?? DateTime.fromMillisecondsSinceEpoch(0).toIso8601String()),
-      validUntil: DateTime.parse(json['valid_until']?.toString() ?? DateTime.fromMillisecondsSinceEpoch(0).toIso8601String()),
+      issuedAt:
+          DateTime.parse(json['issued_at']?.toString() ?? DateTime.fromMillisecondsSinceEpoch(0).toIso8601String()),
+      validUntil:
+          DateTime.parse(json['valid_until']?.toString() ?? DateTime.fromMillisecondsSinceEpoch(0).toIso8601String()),
       captureMode: _captureMode(json['capture_mode']?.toString()),
       sensitivity: json['sensitivity']?.toString() ?? 'medium',
       silenceDetectionSeconds: json['silence_detection_seconds'] as int? ?? 12,
@@ -121,7 +123,9 @@ class AmbientPolicyDecision {
   final bool accepted;
   final String reason;
 
-  const AmbientPolicyDecision.accepted() : accepted = true, reason = 'ok';
+  const AmbientPolicyDecision.accepted()
+      : accepted = true,
+        reason = 'ok';
   const AmbientPolicyDecision.rejected(this.reason) : accepted = false;
 }
 
@@ -139,7 +143,9 @@ class AmbientCapturePolicyValidator {
     final prefs = SharedPreferencesUtil();
     final current = now ?? DateTime.now().toUtc();
     if (!prefs.advancedAmbientCaptureEnabled) return const AmbientPolicyDecision.rejected('master_disabled');
-    if (!prefs.ambientCapturePluginControlEnabled) return const AmbientPolicyDecision.rejected('plugin_control_disabled');
+    if (!prefs.ambientCapturePluginControlEnabled) {
+      return const AmbientPolicyDecision.rejected('plugin_control_disabled');
+    }
     if (privateModeActive) return const AmbientPolicyDecision.rejected('private_mode_active');
     if (policy.scope != 'ambient_capture_controller') return const AmbientPolicyDecision.rejected('missing_scope');
     if (policy.pluginId != expectedPluginId) return const AmbientPolicyDecision.rejected('wrong_plugin');
@@ -150,9 +156,6 @@ class AmbientCapturePolicyValidator {
       return const AmbientPolicyDecision.rejected('issued_in_future');
     }
     if (!policy.validUntil.toUtc().isAfter(current)) return const AmbientPolicyDecision.rejected('expired');
-    if (policy.allowAccessibilityMode && (!prefs.ambientCaptureAccessibilityModeEnabled || !accessibilityEnabled)) {
-      return const AmbientPolicyDecision.rejected('accessibility_not_granted');
-    }
     if (policy.allowAudioUpload && !prefs.ambientCaptureRawAudioUploadEnabled) {
       return const AmbientPolicyDecision.rejected('raw_audio_upload_disabled');
     }

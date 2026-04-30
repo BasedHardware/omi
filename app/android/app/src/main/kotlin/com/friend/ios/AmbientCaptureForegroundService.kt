@@ -38,12 +38,13 @@ class AmbientCaptureForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action ?: ACTION_START) {
-            ACTION_START -> startCapture()
-            ACTION_PAUSE -> if (isRunning) pauseCapture() else safeNoop(intent.action)
-            ACTION_RESUME -> if (isRunning) resumeCapture() else safeNoop(intent.action)
-            ACTION_STOP -> if (isRunning) stopCapture() else safeNoop(intent.action)
-            ACTION_PRIVATE_MODE -> if (isRunning) enablePrivateMode() else safeNoop(intent.action)
+        val action = intent?.action ?: ACTION_START
+        when (action) {
+            ACTION_START -> startCapture(intent?.getBooleanExtra(EXTRA_LOCAL_MANUAL_OVERRIDE, false) == true)
+            ACTION_PAUSE -> if (isRunning) pauseCapture() else safeNoop(action)
+            ACTION_RESUME -> if (isRunning) resumeCapture() else safeNoop(action)
+            ACTION_STOP -> if (isRunning) stopCapture() else safeNoop(action)
+            ACTION_PRIVATE_MODE -> if (isRunning) enablePrivateMode() else safeNoop(action)
         }
         return START_NOT_STICKY
     }
@@ -61,8 +62,17 @@ class AmbientCaptureForegroundService : Service() {
         super.onDestroy()
     }
 
-    private fun startCapture() {
+    private fun startCapture(localManualOverride: Boolean) {
         if (isRunning) return
+        val startDecision = canStartCapture(localManualOverride)
+        if (startDecision != "ok") {
+            Log.w(TAG, "Refusing ambient capture start: $startDecision")
+            healthMonitor?.setPolicyDisabled(startDecision)
+            AmbientCaptureAudit.record(this, "capture_start_rejected", mapOf("reason" to startDecision))
+            emitTelemetry("capture_start_rejected_$startDecision")
+            stopSelf()
+            return
+        }
         isRunning = true
         isPaused = false
         privateMode = false
@@ -83,6 +93,22 @@ class AmbientCaptureForegroundService : Service() {
         )
         if (recorder?.start() == true) {
             emitTelemetry("capture_started")
+        }
+    }
+
+    private fun canStartCapture(localManualOverride: Boolean): String {
+        val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+        if (!prefs.getBoolean("flutter.advanced_ambient_capture_enabled", false)) return "master_disabled"
+        if (!prefs.getBoolean("flutter.ambient_capture_plugin_control_enabled", false)) return "ok"
+        if (localManualOverride) return "ok"
+        val validUntil = prefs.getString("flutter.ambient_capture_last_policy_valid_until", "") ?: ""
+        val captureMode = prefs.getString("flutter.ambient_capture_last_policy_capture_mode", "off") ?: "off"
+        if (validUntil.isBlank()) return "fresh_policy_required"
+        return try {
+            val policyFresh = java.time.Instant.parse(validUntil).isAfter(java.time.Instant.now())
+            if (!policyFresh || captureMode == "off" || captureMode == "private") "fresh_policy_required" else "ok"
+        } catch (_: Exception) {
+            "fresh_policy_required"
         }
     }
 
@@ -248,8 +274,15 @@ class AmbientCaptureForegroundService : Service() {
         (policy["allow_local_stt_fallback"] as? Boolean)?.let {
             editor.putBoolean("flutter.ambient_capture_local_stt_fallback_enabled", it)
         }
-        (policy["allow_caption_fallback"] as? Boolean)?.let {
-            editor.putBoolean("flutter.ambient_capture_caption_fallback_enabled", it)
+        if ((policy["allow_accessibility_mode"] as? Boolean) == true &&
+            !prefs.getBoolean("flutter.ambient_capture_accessibility_mode_enabled", false)
+        ) {
+            AmbientCaptureAudit.record(this, "accessibility_request_clamped_by_local_setting")
+        }
+        if ((policy["allow_caption_fallback"] as? Boolean) == true &&
+            !prefs.getBoolean("flutter.ambient_capture_caption_fallback_enabled", false)
+        ) {
+            AmbientCaptureAudit.record(this, "accessibility_request_clamped_by_local_setting")
         }
         (policy["allow_audio_upload"] as? Boolean)?.let {
             if (prefs.getBoolean("flutter.ambient_capture_raw_audio_upload_enabled", false)) {
@@ -267,6 +300,7 @@ class AmbientCaptureForegroundService : Service() {
         const val ACTION_PRIVATE_MODE = "com.friend.ios.ambient.PRIVATE_MODE"
         private const val CHANNEL_ID = "ambient_capture"
         private const val NOTIFICATION_ID = 44072
+        private const val EXTRA_LOCAL_MANUAL_OVERRIDE = "localManualOverride"
 
         private const val TAG = "AmbientCapture"
         private const val POLICY_ACTIVE_INTERVAL_MS = 60_000L
@@ -277,8 +311,10 @@ class AmbientCaptureForegroundService : Service() {
         private var privateMode = false
         private var lastHealth: Map<String, Any?> = mapOf("state" to AmbientHealthState.UNKNOWN_DEGRADED.name)
 
-        fun start(context: Context) {
-            val intent = Intent(context, AmbientCaptureForegroundService::class.java).setAction(ACTION_START)
+        fun start(context: Context, localManualOverride: Boolean = true) {
+            val intent = Intent(context, AmbientCaptureForegroundService::class.java)
+                .setAction(ACTION_START)
+                .putExtra(EXTRA_LOCAL_MANUAL_OVERRIDE, localManualOverride)
             ContextCompat.startForegroundService(context, intent)
         }
 

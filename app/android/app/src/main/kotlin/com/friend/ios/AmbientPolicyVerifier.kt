@@ -18,12 +18,42 @@ object AmbientPolicyVerifier {
         fun putString(arg: String, pref: String) {
             args[arg]?.toString()?.takeIf { it.isNotBlank() }?.let { editor.putString(pref, it) }
         }
-        putString("activePluginId", "flutter.ambient_capture_active_controller_app_id")
-        putString("publicKey", "flutter.ambient_capture_controller_public_key")
-        putString("keyId", "flutter.ambient_capture_controller_key_id")
+        val existingPluginId = prefs.getString("flutter.ambient_capture_active_controller_app_id", "") ?: ""
+        val existingPublicKey = prefs.getString("flutter.ambient_capture_controller_public_key", "") ?: ""
+        val existingKeyId = prefs.getString("flutter.ambient_capture_controller_key_id", "") ?: ""
+        val setupApproved = args["controllerSetupApproved"] == true || args["allowControllerRekey"] == true
+        val activePluginId = args["activePluginId"]?.toString()?.takeIf { it.isNotBlank() }
+        val publicKey = args["publicKey"]?.toString()?.takeIf { it.isNotBlank() }
+        val keyId = args["keyId"]?.toString()?.takeIf { it.isNotBlank() }
+
+        if (activePluginId != null && (existingPluginId.isBlank() || existingPluginId == activePluginId || setupApproved)) {
+            editor.putString("flutter.ambient_capture_active_controller_app_id", activePluginId)
+            AmbientCaptureAudit.record(context, "controller_registered", mapOf("plugin_id" to activePluginId))
+        }
+        if (publicKey != null && keyId != null) {
+            val samePinnedKey = existingPublicKey == publicKey && existingKeyId == keyId
+            val noPinnedKey = existingPublicKey.isBlank() && existingKeyId.isBlank()
+            if (samePinnedKey || noPinnedKey || setupApproved) {
+                editor.putString("flutter.ambient_capture_controller_public_key", publicKey)
+                editor.putString("flutter.ambient_capture_controller_key_id", keyId)
+                if (noPinnedKey || setupApproved) {
+                    AmbientCaptureAudit.record(context, "controller_key_pinned", mapOf("key_id" to keyId))
+                }
+            } else {
+                AmbientCaptureAudit.record(
+                    context,
+                    "policy_key_mismatch",
+                    mapOf("pinned_key_id" to existingKeyId, "requested_key_id" to keyId),
+                )
+            }
+        }
         putString("policyUrl", "flutter.ambient_capture_policy_url")
         putString("userId", "flutter.uid")
         putString("deviceId", "flutter.ambient_capture_registered_device_id")
+        args["deviceToken"]?.toString()?.takeIf { it.isNotBlank() }?.let {
+            AmbientSecureStore.putString(context, "controller_device_token", it)
+            editor.remove("flutter.ambient_capture_controller_device_token")
+        }
         if (args["revoked"] is Boolean) {
             editor.putBoolean("flutter.ambient_capture_controller_revoked", args["revoked"] as Boolean)
         }
@@ -36,10 +66,23 @@ object AmbientPolicyVerifier {
             val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             val payload = args["payload"] as? String ?: return reject("missing_payload")
             val signatureB64 = args["signature"] as? String ?: return reject("missing_signature")
-            val publicKeyB64 = (args["publicKey"] as? String)?.takeIf { it.isNotBlank() }
-                ?: prefs.getString("flutter.ambient_capture_controller_public_key", "")
-                ?: return reject("missing_public_key")
+            val publicKeyB64 = prefs.getString("flutter.ambient_capture_controller_public_key", "") ?: ""
             if (publicKeyB64.isBlank()) return reject("missing_public_key")
+            val pinnedKeyId = prefs.getString("flutter.ambient_capture_controller_key_id", "") ?: ""
+            if (pinnedKeyId.isBlank()) return reject("missing_key_id")
+            val envelopeKeyId = args["keyId"]?.toString()?.takeIf { it.isNotBlank() } ?: return reject("missing_key_id")
+            if (envelopeKeyId != pinnedKeyId) {
+                AmbientCaptureAudit.record(
+                    context,
+                    "policy_rejected_wrong_key_id",
+                    mapOf("pinned_key_id" to pinnedKeyId, "policy_key_id" to envelopeKeyId),
+                )
+                return reject("wrong_key_id")
+            }
+            val envelopePublicKey = args["publicKey"]?.toString()?.takeIf { it.isNotBlank() }
+            if (envelopePublicKey != null && envelopePublicKey != publicKeyB64) {
+                AmbientCaptureAudit.record(context, "policy_key_mismatch", mapOf("key_id" to envelopeKeyId))
+            }
 
             val policy = JSONObject(payload)
             val algorithm = args["algorithm"]?.toString() ?: policy.optString("alg", "Ed25519")
@@ -87,16 +130,26 @@ object AmbientPolicyVerifier {
                 (
                     !prefs.getBoolean("flutter.ambient_capture_accessibility_mode_enabled", false) ||
                         !AmbientAccessibilityService.isEnabled
-                    )
+                )
             ) {
-                return reject("accessibility_not_granted")
+                AmbientCaptureAudit.record(context, "accessibility_request_clamped_by_local_setting")
+            }
+            if (policy.optBoolean("allow_caption_fallback", false) &&
+                !prefs.getBoolean("flutter.ambient_capture_caption_fallback_enabled", false)
+            ) {
+                AmbientCaptureAudit.record(context, "accessibility_request_clamped_by_local_setting")
             }
             if (policy.optBoolean("allow_audio_upload", false) &&
                 !prefs.getBoolean("flutter.ambient_capture_raw_audio_upload_enabled", false)
             ) {
                 return reject("raw_audio_upload_disabled")
             }
-            prefs.edit().putLong("flutter.ambient_capture_last_accepted_sequence", sequence).apply()
+            prefs.edit()
+                .putLong("flutter.ambient_capture_last_accepted_sequence", sequence)
+                .putLong("flutter.ambient_capture_last_policy_accepted_at_ms", System.currentTimeMillis())
+                .putString("flutter.ambient_capture_last_policy_valid_until", validUntil)
+                .putString("flutter.ambient_capture_last_policy_capture_mode", policy.optString("capture_mode", "off"))
+                .apply()
             mapOf("accepted" to true, "reason" to "ok", "sequence" to sequence)
         } catch (e: Exception) {
             reject(e.javaClass.simpleName)

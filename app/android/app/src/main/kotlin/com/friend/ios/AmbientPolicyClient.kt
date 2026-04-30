@@ -9,9 +9,23 @@ import org.json.JSONObject
 class AmbientPolicyClient(private val context: Context) {
     private val client = OkHttpClient()
 
-    fun fetchPolicy(policyUrl: String, bearerToken: String? = null): String {
+    fun fetchPolicy(policyUrl: String): String {
+        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val token = AmbientSecureStore.getString(context, "controller_device_token")
+        if (token.isNullOrBlank()) {
+            AmbientCaptureAudit.record(context, "policy_rejected_missing_token")
+            throw IllegalStateException("policy_rejected_missing_token")
+        }
+        val appId = prefs.getString("flutter.ambient_capture_active_controller_app_id", "") ?: ""
+        val userId = prefs.getString("flutter.uid", "") ?: ""
+        val deviceId = prefs.getString("flutter.ambient_capture_registered_device_id", "") ?: ""
+        val lastSequence = prefs.getLong("flutter.ambient_capture_last_accepted_sequence", 0L)
         val builder = Request.Builder().url(policyUrl)
-        if (!bearerToken.isNullOrBlank()) builder.header("Authorization", "Bearer $bearerToken")
+            .header("Authorization", "Bearer $token")
+            .header("X-Omi-User-Id", userId)
+            .header("X-Omi-Device-Id", deviceId)
+            .header("X-Omi-App-Id", appId)
+            .header("X-Last-Policy-Sequence", lastSequence.toString())
         return client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) throw IllegalStateException("Policy fetch failed: ${response.code}")
             response.body?.string() ?: ""
@@ -29,15 +43,13 @@ class AmbientPolicyClient(private val context: Context) {
                 val envelope = JSONObject(payload)
                 val policyJson = envelope.optString("payload", payload)
                 val signature = envelope.optString("signature", "")
-                val publicKey = envelope.optString(
-                    "public_key",
-                    prefs.getString("flutter.ambient_capture_controller_public_key", "") ?: "",
-                )
                 val result = AmbientPolicyVerifier.verify(
                     mapOf(
                         "payload" to policyJson,
                         "signature" to signature,
-                        "publicKey" to publicKey,
+                        "keyId" to envelope.optString("key_id", ""),
+                        "publicKey" to envelope.optString("public_key", ""),
+                        "algorithm" to envelope.optString("alg", "Ed25519"),
                     ),
                 )
                 if (result["accepted"] == true) {
@@ -56,10 +68,16 @@ class AmbientPolicyClient(private val context: Context) {
                 }
             } catch (e: Exception) {
                 Log.w("AmbientCapture", "Policy fetch/apply failed: ${e.message}")
+                val reason = if (e.message == "policy_rejected_missing_token") {
+                    "policy_rejected_missing_token"
+                } else {
+                    e.javaClass.simpleName
+                }
                 AmbientCaptureMethodChannel.emitTelemetry(
                     mapOf(
                         "type" to "policy_rejected",
-                        "reason" to e.javaClass.simpleName,
+                        "reason" to reason,
+                        "message" to e.message,
                         "timestamp" to System.currentTimeMillis(),
                     ),
                 )

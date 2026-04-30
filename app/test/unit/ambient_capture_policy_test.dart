@@ -14,6 +14,8 @@ void main() {
     String deviceId = 'device-1',
     int sequence = 2,
     DateTime? validUntil,
+    bool allowAccessibilityMode = false,
+    bool allowCaptionFallback = false,
   }) {
     final now = DateTime.utc(2026, 1, 1, 12);
     return AmbientCapturePolicy.fromJson({
@@ -31,9 +33,9 @@ void main() {
       'rms_silence_dbfs_threshold': -75,
       'zero_frame_threshold': 0.98,
       'allow_foreground_mic': true,
-      'allow_accessibility_mode': false,
+      'allow_accessibility_mode': allowAccessibilityMode,
       'allow_local_stt_fallback': false,
-      'allow_caption_fallback': false,
+      'allow_caption_fallback': allowCaptionFallback,
       'allow_audio_upload': false,
       'allow_transcript_upload': true,
       'raw_audio_retention': 'none',
@@ -135,6 +137,23 @@ void main() {
       now: DateTime.utc(2026, 1, 1, 12),
     );
     expect(decision.reason, 'private_mode_active');
+  });
+
+  test('policy cannot enable accessibility or caption fallback when local settings are off', () {
+    final decision = validator.validate(
+      policy: policy(allowAccessibilityMode: true, allowCaptionFallback: true),
+      expectedPluginId: 'ambient_second_brain_controller',
+      expectedUserId: 'user-1',
+      expectedDeviceId: 'device-1',
+      lastSequence: 1,
+      accessibilityEnabled: false,
+      now: DateTime.utc(2026, 1, 1, 12),
+    );
+
+    final prefs = SharedPreferencesUtil();
+    expect(decision.accepted, isTrue);
+    expect(prefs.ambientCaptureAccessibilityModeEnabled, isFalse);
+    expect(prefs.ambientCaptureCaptionFallbackEnabled, isFalse);
   });
 
   test('capture health state model parses degraded states', () {

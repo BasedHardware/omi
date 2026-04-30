@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
@@ -90,20 +89,24 @@ class AmbientCaptureService {
     String? activePluginId,
     String? publicKey,
     String? keyId,
+    String? deviceToken,
     String? policyUrl,
     String? userId,
     String? deviceId,
     bool? revoked,
+    bool controllerSetupApproved = false,
   }) async {
     if (!isSupported) return;
     await _control.invokeMethod('setPolicyConfig', {
       if (activePluginId != null) 'activePluginId': activePluginId,
       if (publicKey != null) 'publicKey': publicKey,
       if (keyId != null) 'keyId': keyId,
+      if (deviceToken != null) 'deviceToken': deviceToken,
       if (policyUrl != null) 'policyUrl': policyUrl,
       if (userId != null) 'userId': userId,
       if (deviceId != null) 'deviceId': deviceId,
       if (revoked != null) 'revoked': revoked,
+      'controllerSetupApproved': controllerSetupApproved,
     });
   }
 
@@ -135,19 +138,21 @@ class AmbientCaptureService {
 
   Future<void> openAccessibilitySettings() async {
     if (!isSupported) return;
-    await _control.invokeMethod('openAccessibilitySettings');
+    await _control.invokeMethod('openAccessibilitySettings', {'localUserAction': true});
   }
 
   Future<Map<dynamic, dynamic>> verifyNativePolicy({
     required String payload,
     required String signature,
-    required String publicKey,
+    required String keyId,
+    String? publicKey,
   }) async {
     if (!isSupported) return {'accepted': false, 'reason': 'android_only'};
     return await _policy.invokeMethod<Map<dynamic, dynamic>>('verifyPolicy', {
           'payload': payload,
           'signature': signature,
-          'publicKey': publicKey,
+          'keyId': keyId,
+          if (publicKey != null) 'publicKey': publicKey,
         }) ??
         {'accepted': false, 'reason': 'native_no_response'};
   }
