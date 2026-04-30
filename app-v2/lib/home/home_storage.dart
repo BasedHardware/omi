@@ -1,8 +1,10 @@
+import 'package:hive/hive.dart';
+
 /// Hive box names for the Companion Stream Home.
 ///
 /// All three are opened in `main()` before `runApp` (parallel via `Future.wait`).
 /// They persist across launches and survive `OnboardingChatProvider.reset()`
-/// EXCEPT when reset explicitly wipes them.
+/// EXCEPT when reset explicitly wipes them via [clearAll].
 class HomeBoxes {
   HomeBoxes._();
 
@@ -19,4 +21,15 @@ class HomeBoxes {
   /// this box and skip emitting any card whose `id` already has a `dismiss`
   /// row. Snooze rows include an `until` timestamp.
   static const String actions = 'home.actions.v1';
+
+  /// Wipes the rendered stream, the cached brief, and the action history so
+  /// the next Home build behaves like a cold start. Used by the debug "Reset
+  /// onboarding" flow to give a true clean slate.
+  static Future<void> clearAll() async {
+    await Future.wait([
+      Hive.box<Map>(cards).clear(),
+      Hive.box<Map>(brief).clear(),
+      Hive.box<Map>(actions).clear(),
+    ]);
+  }
 }
