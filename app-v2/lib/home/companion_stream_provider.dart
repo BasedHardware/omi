@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
+import 'package:nooto_v2/home/cards/action_item_card.dart';
 import 'package:nooto_v2/home/cards/welcome_card.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_storage.dart';
@@ -71,12 +72,16 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// dismissed in `home.actions.v1`.
   void _runGenerators() {
     _maybeEmit(welcomeCardFor(_signals));
+    for (final card in actionItemCardsFor(_signals)) {
+      _maybeEmit(card);
+    }
   }
 
   void _maybeEmit(CompanionCard? card) {
     if (card == null) return;
     if (_cards.any((c) => c.id == card.id)) return;
     if (_isDismissed(card.id)) return;
+    if (_isAccepted(card.id)) return;
     if (_isSnoozed(card.id)) return;
     _cards.add(card);
     _cards.sort((a, b) => b.priority.compareTo(a.priority));
@@ -84,6 +89,11 @@ class CompanionStreamProvider extends ChangeNotifier {
 
   bool _isDismissed(String cardId) {
     final raw = _actionsBox.get(_actionKey(cardId, CardAction.dismiss));
+    return raw != null;
+  }
+
+  bool _isAccepted(String cardId) {
+    final raw = _actionsBox.get(_actionKey(cardId, CardAction.accept));
     return raw != null;
   }
 
@@ -122,7 +132,10 @@ class CompanionStreamProvider extends ChangeNotifier {
         if (snoozeUntil != null) 'until': snoozeUntil.millisecondsSinceEpoch,
       },
     );
-    if (action == CardAction.dismiss || action == CardAction.snooze) {
+    final removesFromStream = action == CardAction.accept ||
+        action == CardAction.dismiss ||
+        action == CardAction.snooze;
+    if (removesFromStream) {
       _cards.removeWhere((c) => c.id == card.id);
       await _cardsBox.delete(card.id);
       notifyListeners();
@@ -148,8 +161,9 @@ CompanionCard? _fromJson(Map<String, dynamic> json) {
   switch (kind) {
     case CardKind.welcome:
       return WelcomeCard.fromJson(json);
-    case CardKind.brief:
     case CardKind.actionItem:
+      return ActionItemCard.fromJson(json);
+    case CardKind.brief:
     case CardKind.commitmentCapture:
     case CardKind.focusBlock:
     case CardKind.relationshipNudge:
