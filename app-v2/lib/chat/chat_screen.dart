@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/chat/chat_provider.dart';
@@ -93,9 +94,12 @@ class _MessageList extends StatelessWidget {
   final ScrollController scroll;
   final ChatProvider chat;
 
+  static const _clusterGap = Duration(minutes: 5);
+
   @override
   Widget build(BuildContext context) {
-    final count = chat.messages.length;
+    final messages = chat.messages;
+    final count = messages.length;
     return ListView.builder(
       controller: scroll,
       reverse: true,
@@ -104,7 +108,59 @@ class _MessageList extends StatelessWidget {
         vertical: AppStyles.spacingM,
       ),
       itemCount: count,
-      itemBuilder: (_, i) => ChatBubble(message: chat.messages[count - 1 - i]),
+      itemBuilder: (_, i) {
+        final originalIdx = count - 1 - i;
+        final current = messages[originalIdx];
+        final prev = originalIdx > 0 ? messages[originalIdx - 1] : null;
+        final showDivider = prev == null ||
+            current.createdAt.difference(prev.createdAt) >= _clusterGap;
+        if (!showDivider) return ChatBubble(message: current);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ClusterDivider(time: current.createdAt),
+            ChatBubble(message: current),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Centered, muted timestamp shown between message clusters that are >5min apart.
+/// Apple Messages convention; without it, threads feel timeless.
+class _ClusterDivider extends StatelessWidget {
+  const _ClusterDivider({required this.time});
+  final DateTime time;
+
+  String _label() {
+    final now = DateTime.now();
+    final t = time.toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    final tDay = DateTime(t.year, t.month, t.day);
+    final daysAgo = today.difference(tDay).inDays;
+    final timeFmt = DateFormat.jm().format(t);
+    if (daysAgo == 0) return 'Today $timeFmt';
+    if (daysAgo == 1) return 'Yesterday $timeFmt';
+    if (daysAgo < 7) return '${DateFormat.EEEE().format(t)} $timeFmt';
+    if (t.year == now.year) return '${DateFormat.MMMd().format(t)} $timeFmt';
+    return '${DateFormat.yMMMd().format(t)} $timeFmt';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppStyles.spacingM, bottom: AppStyles.spacingS),
+      child: Center(
+        child: Text(
+          _label(),
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textTertiary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 }
