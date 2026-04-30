@@ -322,7 +322,7 @@ async def _stream_handler(
         translation_language = None
     elif stt_language == 'multi':
         if language == "multi":
-            user_language_preference = user_db.get_user_language_preference(uid)
+            user_language_preference = await asyncio.to_thread(user_db.get_user_language_preference, uid)
             if user_language_preference:
                 translation_language = user_language_preference
         else:
@@ -481,7 +481,8 @@ async def _stream_handler(
                 words_transcribed_since_last_record = 0  # reset
 
                 if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
-                    record_usage(
+                    await asyncio.to_thread(
+                        record_usage,
                         uid,
                         transcription_seconds=transcription_seconds,
                         words_transcribed=words_to_record,
@@ -519,7 +520,7 @@ async def _stream_handler(
                 # DG budget gate: check restrict-stage budget (#6083)
                 # Re-check stage after classifier may have escalated (fire-and-forget task above)
                 try:
-                    stage = get_enforcement_stage(uid)
+                    stage = await asyncio.to_thread(get_enforcement_stage, uid)
                     if stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
                         fair_use_track_dg_usage = True
                         was_exhausted = fair_use_dg_budget_exhausted
@@ -549,7 +550,7 @@ async def _stream_handler(
                 )
             )
             if needs_refresh:
-                remaining_seconds_cache = get_remaining_transcription_seconds(uid)
+                remaining_seconds_cache = await asyncio.to_thread(get_remaining_transcription_seconds, uid)
                 remaining_seconds_cache_ts = now
                 remaining_seconds_cache_initialized = True
             elif remaining_seconds_cache is not None and transcription_seconds > 0:
@@ -591,7 +592,7 @@ async def _stream_handler(
                     freemium_threshold_sent = False
 
             # Silence notification logic for basic plan users
-            user_subscription = user_db.get_user_valid_subscription(uid)
+            user_subscription = await asyncio.to_thread(user_db.get_user_valid_subscription, uid)
             if not user_subscription or user_subscription.plan == PlanType.basic:
                 time_of_last_words = last_transcript_time or first_audio_byte_timestamp
                 if (
@@ -675,14 +676,15 @@ async def _stream_handler(
         MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
     )
 
-    # Validate user
-    if not user_db.is_exists_user(uid):
+    # Validate user (wrap sync Firestore call to avoid blocking event loop)
+    user_exists = await asyncio.to_thread(user_db.is_exists_user, uid)
+    if not user_exists:
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
         return
 
     # Create or get conversation ID early for audio chunk storage
-    private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
+    private_cloud_sync_enabled = await asyncio.to_thread(user_db.get_user_private_cloud_sync_enabled, uid)
 
     # Enable speaker identification when user has speech profile or private cloud sync
     has_speech_profile = False
