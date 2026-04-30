@@ -8981,4 +8981,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => '检测多种口语';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

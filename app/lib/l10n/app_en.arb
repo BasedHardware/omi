@@ -10889,5 +10889,13 @@
     "multiLanguageDetectionDesc": "Detect multiple spoken languages",
     "@multiLanguageDetectionDesc": {
         "description": "Description for multi-language detection toggle"
+    },
+    "translateTranscript": "Translate Transcript",
+    "@translateTranscript": {
+        "description": "Button label to translate transcript segments"
+    },
+    "stopTranslation": "Stop Translation",
+    "@stopTranslation": {
+        "description": "Button label to stop translation"
     }
 }

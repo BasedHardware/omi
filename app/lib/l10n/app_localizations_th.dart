@@ -9098,4 +9098,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'ตรวจจับภาษาพูดหลายภาษา';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

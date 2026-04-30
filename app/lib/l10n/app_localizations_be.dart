@@ -9170,4 +9170,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Detect multiple spoken languages';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

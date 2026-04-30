@@ -9180,4 +9180,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Разпознаване на няколко говорими езика';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

@@ -9142,4 +9142,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Tuvasta mitu räägitud keelt';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

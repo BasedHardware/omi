@@ -8995,4 +8995,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => '複数の話し言葉を検出';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

@@ -9184,4 +9184,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Több beszélt nyelv felismerése';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

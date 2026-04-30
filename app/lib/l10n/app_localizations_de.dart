@@ -9222,4 +9222,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Mehrere gesprochene Sprachen erkennen';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

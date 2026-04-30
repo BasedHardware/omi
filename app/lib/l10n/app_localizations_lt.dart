@@ -9153,4 +9153,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Aptikti kelias kalbamas kalbas';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

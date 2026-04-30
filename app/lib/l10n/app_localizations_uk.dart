@@ -9158,4 +9158,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Виявлення кількох розмовних мов';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

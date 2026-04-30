@@ -9083,4 +9083,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'كشف عدة لغات منطوقة';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

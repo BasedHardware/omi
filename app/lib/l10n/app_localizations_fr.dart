@@ -9228,4 +9228,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Détecter plusieurs langues parlées';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

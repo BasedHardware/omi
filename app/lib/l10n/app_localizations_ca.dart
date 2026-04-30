@@ -9199,4 +9199,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Detecta diversos idiomes parlats';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

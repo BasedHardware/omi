@@ -9125,4 +9125,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'कई बोली जाने वाली भाषाओं का पता लगाएं';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

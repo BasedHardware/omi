@@ -9158,4 +9158,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Birden fazla konuşulan dili algıla';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

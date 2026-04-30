@@ -8996,4 +8996,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => '여러 음성 언어 감지';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

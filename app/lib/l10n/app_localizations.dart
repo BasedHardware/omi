@@ -17066,6 +17066,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Detect multiple spoken languages'**
   String get multiLanguageDetectionDesc;
+
+  /// Button label to translate transcript segments
+  ///
+  /// In en, this message translates to:
+  /// **'Translate Transcript'**
+  String get translateTranscript;
+
+  /// Button label to stop translation
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Translation'**
+  String get stopTranslation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9141,4 +9141,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Detekovat více mluvených jazyků';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

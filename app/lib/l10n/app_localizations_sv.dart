@@ -9149,4 +9149,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Identifiera flera talade språk';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

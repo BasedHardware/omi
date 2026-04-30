@@ -9200,4 +9200,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Rileva più lingue parlate';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

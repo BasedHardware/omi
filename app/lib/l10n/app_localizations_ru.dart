@@ -9174,4 +9174,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Распознавание нескольких языков';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

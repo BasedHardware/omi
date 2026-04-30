@@ -9145,4 +9145,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Phát hiện nhiều ngôn ngữ nói';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

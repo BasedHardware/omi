@@ -9165,4 +9165,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Wykrywaj wiele języków mówionych';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

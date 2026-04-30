@@ -9131,4 +9131,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Registrer flere talte sprog';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

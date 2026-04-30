@@ -9155,4 +9155,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Deteksi beberapa bahasa lisan';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

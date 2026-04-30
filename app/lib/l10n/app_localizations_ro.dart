@@ -9188,4 +9188,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Detectează mai multe limbi vorbite';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }

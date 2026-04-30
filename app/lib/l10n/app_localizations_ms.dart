@@ -9169,4 +9169,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get multiLanguageDetectionDesc => 'Kesan pelbagai bahasa pertuturan';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
 }
