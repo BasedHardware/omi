@@ -9206,4 +9206,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

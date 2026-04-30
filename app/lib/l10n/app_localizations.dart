@@ -17078,6 +17078,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stop Translation'**
   String get stopTranslation;
+
+  /// Button label to pause translation when auto-translate is enabled in settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Translation'**
+  String get pauseTranslation;
+
+  /// Button label to resume translation when auto-translate is enabled in settings
+  ///
+  /// In en, this message translates to:
+  /// **'Resume Translation'**
+  String get resumeTranslation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
