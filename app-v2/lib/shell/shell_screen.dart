@@ -1,17 +1,12 @@
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/chat/chat_screen.dart';
-import 'package:nooto_v2/chat/chat_storage.dart';
 import 'package:nooto_v2/home/home_screen.dart';
-import 'package:nooto_v2/home/home_storage.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
-import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
-import 'package:nooto_v2/providers/auth_provider.dart';
+import 'package:nooto_v2/shell/app_bar_kebab_menu.dart';
 import 'package:nooto_v2/shell/bottom_nav_bar.dart';
 import 'package:nooto_v2/shell/stubs/coming_soon_stub.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
@@ -46,36 +41,27 @@ class _ShellScreenState extends State<ShellScreen> {
       _Tab(label: l.shellTabPlan, icon: FontAwesomeIcons.calendarCheck),
       _Tab(label: l.shellTabApps, icon: FontAwesomeIcons.tableCellsLarge),
     ];
+    // Home runs its own SliverAppBar.large (iOS Large Title pattern) — the
+    // shell drops its compact bar on Home so we don't double-stack.
+    final isHome = _index == 0;
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
-            ),
-          ),
-        ),
-        elevation: 0,
-        // Home leads with cards; other tabs use the tab label.
-        // The wordmark on Home is quiet brand presence — replaces the
-        // institutional "Início" without going back to a centered title.
-        titleSpacing: 16,
-        title: _index == 0
-            ? Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Nooto',
-                  style: brandSerif(
-                    fontSize: 16,
-                    color: AppColors.textTertiary,
+      appBar: isHome
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              flexibleSpace: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: Container(
+                    color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
                   ),
                 ),
-              )
-            : Text(
+              ),
+              elevation: 0,
+              titleSpacing: 16,
+              title: Text(
                 tabs[_index].label,
                 style: const TextStyle(
                   fontSize: 18,
@@ -83,26 +69,8 @@ class _ShellScreenState extends State<ShellScreen> {
                   color: AppColors.textPrimary,
                 ),
               ),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'More',
-            icon: const Icon(Icons.more_vert, color: AppColors.textTertiary, size: 20),
-            color: AppColors.backgroundSecondary,
-            onSelected: (v) async {
-              if (v == 'signout') {
-                await context.read<AuthChangeProvider>().signOut();
-              } else if (v == 'reset') {
-                await _confirmReset();
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'signout', child: Text('Sign out', style: TextStyle(color: AppColors.textPrimary))),
-              if (kDebugMode)
-                const PopupMenuItem(value: 'reset', child: Text('Reset onboarding', style: TextStyle(color: AppColors.textPrimary))),
-            ],
-          ),
-        ],
-      ),
+              actions: const [AppBarKebabMenu()],
+            ),
       body: IndexedStack(
         index: _index,
         children: [
@@ -129,32 +97,6 @@ class _ShellScreenState extends State<ShellScreen> {
         labels: tabs.map((t) => t.label).toList(),
       ),
     );
-  }
-
-  Future<void> _confirmReset() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.backgroundSecondary,
-        title: const Text('Reset onboarding?', style: TextStyle(color: AppColors.textPrimary)),
-        content: const Text(
-          'This wipes your saved chat state and starts over.',
-          style: TextStyle(color: AppColors.textTertiary),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Reset', style: TextStyle(color: AppColors.errorColor)),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || ok != true) return;
-    await HomeBoxes.clearAll();
-    await ChatBoxes.clearAll();
-    if (!mounted) return;
-    await context.read<OnboardingChatProvider>().reset();
   }
 }
 
