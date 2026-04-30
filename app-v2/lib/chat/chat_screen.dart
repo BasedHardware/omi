@@ -186,7 +186,7 @@ class _Composer extends StatelessWidget {
                 ),
                 cursorColor: AppColors.brandPrimary,
                 decoration: const InputDecoration(
-                  hintText: 'Ask Nooto anything…',
+                  hintText: "What's on your mind?",
                   hintStyle: TextStyle(
                     fontSize: 16,
                     color: AppColors.textTertiary,
