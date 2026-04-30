@@ -182,7 +182,12 @@ class _SeeAllRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled ? AppColors.textTertiary : AppColors.textTertiary.withValues(alpha: 0.5);
+    // Brand-blue when enabled — matches the bullet dots and signals this is
+    // the gateway to Plan tab. Quieter textTertiary in the disabled empty
+    // state where there's nothing to navigate to.
+    final color = enabled
+        ? AppColors.brandPrimary
+        : AppColors.textTertiary.withValues(alpha: 0.5);
     final row = Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
