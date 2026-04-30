@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
@@ -159,15 +160,23 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
+def _word_count(text: str) -> int:
+    if not text:
+        return 0
+    cjk_chars = sum(1 for c in text if unicodedata.east_asian_width(c) in ('W', 'F', 'H'))
+    if cjk_chars > len(text) * 0.3:
+        return cjk_chars // 2
+    return len(text.split())
+
+
 def should_discard_conversation(
     transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
-    if transcript and len(transcript.split(' ')) > 100:
+    word_count = _word_count(transcript) if transcript and transcript.strip() else 0
+    if word_count > 100:
         return False
-
-    word_count = len(transcript.split()) if transcript and transcript.strip() else 0
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
     context_parts = []
