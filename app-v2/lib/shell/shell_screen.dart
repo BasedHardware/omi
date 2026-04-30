@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nooto_v2/chat/chat_screen.dart';
+import 'package:nooto_v2/chat/chat_storage.dart';
 import 'package:nooto_v2/home/home_screen.dart';
 import 'package:nooto_v2/home/home_storage.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
@@ -21,6 +23,16 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
+  // When the Home composer pill navigates here, we focus the chat input on
+  // arrival so the keyboard pops in the same gesture. Reset after consuming.
+  bool _autoFocusChat = false;
+
+  void _switchTab(int idx, {bool focusChat = false}) {
+    setState(() {
+      _index = idx;
+      _autoFocusChat = focusChat;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,14 +97,24 @@ class _ShellScreenState extends State<ShellScreen> {
         children: [
           for (var i = 0; i < tabs.length; i++)
             if (i == 0)
-              HomeScreen(onSwitchToTab: (idx) => setState(() => _index = idx))
+              HomeScreen(
+                onSwitchToTab: (idx) =>
+                    _switchTab(idx, focusChat: idx == 1),
+              )
+            else if (i == 1)
+              // Rebuild ChatScreen when autoFocus changes so the post-frame
+              // focus request fires once per arrival from the Home composer.
+              ChatScreen(
+                key: ValueKey('chat-$_autoFocusChat'),
+                autoFocus: _autoFocusChat && _index == 1,
+              )
             else
               ComingSoonStub(tabLabel: tabs[i].label, icon: tabs[i].icon),
         ],
       ),
       bottomNavigationBar: ShellTabBar(
         selectedIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+        onTap: (i) => _switchTab(i),
         labels: tabs.map((t) => t.label).toList(),
       ),
     );
@@ -119,6 +141,7 @@ class _ShellScreenState extends State<ShellScreen> {
     );
     if (!mounted || ok != true) return;
     await HomeBoxes.clearAll();
+    await ChatBoxes.clearAll();
     if (!mounted) return;
     await context.read<OnboardingChatProvider>().reset();
   }
