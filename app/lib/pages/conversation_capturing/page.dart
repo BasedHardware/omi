@@ -110,6 +110,44 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
   }
 
+  void _showTranslateBottomSheet(BuildContext context, CaptureProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.translate,
+                  color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.white,
+                ),
+                title: Text(
+                  provider.translationEnabled ? context.l10n.stopTranslation : context.l10n.translateTranscript,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                onTap: () {
+                  provider.toggleTranslation();
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _stopConversation(CaptureProvider provider) async {
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
@@ -210,34 +248,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   ),
                 ],
               ),
-              actions: [
-                GestureDetector(
-                  onTap: () => provider.toggleTranslation(),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.translate,
-                          color: provider.translationEnabled ? Colors.white : Colors.grey.shade500,
-                          size: 18,
-                        ),
-                        if (provider.translationEnabled) ...[
-                          const SizedBox(width: 4),
-                          const Text('ON',
-                              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
             body: Column(
               children: [
@@ -316,6 +326,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                                 );
                                               },
                                             );
+                                          },
+                                          onSegmentLongPress: (segment) {
+                                            _showTranslateBottomSheet(context, provider);
                                           },
                                         ),
                             ),
