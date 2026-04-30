@@ -553,30 +553,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       final success = await conversations_api.unlinkCalendarEvent(conversation.id);
       if (success) {
-        if (_cachedConversation != null) {
-          final updatedConversation = ServerConversation(
-            id: _cachedConversation!.id,
-            createdAt: _cachedConversation!.createdAt,
-            structured: _cachedConversation!.structured,
-            startedAt: _cachedConversation!.startedAt,
-            finishedAt: _cachedConversation!.finishedAt,
-            transcriptSegments: _cachedConversation!.transcriptSegments,
-            appResults: _cachedConversation!.appResults,
-            suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
-            geolocation: _cachedConversation!.geolocation,
-            photos: _cachedConversation!.photos,
-            discarded: _cachedConversation!.discarded,
-            deleted: _cachedConversation!.deleted,
-            source: _cachedConversation!.source,
-            language: _cachedConversation!.language,
-            externalIntegration: _cachedConversation!.externalIntegration,
-            calendarEvent: null,
-            status: _cachedConversation!.status,
-            isLocked: _cachedConversation!.isLocked,
-          );
-          _cachedConversation = updatedConversation;
-          conversationProvider?.updateConversation(updatedConversation);
-        }
+        _updateLocalConversationWithCalendarEvent(null);
         notifyListeners();
         return true;
       }

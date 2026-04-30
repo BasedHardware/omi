@@ -45,6 +45,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
+from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event, update_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
@@ -199,53 +200,13 @@ class LinkCalendarEventRequest(BaseModel):
     event_id: str
 
 
-def _extract_attendees(event: dict) -> tuple[list[str], list[str]]:
-    """Extract attendee names and emails from a Google Calendar event."""
-    names = []
-    emails = []
-    for attendee in event.get('attendees', []):
-        if attendee.get('self', False):
-            continue
-        email = attendee.get('email', '')
-        name = attendee.get('displayName') or email
-        if name:
-            names.append(name)
-        if email:
-            emails.append(email)
-    return names, emails
-
-
-def _parse_event_times(event: dict) -> tuple[Optional[datetime], Optional[datetime]]:
-    """Parse start and end times from a Google Calendar event."""
-    start = event.get('start', {})
-    end = event.get('end', {})
-    try:
-        if 'dateTime' in start:
-            start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-        elif 'date' in start:
-            start_dt = datetime.fromisoformat(start['date'] + 'T00:00:00+00:00')
-        else:
-            return None, None
-
-        if 'dateTime' in end:
-            end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
-        elif 'date' in end:
-            end_dt = datetime.fromisoformat(end['date'] + 'T23:59:59+00:00')
-        else:
-            return None, None
-
-        return start_dt, end_dt
-    except (ValueError, KeyError):
-        return None, None
-
-
 def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
     """Convert a raw Google Calendar event to CalendarEventLink model."""
-    start_time, end_time = _parse_event_times(event)
+    start_time, end_time = parse_event_times(event)
     if start_time is None or end_time is None:
         return None
 
-    attendee_names, attendee_emails = _extract_attendees(event)
+    attendee_names, attendee_emails = extract_attendees(event)
 
     return CalendarEventLink(
         event_id=event.get('id', ''),
@@ -305,7 +266,7 @@ def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.dict()})
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump()})
 
     return calendar_event
 
@@ -355,7 +316,7 @@ def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_c
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.dict()})
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump()})
 
     return calendar_event
 
