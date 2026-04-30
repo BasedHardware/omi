@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -36,7 +35,6 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'maps_util.dart';
 
 // Highlight search matches with current result highlighting
@@ -1158,120 +1156,6 @@ class GetGeolocationWidgets extends StatelessWidget {
 ///************************************************
 ///************ SETTINGS BOTTOM SHEET *************
 ///************************************************
-
-class CalendarEventDetailsSheet extends StatelessWidget {
-  final CalendarEventLink calendarEvent;
-
-  const CalendarEventDetailsSheet({super.key, required this.calendarEvent});
-
-  @override
-  Widget build(BuildContext context) {
-    final timeFormat = (DateTime dt) =>
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    final dateStr = dateTimeFormat('MMM d, yyyy', calendarEvent.startTime);
-    final timeStr = '${timeFormat(calendarEvent.startTime)} – ${timeFormat(calendarEvent.endTime)}';
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1B1B1B),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: Image.asset(
-                  'assets/integration_app_logos/google-calendar.png',
-                  width: 20,
-                  height: 20,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  calendarEvent.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.access_time, size: 16, color: Colors.white54),
-              const SizedBox(width: 8),
-              Text(
-                '$dateStr  $timeStr',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
-          if (calendarEvent.attendees.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.people_outline, size: 16, color: Colors.white54),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    calendarEvent.attendees.join(', '),
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (calendarEvent.htmlLink != null) ...[
-            const SizedBox(height: 20),
-            GestureDetector(
-              onTap: () async {
-                final uri = Uri.parse(calendarEvent.htmlLink!);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white24),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Center(
-                  child: Text(
-                    'Open in Google Calendar',
-                    style: TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 ///************************************************
 
