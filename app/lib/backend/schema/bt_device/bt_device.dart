@@ -16,6 +16,7 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
+// import package for m02ultra
 
 enum ImageOrientation {
   orientation0, // 0 degrees
@@ -206,6 +207,8 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
     deviceType = DeviceType.friendPendant;
   } else if (BtDevice.isLimitlessDeviceFromDevice(device)) {
     deviceType = DeviceType.limitless;
+  } else if (BtDevice.isM02UltraDeviceFromDevice(device)) {
+    deviceType = DeviceType.m02ultra;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
@@ -371,6 +374,8 @@ class BtDevice {
       return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.m02ultra) {
+      return await _getDeviceInfoFromM02Ultra(conn as M02UltraDeviceConnection);
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
@@ -528,6 +533,31 @@ class BtDevice {
     );
   }
 
+  Future _getDeviceInfoFromM02Ultra(M02UltraDeviceConnection conn) async {
+    var modelNumber = 'M02_4B94';
+    var firmwareRevision = 'AM02_1.00.19_260108';
+    var hardwareRevision = 'AM02_v1.0';
+    var manufacturerName = 'M02Ultra';
+
+    try {
+      final deviceInfo = await conn.getDeviceInfo();
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+    } catch (e) {
+      Logger.error('Error getting M02Ultra device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.m02ultra,
+    );
+  }
+
   Future _getDeviceInfoFromFieldy(DeviceConnection conn) async {
     var modelNumber = 'Fieldy';
     var firmwareRevision = '1.0.0';
@@ -632,6 +662,7 @@ class BtDevice {
   String getFirmwareWarningTitle() {
     switch (type) {
       case DeviceType.plaud:
+      case DeviceType.m02ultra:
       case DeviceType.fieldy:
       case DeviceType.friendPendant:
       case DeviceType.limitless:
@@ -654,6 +685,10 @@ class BtDevice {
         return 'Your $name\'s current firmware works great with Omi.\n\n'
             'We recommend keeping your current firmware and not updating through the PLAUD app, as newer versions may affect compatibility.';
 
+      case DeviceType.m02ultra:
+        return 'Your $name\'s current firmware v$firmwareRevision works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the other apps, as newer versions may affect compatibility.';
+        
       case DeviceType.bee:
         if (isBeeFirmwareUnsupported) {
           return 'Your $name is running firmware v$firmwareRevision which uses encrypted audio that Omi cannot process.\n\n'
@@ -694,6 +729,7 @@ class BtDevice {
   static bool isSupportedDevice(ScanResult result) {
     return isBeeDevice(result) ||
         isPlaudDevice(result) ||
+        isM02UltraDevice(result) ||
         isFieldyDevice(result) ||
         isFriendPendantDevice(result) ||
         isLimitlessDevice(result) ||
@@ -750,6 +786,18 @@ class BtDevice {
     return device.platformName.toUpperCase().startsWith('PLAUD');
   }
 
+  static bool isM02UltraDevice(ScanResult result) {
+    final name = result.device.platformName.toLowerCase();
+    return name == 'm02ultra' || name == 'm02_4b94';
+  }
+
+  static bool isM02UltraDeviceFromDevice(BluetoothDevice device) {
+    final name = device.platformName.toLowerCase();
+    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == m02ultraServiceUuid.toLowerCase()) ||
+        name == 'm02ultra' ||
+        name == 'm02_4b94';
+  }
+  
   static bool isFieldyDevice(ScanResult result) {
     final name = result.device.platformName.toLowerCase();
     return name == 'compass' || name == 'fieldy';
@@ -814,6 +862,8 @@ class BtDevice {
       deviceType = DeviceType.bee;
     } else if (isPlaudDevice(result)) {
       deviceType = DeviceType.plaud;
+    } else if (isM02UltraDevice(result)) {
+      deviceType = DeviceType.m02ultra;
     } else if (isFieldyDevice(result)) {
       deviceType = DeviceType.fieldy;
     } else if (isFriendPendantDevice(result)) {
