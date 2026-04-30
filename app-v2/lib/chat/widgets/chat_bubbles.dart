@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'package:nooto_v2/chat/chat_message.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
@@ -75,7 +76,6 @@ class _AssistantBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isTyping = text.isEmpty && streaming && toolEvents.isEmpty;
-    final showCaret = streaming && text.isNotEmpty;
     final hasTools = toolEvents.isNotEmpty;
 
     return Align(
@@ -118,22 +118,11 @@ class _AssistantBubble extends StatelessWidget {
                         const SizedBox(height: AppStyles.spacingS),
                     ],
                     if (text.isNotEmpty)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              text,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: AppColors.textSecondary,
-                                height: 1.45,
-                              ),
-                            ),
-                          ),
-                          if (showCaret) const _Caret(),
-                        ],
+                      MarkdownBody(
+                        data: text,
+                        selectable: true,
+                        softLineBreak: true,
+                        styleSheet: _markdownStyle(context),
                       )
                     else if (streaming)
                       // Tools running but no text yet — show typing dots below.
@@ -186,6 +175,58 @@ class _ToolEventChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Markdown stylesheet tuned for the dark assistant bubble. Body matches the
+/// previous Text style (16pt, textSecondary, 1.45 line-height). Bold and
+/// headings tighten in textPrimary; code keeps a darker chip; links use
+/// brand blue. List bullets and numbers stay textTertiary so the structure
+/// reads as scaffolding, not signal.
+MarkdownStyleSheet _markdownStyle(BuildContext context) {
+  const body = TextStyle(
+    fontSize: 16,
+    color: AppColors.textSecondary,
+    height: 1.45,
+  );
+  return MarkdownStyleSheet(
+    p: body,
+    pPadding: EdgeInsets.zero,
+    strong: body.copyWith(
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w600,
+    ),
+    em: body.copyWith(fontStyle: FontStyle.italic),
+    a: body.copyWith(
+      color: AppColors.brandPrimary,
+      decoration: TextDecoration.underline,
+    ),
+    code: const TextStyle(
+      fontSize: 14,
+      fontFamily: 'monospace',
+      color: AppColors.textPrimary,
+      backgroundColor: AppColors.backgroundTertiary,
+    ),
+    codeblockDecoration: BoxDecoration(
+      color: AppColors.backgroundTertiary,
+      borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+    ),
+    codeblockPadding: const EdgeInsets.all(AppStyles.spacingM),
+    h1: body.copyWith(fontSize: 22, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+    h2: body.copyWith(fontSize: 19, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+    h3: body.copyWith(fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+    listBullet: body.copyWith(color: AppColors.textTertiary),
+    blockquote: body.copyWith(color: AppColors.textTertiary),
+    blockquoteDecoration: BoxDecoration(
+      color: AppColors.backgroundPrimary.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
+    ),
+    blockquotePadding: const EdgeInsets.all(AppStyles.spacingS),
+    horizontalRuleDecoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+    ),
+  );
 }
 
 /// Three dots that bounce in sequence (~1.2s cycle) while we wait for the
@@ -262,46 +303,3 @@ class _Dot extends StatelessWidget {
   }
 }
 
-/// Blinking caret at end of streaming assistant text. 1Hz blink per the
-/// design doc's motion language.
-class _Caret extends StatefulWidget {
-  const _Caret();
-
-  @override
-  State<_Caret> createState() => _CaretState();
-}
-
-class _CaretState extends State<_Caret>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1000),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, child) {
-        final on = _ctrl.value < 0.5;
-        return Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 2),
-          child: Opacity(
-            opacity: on ? 1 : 0,
-            child: Container(
-              width: 2,
-              height: 16,
-              color: AppColors.brandPrimary,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
