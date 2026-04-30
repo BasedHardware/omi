@@ -87,12 +87,10 @@ class _CardList extends StatelessWidget {
     if (cards.isEmpty) {
       return const _QuietEmpty();
     }
-    // Top inset clears the translucent AppBar (kToolbarHeight + status bar).
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingS;
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         AppStyles.spacingL,
-        topInset,
+        AppStyles.spacingS,
         AppStyles.spacingL,
         AppStyles.spacingXL,
       ),

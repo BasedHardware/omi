@@ -44,9 +44,12 @@ class _ShellScreenState extends State<ShellScreen> {
     // All tabs share the compact glass AppBar. Home leaves the title slot
     // empty (the cards carry their own meaning); other tabs show the label.
     final isHome = _index == 0;
+    // Glass-over-content (extendBody) only on tabs that want the iOS scroll-
+    // under-bar effect. Home is short and looked like dead space; sit body
+    // below the bar normally.
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: !isHome,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         flexibleSpace: ClipRect(
