@@ -65,8 +65,8 @@ class _AssistantBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showCaret = streaming;
-    final body = text.isEmpty && streaming ? '…' : text;
+    final isTyping = text.isEmpty && streaming;
+    final showCaret = streaming && !isTyping;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -90,23 +90,99 @@ class _AssistantBubble extends StatelessWidget {
             ),
             border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(
-                child: Text(
-                  body,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
+          child: isTyping
+              ? const _TypingDots()
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: AppColors.textSecondary,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                    if (showCaret) const _Caret(),
+                  ],
                 ),
-              ),
-              if (showCaret) const _Caret(),
+        ),
+      ),
+    );
+  }
+}
+
+/// Three dots that bounce in sequence (~1.2s cycle) while we wait for the
+/// first streaming chunk. Mirrors the Messages typing indicator.
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  double _dotOpacity(double t, double phase) {
+    // Triangle wave centered on `phase` so each dot peaks ~400ms apart.
+    final delta = (t - phase).abs();
+    final wrapped = delta > 0.5 ? 1 - delta : delta;
+    return 0.35 + (1 - (wrapped * 2).clamp(0.0, 1.0)) * 0.65;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 18,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (_, child) {
+          final t = _ctrl.value;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _Dot(opacity: _dotOpacity(t, 0.0)),
+              const SizedBox(width: 4),
+              _Dot(opacity: _dotOpacity(t, 0.33)),
+              const SizedBox(width: 4),
+              _Dot(opacity: _dotOpacity(t, 0.66)),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.opacity});
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: opacity,
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: const BoxDecoration(
+          color: AppColors.textTertiary,
+          shape: BoxShape.circle,
         ),
       ),
     );
