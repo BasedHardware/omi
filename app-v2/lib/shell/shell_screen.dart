@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -46,8 +48,17 @@ class _ShellScreenState extends State<ShellScreen> {
     ];
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
         elevation: 0,
         // Home leads with cards; other tabs use the tab label.
         // The wordmark on Home is quiet brand presence — replaces the
