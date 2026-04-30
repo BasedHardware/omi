@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
+import 'package:nooto_v2/home/cards/morning_brief_card.dart';
 import 'package:nooto_v2/home/cards/today_card.dart';
 import 'package:nooto_v2/home/cards/welcome_card.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_storage.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
+import 'package:nooto_v2/services/chat_service.dart';
 
 /// Screen-scoped provider that owns the Home card stream.
 ///
@@ -23,16 +25,21 @@ class CompanionStreamProvider extends ChangeNotifier {
   CompanionStreamProvider({
     required CompanionSignals signals,
     required ActionItemsProvider actionItems,
+    required ChatService chatService,
   })  : _signals = signals,
-        _actionItems = actionItems {
+        _actionItems = actionItems,
+        _chatService = chatService {
     _actionItems.addListener(_onActionItemsChanged);
     _init();
   }
 
   final CompanionSignals _signals;
   final ActionItemsProvider _actionItems;
+  final ChatService _chatService;
   final List<CompanionCard> _cards = [];
   bool _ready = false;
+  bool _briefInFlight = false;
+  bool _disposed = false;
 
   void _onActionItemsChanged() {
     _runGenerators();
@@ -42,6 +49,7 @@ class CompanionStreamProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _actionItems.removeListener(_onActionItemsChanged);
     super.dispose();
   }
@@ -51,6 +59,7 @@ class CompanionStreamProvider extends ChangeNotifier {
 
   Box<Map> get _cardsBox => Hive.box<Map>(HomeBoxes.cards);
   Box<Map> get _actionsBox => Hive.box<Map>(HomeBoxes.actions);
+  Box<Map> get _briefBox => Hive.box<Map>(HomeBoxes.brief);
 
   Future<void> _init() async {
     try {
@@ -61,6 +70,7 @@ class CompanionStreamProvider extends ChangeNotifier {
       // doesn't have to. Fire-and-forget; the listener re-runs generators
       // when results arrive.
       unawaited(_actionItems.kickOffIfNeeded());
+      unawaited(_kickOffMorningBrief());
     } catch (e, st) {
       debugPrint('[CompanionStream] init failed: $e\n$st');
       // Fail-soft: empty stream, no crash. User sees only the welcome
@@ -96,7 +106,76 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// dismissed in `home.actions.v1`.
   void _runGenerators() {
     _maybeEmit(welcomeCardFor(_signals));
+    _replaceOrEmit(_cachedBriefCard());
     _replaceOrEmit(todayCardFor(_actionItems));
+  }
+
+  /// Synchronous read of today's brief from Hive. Network fetch lives in
+  /// [_kickOffMorningBrief]; this just surfaces an already-cached entry so
+  /// generator passes don't flicker the brief in/out.
+  MorningBriefCard? _cachedBriefCard() {
+    final raw = _briefBox.get(_todayLocalKey());
+    if (raw == null) return null;
+    try {
+      return MorningBriefCard.fromJson(Map<String, dynamic>.from(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _kickOffMorningBrief() async {
+    final dateKey = _todayLocalKey();
+    if (_briefBox.get(dateKey) != null) return;
+    if (_briefInFlight) return;
+    _briefInFlight = true;
+    try {
+      final body = await _chatService.fetchBrief(prompt: _briefPrompt);
+      if (_disposed) return;
+      final trimmed = body.trim();
+      if (trimmed.isEmpty) return;
+      final card = MorningBriefCard(
+        dateKey: dateKey,
+        greeting: _greetingFor(_signals.preferredName),
+        body: trimmed,
+        generatedAt: DateTime.now(),
+      );
+      await _briefBox.put(dateKey, card.toJson());
+      if (_disposed) return;
+      _replaceOrEmit(card);
+      _persist();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[CompanionStream] brief fetch failed: $e');
+    } finally {
+      _briefInFlight = false;
+    }
+  }
+
+  static const String _briefPrompt =
+      "Good morning. Brief me on what I committed to yesterday and what I "
+      "should focus on today. Keep it to 2-3 short paragraphs in first "
+      "person, like a chief of staff — direct, no corporate phrasing, no "
+      "headers, no bullet points.";
+
+  String _greetingFor(String? name) {
+    final hour = DateTime.now().hour;
+    final salutation = hour < 11
+        ? 'Good morning'
+        : hour < 17
+            ? 'Good afternoon'
+            : hour < 22
+                ? 'Good evening'
+                : 'Hi';
+    final n = (name ?? '').trim();
+    return n.isEmpty ? '$salutation.' : '$salutation, $n.';
+  }
+
+  String _todayLocalKey() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
   }
 
   /// Today card is regenerated each pass with fresh content, so unlike most
@@ -198,6 +277,7 @@ CompanionCard? _fromJson(Map<String, dynamic> json) {
     case CardKind.actionItem:
       return TodayCard.fromJson(json);
     case CardKind.brief:
+      return MorningBriefCard.fromJson(json);
     case CardKind.commitmentCapture:
     case CardKind.focusBlock:
     case CardKind.relationshipNudge:
