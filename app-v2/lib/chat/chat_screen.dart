@@ -210,13 +210,10 @@ class _Composer extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottomSafe = MediaQuery.of(context).padding.bottom;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.backgroundPrimary,
-        border: Border(top: BorderSide(color: Colors.white10, width: 1)),
-      ),
+      color: AppColors.backgroundPrimary,
       padding: EdgeInsets.fromLTRB(
         AppStyles.spacingL,
-        AppStyles.spacingM,
+        AppStyles.spacingS,
         AppStyles.spacingL,
         bottomSafe + AppStyles.spacingS,
       ),
