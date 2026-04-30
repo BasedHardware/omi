@@ -99,7 +99,7 @@ class _MorningBriefView extends StatelessWidget {
                 card.greeting,
                 style: brandEmphasis(
                   fontSize: 22,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                   height: 1.25,
                 ),
