@@ -715,7 +715,7 @@ def process_conversation(
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     # Check for overlapping calendar events
-    if not discarded and conversation.started_at and conversation.finished_at:
+    if not discarded and conversation.started_at and conversation.finished_at and conversation.calendar_event is None:
         try:
             calendar_event = asyncio.run(get_overlapping_calendar_event(
                 uid,
