@@ -37,10 +37,21 @@ class _ShellScreenState extends State<ShellScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
-        // Home is led by the welcome + brief cards themselves — no title bar
-        // text needed. Other tabs are stubs that benefit from a label.
+        // Home leads with cards; other tabs use the tab label.
+        // The wordmark on Home is quiet brand presence — replaces the
+        // institutional "Início" without going back to a centered title.
+        titleSpacing: 16,
         title: _index == 0
-            ? null
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Nooto',
+                  style: brandSerif(
+                    fontSize: 16,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              )
             : Text(
                 tabs[_index].label,
                 style: const TextStyle(
@@ -79,7 +90,11 @@ class _ShellScreenState extends State<ShellScreen> {
               ComingSoonStub(tabLabel: tabs[i].label, icon: tabs[i].icon),
         ],
       ),
-      bottomNavigationBar: ShellTabBar(selectedIndex: _index, onTap: (i) => setState(() => _index = i)),
+      bottomNavigationBar: ShellTabBar(
+        selectedIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        labels: tabs.map((t) => t.label).toList(),
+      ),
     );
   }
 
