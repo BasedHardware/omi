@@ -23,8 +23,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/pages/settings/calendar_integrations_page.dart';
-import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp;
+import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -329,8 +328,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-            ? conversation.appResults[0].content.trim()
-            : conversation.structured.toString();
+                ? conversation.appResults[0].content.trim()
+                : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -408,7 +407,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               Navigator.pop(c);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const CalendarIntegrationsPage()),
+                MaterialPageRoute(builder: (context) => const IntegrationsPage()),
               );
             },
             child: const Text('Connect', style: TextStyle(color: Colors.white)),
@@ -712,8 +711,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                          provider.conversation,
-                                        );
+                                              provider.conversation,
+                                            );
                                         // Track star/unstar action
                                         MixpanelManager().conversationStarToggled(
                                           conversation: provider.conversation,
@@ -1040,15 +1039,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 child: Consumer<ConversationDetailProvider>(
                   builder: (context, provider, child) {
                     final conversation = provider.conversation;
-                    final hasActionItems = conversation.structured.actionItems
-                        .where((item) => !item.deleted)
-                        .isNotEmpty;
+                    final hasActionItems =
+                        conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
                       conversation: conversation,
-                      hasSegments:
-                          conversation.transcriptSegments.isNotEmpty ||
+                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
                       hasActionItems: hasActionItems,
@@ -1824,11 +1821,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person = segment.personId != null
-                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
-                    : null;
-                final speakerName =
-                    person?.name ??
+                final person =
+                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                final speakerName = person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 MixpanelManager().editSegmentTextStarted();
                 bool saved = false;
@@ -1885,9 +1880,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
-                                  ? null
-                                  : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId =
+                                  finalPersonId == 'user' ? null : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,
