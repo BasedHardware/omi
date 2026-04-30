@@ -179,5 +179,5 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shellComingSoonBody =>
-      'This screen lands in a future phase. Right now Nooto v2 is just the welcome and onboarding flow.';
+      'This screen lands in a future phase. For now, the morning brief and today\'s commitments are on Home.';
 }

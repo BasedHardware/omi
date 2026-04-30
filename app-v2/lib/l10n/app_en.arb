@@ -1,10 +1,13 @@
 {
   "@@locale": "en",
   "appName": "Nooto",
-
   "welcomeBrandLine": "Welcome to {brand}",
   "@welcomeBrandLine": {
-    "placeholders": { "brand": { "type": "String" } }
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      }
+    }
   },
   "welcomeTaglinePrefix": "Personal intelligence that turns ",
   "welcomeTaglineEmphasis": "thought to action.",
@@ -12,14 +15,16 @@
   "welcomeContinueWithGoogle": "Continue with Google",
   "welcomeWaitingForBrowser": "Waiting for browser…",
   "welcomeAgreeFooter": "By continuing you agree to our Terms and Privacy Policy.",
-
   "onboardingPromptHintTyped": "Type your answer…",
   "onboardingPromptHintTap": "Tap an option above to continue",
-
   "onboardingOpenerName": "Hey — what should I call you?",
   "onboardingOpenerLanguage": "Nice to meet you, {name}. What language do you want me to use?",
   "@onboardingOpenerLanguage": {
-    "placeholders": { "name": { "type": "String" } }
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "onboardingOpenerMicrophone": "I'll need your mic to listen for what matters.",
   "onboardingOpenerNotifications": "Mind if I ping you when something needs your attention?",
@@ -29,13 +34,11 @@
   "onboardingOpenerSpeechProfile": "Let me learn your voice so I can tell you apart from the rest of the world.",
   "onboardingOpenerAcknowledge": "All set. Let's go.",
   "onboardingSkipped": "Sure, we can do that later.",
-
   "onboardingChipMoreLanguages": "More languages…",
   "onboardingChipSkipForNow": "Skip for now",
   "onboardingChipPairLater": "I'll pair it later",
   "onboardingAckLetsGo": "Let's go",
   "onboardingAckGotIt": "Got it",
-
   "onboardingPermissionAllow": "Allow",
   "onboardingPermissionPending": "Pending",
   "onboardingPermissionGranted": "Granted",
@@ -49,23 +52,24 @@
   "onboardingPermissionLabelBackgroundHelper": "Lets Nooto stay alive while you're using other apps.",
   "onboardingPermissionLabelLocation": "Location",
   "onboardingPermissionLabelLocationHelper": "Tags conversations with where they happened. Optional.",
-
   "onboardingSpeechCardTitle": "Read this aloud",
   "onboardingSpeechCardBody": "Whenever you're ready, hold the button and read this in a normal voice for about five seconds.",
   "onboardingSpeechCardSample": "Hi, I'm getting Nooto set up. This is what my voice sounds like in a normal room.",
   "onboardingSpeechRecording": "Listening…",
   "onboardingSpeechCaptured": "Voice captured ✓",
   "onboardingSpeechSkip": "Skip for now",
-
   "shellTabHome": "Home",
   "shellTabChat": "Chat",
   "shellTabLibrary": "Library",
   "shellTabPlan": "Plan",
   "shellTabApps": "Apps",
-
   "shellComingSoonTitle": "{tab} arrives next",
   "@shellComingSoonTitle": {
-    "placeholders": { "tab": { "type": "String" } }
+    "placeholders": {
+      "tab": {
+        "type": "String"
+      }
+    }
   },
-  "shellComingSoonBody": "This screen lands in a future phase. Right now Nooto v2 is just the welcome and onboarding flow."
+  "shellComingSoonBody": "This screen lands in a future phase. For now, the morning brief and today's commitments are on Home."
 }
