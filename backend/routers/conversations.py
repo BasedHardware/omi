@@ -248,7 +248,7 @@ def link_calendar_event(
     except Exception as e:
         error_msg = str(e)
         # Try to refresh token if authentication failed
-        if "Authentication failed" in error_msg or "401" in error_msg:
+        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
             new_token = refresh_google_token(uid, integration)
             if new_token:
                 try:
@@ -390,7 +390,7 @@ def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.
         error_msg = str(e)
 
         # Try to refresh token if authentication failed
-        if "401" in error_msg or "Authentication" in error_msg.lower():
+        if "error 401" in error_msg.lower() or "authentication" in error_msg.lower():
             new_token = refresh_google_token(uid, integration)
             if new_token:
                 try:

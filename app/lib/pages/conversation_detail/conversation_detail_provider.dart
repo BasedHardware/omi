@@ -597,6 +597,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         status: _cachedConversation!.status,
         isLocked: _cachedConversation!.isLocked,
         starred: _cachedConversation!.starred,
+        folderId: _cachedConversation!.folderId,
+        visibility: _cachedConversation!.visibility,
       );
       _cachedConversation = updatedConversation;
       conversationProvider?.updateConversation(updatedConversation);

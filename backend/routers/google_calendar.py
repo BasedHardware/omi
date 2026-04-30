@@ -100,7 +100,7 @@ def list_google_calendar_events(
         )
     except Exception as e:
         error_msg = str(e)
-        if "Authentication failed" in error_msg or "401" in error_msg:
+        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
             new_token = refresh_google_token(uid, integration)
             if new_token:
                 try:

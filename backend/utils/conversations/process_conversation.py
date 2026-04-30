@@ -725,7 +725,7 @@ def process_conversation(
             if calendar_event:
                 conversation.calendar_event = calendar_event
         except Exception as e:
-            print(f"Error during calendar event linking: {e}")
+            logger.error(f"Error during calendar event linking: {e}")
             pass
 
     # AI-based folder assignment
