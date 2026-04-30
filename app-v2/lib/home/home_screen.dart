@@ -7,6 +7,7 @@ import 'package:nooto_v2/home/companion_stream_provider.dart';
 import 'package:nooto_v2/home/home_nav.dart';
 import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
+import 'package:nooto_v2/services/chat_service.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// The Companion Stream Home — Tab 0 of `ShellScreen`.
@@ -33,6 +34,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final signals = context.read<OnboardingChatProvider>().signals;
     final actionItems = context.read<ActionItemsProvider>();
+    final chatService = context.read<ChatService>();
     return MultiProvider(
       providers: [
         Provider<HomeNav>.value(value: HomeNav(switchToTab: onSwitchToTab)),
@@ -40,6 +42,7 @@ class HomeScreen extends StatelessWidget {
           create: (_) => CompanionStreamProvider(
             signals: signals,
             actionItems: actionItems,
+            chatService: chatService,
           ),
         ),
       ],
