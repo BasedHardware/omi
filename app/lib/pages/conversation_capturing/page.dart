@@ -210,6 +210,29 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   ),
                 ],
               ),
+              actions: [
+                GestureDetector(
+                  onTap: () => provider.toggleTranslation(),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.grey.shade600,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.translate,
+                      color: provider.translationEnabled ? Colors.white : Colors.grey.shade400,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
             body: Column(
               children: [
@@ -349,28 +372,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Translate toggle button
-                      GestureDetector(
-                        onTap: () => provider.toggleTranslation(),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: provider.translationEnabled ? const Color(0xFF4A90D9) : const Color(0xFF35343B),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.translate, color: Colors.white, size: 24),
                         ),
                       ),
                       const SizedBox(width: 12),
