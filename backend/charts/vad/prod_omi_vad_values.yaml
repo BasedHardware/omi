@@ -138,7 +138,7 @@ autoscaling:
         periodSeconds: 120
       selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 120
+      stabilizationWindowSeconds: 300
       policies:
       - type: Percent
         value: 20
