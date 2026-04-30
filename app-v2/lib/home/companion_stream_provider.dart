@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
@@ -6,6 +8,7 @@ import 'package:nooto_v2/home/cards/action_item_card.dart';
 import 'package:nooto_v2/home/cards/welcome_card.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_storage.dart';
+import 'package:nooto_v2/providers/action_items_provider.dart';
 
 /// Screen-scoped provider that owns the Home card stream.
 ///
@@ -17,14 +20,31 @@ import 'package:nooto_v2/home/home_storage.dart';
 /// entry there + one fromJson registration in [_fromJson]; nothing else here
 /// changes when the card vocabulary grows.
 class CompanionStreamProvider extends ChangeNotifier {
-  CompanionStreamProvider({required CompanionSignals signals})
-      : _signals = signals {
+  CompanionStreamProvider({
+    required CompanionSignals signals,
+    required ActionItemsProvider actionItems,
+  })  : _signals = signals,
+        _actionItems = actionItems {
+    _actionItems.addListener(_onActionItemsChanged);
     _init();
   }
 
   final CompanionSignals _signals;
+  final ActionItemsProvider _actionItems;
   final List<CompanionCard> _cards = [];
   bool _ready = false;
+
+  void _onActionItemsChanged() {
+    _runGenerators();
+    _persist();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _actionItems.removeListener(_onActionItemsChanged);
+    super.dispose();
+  }
 
   List<CompanionCard> get cards => List.unmodifiable(_cards);
   bool get ready => _ready;
@@ -37,6 +57,10 @@ class CompanionStreamProvider extends ChangeNotifier {
       _hydrateFromHive();
       _runGenerators();
       _persist();
+      // Trigger the first action-items fetch from here so the widget tree
+      // doesn't have to. Fire-and-forget; the listener re-runs generators
+      // when results arrive.
+      unawaited(_actionItems.kickOffIfNeeded());
     } catch (e, st) {
       debugPrint('[CompanionStream] init failed: $e\n$st');
       // Fail-soft: empty stream, no crash. User sees only the welcome
@@ -72,7 +96,7 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// dismissed in `home.actions.v1`.
   void _runGenerators() {
     _maybeEmit(welcomeCardFor(_signals));
-    for (final card in actionItemCardsFor(_signals)) {
+    for (final card in actionItemCardsFor(_actionItems)) {
       _maybeEmit(card);
     }
   }
