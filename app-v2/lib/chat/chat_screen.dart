@@ -200,7 +200,13 @@ class _Composer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppStyles.spacingS),
-          _SendButton(enabled: enabled, onTap: onSubmit),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (_, value, child) => _SendButton(
+              enabled: enabled && value.text.trim().isNotEmpty,
+              onTap: onSubmit,
+            ),
+          ),
         ],
       ),
     );
