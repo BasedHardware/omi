@@ -1,0 +1,53 @@
+name: nooto_v2
+description: "Nooto v2 — chat-driven Flutter rewrite. Phase 1: onboarding."
+publish_to: 'none'
+
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  intl: ^0.20.2
+  crypto: ^3.0.0
+
+  # State + persistence
+  provider: ^6.1.2
+  shared_preferences: ^2.5.3
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Auth
+  firebase_core: 3.13.0
+  firebase_auth: 5.5.3
+  google_sign_in: 6.2.2
+  sign_in_with_apple: ^6.1.1
+
+  # Audio (PCM16 phone-mic capture for the speech-profile turn)
+  flutter_sound: 9.25.1
+  permission_handler: ^12.0.0+1
+
+  # UI
+  font_awesome_flutter: ^10.8.0
+  flutter_svg: ^2.0.16
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  mocktail: ^1.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/images/
