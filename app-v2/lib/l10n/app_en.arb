@@ -1,0 +1,75 @@
+{
+  "@@locale": "en",
+  "appName": "Nooto",
+  "welcomeBrandLine": "Welcome to {brand}",
+  "@welcomeBrandLine": {
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeTaglinePrefix": "Personal intelligence that turns ",
+  "welcomeTaglineEmphasis": "thought to action.",
+  "welcomeContinueWithApple": "Continue with Apple",
+  "welcomeContinueWithGoogle": "Continue with Google",
+  "welcomeWaitingForBrowser": "Waiting for browser…",
+  "welcomeAgreeFooter": "By continuing you agree to our Terms and Privacy Policy.",
+  "onboardingPromptHintTyped": "Type your answer…",
+  "onboardingPromptHintTap": "Tap an option above to continue",
+  "onboardingOpenerName": "Hey — what should I call you?",
+  "onboardingOpenerLanguage": "Nice to meet you, {name}. What language do you want me to use?",
+  "@onboardingOpenerLanguage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingOpenerMicrophone": "I'll need your mic to listen for what matters.",
+  "onboardingOpenerNotifications": "Mind if I ping you when something needs your attention?",
+  "onboardingOpenerBackground": "I work best if I can keep listening in the background.",
+  "onboardingOpenerLocation": "Want me to tag where things happen? Optional — feel free to skip.",
+  "onboardingOpenerDevice": "Have a Nooto device on you? We can wire it up later — pairing arrives in the next phase.",
+  "onboardingOpenerSpeechProfile": "Let me learn your voice so I can tell you apart from the rest of the world.",
+  "onboardingOpenerAcknowledge": "All set. Let's go.",
+  "onboardingSkipped": "Sure, we can do that later.",
+  "onboardingChipMoreLanguages": "More languages…",
+  "onboardingChipSkipForNow": "Skip for now",
+  "onboardingChipPairLater": "I'll pair it later",
+  "onboardingAckLetsGo": "Let's go",
+  "onboardingAckGotIt": "Got it",
+  "onboardingPermissionAllow": "Allow",
+  "onboardingPermissionPending": "Pending",
+  "onboardingPermissionGranted": "Granted",
+  "onboardingPermissionDenied": "Denied",
+  "onboardingPermissionDeniedAction": "Open settings",
+  "onboardingPermissionLabelMicrophone": "Microphone access",
+  "onboardingPermissionLabelMicrophoneHelper": "Audio is processed on your device; only the transcript leaves.",
+  "onboardingPermissionLabelNotifications": "Notification access",
+  "onboardingPermissionLabelNotificationsHelper": "Quiet, useful nudges only — never noise.",
+  "onboardingPermissionLabelBackground": "Background activity",
+  "onboardingPermissionLabelBackgroundHelper": "Lets Nooto stay alive while you're using other apps.",
+  "onboardingPermissionLabelLocation": "Location",
+  "onboardingPermissionLabelLocationHelper": "Tags conversations with where they happened. Optional.",
+  "onboardingSpeechCardTitle": "Read this aloud",
+  "onboardingSpeechCardBody": "Whenever you're ready, hold the button and read this in a normal voice for about five seconds.",
+  "onboardingSpeechCardSample": "Hi, I'm getting Nooto set up. This is what my voice sounds like in a normal room.",
+  "onboardingSpeechRecording": "Listening…",
+  "onboardingSpeechCaptured": "Voice captured ✓",
+  "onboardingSpeechSkip": "Skip for now",
+  "shellTabHome": "Home",
+  "shellTabChat": "Chat",
+  "shellTabLibrary": "Library",
+  "shellTabPlan": "Plan",
+  "shellTabApps": "Apps",
+  "shellComingSoonTitle": "{tab} arrives next",
+  "@shellComingSoonTitle": {
+    "placeholders": {
+      "tab": {
+        "type": "String"
+      }
+    }
+  },
+  "shellComingSoonBody": "This screen lands in a future phase. For now, the morning brief and today's commitments are on Home."
+}
