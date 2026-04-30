@@ -123,6 +123,13 @@ class CompanionStreamProvider extends ChangeNotifier {
     }
   }
 
+  /// Cache contract: one network call per device per day. The cache hit at
+  /// the top short-circuits every subsequent call same-day; the miss path
+  /// writes to Hive immediately on success so even a fast second mount
+  /// (e.g. screen rebuild during the in-flight fetch) sees the entry.
+  /// Errors are NOT cached — including the backend's `agentic.py` fallback
+  /// string, which we detect and discard so a failed fetch doesn't poison
+  /// the next 24h of opens.
   Future<void> _kickOffMorningBrief() async {
     final dateKey = _todayLocalKey();
     if (_briefBox.get(dateKey) != null) return;
@@ -133,6 +140,11 @@ class CompanionStreamProvider extends ChangeNotifier {
       if (_disposed) return;
       final trimmed = body.trim();
       if (trimmed.isEmpty) return;
+      if (_looksLikeBackendError(trimmed)) {
+        debugPrint('[CompanionStream] brief returned backend fallback, '
+            'not caching: $trimmed');
+        return;
+      }
       final card = MorningBriefCard(
         dateKey: dateKey,
         greeting: _greetingFor(_signals.preferredName),
@@ -149,6 +161,15 @@ class CompanionStreamProvider extends ChangeNotifier {
     } finally {
       _briefInFlight = false;
     }
+  }
+
+  /// Backend's agentic chat path returns this exact string on any LLM
+  /// exception (see `backend/utils/retrieval/agentic.py:427`). It looks like
+  /// a successful response from our wire-protocol POV, so we sniff it here.
+  bool _looksLikeBackendError(String body) {
+    final lower = body.toLowerCase();
+    return lower.contains('encountered an error') &&
+        lower.contains('try again');
   }
 
   static const String _briefPrompt =
