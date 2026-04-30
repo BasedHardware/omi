@@ -111,6 +111,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   void _showTranslateBottomSheet(BuildContext context, CaptureProvider provider) {
+    final isAutoTranslateOn = SharedPreferencesUtil().cachedAutoTranslateEnabled;
+    final isActive = provider.translationEnabled;
+
+    String label;
+    if (isActive) {
+      label = isAutoTranslateOn ? context.l10n.pauseTranslation : context.l10n.stopTranslation;
+    } else {
+      label = isAutoTranslateOn ? context.l10n.resumeTranslation : context.l10n.translateTranscript;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
@@ -129,10 +139,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ListTile(
                 leading: Icon(
                   Icons.translate,
-                  color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.white,
+                  color: isActive ? const Color(0xFF4A90D9) : Colors.white,
                 ),
                 title: Text(
-                  provider.translationEnabled ? context.l10n.stopTranslation : context.l10n.translateTranscript,
+                  label,
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
                 onTap: () {
