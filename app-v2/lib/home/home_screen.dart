@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/companion_stream_provider.dart';
+import 'package:nooto_v2/home/home_nav.dart';
 import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
@@ -32,11 +33,16 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final signals = context.read<OnboardingChatProvider>().signals;
     final actionItems = context.read<ActionItemsProvider>();
-    return ChangeNotifierProvider<CompanionStreamProvider>(
-      create: (_) => CompanionStreamProvider(
-        signals: signals,
-        actionItems: actionItems,
-      ),
+    return MultiProvider(
+      providers: [
+        Provider<HomeNav>.value(value: HomeNav(switchToTab: onSwitchToTab)),
+        ChangeNotifierProvider<CompanionStreamProvider>(
+          create: (_) => CompanionStreamProvider(
+            signals: signals,
+            actionItems: actionItems,
+          ),
+        ),
+      ],
       child: _HomeBody(onSwitchToTab: onSwitchToTab),
     );
   }
