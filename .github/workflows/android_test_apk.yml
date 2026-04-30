@@ -65,7 +65,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
+          # android-actions/setup-android accepts SDK licenses already.
+          # Avoid `yes | sdkmanager --licenses` here: `yes` exits with SIGPIPE
+          # after sdkmanager closes stdin, and GitHub's bash pipefail treats it
+          # as a failed step.
           sdkmanager \
             "platform-tools" \
             "platforms;android-${ANDROID_API_LEVEL}" \
