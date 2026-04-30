@@ -53,8 +53,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom() {
     if (!_scroll.hasClients) return;
+    // ListView is reversed so newest sits at offset 0 (visually the bottom).
     _scroll.animateTo(
-      _scroll.position.maxScrollExtent,
+      0,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
     );
@@ -94,14 +95,16 @@ class _MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final count = chat.messages.length;
     return ListView.builder(
       controller: scroll,
+      reverse: true,
       padding: const EdgeInsets.symmetric(
         horizontal: AppStyles.spacingL,
         vertical: AppStyles.spacingM,
       ),
-      itemCount: chat.messages.length,
-      itemBuilder: (_, i) => ChatBubble(message: chat.messages[i]),
+      itemCount: count,
+      itemBuilder: (_, i) => ChatBubble(message: chat.messages[count - 1 - i]),
     );
   }
 }
