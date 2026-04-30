@@ -37,10 +37,18 @@ class _ShellScreenState extends State<ShellScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
-        title: Text(
-          tabs[_index].label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-        ),
+        // Home is led by the welcome + brief cards themselves — no title bar
+        // text needed. Other tabs are stubs that benefit from a label.
+        title: _index == 0
+            ? null
+            : Text(
+                tabs[_index].label,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
         actions: [
           PopupMenuButton<String>(
             tooltip: 'More',
