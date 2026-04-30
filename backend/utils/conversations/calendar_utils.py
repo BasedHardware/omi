@@ -1,6 +1,6 @@
 """Shared helpers for parsing Google Calendar API event payloads."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 
@@ -23,7 +23,8 @@ def parse_event_times(event: dict) -> tuple[Optional[datetime], Optional[datetim
         if 'dateTime' in end:
             end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
         elif 'date' in end:
-            end_dt = datetime.fromisoformat(end['date'] + 'T23:59:59+00:00')
+            # Google Calendar end.date is exclusive (the day after the event ends)
+            end_dt = datetime.fromisoformat(end['date'] + 'T00:00:00+00:00') - timedelta(seconds=1)
         else:
             return None, None
 

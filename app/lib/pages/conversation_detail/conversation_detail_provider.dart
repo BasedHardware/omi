@@ -8,13 +8,6 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/api/conversations.dart' as conversations_api
-    show
-        unlinkCalendarEvent,
-        addSummaryToCalendarEvent,
-        linkCalendarEvent,
-        autoLinkCalendarEvent,
-        listGoogleCalendarEvents;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -551,7 +544,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Unlinks the calendar event from the current conversation
   Future<bool> unlinkCalendarEvent() async {
     try {
-      final success = await conversations_api.unlinkCalendarEvent(conversation.id);
+      final success = await unlinkCalendarEvent(conversation.id);
       if (success) {
         _updateLocalConversationWithCalendarEvent(null);
         notifyListeners();
@@ -566,7 +559,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Adds conversation summary to the linked calendar event and returns the event link
   Future<String?> addSummaryToCalendarEvent() async {
     try {
-      final htmlLink = await conversations_api.addSummaryToCalendarEvent(conversation.id);
+      final htmlLink = await addSummaryToCalendarEvent(conversation.id);
       return htmlLink;
     } catch (e) {
       return null;
@@ -609,7 +602,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Auto-links the conversation to the best overlapping calendar event
   Future<CalendarEventLink?> autoLinkCalendarEvent() async {
     try {
-      final calendarEvent = await conversations_api.autoLinkCalendarEvent(conversation.id);
+      final calendarEvent = await autoLinkCalendarEvent(conversation.id);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -623,7 +616,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Links the conversation to a specific calendar event by event ID
   Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
     try {
-      final calendarEvent = await conversations_api.linkCalendarEvent(conversation.id, eventId);
+      final calendarEvent = await linkCalendarEvent(conversation.id, eventId);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -643,7 +636,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final timeMin = conversationStart.subtract(const Duration(hours: 2));
       final timeMax = conversationEnd.add(const Duration(hours: 2));
 
-      return await conversations_api.listGoogleCalendarEvents(
+      return await listGoogleCalendarEvents(
         timeMin: timeMin,
         timeMax: timeMax,
         maxResults: 30,

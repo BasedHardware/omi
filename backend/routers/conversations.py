@@ -266,7 +266,7 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump()})
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')})
 
     return calendar_event
 
@@ -316,7 +316,7 @@ def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_c
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump()})
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')})
 
     return calendar_event
 
