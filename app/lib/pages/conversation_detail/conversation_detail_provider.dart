@@ -7,7 +7,10 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart'
+    hide unlinkCalendarEvent, addSummaryToCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/conversations.dart' as conv_api
+    show unlinkCalendarEvent, addSummaryToCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -398,9 +401,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps = _cachedEnabledConversationApps
-          .where((app) => _locallyAddedAppIds.contains(app.id))
-          .toList();
+      final locallyAddedApps =
+          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
@@ -544,7 +546,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Unlinks the calendar event from the current conversation
   Future<bool> unlinkCalendarEvent() async {
     try {
-      final success = await unlinkCalendarEvent(conversation.id);
+      final success = await conv_api.unlinkCalendarEvent(conversation.id);
       if (success) {
         _updateLocalConversationWithCalendarEvent(null);
         notifyListeners();
@@ -559,7 +561,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Adds conversation summary to the linked calendar event and returns the event link
   Future<String?> addSummaryToCalendarEvent() async {
     try {
-      final htmlLink = await addSummaryToCalendarEvent(conversation.id);
+      final htmlLink = await conv_api.addSummaryToCalendarEvent(conversation.id);
       return htmlLink;
     } catch (e) {
       return null;
@@ -602,7 +604,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Auto-links the conversation to the best overlapping calendar event
   Future<CalendarEventLink?> autoLinkCalendarEvent() async {
     try {
-      final calendarEvent = await autoLinkCalendarEvent(conversation.id);
+      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -616,7 +618,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Links the conversation to a specific calendar event by event ID
   Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
     try {
-      final calendarEvent = await linkCalendarEvent(conversation.id, eventId);
+      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
