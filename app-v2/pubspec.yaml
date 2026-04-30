@@ -29,6 +29,9 @@ dependencies:
   google_sign_in: 6.2.2
   sign_in_with_apple: ^6.1.1
 
+  # Networking
+  http: ^1.2.2
+
   # Audio (PCM16 phone-mic capture for the speech-profile turn)
   flutter_sound: 9.25.1
   permission_handler: ^12.0.0+1
