@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   static const Color backgroundPrimary = Color(0xFF0F0F0F);
@@ -38,21 +37,21 @@ class AppStyles {
   static const double touchTargetMinimum = 44.0;
 }
 
-/// Brand emphasis serif used for taglines and the wordmark.
-/// Matches `desktop-v2`'s "font-serif italic" treatment.
-TextStyle brandSerif({
+/// Brand emphasis: system sans-serif with weight + size as the only emphasis
+/// levers. Used for greetings, the Nooto wordmark, and voice card text.
+/// No serif anywhere in this product — see DESIGN.md.
+TextStyle brandEmphasis({
   double fontSize = 16,
-  FontWeight fontWeight = FontWeight.w500,
-  FontStyle fontStyle = FontStyle.italic,
+  FontWeight fontWeight = FontWeight.w600,
   Color color = AppColors.textPrimary,
   double? height,
 }) {
-  return GoogleFonts.playfairDisplay(
+  return TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
-    fontStyle: fontStyle,
     color: color,
     height: height,
+    letterSpacing: -0.2,
   );
 }
 
