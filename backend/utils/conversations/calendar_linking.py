@@ -13,8 +13,8 @@ from utils.conversations.calendar_utils import extract_attendees, parse_event_ti
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
 
-# Minimum overlap duration in seconds to consider a match (5 minutes)
-MIN_OVERLAP_SECONDS = 5 * 60
+# Minimum overlap duration in seconds to consider a match (10 seconds)
+MIN_OVERLAP_SECONDS = 10
 
 # Minimum overlap percentage of event duration to consider a match (50%)
 MIN_OVERLAP_PERCENTAGE = 0.50

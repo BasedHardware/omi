@@ -370,7 +370,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void _handleLinkEvent(BuildContext context, ConversationDetailProvider provider) {
     // Check if Google Calendar is connected
     final integrationProvider = Provider.of<IntegrationProvider>(context, listen: false);
-    final isConnected = integrationProvider.isAppConnected(IntegrationApp.googleCalendar);
+    final isConnected = integrationProvider.hasLoaded
+        ? integrationProvider.isAppConnected(IntegrationApp.googleCalendar)
+        : SharedPreferencesUtil().getBool('google_calendar_connected');
 
     if (!isConnected) {
       _showCalendarNotConnectedDialog(context);
