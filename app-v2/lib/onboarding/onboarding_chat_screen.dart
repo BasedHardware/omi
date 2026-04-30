@@ -199,7 +199,7 @@ class _BrandStrip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text('Nooto', style: brandSerif(fontSize: 20, color: AppColors.textPrimary)),
+        Text('Nooto', style: brandEmphasis(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
       ],
     );
   }

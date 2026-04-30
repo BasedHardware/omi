@@ -96,7 +96,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         TextSpan(text: l.welcomeTaglinePrefix),
                         TextSpan(
                           text: l.welcomeTaglineEmphasis,
-                          style: brandSerif(fontSize: 30, color: AppColors.brandLight, height: 1.18),
+                          style: brandEmphasis(fontSize: 30, fontWeight: FontWeight.w700, color: AppColors.brandLight, height: 1.18),
                         ),
                       ],
                     ),
@@ -109,7 +109,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         const TextSpan(text: 'Welcome to '),
                         TextSpan(
                           text: l.appName,
-                          style: brandSerif(fontSize: 17, color: AppColors.textPrimary),
+                          style: brandEmphasis(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                         ),
                         const TextSpan(text: '.'),
                       ],

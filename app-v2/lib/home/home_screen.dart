@@ -98,11 +98,19 @@ class _CardScroll extends StatelessWidget {
           border: null,
           largeTitle: Text(
             'Nooto',
-            style: brandSerif(fontSize: 34, color: AppColors.textPrimary),
+            style: brandEmphasis(
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
           middle: Text(
             'Nooto',
-            style: brandSerif(fontSize: 17, color: AppColors.textPrimary),
+            style: brandEmphasis(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
           ),
           trailing: const AppBarKebabMenu(),
         ),
@@ -143,8 +151,9 @@ class _QuietEmpty extends StatelessWidget {
         padding: const EdgeInsets.all(AppStyles.spacingXL),
         child: Text(
           "I'm here when you need me.",
-          style: brandSerif(
+          style: brandEmphasis(
             fontSize: 18,
+            fontWeight: FontWeight.w500,
             color: AppColors.textTertiary,
           ),
           textAlign: TextAlign.center,

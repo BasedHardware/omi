@@ -8,7 +8,7 @@ import 'package:nooto_v2/theme/app_theme.dart';
 /// welcome card (priority 1000) and the Today surface card (priority 500),
 /// so on a typical Home open the visual flow is:
 ///
-///   ┌ Welcome, Matheus.       (voice, brandSerif greeting)
+///   ┌ Welcome, Matheus.       (voice, sans-serif bold greeting)
 ///   ┌ Yesterday you said you'd email John…    (this card, voice)
 ///   └ Today: ⦁ Email John ⦁ Soccer 8pm        (Today surface card)
 ///
@@ -97,8 +97,9 @@ class _MorningBriefView extends StatelessWidget {
             if (hasGreeting) ...[
               Text(
                 card.greeting,
-                style: brandSerif(
+                style: brandEmphasis(
                   fontSize: 22,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                   height: 1.25,
                 ),
