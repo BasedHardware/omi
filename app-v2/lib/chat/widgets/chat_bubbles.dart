@@ -13,7 +13,11 @@ class ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return message.role == ChatRole.user
         ? _UserBubble(text: message.text)
-        : _AssistantBubble(text: message.text, streaming: message.streaming);
+        : _AssistantBubble(
+            text: message.text,
+            streaming: message.streaming,
+            toolEvents: message.toolEvents,
+          );
   }
 }
 
@@ -59,14 +63,20 @@ class _UserBubble extends StatelessWidget {
 }
 
 class _AssistantBubble extends StatelessWidget {
-  const _AssistantBubble({required this.text, required this.streaming});
+  const _AssistantBubble({
+    required this.text,
+    required this.streaming,
+    required this.toolEvents,
+  });
   final String text;
   final bool streaming;
+  final List<String> toolEvents;
 
   @override
   Widget build(BuildContext context) {
-    final isTyping = text.isEmpty && streaming;
-    final showCaret = streaming && !isTyping;
+    final isTyping = text.isEmpty && streaming && toolEvents.isEmpty;
+    final showCaret = streaming && text.isNotEmpty;
+    final hasTools = toolEvents.isNotEmpty;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -92,24 +102,87 @@ class _AssistantBubble extends StatelessWidget {
           ),
           child: isTyping
               ? const _TypingDots()
-              : Row(
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Flexible(
-                      child: Text(
-                        text,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: AppColors.textSecondary,
-                          height: 1.45,
+                    if (hasTools) ...[
+                      for (final label in toolEvents)
+                        _ToolEventChip(
+                          label: label,
+                          inProgress: streaming &&
+                              text.isEmpty &&
+                              label == toolEvents.last,
                         ),
+                      if (text.isNotEmpty)
+                        const SizedBox(height: AppStyles.spacingS),
+                    ],
+                    if (text.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              text,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: AppColors.textSecondary,
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+                          if (showCaret) const _Caret(),
+                        ],
+                      )
+                    else if (streaming)
+                      // Tools running but no text yet — show typing dots below.
+                      const Padding(
+                        padding: EdgeInsets.only(top: AppStyles.spacingXS),
+                        child: _TypingDots(),
                       ),
-                    ),
-                    if (showCaret) const _Caret(),
                   ],
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// A tool-use chip rendered above the assistant text. Shows what the
+/// assistant looked at (or is looking at) while answering.
+class _ToolEventChip extends StatelessWidget {
+  const _ToolEventChip({required this.label, required this.inProgress});
+  final String label;
+  final bool inProgress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            inProgress
+                ? Icons.auto_awesome_outlined
+                : Icons.check_circle_outline_rounded,
+            size: 12,
+            color: AppColors.textTertiary,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textTertiary,
+                fontWeight: FontWeight.w500,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
