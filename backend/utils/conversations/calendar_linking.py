@@ -20,7 +20,7 @@ MIN_OVERLAP_SECONDS = 5 * 60
 MIN_OVERLAP_PERCENTAGE = 0.50
 
 
-def get_overlapping_calendar_event(
+async def get_overlapping_calendar_event(
     uid: str,
     conversation_start: datetime,
     conversation_end: datetime,
@@ -53,7 +53,7 @@ def get_overlapping_calendar_event(
     search_end = conversation_end + timedelta(minutes=30)
 
     try:
-        events = get_google_calendar_events(
+        events = await get_google_calendar_events(
             access_token=access_token,
             time_min=search_start,
             time_max=search_end,
@@ -62,10 +62,10 @@ def get_overlapping_calendar_event(
     except Exception as e:
         error_msg = str(e)
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = refresh_google_token(uid, integration)
+            new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    events = get_google_calendar_events(
+                    events = await get_google_calendar_events(
                         access_token=new_token,
                         time_min=search_start,
                         time_max=search_end,

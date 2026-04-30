@@ -276,7 +276,7 @@ async def link_calendar_event(
     response_model=CalendarEventLink,
     tags=['conversations'],
 )
-def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Auto-link a conversation to the best overlapping Google Calendar event.
     Uses the conversation's started_at/finished_at to find a matching event.
@@ -310,7 +310,7 @@ def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_c
         finished_at = finished_at.replace(tzinfo=timezone.utc)
 
     # Find overlapping calendar event
-    calendar_event = get_overlapping_calendar_event(uid, started_at, finished_at)
+    calendar_event = await get_overlapping_calendar_event(uid, started_at, finished_at)
 
     if calendar_event is None:
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")

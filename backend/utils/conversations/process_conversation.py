@@ -717,11 +717,11 @@ def process_conversation(
     # Check for overlapping calendar events
     if not discarded and conversation.started_at and conversation.finished_at:
         try:
-            calendar_event = get_overlapping_calendar_event(
+            calendar_event = asyncio.run(get_overlapping_calendar_event(
                 uid,
                 conversation.started_at,
                 conversation.finished_at,
-            )
+            ))
             if calendar_event:
                 conversation.calendar_event = calendar_event
         except Exception as e:
