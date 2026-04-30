@@ -350,7 +350,7 @@ class SharedPreferencesUtil {
 
   set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
 
-  bool get cachedAutoTranslateEnabled => getBool('cachedAutoTranslateEnabled', defaultValue: false);
+  bool get cachedAutoTranslateEnabled => getBool('cachedAutoTranslateEnabled', defaultValue: true);
 
   set cachedAutoTranslateEnabled(bool value) => saveBool('cachedAutoTranslateEnabled', value);
 
