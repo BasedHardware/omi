@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nooto_v2/companion/companion_signals.dart';
 import 'package:nooto_v2/home/cards/card_entrance.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/companion_stream_provider.dart';
+import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// A commitment the assistant heard the user make. Surface grammar — bordered
@@ -22,7 +22,24 @@ final class ActionItemCard extends CompanionCard {
     required this.source,
     required this.capturedAt,
     required this.generatedAt,
+    this.serverId,
   });
+
+  /// Convenience: build a card from a backend [ActionItem]. `cardId` is
+  /// derived from the server id so dedup + persistence keys stay stable
+  /// across launches.
+  factory ActionItemCard.fromItem(ActionItem item, {DateTime? generatedAt}) {
+    return ActionItemCard(
+      cardId: '$_idPrefix${item.id}',
+      serverId: item.id,
+      title: item.description,
+      source: '',
+      capturedAt: item.createdAt ?? DateTime.now(),
+      generatedAt: generatedAt ?? DateTime.now(),
+    );
+  }
+
+  static const String _idPrefix = 'actionItem:';
 
   final String cardId;
   final String title;
@@ -38,6 +55,11 @@ final class ActionItemCard extends CompanionCard {
 
   @override
   final DateTime generatedAt;
+
+  /// Server id for the underlying [ActionItem]. Null for cards rehydrated
+  /// from Hive without a server-id field (legacy demo, pre-PR2b cache rows).
+  /// When set, accepting the card also persists `completed=true` server-side.
+  final String? serverId;
 
   @override
   String get id => cardId;
@@ -57,6 +79,7 @@ final class ActionItemCard extends CompanionCard {
   Map<String, dynamic> toJson() => {
         'kind': kind.code,
         'cardId': cardId,
+        'serverId': serverId,
         'title': title,
         'source': source,
         'capturedAt': capturedAt.toIso8601String(),
@@ -66,6 +89,7 @@ final class ActionItemCard extends CompanionCard {
   factory ActionItemCard.fromJson(Map<String, dynamic> json) {
     return ActionItemCard(
       cardId: json['cardId'] as String,
+      serverId: json['serverId'] as String?,
       title: json['title'] as String? ?? '',
       source: json['source'] as String? ?? '',
       capturedAt: DateTime.parse(json['capturedAt'] as String),
@@ -84,7 +108,15 @@ final class ActionItemCard extends CompanionCard {
       );
       return;
     }
-    if (action == CardAction.accept || action == CardAction.dismiss) {
+    if (action == CardAction.accept) {
+      final id = serverId;
+      if (id != null) {
+        context.read<ActionItemsProvider>().complete(id);
+      }
+      stream.recordAction(this, action);
+      return;
+    }
+    if (action == CardAction.dismiss) {
       stream.recordAction(this, action);
     }
   }
@@ -93,22 +125,15 @@ final class ActionItemCard extends CompanionCard {
   Widget render(BuildContext context) => _ActionItemCardView(card: this);
 }
 
-/// Public generator. Returns a list so a future LLM-backed generator can emit
-/// multiple action items in one pass without restructuring the call site.
-///
-/// Until the backend lands we emit a single fixed demo card so the
-/// surface-card grammar is visible on Home. Stable id (`actionItem:demo:1`)
-/// means dismiss persists across cold starts.
-List<ActionItemCard> actionItemCardsFor(CompanionSignals signals) {
-  return [
-    ActionItemCard(
-      cardId: 'actionItem:demo:1',
-      title: 'Email John about the proposal',
-      source: 'From your morning sync',
-      capturedAt: DateTime.now().subtract(const Duration(minutes: 12)),
-      generatedAt: DateTime.now(),
-    ),
-  ];
+/// Reads the top 3 incomplete commitments from [ActionItemsProvider] and
+/// surfaces them as cards. Returns `[]` when the provider is still loading
+/// or empty — Home shows the welcome card alone in that case rather than a
+/// flicker.
+List<ActionItemCard> actionItemCardsFor(ActionItemsProvider provider) {
+  final now = DateTime.now();
+  return provider.incompleteTop3
+      .map((item) => ActionItemCard.fromItem(item, generatedAt: now))
+      .toList();
 }
 
 class _ActionItemCardView extends StatelessWidget {
