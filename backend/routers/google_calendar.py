@@ -72,7 +72,7 @@ def _event_to_response(event: dict) -> Optional[GoogleCalendarEvent]:
     response_model=List[GoogleCalendarEvent],
     tags=['google_calendar'],
 )
-def list_google_calendar_events(
+async def list_google_calendar_events(
     time_min: Optional[datetime] = Query(None, description="Minimum time for events (ISO format)"),
     time_max: Optional[datetime] = Query(None, description="Maximum time for events (ISO format)"),
     q: Optional[str] = Query(None, description="Search query to filter events"),
@@ -91,7 +91,7 @@ def list_google_calendar_events(
         time_max = time_max.replace(tzinfo=timezone.utc)
 
     try:
-        events = get_google_calendar_events(
+        events = await get_google_calendar_events(
             access_token=access_token,
             time_min=time_min,
             time_max=time_max,
@@ -101,10 +101,10 @@ def list_google_calendar_events(
     except Exception as e:
         error_msg = str(e)
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = refresh_google_token(uid, integration)
+            new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    events = get_google_calendar_events(
+                    events = await get_google_calendar_events(
                         access_token=new_token,
                         time_min=time_min,
                         time_max=time_max,
