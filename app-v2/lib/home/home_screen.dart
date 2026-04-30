@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +8,6 @@ import 'package:nooto_v2/home/home_nav.dart';
 import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/services/chat_service.dart';
-import 'package:nooto_v2/shell/app_bar_kebab_menu.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// The Companion Stream Home — Tab 0 of `ShellScreen`.
@@ -65,7 +63,7 @@ class _HomeBody extends StatelessWidget {
         return Column(
           children: [
             Expanded(
-              child: _CardScroll(cards: stream.cards),
+              child: _CardList(cards: stream.cards),
             ),
             _Composer(
               onTap: () {
@@ -79,53 +77,28 @@ class _HomeBody extends StatelessWidget {
   }
 }
 
-/// CustomScrollView with the iOS Large Title pattern:
-/// the Nooto wordmark sits large at the top of the cards and collapses into
-/// the compact bar as you scroll. CupertinoSliverNavigationBar gives the
-/// authentic cross-fade between large and compact titles plus the iOS 26
-/// Liquid Glass blur material automatically.
-class _CardScroll extends StatelessWidget {
-  const _CardScroll({required this.cards});
+class _CardList extends StatelessWidget {
+  const _CardList({required this.cards});
 
   final List<CompanionCard> cards;
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        CupertinoSliverNavigationBar(
-          backgroundColor: AppColors.backgroundPrimary.withValues(alpha: 0.55),
-          border: null,
-          largeTitle: Text(
-            'Nooto',
-            style: brandEmphasis(
-              fontSize: 34,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          trailing: const AppBarKebabMenu(),
-        ),
-        if (cards.isEmpty)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: _QuietEmpty(),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-              AppStyles.spacingL,
-              AppStyles.spacingS,
-              AppStyles.spacingL,
-              AppStyles.spacingXL,
-            ),
-            sliver: SliverList.separated(
-              itemCount: cards.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppStyles.spacingL),
-              itemBuilder: (context, i) => cards[i].render(context),
-            ),
-          ),
-      ],
+    if (cards.isEmpty) {
+      return const _QuietEmpty();
+    }
+    // Top inset clears the translucent AppBar (kToolbarHeight + status bar).
+    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingS;
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(
+        AppStyles.spacingL,
+        topInset,
+        AppStyles.spacingL,
+        AppStyles.spacingXL,
+      ),
+      itemCount: cards.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppStyles.spacingL),
+      itemBuilder: (context, i) => cards[i].render(context),
     );
   }
 }

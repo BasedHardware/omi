@@ -41,27 +41,27 @@ class _ShellScreenState extends State<ShellScreen> {
       _Tab(label: l.shellTabPlan, icon: FontAwesomeIcons.calendarCheck),
       _Tab(label: l.shellTabApps, icon: FontAwesomeIcons.tableCellsLarge),
     ];
-    // Home runs its own SliverAppBar.large (iOS Large Title pattern) — the
-    // shell drops its compact bar on Home so we don't double-stack.
+    // All tabs share the compact glass AppBar. Home leaves the title slot
+    // empty (the cards carry their own meaning); other tabs show the label.
     final isHome = _index == 0;
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       extendBodyBehindAppBar: true,
-      appBar: isHome
-          ? null
-          : AppBar(
-              backgroundColor: Colors.transparent,
-              flexibleSpace: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                  child: Container(
-                    color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
-                  ),
-                ),
-              ),
-              elevation: 0,
-              titleSpacing: 16,
-              title: Text(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
+        elevation: 0,
+        titleSpacing: 16,
+        title: isHome
+            ? null
+            : Text(
                 tabs[_index].label,
                 style: const TextStyle(
                   fontSize: 18,
@@ -69,8 +69,8 @@ class _ShellScreenState extends State<ShellScreen> {
                   color: AppColors.textPrimary,
                 ),
               ),
-              actions: const [AppBarKebabMenu()],
-            ),
+        actions: const [AppBarKebabMenu()],
+      ),
       body: IndexedStack(
         index: _index,
         children: [
