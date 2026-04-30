@@ -222,7 +222,7 @@ def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
 @router.post(
     "/v1/conversations/{conversation_id}/calendar-event", response_model=CalendarEventLink, tags=['conversations']
 )
-def link_calendar_event(
+async def link_calendar_event(
     conversation_id: str,
     request: LinkCalendarEventRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -244,15 +244,15 @@ def link_calendar_event(
 
     # Fetch the event from Google Calendar
     try:
-        event = get_google_calendar_event(access_token, request.event_id)
+        event = await get_google_calendar_event(access_token, request.event_id)
     except Exception as e:
         error_msg = str(e)
         # Try to refresh token if authentication failed
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = refresh_google_token(uid, integration)
+            new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    event = get_google_calendar_event(new_token, request.event_id)
+                    event = await get_google_calendar_event(new_token, request.event_id)
                 except Exception as retry_error:
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
             else:
@@ -321,14 +321,14 @@ def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_c
     return calendar_event
 
 
-def _add_summary_to_calendar_event_with_token(
+async def _add_summary_to_calendar_event_with_token(
     access_token: str,
     event_id: str,
     conversation_id: str,
 ) -> dict:
     """Helper function to add summary link to calendar event with given token."""
     # Get existing event to preserve current description
-    existing_event = get_google_calendar_event(access_token, event_id)
+    existing_event = await get_google_calendar_event(access_token, event_id)
     current_description = existing_event.get('description', '') or ''
 
     # Build the conversation link
@@ -348,7 +348,7 @@ def _add_summary_to_calendar_event_with_token(
         new_description = conversation_link
 
     # Update the calendar event
-    updated_event = update_google_calendar_event(
+    updated_event = await update_google_calendar_event(
         access_token=access_token,
         event_id=event_id,
         description=new_description,
@@ -361,7 +361,7 @@ def _add_summary_to_calendar_event_with_token(
 
 
 @router.post("/v1/conversations/{conversation_id}/calendar-event/add-summary", tags=['conversations'])
-def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Add conversation summary to the linked calendar event description.
     """
@@ -385,16 +385,16 @@ def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.
         raise HTTPException(status_code=400, detail="No access token found")
 
     try:
-        return _add_summary_to_calendar_event_with_token(access_token, event_id, conversation_id)
+        return await _add_summary_to_calendar_event_with_token(access_token, event_id, conversation_id)
     except Exception as e:
         error_msg = str(e)
 
         # Try to refresh token if authentication failed
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = refresh_google_token(uid, integration)
+            new_token = await refresh_google_token(uid, integration)
             if new_token:
                 try:
-                    return _add_summary_to_calendar_event_with_token(new_token, event_id, conversation_id)
+                    return await _add_summary_to_calendar_event_with_token(new_token, event_id, conversation_id)
                 except Exception as retry_error:
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
 
