@@ -104,14 +104,6 @@ class _CardScroll extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          middle: Text(
-            'Nooto',
-            style: brandEmphasis(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
           trailing: const AppBarKebabMenu(),
         ),
         if (cards.isEmpty)
