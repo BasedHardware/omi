@@ -133,6 +133,11 @@ Use the `/ui-review` skill to check screens for UI inconsistencies. Always follo
 - **UI Guidelines**: `app/lib/utils/ui_guidelines.dart` - Spacing, radius constants
 - **Documentation**: `app/lib/theme/README.md` - Full usage guide
 
+#### Design System (v2)
+- **Source of truth**: `app-v2/DESIGN.md` — Apple HIG-anchored design system with rationales, locked card grammar (voice vs surface), explicit anti-patterns. Read before any visual or UI decision in `app-v2/`.
+- **Tokens**: `app-v2/lib/theme/app_theme.dart` — implementation, mirrors DESIGN.md.
+- **Card grammar**: voice cards (welcome, brief — no chrome) vs surface cards (Today — chromed border). Stacking surface cards is a hard rejection.
+
 #### Apple HIG Compliance (iOS)
 
 | Standard | Value | Requirement |
