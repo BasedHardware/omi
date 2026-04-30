@@ -37,6 +37,7 @@ class TranscriptWidget extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final Function(int segmentIndex)? onEditSegmentText;
+  final Function(TranscriptSegment)? onSegmentLongPress;
 
   const TranscriptWidget({
     super.key,
@@ -58,6 +59,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
     this.onEditSegmentText,
+    this.onSegmentLongPress,
   });
 
   @override
@@ -574,6 +576,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   ? () {
                                       HapticFeedback.mediumImpact();
                                       widget.onEditSegmentText!(segmentIdx);
+                                    }
+                                  : null,
+                              onLongPress: widget.onSegmentLongPress != null
+                                  ? () {
+                                      HapticFeedback.mediumImpact();
+                                      widget.onSegmentLongPress!(data);
                                     }
                                   : null,
                               child: Column(
