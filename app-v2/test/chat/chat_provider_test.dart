@@ -83,6 +83,28 @@ void main() {
     expect(provider.sending, isFalse);
   });
 
+  test('think: lines accumulate as deduped tool events', () async {
+    final mock = MockClient.streaming((req, body) async {
+      return _streamed([
+        'think: Searching memory',
+        'think: Searching memory', // duplicate, must not double
+        'data: Here is what I found.',
+        'think: Reading calendar|app_id:nooto-cal',
+        'data: ' ' Today is busy.',
+        'done: ${base64.encode(utf8.encode("{}"))}',
+      ]);
+    });
+    final provider = ChatProvider(service: ChatService(client: _client(mock)));
+
+    await provider.send('what do you know');
+
+    final assistant = provider.messages[1];
+    expect(assistant.toolEvents, ['Searching memory', 'Reading calendar']);
+    expect(assistant.text, contains('Here is what I found'));
+    expect(assistant.text, contains('Today is busy'));
+    expect(assistant.streaming, isFalse);
+  });
+
   test('error replaces streaming message with friendly fallback', () async {
     final mock = MockClient.streaming((req, body) async {
       return http.StreamedResponse(const Stream<List<int>>.empty(), 500);
