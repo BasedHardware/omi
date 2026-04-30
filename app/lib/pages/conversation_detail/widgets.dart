@@ -1308,3 +1308,77 @@ _getLoadingIndicator() {
     child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
   );
 }
+
+class CalendarEventDetailsSheet extends StatelessWidget {
+  final CalendarEventLink calendarEvent;
+  const CalendarEventDetailsSheet({super.key, required this.calendarEvent});
+
+  @override
+  Widget build(BuildContext context) {
+    final start = calendarEvent.startTime;
+    final end = calendarEvent.endTime;
+    final timeStr = '${_fmt(start)} – ${_fmt(end)}';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(children: [
+            const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(calendarEvent.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.access_time, size: 16, color: Colors.white54),
+            const SizedBox(width: 8),
+            Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ]),
+          if (calendarEvent.attendees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.people_outline, size: 16, color: Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(calendarEvent.attendees.join(', '),
+                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              ),
+            ]),
+          ],
+          if (calendarEvent.htmlLink != null) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse(calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
+              child: const Text('Open in Google Calendar',
+                  style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+}
