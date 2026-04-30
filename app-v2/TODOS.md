@@ -2,23 +2,6 @@
 
 Deferred work captured during planning. Add to a sprint when picking up.
 
-## Register v2 Firebase bundle IDs (one-time, user action)
-
-**What:** Register `com.togodynamics.nootoV2` in the `nooto-dev` Firebase project (iOS + Android), download the platform config files, then run `flutterfire configure --project=nooto-dev` from `app-v2/` to overwrite `lib/firebase_options.dart` with real values. After that, flip `kEnableFirebaseAuth` to `true` in `lib/env_flags.dart`.
-
-**Why:** PR2a ships the auth-gated boot path, the v2 `ApiClient`, and a placeholder `firebase_options.dart` that throws `UnimplementedError` if invoked. Real Firebase init needs the v2 bundle registered in console first — this is the gating step before PR2b/c can run against the real backend.
-
-**Steps:**
-1. Firebase console → `nooto-dev` project → Project settings → Your apps → Add iOS app with bundle `com.togodynamics.nootoV2`. Download `GoogleService-Info.plist` and drop into `app-v2/ios/Runner/`.
-2. Same console → Add Android app with package `com.togodynamics.nootoV2`. Download `google-services.json` and drop into `app-v2/android/app/`.
-3. From `app-v2/` run: `flutterfire configure --project=nooto-dev`. The wizard regenerates `lib/firebase_options.dart` with real platform values.
-4. Edit `lib/env_flags.dart` → `const bool kEnableFirebaseAuth = true;`
-5. `flutter run` and verify Apple/Google sign-in completes against the real `nooto-dev` Firebase project (not the dev fake-auth bypass).
-
-**Context:** Surfaced during `/plan-eng-review` PR2a (2026-04-30). Code path is already wired in `main.dart` and gated by the flag. The v2 auth service (`lib/services/auth_service.dart`) and provider (`lib/providers/auth_provider.dart`) were built earlier with the gate in mind.
-
-**Depends on:** PR2a merged. Required before PR2b/PR2c can hit the v1 backend.
-
 ## Bound `home.actions.v1` retention to 90 days
 
 **What:** On `main()` boot, compact the `home.actions.v1` Hive box by deleting rows whose `ts` is older than 90 days.
