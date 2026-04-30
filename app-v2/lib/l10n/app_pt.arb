@@ -1,0 +1,71 @@
+{
+  "@@locale": "pt",
+  "appName": "Nooto",
+
+  "welcomeBrandLine": "Bem-vindo ao {brand}",
+  "@welcomeBrandLine": {
+    "placeholders": { "brand": { "type": "String" } }
+  },
+  "welcomeTaglinePrefix": "Inteligência pessoal que transforma ",
+  "welcomeTaglineEmphasis": "pensamento em ação.",
+  "welcomeContinueWithApple": "Continuar com Apple",
+  "welcomeContinueWithGoogle": "Continuar com Google",
+  "welcomeWaitingForBrowser": "Aguardando o navegador…",
+  "welcomeAgreeFooter": "Ao continuar você concorda com nossos Termos e Política de Privacidade.",
+
+  "onboardingPromptHintTyped": "Digite sua resposta…",
+  "onboardingPromptHintTap": "Toque em uma opção acima para continuar",
+
+  "onboardingOpenerName": "Oi — como você quer que eu te chame?",
+  "onboardingOpenerLanguage": "Prazer em te conhecer, {name}. Em qual idioma você quer que eu fale?",
+  "@onboardingOpenerLanguage": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "onboardingOpenerMicrophone": "Vou precisar do seu microfone para ouvir o que importa.",
+  "onboardingOpenerNotifications": "Tudo bem se eu te avisar quando algo precisar da sua atenção?",
+  "onboardingOpenerBackground": "Funciono melhor se puder continuar ouvindo em segundo plano.",
+  "onboardingOpenerLocation": "Quer que eu marque onde as coisas acontecem? Opcional — pode pular.",
+  "onboardingOpenerDevice": "Tem um aparelho Nooto com você? Podemos conectar depois — o pareamento chega na próxima fase.",
+  "onboardingOpenerSpeechProfile": "Deixa eu aprender sua voz para te reconhecer no meio de outras.",
+  "onboardingOpenerAcknowledge": "Tudo pronto. Vamos lá.",
+  "onboardingSkipped": "Claro, podemos fazer isso depois.",
+
+  "onboardingChipMoreLanguages": "Mais idiomas…",
+  "onboardingChipSkipForNow": "Pular por agora",
+  "onboardingChipPairLater": "Vou parear depois",
+  "onboardingAckLetsGo": "Vamos lá",
+  "onboardingAckGotIt": "Entendi",
+
+  "onboardingPermissionAllow": "Permitir",
+  "onboardingPermissionPending": "Pendente",
+  "onboardingPermissionGranted": "Permitido",
+  "onboardingPermissionDenied": "Negado",
+  "onboardingPermissionDeniedAction": "Abrir ajustes",
+  "onboardingPermissionLabelMicrophone": "Acesso ao microfone",
+  "onboardingPermissionLabelMicrophoneHelper": "O áudio é processado no seu dispositivo; só a transcrição sai.",
+  "onboardingPermissionLabelNotifications": "Acesso a notificações",
+  "onboardingPermissionLabelNotificationsHelper": "Só avisos úteis e silenciosos — nunca ruído.",
+  "onboardingPermissionLabelBackground": "Atividade em segundo plano",
+  "onboardingPermissionLabelBackgroundHelper": "Permite que o Nooto continue ativo enquanto você usa outros apps.",
+  "onboardingPermissionLabelLocation": "Localização",
+  "onboardingPermissionLabelLocationHelper": "Marca conversas com o local em que aconteceram. Opcional.",
+
+  "onboardingSpeechCardTitle": "Leia isto em voz alta",
+  "onboardingSpeechCardBody": "Quando estiver pronto, segure o botão e leia isto em voz normal por uns cinco segundos.",
+  "onboardingSpeechCardSample": "Oi, estou configurando o Nooto. É assim que minha voz soa numa sala normal.",
+  "onboardingSpeechRecording": "Ouvindo…",
+  "onboardingSpeechCaptured": "Voz capturada ✓",
+  "onboardingSpeechSkip": "Pular por agora",
+
+  "shellTabHome": "Início",
+  "shellTabChat": "Chat",
+  "shellTabLibrary": "Biblioteca",
+  "shellTabPlan": "Plano",
+  "shellTabApps": "Apps",
+
+  "shellComingSoonTitle": "{tab} chega em breve",
+  "@shellComingSoonTitle": {
+    "placeholders": { "tab": { "type": "String" } }
+  },
+  "shellComingSoonBody": "Esta tela chega em uma fase futura. Por enquanto, o Nooto v2 é só o fluxo de boas-vindas e onboarding."
+}
