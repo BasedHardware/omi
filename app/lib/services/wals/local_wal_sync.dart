@@ -444,11 +444,16 @@ class LocalWalSyncImpl implements LocalWalSync {
     await _saveWalsToFile();
   }
 
-  /// Returns the approximate duration (in seconds) of audio frames still in memory
-  /// that haven't been chunked/flushed to disk yet.
+  /// Returns the approximate duration (in seconds) of UNSYNCED audio frames
+  /// still in memory. Frames already delivered via WebSocket are excluded so
+  /// the "Audio Saved Locally" indicator only appears when data is at risk.
   int getInFlightSeconds() {
     if (_framesPerSecond <= 0) return 0;
-    return _frames.length ~/ _framesPerSecond;
+    int unsyncedCount = 0;
+    for (int i = 0; i < _frameSynced.length; i++) {
+      if (!_frameSynced[i]) unsyncedCount++;
+    }
+    return unsyncedCount ~/ _framesPerSecond;
   }
 
   @override
