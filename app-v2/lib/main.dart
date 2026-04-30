@@ -8,8 +8,10 @@ import 'package:nooto_v2/firebase_options.dart';
 import 'package:nooto_v2/home/home_storage.dart';
 import 'package:nooto_v2/mobile_app.dart';
 import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
+import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/providers/auth_provider.dart';
 import 'package:nooto_v2/providers/locale_provider.dart';
+import 'package:nooto_v2/services/api_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,12 +28,16 @@ Future<void> main() async {
   ]);
   final localeProvider = LocaleProvider();
   await localeProvider.hydrate();
+  final apiClient = ApiClient();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthChangeProvider()),
         ChangeNotifierProvider(create: (_) => OnboardingChatProvider()),
         ChangeNotifierProvider.value(value: localeProvider),
+        ChangeNotifierProvider(
+          create: (_) => ActionItemsProvider(client: apiClient),
+        ),
       ],
       child: const MobileApp(),
     ),
