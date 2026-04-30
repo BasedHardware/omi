@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:nooto_v2/home/cards/card_entrance.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_nav.dart';
+import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
@@ -195,17 +196,18 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final visible = card.items.length;
     final total = card.totalIncomplete;
     final dateLabel = MaterialLocalizations.of(context).formatShortDate(card.generatedAt);
-    final subtitle = _buildSubtitle(visible: visible, total: total, dateLabel: dateLabel);
+    final subtitle = _buildSubtitle(l: l, visible: visible, total: total, dateLabel: dateLabel);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Today',
-          style: TextStyle(
+        Text(
+          l.todayCardHeader,
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: AppColors.textPrimary,
@@ -225,13 +227,17 @@ class _Header extends StatelessWidget {
     );
   }
 
-  String? _buildSubtitle({required int visible, required int? total, required String dateLabel}) {
+  String? _buildSubtitle({
+    required AppLocalizations l,
+    required int visible,
+    required int? total,
+    required String dateLabel,
+  }) {
     if (visible == 0) return dateLabel;
     if (total != null && total > visible) {
-      return '$dateLabel · $visible of $total';
+      return '$dateLabel · ${l.todayCardCountPartial(visible, total)}';
     }
-    final unit = visible == 1 ? 'item' : 'items';
-    return '$dateLabel · $visible $unit';
+    return '$dateLabel · ${l.todayCardCountFull(visible)}';
   }
 }
 
@@ -320,6 +326,7 @@ class _SeeAllRow extends StatelessWidget {
     // Brand-blue when enabled — matches the bullet dots and signals this is
     // the gateway to Plan tab. Quieter textTertiary in the disabled empty
     // state where there's nothing to navigate to.
+    final l = AppLocalizations.of(context);
     final color = enabled
         ? AppColors.brandPrimary
         : AppColors.textTertiary.withValues(alpha: 0.5);
@@ -327,7 +334,7 @@ class _SeeAllRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Text(
-          'See all',
+          l.todayCardSeeAll,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -341,7 +348,7 @@ class _SeeAllRow extends StatelessWidget {
     if (!enabled) return row;
     return Semantics(
       button: true,
-      label: 'See all action items, opens Plan tab',
+      label: l.todayCardSeeAllSemantics,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
