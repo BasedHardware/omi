@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nooto_v2/chat/chat_message.dart';
 import 'package:nooto_v2/chat/chat_provider.dart';
 import 'package:nooto_v2/chat/widgets/chat_bubbles.dart';
+import 'package:nooto_v2/home/cards/card_entrance.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// Tab 1: chat with the assistant against `/v2/messages`. v0 is a single
@@ -117,17 +118,19 @@ class _MessageList extends StatelessWidget {
             current.createdAt.difference(prev.createdAt) >= _clusterGap;
         final showAssistantStamp = current.role == ChatRole.assistant &&
             (prev == null || prev.role != ChatRole.assistant || showDivider);
-        if (!showDivider && !showAssistantStamp) {
-          return ChatBubble(message: current);
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (showDivider) _ClusterDivider(time: current.createdAt),
-            if (showAssistantStamp) const _AssistantStamp(),
-            ChatBubble(message: current),
-          ],
-        );
+        final body = (!showDivider && !showAssistantStamp)
+            ? ChatBubble(message: current)
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (showDivider) _ClusterDivider(time: current.createdAt),
+                  if (showAssistantStamp) const _AssistantStamp(),
+                  ChatBubble(message: current),
+                ],
+              );
+        // Keyed by message id so existing bubbles keep their animation state
+        // across list rebuilds — only new messages run the entrance.
+        return CardEntrance(key: ValueKey('entrance:${current.id}'), child: body);
       },
     );
   }
