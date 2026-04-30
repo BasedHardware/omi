@@ -229,7 +229,7 @@ class _Composer extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(
                 horizontal: AppStyles.spacingL,
-                vertical: AppStyles.spacingS,
+                vertical: AppStyles.spacingM,
               ),
               child: TextField(
                 controller: controller,
