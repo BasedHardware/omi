@@ -130,7 +130,7 @@ class _CalendarIntegrationsPageState extends State<CalendarIntegrationsPage> wit
             ),
           );
         }
-        await _loadFromBackend();
+        if (mounted) await _loadFromBackend();
         debugPrint('✓ Calendar integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       } else {
         if (mounted) {

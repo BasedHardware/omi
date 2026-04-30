@@ -84,6 +84,8 @@ def get_overlapping_calendar_event(
     best_match = None
     best_overlap_seconds = 0
 
+    conversation_duration = (conversation_end - conversation_start).total_seconds()
+
     for event in events:
         event_start, event_end = parse_event_times(event)
         if event_start is None or event_end is None:
@@ -93,13 +95,23 @@ def get_overlapping_calendar_event(
         overlap_end = min(event_end, conversation_end)
         overlap_duration = (overlap_end - overlap_start).total_seconds()
 
+        if overlap_duration <= 0:
+            continue
+
         event_duration = (event_end - event_start).total_seconds()
-        overlap_percentage = overlap_duration / event_duration if event_duration > 0 else 0
+        overlap_pct_of_event = overlap_duration / event_duration if event_duration > 0 else 0
+        overlap_pct_of_conversation = overlap_duration / conversation_duration if conversation_duration > 0 else 0
 
+        # Must meet the absolute time threshold AND cover a meaningful portion
+        # of either the event or the conversation — prevents a short recording
+        # from spuriously linking to a multi-hour all-day block.
         meets_time_criteria = overlap_duration >= MIN_OVERLAP_SECONDS
-        meets_percentage_criteria = overlap_percentage >= MIN_OVERLAP_PERCENTAGE and overlap_duration > 0
+        meets_percentage_criteria = (
+            overlap_pct_of_event >= MIN_OVERLAP_PERCENTAGE or
+            overlap_pct_of_conversation >= MIN_OVERLAP_PERCENTAGE
+        )
 
-        if (meets_time_criteria or meets_percentage_criteria) and overlap_duration > best_overlap_seconds:
+        if meets_time_criteria and meets_percentage_criteria and overlap_duration > best_overlap_seconds:
             best_overlap_seconds = overlap_duration
             best_match = event
 
