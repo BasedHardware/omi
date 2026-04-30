@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/home/home_screen.dart';
+import 'package:nooto_v2/home/home_storage.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/onboarding/onboarding_chat_provider.dart';
 import 'package:nooto_v2/providers/auth_provider.dart';
@@ -94,6 +95,8 @@ class _ShellScreenState extends State<ShellScreen> {
       ),
     );
     if (!mounted || ok != true) return;
+    await HomeBoxes.clearAll();
+    if (!mounted) return;
     await context.read<OnboardingChatProvider>().reset();
   }
 }
