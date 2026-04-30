@@ -10897,5 +10897,13 @@
     "stopTranslation": "Stop Translation",
     "@stopTranslation": {
         "description": "Button label to stop translation"
+    },
+    "pauseTranslation": "Pause Translation",
+    "@pauseTranslation": {
+        "description": "Button label to pause translation when auto-translate is enabled in settings"
+    },
+    "resumeTranslation": "Resume Translation",
+    "@resumeTranslation": {
+        "description": "Button label to resume translation when auto-translate is enabled in settings"
     }
 }
