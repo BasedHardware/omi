@@ -152,10 +152,11 @@ class CompanionStreamProvider extends ChangeNotifier {
   }
 
   static const String _briefPrompt =
-      "Good morning. Brief me on what I committed to yesterday and what I "
-      "should focus on today. Keep it to 2-3 short paragraphs in first "
-      "person, like a chief of staff — direct, no corporate phrasing, no "
-      "headers, no bullet points.";
+      "Brief me in at most 60 words: the one most important thing from "
+      "yesterday I should pick up today, and the single most important new "
+      "focus. First-person chief-of-staff voice — direct, no greeting, no "
+      "headers, no bullets, no preamble. If yesterday was empty, say so in "
+      "one short sentence and name today's top priority.";
 
   String _greetingFor(String? name) {
     final hour = DateTime.now().hour;
