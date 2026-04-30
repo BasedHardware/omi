@@ -37,7 +37,7 @@ class UserProvider with ChangeNotifier {
 
   // Transcription preferences
   bool _singleLanguageMode = false;
-  bool _autoTranslateEnabled = false;
+  bool _autoTranslateEnabled = true;
   List<String> _transcriptionVocabulary = [];
 
   // Loading states for transcription settings
@@ -168,7 +168,7 @@ class UserProvider with ChangeNotifier {
       final prefs = await getTranscriptionPreferences();
       if (prefs != null) {
         _singleLanguageMode = prefs['single_language_mode'] ?? false;
-        _autoTranslateEnabled = prefs['auto_translate_enabled'] ?? false;
+        _autoTranslateEnabled = prefs['auto_translate_enabled'] ?? true;
         _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
         _syncToCache();
         notifyListeners();
