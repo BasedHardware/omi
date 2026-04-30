@@ -113,9 +113,30 @@ class _MorningBriefView extends StatelessWidget {
                 height: 1.45,
               ),
             ),
+            const SizedBox(height: AppStyles.spacingS),
+            Text(
+              _synthesizedAgo(card.generatedAt),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textTertiary,
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  /// Closes the "is this fresh?" loop. Brief is cached for 24h, so without
+  /// this label a stale brief reads as live.
+  String _synthesizedAgo(DateTime when) {
+    final delta = DateTime.now().difference(when);
+    if (delta.inMinutes < 2) return 'synthesized just now';
+    if (delta.inMinutes < 60) return 'synthesized ${delta.inMinutes}m ago';
+    if (delta.inHours < 6) return 'synthesized ${delta.inHours}h ago';
+    final hour = when.hour;
+    if (hour < 11) return 'synthesized this morning';
+    if (hour < 17) return 'synthesized this afternoon';
+    return 'synthesized this evening';
   }
 }
