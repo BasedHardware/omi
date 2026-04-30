@@ -89,8 +89,18 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await for (final chunk in _service.streamChat(trimmed)) {
-        assistant = assistant.copyWith(text: assistant.text + chunk);
+      await for (final event in _service.streamChat(trimmed)) {
+        if (event is ChatStreamText) {
+          assistant = assistant.copyWith(text: assistant.text + event.text);
+        } else if (event is ChatStreamToolStart) {
+          // Dedupe consecutive identical tool labels — the agent can re-emit
+          // the same one across iterations (e.g. multi-step search).
+          final events = List<String>.from(assistant.toolEvents);
+          if (events.isEmpty || events.last != event.label) {
+            events.add(event.label);
+            assistant = assistant.copyWith(toolEvents: events);
+          }
+        }
         final idx = _messages.indexWhere((m) => m.id == assistantId);
         if (idx != -1) _messages[idx] = assistant;
         notifyListeners();
