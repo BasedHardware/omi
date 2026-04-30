@@ -41,7 +41,7 @@ class _UserBubble extends StatelessWidget {
               topLeft: Radius.circular(AppStyles.radiusLarge),
               topRight: Radius.circular(AppStyles.radiusLarge),
               bottomLeft: Radius.circular(AppStyles.radiusLarge),
-              bottomRight: Radius.circular(AppStyles.radiusSmall),
+              bottomRight: Radius.circular(AppStyles.radiusMedium),
             ),
           ),
           child: Text(
@@ -85,7 +85,7 @@ class _AssistantBubble extends StatelessWidget {
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(AppStyles.radiusLarge),
               topRight: Radius.circular(AppStyles.radiusLarge),
-              bottomLeft: Radius.circular(AppStyles.radiusSmall),
+              bottomLeft: Radius.circular(AppStyles.radiusMedium),
               bottomRight: Radius.circular(AppStyles.radiusLarge),
             ),
             border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
