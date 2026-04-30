@@ -214,20 +214,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 GestureDetector(
                   onTap: () => provider.toggleTranslation(),
                   child: Container(
-                    width: 36,
-                    height: 36,
-                    margin: const EdgeInsets.only(right: 12),
+                    width: 38,
+                    height: 38,
+                    margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.transparent,
+                      color: provider.translationEnabled ? const Color(0xFF4A90D9) : const Color(0xFF2A2A2E),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: provider.translationEnabled ? const Color(0xFF4A90D9) : Colors.grey.shade600,
-                        width: 1.5,
-                      ),
                     ),
                     child: Icon(
                       Icons.translate,
-                      color: provider.translationEnabled ? Colors.white : Colors.grey.shade400,
+                      color: provider.translationEnabled ? Colors.white : Colors.grey.shade500,
                       size: 20,
                     ),
                   ),
