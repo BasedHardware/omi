@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nooto_v2/chat/chat_message.dart';
 import 'package:nooto_v2/chat/chat_provider.dart';
 import 'package:nooto_v2/chat/widgets/chat_bubbles.dart';
 import 'package:nooto_v2/home/cards/card_entrance.dart';
@@ -116,43 +115,19 @@ class _MessageList extends StatelessWidget {
         final prev = originalIdx > 0 ? messages[originalIdx - 1] : null;
         final showDivider = prev == null ||
             current.createdAt.difference(prev.createdAt) >= _clusterGap;
-        final showAssistantStamp = current.role == ChatRole.assistant &&
-            (prev == null || prev.role != ChatRole.assistant || showDivider);
-        final body = (!showDivider && !showAssistantStamp)
-            ? ChatBubble(message: current)
-            : Column(
+        final body = showDivider
+            ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (showDivider) _ClusterDivider(time: current.createdAt),
-                  if (showAssistantStamp) const _AssistantStamp(),
+                  _ClusterDivider(time: current.createdAt),
                   ChatBubble(message: current),
                 ],
-              );
+              )
+            : ChatBubble(message: current);
         // Keyed by message id so existing bubbles keep their animation state
         // across list rebuilds — only new messages run the entrance.
         return CardEntrance(key: ValueKey('entrance:${current.id}'), child: body);
       },
-    );
-  }
-}
-
-/// Quiet brand stamp above the first assistant bubble in a turn. Mirrors how
-/// Messages prints the sender name in group threads — identifies the speaker
-/// without competing with the content.
-class _AssistantStamp extends StatelessWidget {
-  const _AssistantStamp();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: AppStyles.spacingS, bottom: 2),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          'Nooto',
-          style: brandSerif(fontSize: 13, color: AppColors.textTertiary),
-        ),
-      ),
     );
   }
 }
