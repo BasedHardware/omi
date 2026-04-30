@@ -12,6 +12,7 @@ import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/providers/auth_provider.dart';
 import 'package:nooto_v2/providers/locale_provider.dart';
 import 'package:nooto_v2/services/api_client.dart';
+import 'package:nooto_v2/services/chat_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +30,7 @@ Future<void> main() async {
   final localeProvider = LocaleProvider();
   await localeProvider.hydrate();
   final apiClient = ApiClient();
+  final chatService = ChatService(client: apiClient);
   runApp(
     MultiProvider(
       providers: [
@@ -38,6 +40,7 @@ Future<void> main() async {
         ChangeNotifierProvider(
           create: (_) => ActionItemsProvider(client: apiClient),
         ),
+        Provider<ChatService>.value(value: chatService),
       ],
       child: const MobileApp(),
     ),
