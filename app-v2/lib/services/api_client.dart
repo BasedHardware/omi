@@ -59,6 +59,21 @@ class ApiClient {
     );
   }
 
+  Future<http.Response> patch(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+  }) async {
+    final uri = _resolve(path);
+    final encoded = _encodeBody(body);
+    return _withAuthRetry(
+      headers: headers,
+      timeout: writeTimeout,
+      run: (hdrs) =>
+          _http.patch(uri, headers: hdrs, body: encoded).timeout(writeTimeout),
+    );
+  }
+
   /// Streams the response body byte-chunks. Caller decodes (e.g. SSE parse for
   /// the morning brief). On 401 or 5xx this throws `http.ClientException`
   /// without auto-retry — streaming consumers own retry semantics because
