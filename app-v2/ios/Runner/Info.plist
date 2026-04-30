@@ -4,6 +4,21 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>GIDClientID</key>
+	<string>1060764816205-i0hf8fsqc7rqebvah1eefnvgdrh8kcrb.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>google-signin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1060764816205-i0hf8fsqc7rqebvah1eefnvgdrh8kcrb</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Nooto needs your microphone to capture a short voice sample during onboarding so it can recognize you later.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
