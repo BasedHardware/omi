@@ -633,15 +633,15 @@ class TestPusherHeaderDemux:
         assert len(private_cloud_queue[0]['data']) == 500
         assert len(private_cloud_sync_buffer) == 0
 
-    def test_flaw_header_102_memory_id_updates_conversation_id(self):
-        """FLAW TEST: memory_id in transcript should update current_conversation_id."""
+    def test_header_102_memory_id_does_not_update_conversation_id(self):
+        """Inline logic test: verifies current_conversation_id is not mutated."""
         current_conversation_id = 'old-conv'
         payload = {'segments': [], 'memory_id': 'new-conv-from-memory'}
         res = payload
         memory_id = res.get('memory_id')
-        if memory_id:
-            current_conversation_id = memory_id
-        assert current_conversation_id == 'new-conv-from-memory'
+        conversation_or_memory_id = memory_id or current_conversation_id
+        assert conversation_or_memory_id == 'new-conv-from-memory'
+        assert current_conversation_id == 'old-conv'
 
 
 # ===================================================================
