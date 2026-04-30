@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
+import 'package:nooto_v2/home/cards/card_entrance.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/companion_stream_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
@@ -70,100 +71,73 @@ WelcomeCard? welcomeCardFor(CompanionSignals signals) {
   );
 }
 
-class _WelcomeCardView extends StatefulWidget {
+class _WelcomeCardView extends StatelessWidget {
   const _WelcomeCardView({required this.card});
 
   final WelcomeCard card;
 
   @override
-  State<_WelcomeCardView> createState() => _WelcomeCardViewState();
-}
-
-class _WelcomeCardViewState extends State<_WelcomeCardView>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 180),
-  )..forward();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    final slide = Tween<Offset>(
-      begin: const Offset(0, 0.04),
-      end: Offset.zero,
-    ).animate(fade);
-    final name = widget.card.preferredName.trim();
+    final name = card.preferredName.trim();
     final greeting = name.isEmpty ? 'Welcome.' : 'Welcome, $name.';
 
-    return FadeTransition(
-      opacity: fade,
-      child: SlideTransition(
-        position: slide,
-        child: Semantics(
-          label: '$greeting I will start by listening for the things you say '
-              "you'll do. When you commit to something, it'll show up here so "
-              "you don't have to remember it twice.",
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppStyles.spacingL,
-              vertical: AppStyles.spacingM,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  greeting,
-                  style: brandSerif(
-                    fontSize: 22,
-                    color: AppColors.textPrimary,
-                    height: 1.25,
-                  ),
+    return CardEntrance(
+      child: Semantics(
+        label: '$greeting I will start by listening for the things you say '
+            "you'll do. When you commit to something, it'll show up here so "
+            "you don't have to remember it twice.",
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppStyles.spacingL,
+            vertical: AppStyles.spacingM,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                greeting,
+                style: brandSerif(
+                  fontSize: 22,
+                  color: AppColors.textPrimary,
+                  height: 1.25,
                 ),
-                const SizedBox(height: AppStyles.spacingM),
-                const Text(
-                  "I'll start by listening for the things you say you'll do. "
-                  "When you commit to something, it'll show up here — so you "
-                  "don't have to remember it twice.",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
+              ),
+              const SizedBox(height: AppStyles.spacingM),
+              const Text(
+                "I'll start by listening for the things you say you'll do. "
+                "When you commit to something, it'll show up here — so you "
+                "don't have to remember it twice.",
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
                 ),
-                const SizedBox(height: AppStyles.spacingM),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () =>
-                        widget.card.onAction(context, CardAction.dismiss),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brandPrimary,
-                      minimumSize: const Size(
-                        AppStyles.touchTargetMinimum,
-                        AppStyles.touchTargetMinimum,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppStyles.spacingL,
-                      ),
+              ),
+              const SizedBox(height: AppStyles.spacingM),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => card.onAction(context, CardAction.dismiss),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brandPrimary,
+                    minimumSize: const Size(
+                      AppStyles.touchTargetMinimum,
+                      AppStyles.touchTargetMinimum,
                     ),
-                    child: const Text(
-                      'Got it',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppStyles.spacingL,
+                    ),
+                  ),
+                  child: const Text(
+                    'Got it',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
