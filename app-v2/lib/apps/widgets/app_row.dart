@@ -55,14 +55,18 @@ class AppRow extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: AppStyles.spacingS),
             if (app.enabled)
-              const Padding(
-                padding: EdgeInsets.only(left: AppStyles.spacingS),
-                child: Icon(
-                  Icons.check_circle_rounded,
-                  size: 18,
-                  color: AppColors.brandPrimary,
-                ),
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 18,
+                color: AppColors.brandPrimary,
+              )
+            else
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: AppColors.textTertiary,
               ),
           ],
         ),
