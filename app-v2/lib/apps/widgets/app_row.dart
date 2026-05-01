@@ -6,9 +6,15 @@ import 'package:nooto_v2/theme/app_theme.dart';
 /// Single app row in the Apps screen — square thumbnail, name, one-line
 /// description. No card chrome around it; the row IS the surface.
 class AppRow extends StatelessWidget {
-  const AppRow({super.key, required this.app, this.onTap});
+  const AppRow({
+    super.key,
+    required this.app,
+    required this.installed,
+    this.onTap,
+  });
 
   final NooApp app;
+  final bool installed;
   final VoidCallback? onTap;
 
   @override
@@ -56,7 +62,7 @@ class AppRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppStyles.spacingS),
-            if (app.enabled)
+            if (installed)
               const Icon(
                 Icons.check_circle_rounded,
                 size: 18,

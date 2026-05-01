@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nooto_v2/apps/app_detail_screen.dart';
 import 'package:nooto_v2/apps/app_model.dart';
 import 'package:nooto_v2/apps/apps_provider.dart';
 import 'package:nooto_v2/apps/widgets/app_row.dart';
@@ -59,6 +60,7 @@ class _GroupSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final apps = context.watch<AppsProvider>();
     return Padding(
       padding: const EdgeInsets.only(bottom: AppStyles.spacingXL),
       child: Column(
@@ -77,7 +79,16 @@ class _GroupSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppStyles.spacingS),
-          for (final app in group.apps) AppRow(app: app),
+          for (final app in group.apps)
+            AppRow(
+              app: app,
+              installed: apps.isEnabled(app.id),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => AppDetailScreen(app: app)),
+                );
+              },
+            ),
         ],
       ),
     );
