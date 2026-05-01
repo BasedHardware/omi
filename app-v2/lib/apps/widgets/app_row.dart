@@ -79,21 +79,23 @@ class _Thumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final placeholder = _initials(name);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: url.isEmpty
-            ? _Placeholder(initials: placeholder)
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (ctx, err, stack) => _Placeholder(initials: placeholder),
-                loadingBuilder: (ctx, child, progress) =>
-                    progress == null ? child : _Placeholder(initials: placeholder),
-              ),
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
+      clipBehavior: Clip.antiAlias,
+      child: url.isEmpty
+          ? _Placeholder(initials: placeholder)
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (ctx, err, stack) => _Placeholder(initials: placeholder),
+              loadingBuilder: (ctx, child, progress) =>
+                  progress == null ? child : _Placeholder(initials: placeholder),
+            ),
     );
   }
 
