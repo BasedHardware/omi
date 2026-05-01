@@ -16,7 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/utils/logger.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/utils/logger.dart';
 
 class AuthService {
@@ -25,7 +25,15 @@ class AuthService {
 
   AuthService._internal();
 
-  bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
+  bool get isDebugAuthBypassActive =>
+      kDebugMode &&
+      F.env == Environment.dev &&
+      Env.allowDebugAuthBypass &&
+      SharedPreferencesUtil().debugAuthBypassActive;
+
+  bool isSignedIn() =>
+      FirebaseAuth.instance.currentUser != null &&
+      (!FirebaseAuth.instance.currentUser!.isAnonymous || isDebugAuthBypassActive);
 
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
@@ -160,6 +168,7 @@ class AuthService {
   void _clearCachedAuth() {
     SharedPreferencesUtil().authToken = '';
     SharedPreferencesUtil().tokenExpirationTime = 0;
+    SharedPreferencesUtil().debugAuthBypassActive = false;
   }
 
   Future<String?> getIdToken() async {

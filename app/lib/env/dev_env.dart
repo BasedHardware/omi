@@ -57,6 +57,10 @@ final class DevEnv implements EnvFields {
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
 
   @override
+  @EnviedField(varName: 'ALLOW_DEBUG_AUTH_BYPASS', obfuscate: false, defaultValue: false)
+  final bool? allowDebugAuthBypass = _DevEnv.allowDebugAuthBypass;
+
+  @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
   final String? stagingApiUrl = _DevEnv.stagingApiUrl;
 }

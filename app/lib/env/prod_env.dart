@@ -57,6 +57,10 @@ final class ProdEnv implements EnvFields {
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
 
   @override
+  @EnviedField(varName: 'ALLOW_DEBUG_AUTH_BYPASS', obfuscate: false, defaultValue: false)
+  final bool? allowDebugAuthBypass = _ProdEnv.allowDebugAuthBypass;
+
+  @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
   final String? stagingApiUrl = _ProdEnv.stagingApiUrl;
 }

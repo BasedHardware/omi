@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -76,8 +77,10 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
-    return _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+    return AuthService.instance.isSignedIn();
   }
+
+  bool get canUseDebugAuthBypass => kDebugMode && F.env == Environment.dev && Env.allowDebugAuthBypass;
 
   void setLoading(bool value) {
     _loading = value;
@@ -140,6 +143,47 @@ class AuthenticationProvider extends BaseProvider {
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
       }
+      setLoadingState(false);
+    }
+  }
+
+  Future<void> onDebugAuthBypass(Function() onSignIn) async {
+    if (!canUseDebugAuthBypass || loading) return;
+
+    setLoadingState(true);
+    try {
+      if (_auth.currentUser == null) {
+        await _auth.signInAnonymously();
+      } else if (!_auth.currentUser!.isAnonymous) {
+        await _auth.signOut();
+        await _auth.signInAnonymously();
+      }
+
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) {
+        throw StateError('Firebase anonymous sign-in did not return a user.');
+      }
+
+      SharedPreferencesUtil().debugAuthBypassActive = true;
+      SharedPreferencesUtil().uid = firebaseUser.uid;
+      SharedPreferencesUtil().email = firebaseUser.email ?? 'debug-auth-bypass@omi.local';
+      final displayNameParts = firebaseUser.displayName?.split(' ') ?? const <String>[];
+      SharedPreferencesUtil().givenName =
+          displayNameParts.isNotEmpty && displayNameParts.first.isNotEmpty ? displayNameParts.first : 'Debug';
+      SharedPreferencesUtil().familyName = 'Tester';
+      SharedPreferencesUtil().aiConsentGiven = true;
+      SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().foundOmiSource = 'debug_auth_bypass';
+      await AuthService.instance.getIdToken();
+
+      user = firebaseUser;
+      notifyListeners();
+      onSignIn();
+    } catch (e, stackTrace) {
+      Logger.debug('Debug auth bypass failed: $e');
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+      AppSnackbar.showSnackbarError('Debug sign-in failed. Anonymous Firebase auth may be disabled.');
+    } finally {
       setLoadingState(false);
     }
   }
