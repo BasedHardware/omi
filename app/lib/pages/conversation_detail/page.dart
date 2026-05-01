@@ -819,7 +819,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copyConversationId,
-                                iconWidget: FaIcon(FontAwesomeIcons.fingerprint, size: 16),
+                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
