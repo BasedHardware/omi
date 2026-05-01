@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nooto_v2/apps/apps_provider.dart';
 import 'package:nooto_v2/chat/chat_provider.dart';
 import 'package:nooto_v2/chat/chat_storage.dart';
 import 'package:nooto_v2/env_flags.dart';
@@ -42,6 +43,9 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: localeProvider),
         ChangeNotifierProvider(
           create: (_) => ActionItemsProvider(client: apiClient),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => AppsProvider(client: apiClient),
         ),
         Provider<ChatService>.value(value: chatService),
         ChangeNotifierProvider(

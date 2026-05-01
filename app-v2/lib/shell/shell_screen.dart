@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:nooto_v2/apps/apps_screen.dart';
 import 'package:nooto_v2/chat/chat_screen.dart';
 import 'package:nooto_v2/home/home_screen.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
@@ -90,6 +91,8 @@ class _ShellScreenState extends State<ShellScreen> {
                 key: ValueKey('chat-$_autoFocusChat'),
                 autoFocus: _autoFocusChat && _index == 1,
               )
+            else if (i == 4)
+              const AppsScreen()
             else
               ComingSoonStub(tabLabel: tabs[i].label, icon: tabs[i].icon),
         ],
