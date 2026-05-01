@@ -60,7 +60,7 @@ jobs:
           echo "github.sha=${GITHUB_SHA}"
           git log -1 --oneline
           test -f .github/workflows/android_test_apk.yml
-          if grep -n "yes | sdkmanager --licenses" .github/workflows/android_test_apk.yml; then
+          if grep -nE '^[[:space:]]*yes[[:space:]]*\|[[:space:]]*sdkmanager --licenses' .github/workflows/android_test_apk.yml; then
             echo "::error::Stale Android Test APK workflow still contains the sdkmanager license pipe."
             exit 1
           fi
