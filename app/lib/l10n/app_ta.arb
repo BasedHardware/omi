@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "சாரம் நகலெடுக்கவும்",
+  "copyConversationId": "உரையாடல் ID நகலெடு",
+  "conversationIdCopied": "உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

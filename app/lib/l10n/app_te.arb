@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "సారాంశాన్ని కాపీ చేయండి",
+  "copyConversationId": "సంభాషణ ID కాపీ చేయండి",
+  "conversationIdCopied": "సంభాషణ ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

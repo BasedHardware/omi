@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "Копирај резиме",
+  "copyConversationId": "Копирај ID на разговорот",
+  "conversationIdCopied": "ID на разговорот е копиран во клипборд",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

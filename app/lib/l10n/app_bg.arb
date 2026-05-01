@@ -18,6 +18,8 @@
   "clear": "Изчисти",
   "copyTranscript": "Копирай стенограма",
   "copySummary": "Копирай обобщение",
+  "copyConversationId": "Копиране на ID на разговора",
+  "conversationIdCopied": "ID на разговора е копирано в клипборда",
   "testPrompt": "Тествай подсказка",
   "reprocessConversation": "Преработи разговор",
   "deleteConversation": "Изтриване на разговор",

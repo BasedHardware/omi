@@ -18,6 +18,8 @@
   "clear": "Törlés",
   "copyTranscript": "Átirat másolása",
   "copySummary": "Összefoglaló másolása",
+  "copyConversationId": "Társalgás azonosítójának másolása",
+  "conversationIdCopied": "A társalgás azonosítója vágólapra másolva",
   "testPrompt": "Prompt tesztelése",
   "reprocessConversation": "Beszélgetés újrafeldolgozása",
   "deleteConversation": "Beszélgetés törlése",

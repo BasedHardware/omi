@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "সারসংক্ষেপ কপি করুন",
+  "copyConversationId": "কথোপকথন আইডি কপি করুন",
+  "conversationIdCopied": "কথোপকথন আইডি ক্লিপবোর্ডে কপি হয়েছে",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

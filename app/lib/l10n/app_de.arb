@@ -18,6 +18,8 @@
   "clear": "Löschen",
   "copyTranscript": "Transkript kopieren",
   "copySummary": "Zusammenfassung kopieren",
+  "copyConversationId": "Konversations-ID kopieren",
+  "conversationIdCopied": "Konversations-ID in Zwischenablage kopiert",
   "testPrompt": "Prompt testen",
   "reprocessConversation": "Unterhaltung neu verarbeiten",
   "deleteConversation": "Gespräch löschen",

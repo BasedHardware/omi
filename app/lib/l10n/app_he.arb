@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "העתק סיכום",
+  "copyConversationId": "העתק מזהה שיחה",
+  "conversationIdCopied": "מזהה השיחה הועתק ללוח",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

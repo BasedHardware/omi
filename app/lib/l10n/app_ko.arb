@@ -18,6 +18,8 @@
   "clear": "지우기",
   "copyTranscript": "스크립트 복사",
   "copySummary": "요약 복사",
+  "copyConversationId": "대화 ID 복사",
+  "conversationIdCopied": "대화 ID가 클립보드에 복사되었습니다",
   "testPrompt": "프롬프트 테스트",
   "reprocessConversation": "대화 재처리",
   "deleteConversation": "대화 삭제",

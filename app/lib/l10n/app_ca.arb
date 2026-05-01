@@ -18,6 +18,8 @@
   "clear": "Neteja",
   "copyTranscript": "Copiar transcripció",
   "copySummary": "Copiar resum",
+  "copyConversationId": "Copia l'ID de la conversa",
+  "conversationIdCopied": "ID de la conversa copiat al porta-retalls",
   "testPrompt": "Provar indicació",
   "reprocessConversation": "Reprocessar conversa",
   "deleteConversation": "Suprimir conversa",

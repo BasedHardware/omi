@@ -18,6 +18,8 @@
   "clear": "清除",
   "copyTranscript": "复制文字记录",
   "copySummary": "复制摘要",
+  "copyConversationId": "复制对话 ID",
+  "conversationIdCopied": "对话 ID 已复制到剪贴板",
   "testPrompt": "测试提示词",
   "reprocessConversation": "重新处理对话",
   "deleteConversation": "删除对话",

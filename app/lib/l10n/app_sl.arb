@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "Kopiraj povzetek",
+  "copyConversationId": "Kopiraj ID pogovora",
+  "conversationIdCopied": "ID pogovora je bil kopiran v odložišče",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

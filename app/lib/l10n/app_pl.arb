@@ -18,6 +18,8 @@
   "clear": "Wyczyść",
   "copyTranscript": "Kopiuj transkrypcję",
   "copySummary": "Kopiuj podsumowanie",
+  "copyConversationId": "Kopiuj ID rozmowy",
+  "conversationIdCopied": "ID rozmowy skopiowane do schowka",
   "testPrompt": "Testuj prompt",
   "reprocessConversation": "Przetwórz ponownie rozmowę",
   "deleteConversation": "Usuń rozmowę",

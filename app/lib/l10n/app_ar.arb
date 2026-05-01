@@ -18,6 +18,8 @@
   "clear": "مسح",
   "copyTranscript": "نسخ النص",
   "copySummary": "نسخ الملخص",
+  "copyConversationId": "نسخ معرّف المحادثة",
+  "conversationIdCopied": "تم نسخ معرّف المحادثة إلى الحافظة",
   "testPrompt": "اختبار الأمر",
   "reprocessConversation": "إعادة معالجة المحادثة",
   "deleteConversation": "حذف المحادثة",

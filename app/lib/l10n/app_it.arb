@@ -18,6 +18,8 @@
   "clear": "Cancella",
   "copyTranscript": "Copia trascrizione",
   "copySummary": "Copia riepilogo",
+  "copyConversationId": "Copia ID conversazione",
+  "conversationIdCopied": "ID conversazione copiato negli appunti",
   "testPrompt": "Prova Prompt",
   "reprocessConversation": "Rielabora Conversazione",
   "deleteConversation": "Elimina conversazione",

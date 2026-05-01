@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "خلاصہ کاپی کریں",
+  "copyConversationId": "گفتگو کی ID کاپی کریں",
+  "conversationIdCopied": "گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

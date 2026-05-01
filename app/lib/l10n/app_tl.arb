@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "Kopyahin ang Buod",
+  "copyConversationId": "Kopyahin ang ID ng usapan",
+  "conversationIdCopied": "Nakopya na ang ID ng usapan sa clipboard",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

@@ -18,6 +18,8 @@
   "clear": "Xóa sạch",
   "copyTranscript": "Sao chép bản ghi",
   "copySummary": "Sao chép tóm tắt",
+  "copyConversationId": "Sao chép ID cuộc trò chuyện",
+  "conversationIdCopied": "Đã sao chép ID cuộc trò chuyện vào clipboard",
   "testPrompt": "Thử nghiệm",
   "reprocessConversation": "Xử lý lại cuộc trò chuyện",
   "deleteConversation": "Xóa cuộc trò chuyện",

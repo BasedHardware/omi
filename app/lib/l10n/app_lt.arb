@@ -533,6 +533,8 @@
   "copyKey": "Kopijuoti raktą",
   "copyLink": "Kopijuoti nuorodą",
   "copySummary": "Kopijuoti santrauką",
+  "copyConversationId": "Kopijuoti pokalbio ID",
+  "conversationIdCopied": "Pokalbio ID nukopijuotas į mainų sritį",
   "copyToClipboard": "Kopijuoti į iškarpinę",
   "copyTranscript": "Kopijuoti transkripciją",
   "copyUrl": "Kopijuoti URL",

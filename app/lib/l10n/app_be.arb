@@ -70,6 +70,8 @@
     "description": "Option to copy transcript to clipboard"
   },
   "copySummary": "Скапіяваць рэзюмэ",
+  "copyConversationId": "Скапіраваць ID размовы",
+  "conversationIdCopied": "ID размовы скапіраваны ў буфер абмену",
   "@copySummary": {
     "description": "Option to copy summary to clipboard"
   },

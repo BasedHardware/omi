@@ -18,6 +18,8 @@
   "clear": "Vymazat",
   "copyTranscript": "Kopírovat přepis",
   "copySummary": "Kopírovat shrnutí",
+  "copyConversationId": "Kopírovat ID konverzace",
+  "conversationIdCopied": "ID konverzace zkopírováno do schránky",
   "testPrompt": "Testovat výzvu",
   "reprocessConversation": "Znovu zpracovat konverzaci",
   "deleteConversation": "Smazat konverzaci",
