@@ -64,6 +64,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get copySummary => 'Kopijuoti santrauką';
 
   @override
+  String get copyConversationId => 'Kopijuoti pokalbio ID';
+
+  @override
+  String get conversationIdCopied => 'Pokalbio ID nukopijuotas į mainų sritį';
+
+  @override
   String get testPrompt => 'Testuoti užklausą';
 
   @override

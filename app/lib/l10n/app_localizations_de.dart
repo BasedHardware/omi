@@ -64,6 +64,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get copySummary => 'Zusammenfassung kopieren';
 
   @override
+  String get copyConversationId => 'Konversations-ID kopieren';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID in Zwischenablage kopiert';
+
+  @override
   String get testPrompt => 'Prompt testen';
 
   @override

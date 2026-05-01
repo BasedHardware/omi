@@ -64,6 +64,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get copySummary => 'சாரம் நகலெடுக்கவும்';
 
   @override
+  String get copyConversationId => 'உரையாடல் ID நகலெடு';
+
+  @override
+  String get conversationIdCopied => 'உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது';
+
+  @override
   String get testPrompt => 'தேர்வு கேட்டுகோள்';
 
   @override

@@ -297,6 +297,18 @@ abstract class AppLocalizations {
   /// **'Copy Summary'**
   String get copySummary;
 
+  /// Menu item to copy conversation ID to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Conversation ID'**
+  String get copyConversationId;
+
+  /// Snackbar message when conversation ID is copied
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation ID copied to clipboard'**
+  String get conversationIdCopied;
+
   /// Menu item for testing prompts
   ///
   /// In en, this message translates to:

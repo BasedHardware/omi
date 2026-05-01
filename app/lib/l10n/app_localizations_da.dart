@@ -64,6 +64,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get copySummary => 'Kopier opsummering';
 
   @override
+  String get copyConversationId => 'Kopiér samtale-ID';
+
+  @override
+  String get conversationIdCopied => 'Samtale-ID kopieret til udklipsholder';
+
+  @override
   String get testPrompt => 'Test prompt';
 
   @override

@@ -64,6 +64,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get copySummary => 'העתק סיכום';
 
   @override
+  String get copyConversationId => 'העתק מזהה שיחה';
+
+  @override
+  String get conversationIdCopied => 'מזהה השיחה הועתק ללוח';
+
+  @override
   String get testPrompt => 'בדוק הנושא';
 
   @override

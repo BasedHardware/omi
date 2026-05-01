@@ -64,6 +64,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get copySummary => 'คัดลอกสรุป';
 
   @override
+  String get copyConversationId => 'คัดลอก ID การสนทนา';
+
+  @override
+  String get conversationIdCopied => 'คัดลอก ID การสนทนาไปยังคลิปบอร์ดแล้ว';
+
+  @override
   String get testPrompt => 'ทดสอบคำสั่ง';
 
   @override

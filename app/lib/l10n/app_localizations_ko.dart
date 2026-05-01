@@ -63,6 +63,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get copySummary => '요약 복사';
 
   @override
+  String get copyConversationId => '대화 ID 복사';
+
+  @override
+  String get conversationIdCopied => '대화 ID가 클립보드에 복사되었습니다';
+
+  @override
   String get testPrompt => '프롬프트 테스트';
 
   @override

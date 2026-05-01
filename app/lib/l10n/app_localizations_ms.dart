@@ -64,6 +64,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get copySummary => 'Salin ringkasan';
 
   @override
+  String get copyConversationId => 'Salin ID perbualan';
+
+  @override
+  String get conversationIdCopied => 'ID perbualan disalin ke papan klip';
+
+  @override
   String get testPrompt => 'Uji Gesaan';
 
   @override

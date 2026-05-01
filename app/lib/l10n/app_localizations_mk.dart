@@ -64,6 +64,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get copySummary => 'Копирај резиме';
 
   @override
+  String get copyConversationId => 'Копирај ID на разговорот';
+
+  @override
+  String get conversationIdCopied => 'ID на разговорот е копиран во клипборд';
+
+  @override
   String get testPrompt => 'Тест подсетник';
 
   @override

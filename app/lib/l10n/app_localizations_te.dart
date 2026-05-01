@@ -64,6 +64,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get copySummary => 'సారాంశాన్ని కాపీ చేయండి';
 
   @override
+  String get copyConversationId => 'సంభాషణ ID కాపీ చేయండి';
+
+  @override
+  String get conversationIdCopied => 'సంభాషణ ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది';
+
+  @override
   String get testPrompt => 'ప్రాంప్ట్‌ను పరీక్షించండి';
 
   @override

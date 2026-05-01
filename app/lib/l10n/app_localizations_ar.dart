@@ -64,6 +64,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get copySummary => 'نسخ الملخص';
 
   @override
+  String get copyConversationId => 'نسخ معرّف المحادثة';
+
+  @override
+  String get conversationIdCopied => 'تم نسخ معرّف المحادثة إلى الحافظة';
+
+  @override
   String get testPrompt => 'اختبار الأمر';
 
   @override

@@ -64,6 +64,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get copySummary => 'Копировать сводку';
 
   @override
+  String get copyConversationId => 'Скопировать ID разговора';
+
+  @override
+  String get conversationIdCopied => 'ID разговора скопирован в буфер обмена';
+
+  @override
   String get testPrompt => 'Тестовый запрос';
 
   @override

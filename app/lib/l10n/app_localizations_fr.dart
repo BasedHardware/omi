@@ -64,6 +64,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get copySummary => 'Copier le résumé';
 
   @override
+  String get copyConversationId => 'Copier l\'ID de la conversation';
+
+  @override
+  String get conversationIdCopied => 'ID de la conversation copié dans le presse-papiers';
+
+  @override
   String get testPrompt => 'Tester le prompt';
 
   @override

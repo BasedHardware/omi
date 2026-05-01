@@ -64,6 +64,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get copySummary => 'کپی خلاصه';
 
   @override
+  String get copyConversationId => 'کپی شناسه مکالمه';
+
+  @override
+  String get conversationIdCopied => 'شناسه مکالمه در کلیپ‌بورد کپی شد';
+
+  @override
   String get testPrompt => 'تست موضوع';
 
   @override

@@ -64,6 +64,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get copySummary => 'Αντιγραφή σύνοψης';
 
   @override
+  String get copyConversationId => 'Αντιγραφή ID συνομιλίας';
+
+  @override
+  String get conversationIdCopied => 'Το ID συνομιλίας αντιγράφηκε στο πρόχειρο';
+
+  @override
   String get testPrompt => 'Δοκιμή Εντολής';
 
   @override

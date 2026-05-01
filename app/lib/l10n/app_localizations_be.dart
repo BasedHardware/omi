@@ -64,6 +64,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get copySummary => 'Скапіяваць рэзюмэ';
 
   @override
+  String get copyConversationId => 'Скапіраваць ID размовы';
+
+  @override
+  String get conversationIdCopied => 'ID размовы скапіраваны ў буфер абмену';
+
+  @override
   String get testPrompt => 'Тэставаць запыт';
 
   @override

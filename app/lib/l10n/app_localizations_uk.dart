@@ -64,6 +64,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get copySummary => 'Копіювати підсумок';
 
   @override
+  String get copyConversationId => 'Копіювати ID розмови';
+
+  @override
+  String get conversationIdCopied => 'ID розмови скопійовано в буфер обміну';
+
+  @override
   String get testPrompt => 'Тестовий запит';
 
   @override

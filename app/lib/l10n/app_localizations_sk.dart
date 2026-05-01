@@ -64,6 +64,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get copySummary => 'Kopírovať zhrnutie';
 
   @override
+  String get copyConversationId => 'Kopírovať ID konverzácie';
+
+  @override
+  String get conversationIdCopied => 'ID konverzácie skopírované do schránky';
+
+  @override
   String get testPrompt => 'Otestovať výzvu';
 
   @override

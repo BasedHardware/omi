@@ -64,6 +64,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get copySummary => 'Sao chép tóm tắt';
 
   @override
+  String get copyConversationId => 'Sao chép ID cuộc trò chuyện';
+
+  @override
+  String get conversationIdCopied => 'Đã sao chép ID cuộc trò chuyện vào clipboard';
+
+  @override
   String get testPrompt => 'Thử nghiệm';
 
   @override
