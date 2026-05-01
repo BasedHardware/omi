@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/home/companion_card.dart';
@@ -90,7 +89,7 @@ class _CardList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(
         AppStyles.spacingL,
-        AppStyles.spacingXL,
+        AppStyles.spacingS,
         AppStyles.spacingL,
         AppStyles.spacingXL,
       ),
@@ -114,8 +113,9 @@ class _QuietEmpty extends StatelessWidget {
         padding: const EdgeInsets.all(AppStyles.spacingXL),
         child: Text(
           "I'm here when you need me.",
-          style: brandSerif(
+          style: brandEmphasis(
             fontSize: 18,
+            fontWeight: FontWeight.w500,
             color: AppColors.textTertiary,
           ),
           textAlign: TextAlign.center,
@@ -125,9 +125,9 @@ class _QuietEmpty extends StatelessWidget {
   }
 }
 
-/// Pill-button composer that mirrors v1's `_AskNootoComposer`. NOT a real
-/// `TextField` — taps push the Chat tab via the [onTap] callback. See design
-/// doc §"Visual specification → Chat composer" for rationale.
+/// Tap-target composer that opens the Chat tab. NOT a real `TextField` —
+/// the tap routes to chat via the [onTap] callback. Rectangular tile, no
+/// chrome — the hint text + arrow do all the signalling.
 class _Composer extends StatelessWidget {
   const _Composer({required this.onTap});
 
@@ -146,43 +146,29 @@ class _Composer extends StatelessWidget {
         ),
         child: Semantics(
           button: true,
-          label: 'Ask Nooto anything. Opens chat.',
+          label: "What's on your mind. Opens chat.",
           child: Material(
             color: AppColors.backgroundSecondary,
-            borderRadius: BorderRadius.circular(AppStyles.radiusXLarge),
+            borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
             child: InkWell(
-              borderRadius: BorderRadius.circular(AppStyles.radiusXLarge),
+              borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
               onTap: onTap,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
+                  horizontal: AppStyles.spacingL,
+                  vertical: 14,
                 ),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppStyles.radiusXLarge),
+                  borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.06),
                   ),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.brandPrimary.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.solidComment,
-                        size: 16,
-                        color: AppColors.brandPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: AppStyles.spacingM),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Ask Nooto anything…',
+                        "What's on your mind?",
                         style: TextStyle(
                           fontSize: 16,
                           color: AppColors.textTertiary,
@@ -190,8 +176,8 @@ class _Composer extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: AppStyles.spacingS),
-                    const Icon(
+                    SizedBox(width: AppStyles.spacingS),
+                    Icon(
                       Icons.arrow_forward_rounded,
                       size: 18,
                       color: AppColors.textTertiary,

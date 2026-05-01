@@ -96,8 +96,9 @@ class _WelcomeCardView extends StatelessWidget {
             children: [
               Text(
                 greeting,
-                style: brandSerif(
+                style: brandEmphasis(
                   fontSize: 22,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                   height: 1.25,
                 ),

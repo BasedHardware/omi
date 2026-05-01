@@ -71,5 +71,21 @@
       }
     }
   },
-  "shellComingSoonBody": "This screen lands in a future phase. For now, the morning brief and today's commitments are on Home."
+  "shellComingSoonBody": "This screen lands in a future phase. For now, the morning brief and today's commitments are on Home.",
+  "todayCardHeader": "Today",
+  "todayCardCountPartial": "{visible} of {total}",
+  "@todayCardCountPartial": {
+    "placeholders": {
+      "visible": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "todayCardCountFull": "{count, plural, =1{1 item} other{{count} items}}",
+  "@todayCardCountFull": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "todayCardSeeAll": "See all",
+  "todayCardSeeAllSemantics": "See all action items, opens Plan tab"
 }

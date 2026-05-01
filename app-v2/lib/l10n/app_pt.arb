@@ -67,5 +67,21 @@
   "@shellComingSoonTitle": {
     "placeholders": { "tab": { "type": "String" } }
   },
-  "shellComingSoonBody": "Esta tela chega em uma fase futura. Por enquanto, o Nooto v2 é só o fluxo de boas-vindas e onboarding."
+  "shellComingSoonBody": "Esta tela chega em uma fase futura. Por enquanto, o Nooto v2 é só o fluxo de boas-vindas e onboarding.",
+  "todayCardHeader": "Hoje",
+  "todayCardCountPartial": "{visible} de {total}",
+  "@todayCardCountPartial": {
+    "placeholders": {
+      "visible": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "todayCardCountFull": "{count, plural, =1{1 item} other{{count} itens}}",
+  "@todayCardCountFull": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "todayCardSeeAll": "Ver tudo",
+  "todayCardSeeAllSemantics": "Ver todas as ações, abre a aba Plano"
 }

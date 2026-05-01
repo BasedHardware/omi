@@ -42,21 +42,29 @@ These are deliberate. Each serves the chief-of-staff thesis.
 
 ## Typography
 
-| Role | Font | Size | Weight | Used for |
-|---|---|---|---|---|
-| Brand serif | **Playfair Display Italic** (Google Fonts) | 22pt (greeting) / 16pt (default) | 500 | Welcome card greeting, brief greeting, brand wordmark |
-| Display | System default (SF Pro on iOS) | 36pt | 600 | Reserved for hero screens (none on Home today) |
-| Headline | System default | 22pt | 600 | Section headers (rare; we lean on labelLarge instead) |
-| Body large | System default | 16pt | 400 | Card body text (welcome paragraph, brief body) |
-| Body medium | System default | 14pt | 400 | Bullets in Today card, secondary chrome |
-| Label large | System default | 14pt | 500 | Buttons, eyebrows, "See all", tab labels |
-| Caption | System default | 12pt | 400-600 | "Action item" eyebrow, relative time, source line |
+System sans-serif only. iOS gets SF Pro automatically, Android gets Roboto. No custom font face anywhere in the product.
 
-**Why Playfair Display for the brand serif:** italic Playfair carries editorial gravity without slipping into hand-script informality. It evokes the "letter from a smart friend" feeling that reinforces the chief-of-staff thesis. Used sparingly (greeting line only), it's the visual signature of the assistant's voice.
+| Role | Size | Weight | Used for |
+|---|---|---|---|
+| Brand emphasis (large) | 30-34pt | 700 | Welcome tagline emphasis, Home large title wordmark |
+| Brand emphasis (compact) | 17-22pt | 600-700 | Voice card greeting, compact bar wordmark, hero one-liners |
+| Display | 36pt | 600 | Reserved for hero screens (none on Home today) |
+| Headline | 22pt | 600 | Section headers (rare; we lean on labelLarge instead) |
+| Body large | 16pt | 400 | Card body text (welcome paragraph, brief body) |
+| Body medium | 14pt | 400 | Bullets in Today card, secondary chrome |
+| Label large | 14pt | 500 | Buttons, eyebrows, "See all", tab labels |
+| Caption | 12pt | 400-600 | "Action item" eyebrow, relative time, source line |
 
-**Why system fonts for everything else:** Apple licensing prevents shipping SF Pro in non-iOS builds. Falling back to system default means iOS users get SF Pro automatically (HIG fluency for free); Android users get Roboto. Loading a custom sans like Inter would fight HIG on iOS *and* introduce a font-loading flash. The cost of using two fonts is inconsistency between iOS and Android body text — accepted because dogfood is iOS-only pre-launch.
+Brand emphasis comes from **weight + size + letter-spacing**, never from a different typeface. The `brandEmphasis()` helper in `app_theme.dart` is the single allowed channel for emphasis text — it returns a system-font TextStyle with -0.2 letter-spacing.
 
-**Blacklist for this project:** any sans serif as primary brand font (Inter, Roboto, Poppins, Space Grotesk). The serif italic IS the voice. Any cursive/handwritten/decorative display face. `system-ui` declared explicitly (Flutter handles this via the platform default).
+**Why no custom font:** Apple licensing prevents shipping SF Pro in non-iOS builds. Loading a custom sans like Inter would fight HIG on iOS *and* introduce a font-loading flash. Custom serif (e.g. Playfair) was tried and explicitly rejected — too literary for the chief-of-staff role and out of step with the rest of the product surface.
+
+**Hard blacklist — never reintroduce:**
+- Any serif face (Playfair, Times, Georgia, etc.). Serif emphasis is permanently off the table for this product.
+- Italic as a brand-emphasis lever (italic was the wrapper we used for serif; without serif there's no reason to italicize for brand).
+- Custom sans (Inter, Roboto, Poppins, Space Grotesk) as primary brand font.
+- Cursive, handwritten, or decorative display faces.
+- The previous `brandSerif()` helper. Use `brandEmphasis()` instead.
 
 ## Color
 
@@ -179,6 +187,7 @@ The following are explicit rejections — flag during review if any appear:
 - Generic hero copy ("Welcome to Nooto", "Unlock the power of...", "All-in-one")
 - Stacked cards mosaic (instant rejection — see Card Grammar)
 - Cookie-cutter section rhythm (hero → 3 features → testimonials)
+- **Serif typography of any kind** (Playfair, Times, Georgia) — permanent blacklist; brand emphasis comes from sans-serif weight + size only
 
 ## Decisions Log
 
@@ -188,4 +197,5 @@ The following are explicit rejections — flag during review if any appear:
 | 2026-04-30 | Voice cards drop chrome | Hard rejection rule from `/plan-design-review` — stacking cards reads as dashboard |
 | 2026-04-30 | One accent color (brand blue) | Restraint; lets red mean real failure |
 | 2026-04-30 | Playfair Display Italic for brand serif | Editorial gravity without script informality; matches `desktop-v2` |
+| 2026-04-30 | **Serif reversed — no serif anywhere, ever** | Founder dogfeed rejected Playfair on sight ("I hate serif fonts"). Brand emphasis switches to sans-serif weight + size only; `brandSerif()` deleted; google_fonts dropped from pubspec; permanent blacklist added to anti-patterns |
 | 2026-04-30 | Light mode out of scope | Dark-only inherited from upstream + pendant-glance use case |

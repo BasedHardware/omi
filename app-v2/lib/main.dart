@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nooto_v2/apps/apps_provider.dart';
+import 'package:nooto_v2/chat/chat_provider.dart';
+import 'package:nooto_v2/chat/chat_storage.dart';
 import 'package:nooto_v2/env_flags.dart';
 import 'package:nooto_v2/firebase_options.dart';
 import 'package:nooto_v2/home/home_storage.dart';
@@ -26,6 +29,7 @@ Future<void> main() async {
     Hive.openBox<Map>(HomeBoxes.cards),
     Hive.openBox<Map>(HomeBoxes.brief),
     Hive.openBox<Map>(HomeBoxes.actions),
+    Hive.openBox<Map>(ChatBoxes.messages),
   ]);
   final localeProvider = LocaleProvider();
   await localeProvider.hydrate();
@@ -40,7 +44,13 @@ Future<void> main() async {
         ChangeNotifierProvider(
           create: (_) => ActionItemsProvider(client: apiClient),
         ),
+        ChangeNotifierProvider(
+          create: (_) => AppsProvider(client: apiClient),
+        ),
         Provider<ChatService>.value(value: chatService),
+        ChangeNotifierProvider(
+          create: (_) => ChatProvider(service: chatService),
+        ),
       ],
       child: const MobileApp(),
     ),

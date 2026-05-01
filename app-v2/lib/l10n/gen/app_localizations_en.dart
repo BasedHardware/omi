@@ -180,4 +180,29 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get shellComingSoonBody =>
       'This screen lands in a future phase. For now, the morning brief and today\'s commitments are on Home.';
+
+  @override
+  String get todayCardHeader => 'Today';
+
+  @override
+  String todayCardCountPartial(int visible, int total) {
+    return '$visible of $total';
+  }
+
+  @override
+  String todayCardCountFull(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get todayCardSeeAll => 'See all';
+
+  @override
+  String get todayCardSeeAllSemantics => 'See all action items, opens Plan tab';
 }

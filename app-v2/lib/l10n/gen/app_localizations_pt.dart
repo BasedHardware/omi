@@ -182,4 +182,29 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get shellComingSoonBody =>
       'Esta tela chega em uma fase futura. Por enquanto, o Nooto v2 é só o fluxo de boas-vindas e onboarding.';
+
+  @override
+  String get todayCardHeader => 'Hoje';
+
+  @override
+  String todayCardCountPartial(int visible, int total) {
+    return '$visible de $total';
+  }
+
+  @override
+  String todayCardCountFull(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count itens',
+      one: '1 item',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get todayCardSeeAll => 'Ver tudo';
+
+  @override
+  String get todayCardSeeAllSemantics => 'Ver todas as ações, abre a aba Plano';
 }

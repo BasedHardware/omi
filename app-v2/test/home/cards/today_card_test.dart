@@ -5,9 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:nooto_v2/home/cards/today_card.dart';
 import 'package:nooto_v2/home/companion_card.dart';
 import 'package:nooto_v2/home/home_nav.dart';
+import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 
 Widget _harness(TodayCard card, {void Function(int)? onSwitch}) {
   return MaterialApp(
+    locale: const Locale('en'),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Provider<HomeNav>.value(
       value: HomeNav(switchToTab: onSwitch ?? (_) {}),
       child: Scaffold(
