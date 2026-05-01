@@ -355,6 +355,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await provider.reprocessConversation();
         }
         break;
+      case 'copy_conversation_id':
+        Clipboard.setData(ClipboardData(text: provider.conversation.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.conversationIdCopied)),
+        );
+        HapticFeedback.lightImpact();
+        break;
       case 'delete':
         _handleDelete(context, provider);
         break;
@@ -809,6 +816,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 title: context.l10n.copySummary,
                                 iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
+                              ),
+                              PullDownMenuItem(
+                                title: context.l10n.copyConversationId,
+                                iconWidget: FaIcon(FontAwesomeIcons.fingerprint, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
