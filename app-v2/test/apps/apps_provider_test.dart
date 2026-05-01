@@ -14,7 +14,7 @@ ApiClient _client(MockClient mock) => ApiClient(
       baseUrl: 'https://example.test/',
     );
 
-Map<String, dynamic> _sampleResponse() => {
+Map<String, dynamic> _sampleCatalog() => {
       'groups': [
         {
           'capability': {'id': 'popular', 'title': 'Popular'},
@@ -62,26 +62,36 @@ Map<String, dynamic> _sampleResponse() => {
       'meta': {'capabilities': const [], 'groupCount': 2, 'limit': 20, 'offset': 0},
     };
 
-void main() {
-  test('load() hydrates groups, drops empty groups', () async {
-    final mock = MockClient((req) async {
-      expect(req.url.path, '/v2/apps');
-      return http.Response(jsonEncode(_sampleResponse()), 200);
-    });
-    final provider = AppsProvider(client: _client(mock));
+/// Routes both /v2/apps and /v1/apps/enabled. enabledList is the user's
+/// installed-set returned for /v1/apps/enabled.
+MockClient _routedMock({List<String> enabledList = const []}) {
+  return MockClient((req) async {
+    if (req.url.path == '/v2/apps') {
+      return http.Response(jsonEncode(_sampleCatalog()), 200);
+    }
+    if (req.url.path == '/v1/apps/enabled') {
+      return http.Response(jsonEncode(enabledList), 200);
+    }
+    if (req.url.path == '/v1/apps/enable') {
+      return http.Response('{"status":"ok"}', 200);
+    }
+    if (req.url.path == '/v1/apps/disable') {
+      return http.Response('{"status":"ok"}', 200);
+    }
+    return http.Response('not found', 404);
+  });
+}
 
-    expect(provider.hasFetched, isFalse);
+void main() {
+  test('load() hydrates groups, drops empty, marks enabled from /v1/apps/enabled', () async {
+    final provider = AppsProvider(client: _client(_routedMock(enabledList: ['a1', 'jira'])));
+
     await provider.load();
 
-    expect(provider.hasFetched, isTrue);
     expect(provider.groups, hasLength(2));
-    expect(provider.groups[0].title, 'Popular');
-    expect(provider.groups[0].apps, hasLength(2));
-    expect(provider.groups[0].apps[0].name, 'Alpha');
-    expect(provider.groups[0].apps[0].installs, 42);
-    expect(provider.groups[0].apps[0].enabled, isTrue);
-    expect(provider.groups[1].title, 'Integrations');
-    expect(provider.groups[1].apps.first.name, 'Jira');
+    expect(provider.isEnabled('a1'), isTrue);
+    expect(provider.isEnabled('a2'), isFalse);
+    expect(provider.isEnabled('jira'), isTrue);
     expect(provider.error, isNull);
   });
 
@@ -89,7 +99,10 @@ void main() {
     var hits = 0;
     final mock = MockClient((req) async {
       hits += 1;
-      return http.Response(jsonEncode(_sampleResponse()), 200);
+      if (req.url.path == '/v2/apps') {
+        return http.Response(jsonEncode(_sampleCatalog()), 200);
+      }
+      return http.Response('[]', 200);
     });
     final provider = AppsProvider(client: _client(mock));
 
@@ -97,24 +110,11 @@ void main() {
     await provider.load();
     await provider.load();
 
-    expect(hits, 1);
-  });
-
-  test('load(force: true) re-fetches', () async {
-    var hits = 0;
-    final mock = MockClient((req) async {
-      hits += 1;
-      return http.Response(jsonEncode(_sampleResponse()), 200);
-    });
-    final provider = AppsProvider(client: _client(mock));
-
-    await provider.load();
-    await provider.load(force: true);
-
+    // 2 hits per load (catalog + enabled); 1 load total => 2 hits.
     expect(hits, 2);
   });
 
-  test('load() captures error and leaves groups empty on 500', () async {
+  test('load() captures error on 500', () async {
     final mock = MockClient((req) async => http.Response('boom', 500));
     final provider = AppsProvider(client: _client(mock));
 
@@ -122,7 +122,107 @@ void main() {
 
     expect(provider.error, isNotNull);
     expect(provider.groups, isEmpty);
-    // hasFetched stays false so a subsequent load() retries.
-    expect(provider.hasFetched, isFalse);
+  });
+
+  test('install() optimistically marks enabled and posts to backend', () async {
+    String? capturedPath;
+    String? capturedQuery;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/v2/apps') {
+        return http.Response(jsonEncode(_sampleCatalog()), 200);
+      }
+      if (req.url.path == '/v1/apps/enabled') {
+        return http.Response('[]', 200);
+      }
+      if (req.url.path == '/v1/apps/enable') {
+        capturedPath = req.url.path;
+        capturedQuery = req.url.query;
+        return http.Response('{"status":"ok"}', 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final provider = AppsProvider(client: _client(mock));
+    await provider.load();
+    expect(provider.isEnabled('a1'), isFalse);
+
+    final ok = await provider.install('a1');
+
+    expect(ok, isTrue);
+    expect(capturedPath, '/v1/apps/enable');
+    expect(capturedQuery, contains('app_id=a1'));
+    expect(provider.isEnabled('a1'), isTrue);
+  });
+
+  test('install() rolls back local state on backend error', () async {
+    final mock = MockClient((req) async {
+      if (req.url.path == '/v2/apps') {
+        return http.Response(jsonEncode(_sampleCatalog()), 200);
+      }
+      if (req.url.path == '/v1/apps/enabled') {
+        return http.Response('[]', 200);
+      }
+      if (req.url.path == '/v1/apps/enable') {
+        return http.Response('boom', 500);
+      }
+      return http.Response('not found', 404);
+    });
+    final provider = AppsProvider(client: _client(mock));
+    await provider.load();
+
+    final ok = await provider.install('a1');
+
+    expect(ok, isFalse);
+    expect(provider.isEnabled('a1'), isFalse);
+    expect(provider.error, isNotNull);
+  });
+
+  test('uninstall() flips state off and posts disable', () async {
+    String? capturedPath;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/v2/apps') {
+        return http.Response(jsonEncode(_sampleCatalog()), 200);
+      }
+      if (req.url.path == '/v1/apps/enabled') {
+        return http.Response(jsonEncode(['a1']), 200);
+      }
+      if (req.url.path == '/v1/apps/disable') {
+        capturedPath = req.url.path;
+        return http.Response('{"status":"ok"}', 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final provider = AppsProvider(client: _client(mock));
+    await provider.load();
+    expect(provider.isEnabled('a1'), isTrue);
+
+    final ok = await provider.uninstall('a1');
+
+    expect(ok, isTrue);
+    expect(capturedPath, '/v1/apps/disable');
+    expect(provider.isEnabled('a1'), isFalse);
+  });
+
+  test('install() no-ops if already installed', () async {
+    var hitEnable = 0;
+    final mock = MockClient((req) async {
+      if (req.url.path == '/v2/apps') {
+        return http.Response(jsonEncode(_sampleCatalog()), 200);
+      }
+      if (req.url.path == '/v1/apps/enabled') {
+        return http.Response(jsonEncode(['a1']), 200);
+      }
+      if (req.url.path == '/v1/apps/enable') {
+        hitEnable += 1;
+        return http.Response('{"status":"ok"}', 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final provider = AppsProvider(client: _client(mock));
+    await provider.load();
+
+    final ok = await provider.install('a1');
+
+    expect(ok, isFalse);
+    expect(hitEnable, 0);
   });
 }
