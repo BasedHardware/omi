@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:hive/hive.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
@@ -67,9 +68,13 @@ class CompanionStreamProvider extends ChangeNotifier {
       _runGenerators();
       _persist();
       // Trigger the first action-items fetch from here so the widget tree
-      // doesn't have to. Fire-and-forget; the listener re-runs generators
-      // when results arrive.
-      unawaited(_actionItems.kickOffIfNeeded());
+      // doesn't have to. Defer to next frame — the constructor runs during
+      // the consumer's build, and ActionItemsProvider.fetchAll fires its
+      // own notifyListeners synchronously, which would throw "setState
+      // called during build" if we kicked off here.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        unawaited(_actionItems.kickOffIfNeeded());
+      });
       unawaited(_kickOffMorningBrief());
     } catch (e, st) {
       debugPrint('[CompanionStream] init failed: $e\n$st');

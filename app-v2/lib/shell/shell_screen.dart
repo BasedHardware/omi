@@ -6,6 +6,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:nooto_v2/apps/apps_screen.dart';
 import 'package:nooto_v2/chat/chat_screen.dart';
 import 'package:nooto_v2/home/home_screen.dart';
+import 'package:nooto_v2/library/library_screen.dart';
+import 'package:nooto_v2/plan/plan_screen.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/shell/app_bar_kebab_menu.dart';
 import 'package:nooto_v2/shell/bottom_nav_bar.dart';
@@ -91,6 +93,10 @@ class _ShellScreenState extends State<ShellScreen> {
                 key: ValueKey('chat-$_autoFocusChat'),
                 autoFocus: _autoFocusChat && _index == 1,
               )
+            else if (i == 2)
+              const LibraryScreen()
+            else if (i == 3)
+              const PlanScreen()
             else if (i == 4)
               const AppsScreen()
             else

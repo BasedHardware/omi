@@ -74,6 +74,19 @@ class ApiClient {
     );
   }
 
+  Future<http.Response> delete(
+    String path, {
+    Map<String, String>? headers,
+  }) async {
+    final uri = _resolve(path);
+    return _withAuthRetry(
+      headers: headers,
+      timeout: writeTimeout,
+      run: (hdrs) =>
+          _http.delete(uri, headers: hdrs).timeout(writeTimeout),
+    );
+  }
+
   /// Streams the response body byte-chunks. Caller decodes (e.g. SSE parse for
   /// the morning brief). On 401 or 5xx this throws `http.ClientException`
   /// without auto-retry — streaming consumers own retry semantics because
