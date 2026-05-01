@@ -34,14 +34,15 @@ class _AppsScreenState extends State<AppsScreen> {
       return _ErrorState(error: apps.error!, onRetry: () => apps.load(force: true));
     }
     if (apps.isEmpty) return const _EmptyState();
+    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingM;
     return RefreshIndicator(
       onRefresh: () => apps.load(force: true),
       color: AppColors.brandPrimary,
       backgroundColor: AppColors.backgroundSecondary,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppStyles.spacingL,
-          AppStyles.spacingS,
+          topInset,
           AppStyles.spacingL,
           AppStyles.spacingXL,
         ),
@@ -59,19 +60,19 @@ class _GroupSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppStyles.spacingL),
+      padding: const EdgeInsets.only(bottom: AppStyles.spacingXL),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS),
             child: Text(
-              group.title,
+              group.title.toUpperCase(),
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textTertiary,
-                letterSpacing: 0.4,
+                letterSpacing: 0.8,
               ),
             ),
           ),
