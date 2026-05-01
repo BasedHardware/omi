@@ -77,7 +77,9 @@ class _MemoryRowState extends State<MemoryRow> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final inferred = !item.manuallyAdded;
+    // Library is Nooto-inferred by default. Flag the exception (your-typed
+    // memories) rather than wallpapering every row with INFERRED.
+    final showYouWrote = item.manuallyAdded;
     return Semantics(
       button: true,
       label: _semanticsLabel(item, _expanded),
@@ -101,7 +103,7 @@ class _MemoryRowState extends State<MemoryRow> {
             child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (inferred) const _InferredEyebrow(),
+              if (showYouWrote) const _YouWroteEyebrow(),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -167,22 +169,22 @@ class _MemoryRowState extends State<MemoryRow> {
   }
 
   static String _semanticsLabel(MemoryItem item, bool expanded) {
-    final inferred = item.manuallyAdded ? '' : 'Inferred. ';
+    final source = item.manuallyAdded ? 'You wrote this. ' : '';
     final locked = item.isLocked ? 'Locked. ' : '';
     final action = expanded ? 'Double-tap to collapse.' : 'Double-tap to expand.';
-    return 'Memory: ${item.content}. Category: ${item.bucket.label}. $inferred$locked$action';
+    return 'Memory: ${item.content}. Category: ${item.bucket.label}. $source$locked$action';
   }
 }
 
-class _InferredEyebrow extends StatelessWidget {
-  const _InferredEyebrow();
+class _YouWroteEyebrow extends StatelessWidget {
+  const _YouWroteEyebrow();
 
   @override
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.only(bottom: 4),
       child: Text(
-        'INFERRED',
+        'YOU WROTE',
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
