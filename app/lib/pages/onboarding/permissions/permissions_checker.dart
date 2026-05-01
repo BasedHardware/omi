@@ -17,13 +17,29 @@ import 'package:omi/widgets/dialog.dart';
 Future<bool> arePermissionsGranted() async {
   final notification = await Permission.notification.isGranted;
   final location = await Permission.location.isGranted;
-  return notification && location;
+  final microphone = await Permission.microphone.isGranted;
+  return notification && location && microphone;
 }
 
 /// Interstitial screen shown when onboarding was completed (from backend)
 /// but permissions haven't been granted on this device (fresh install).
-class PermissionsInterstitialPage extends StatelessWidget {
+class PermissionsInterstitialPage extends StatefulWidget {
   const PermissionsInterstitialPage({super.key});
+
+  @override
+  State<PermissionsInterstitialPage> createState() => _PermissionsInterstitialPageState();
+}
+
+class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<OnboardingProvider>().updatePermissions();
+      }
+    });
+  }
 
   void _goHome(BuildContext context) {
     SharedPreferencesUtil().permissionsCompleted = true;
@@ -145,6 +161,19 @@ class PermissionsInterstitialPage extends StatelessWidget {
                       ),
 
                       _PermissionTile(
+                        value: provider.hasMicrophonePermission,
+                        title: context.l10n.microphoneAccess,
+                        subtitle: context.l10n.microphoneAccessDescription,
+                        onChanged: (s) async {
+                          if (s == true) {
+                            await provider.askForMicrophonePermissions();
+                          } else {
+                            provider.updateMicrophonePermission(false);
+                          }
+                        },
+                      ),
+
+                      _PermissionTile(
                         value: provider.hasNotificationPermission,
                         title: context.l10n.notifications,
                         subtitle: context.l10n.notificationsDesc,
@@ -159,7 +188,7 @@ class PermissionsInterstitialPage extends StatelessWidget {
 
                       const SizedBox(height: 8),
 
-                      // Continue button — requests both permissions
+                      // Continue button requests all required permissions.
                       provider.isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : SizedBox(
@@ -189,6 +218,9 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                         }
                                       }
                                     }
+                                  });
+                                  await Permission.microphone.request().then((value) {
+                                    provider.updateMicrophonePermission(value.isGranted);
                                   });
                                   MixpanelManager().permissionsInterstitialCompleted();
                                   provider.setLoading(false);

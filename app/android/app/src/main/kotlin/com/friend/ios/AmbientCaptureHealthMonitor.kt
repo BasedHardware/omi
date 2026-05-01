@@ -70,6 +70,8 @@ class AmbientCaptureHealthMonitor(private val context: Context, private val onHe
     fun start() {
         audioManager.registerAudioRecordingCallback(callback, mainHandler)
         lastAudioChunkAtMs = System.currentTimeMillis()
+        lowSignalSinceMs = null
+        setState(AmbientHealthState.UNKNOWN_DEGRADED, "monitor_started")
         startWatchdog()
         evaluate("monitor_started")
     }

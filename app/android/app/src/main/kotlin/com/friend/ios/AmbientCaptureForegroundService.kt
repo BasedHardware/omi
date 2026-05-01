@@ -64,19 +64,29 @@ class AmbientCaptureForegroundService : Service() {
 
     private fun startCapture(localManualOverride: Boolean) {
         if (isRunning) return
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification("Starting..."))
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to enter foreground for ambient capture", e)
+            healthMonitor?.setPermissionMissing()
+            emitTelemetry("foreground_start_failed")
+            stopSelf()
+            return
+        }
         val startDecision = canStartCapture(localManualOverride)
         if (startDecision != "ok") {
             Log.w(TAG, "Refusing ambient capture start: $startDecision")
             healthMonitor?.setPolicyDisabled(startDecision)
             AmbientCaptureAudit.record(this, "capture_start_rejected", mapOf("reason" to startDecision))
             emitTelemetry("capture_start_rejected_$startDecision")
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
         isRunning = true
         isPaused = false
         privateMode = false
-        startForeground(NOTIFICATION_ID, buildNotification("Recording"))
+        updateNotification("Recording")
         spoolStore?.startSession()
         spoolStore?.enforceRetention()
         healthMonitor?.start()
@@ -88,11 +98,27 @@ class AmbientCaptureForegroundService : Service() {
             onError = { error ->
                 if (error == "permission_missing") healthMonitor?.setPermissionMissing()
                 emitTelemetry(error)
+                isRunning = false
+                isPaused = false
+                privateMode = false
+                spoolStore?.closeSession()
+                stopPolicyLoop()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             },
         )
         if (recorder?.start() == true) {
             emitTelemetry("capture_started")
+        } else {
+            recorder = null
+            spoolStore?.closeSession()
+            stopPolicyLoop()
+            healthMonitor?.stop()
+            isRunning = false
+            isPaused = false
+            privateMode = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
     }
 
