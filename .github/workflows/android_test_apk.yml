@@ -52,6 +52,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Workflow preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "github.ref=${GITHUB_REF}"
+          echo "github.sha=${GITHUB_SHA}"
+          git log -1 --oneline
+          test -f .github/workflows/android_test_apk.yml
+          if grep -n "yes | sdkmanager --licenses" .github/workflows/android_test_apk.yml; then
+            echo "::error::Stale Android Test APK workflow still contains the sdkmanager license pipe."
+            exit 1
+          fi
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -65,7 +78,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
+          # android-actions/setup-android accepts SDK licenses already.
+          # Avoid `yes | sdkmanager --licenses` here: `yes` exits with SIGPIPE
+          # after sdkmanager closes stdin, and GitHub's bash pipefail treats it
+          # as a failed step.
           sdkmanager \
             "platform-tools" \
             "platforms;android-${ANDROID_API_LEVEL}" \
