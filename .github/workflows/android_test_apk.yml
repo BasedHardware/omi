@@ -26,6 +26,11 @@ on:
         required: true
         default: true
         type: boolean
+      allow_debug_auth_bypass:
+        description: Show a dev/debug-only auth bypass for installable test APKs.
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -120,6 +125,7 @@ jobs:
             echo "API_BASE_URL=https://api.omiapi.com/"
             echo "USE_WEB_AUTH=true"
             echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "ALLOW_DEBUG_AUTH_BYPASS=${{ inputs.allow_debug_auth_bypass }}"
           } > app/.dev.env
           cp app/.dev.env app/.env
 

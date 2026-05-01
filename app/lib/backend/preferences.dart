@@ -291,6 +291,10 @@ class SharedPreferencesUtil {
 
   set aiConsentGiven(bool value) => saveBool('aiConsentGiven', value);
 
+  bool get debugAuthBypassActive => getBool('debugAuthBypassActive');
+
+  set debugAuthBypassActive(bool value) => saveBool('debugAuthBypassActive', value);
+
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key');
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);

@@ -132,6 +132,29 @@ class _AuthComponentState extends State<AuthComponent> {
                       ),
                     ),
 
+                    if (provider.canUseDebugAuthBypass) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            provider.onDebugAuthBypass(widget.onSignIn);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                          ),
+                          child: const Text(
+                            'Debug: continue without Google/Apple',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          ),
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 24),
 
                     // Privacy policy text (same as welcome page)
