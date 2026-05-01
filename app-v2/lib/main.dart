@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:nooto_v2/apps/apps_provider.dart';
 import 'package:nooto_v2/chat/chat_provider.dart';
 import 'package:nooto_v2/chat/chat_storage.dart';
+import 'package:nooto_v2/library/library_provider.dart';
 import 'package:nooto_v2/env_flags.dart';
 import 'package:nooto_v2/firebase_options.dart';
 import 'package:nooto_v2/home/home_storage.dart';
@@ -46,6 +47,9 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => AppsProvider(client: apiClient),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => LibraryProvider(client: apiClient),
         ),
         Provider<ChatService>.value(value: chatService),
         ChangeNotifierProvider(
