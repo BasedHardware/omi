@@ -20,6 +20,16 @@ class PermissionsWidget extends StatefulWidget {
 
 class _PermissionsWidgetState extends State<PermissionsWidget> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<OnboardingProvider>().updatePermissions();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
@@ -128,7 +138,22 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                           },
                         ),
 
-                        // Notification permission
+                        // Microphone permission
+                        _buildPermissionTile(
+                          value: provider.hasMicrophonePermission,
+                          title: context.l10n.microphoneAccess,
+                          subtitle: context.l10n.microphoneAccessDescription,
+                          onChanged: (s) async {
+                            if (s != null) {
+                              if (s) {
+                                await provider.askForMicrophonePermissions();
+                              } else {
+                                provider.updateMicrophonePermission(false);
+                              }
+                            }
+                          },
+                        ),
+
                         _buildPermissionTile(
                           value: provider.hasNotificationPermission,
                           title: context.l10n.notifications,
@@ -166,6 +191,9 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   if (value.isGranted) {
                                     provider.updateNotificationPermission(true);
                                   }
+                                  await Permission.microphone.request().then((value) {
+                                    provider.updateMicrophonePermission(value.isGranted);
+                                  });
                                   if (await Permission.location.serviceStatus.isEnabled) {
                                     await Permission.locationWhenInUse.request().then((value) async {
                                       if (value.isGranted) {

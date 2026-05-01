@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -32,6 +34,7 @@ import 'package:omi/services/ambient_capture/ambient_capture_health.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -56,12 +59,122 @@ class _DeveloperSettingsPageView extends StatefulWidget {
 }
 
 class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
+  bool _ambientSetupLoading = false;
+  bool _ambientMicGranted = false;
+  bool _ambientNotificationsGranted = false;
+  bool _ambientBatteryExempt = false;
+  bool _ambientAccessibilityEnabled = false;
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<McpProvider>().fetchKeys();
+      await _refreshAmbientSetupState();
     });
     super.initState();
+  }
+
+  Future<void> _refreshAmbientSetupState() async {
+    if (!Platform.isAndroid || !mounted) return;
+    final ambientService = context.read<AmbientCaptureProvider>().service;
+    final mic = await Permission.microphone.isGranted;
+    final notifications = await Permission.notification.isGranted;
+    final battery = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+    var accessibility = false;
+    try {
+      accessibility = await ambientService.isAccessibilityEnabled();
+    } catch (e) {
+      Logger.debug('Ambient setup accessibility check failed: $e');
+    }
+    if (!mounted) return;
+    setState(() {
+      _ambientMicGranted = mic;
+      _ambientNotificationsGranted = notifications;
+      _ambientBatteryExempt = battery;
+      _ambientAccessibilityEnabled = accessibility;
+    });
+  }
+
+  Future<void> _runAmbientSetup({bool enableTranscriptUpload = false}) async {
+    if (!Platform.isAndroid || _ambientSetupLoading) return;
+    setState(() => _ambientSetupLoading = true);
+    final prefs = SharedPreferencesUtil();
+    final ambientService = context.read<AmbientCaptureProvider>().service;
+    try {
+      prefs.advancedAmbientCaptureEnabled = true;
+      if (prefs.ambientCaptureMode == 'off') {
+        prefs.ambientCaptureMode = 'normal';
+      }
+      if (enableTranscriptUpload) {
+        prefs.ambientCaptureRawAudioUploadEnabled = true;
+      }
+
+      final mic = await Permission.microphone.request();
+      if (!mic.isGranted && mic.isPermanentlyDenied) {
+        await openAppSettings();
+      }
+      await ForegroundUtil.requestPermissions();
+      await _refreshAmbientSetupState();
+
+      final wantsAccessibility =
+          prefs.ambientCaptureAccessibilityModeEnabled || prefs.ambientCaptureCaptionFallbackEnabled;
+      if (wantsAccessibility && !_ambientAccessibilityEnabled && mounted) {
+        AppSnackbar.showSnackbar(
+          'Enable Omi in Android Accessibility settings, then return here.',
+          duration: const Duration(seconds: 4),
+        );
+        await ambientService.openAccessibilitySettings();
+      }
+    } catch (e) {
+      Logger.debug('Ambient setup failed: $e');
+      AppSnackbar.showSnackbarError('Ambient setup failed: $e', duration: const Duration(seconds: 4));
+    } finally {
+      await _refreshAmbientSetupState();
+      if (mounted) {
+        setState(() => _ambientSetupLoading = false);
+      }
+    }
+  }
+
+  Future<void> _startAmbientCapture(AmbientCaptureProvider ambient) async {
+    final prefs = SharedPreferencesUtil();
+    if (!Platform.isAndroid) {
+      AppSnackbar.showSnackbarError('Advanced Ambient Capture is Android-only.');
+      return;
+    }
+    if (!prefs.advancedAmbientCaptureEnabled) {
+      prefs.advancedAmbientCaptureEnabled = true;
+    }
+    if (prefs.ambientCaptureMode == 'off') {
+      prefs.ambientCaptureMode = 'normal';
+    }
+    await _runAmbientSetup();
+    if (!mounted) return;
+    if (!_ambientMicGranted) {
+      AppSnackbar.showSnackbarError('Microphone permission is required before ambient capture can start.');
+      return;
+    }
+    if (!_ambientNotificationsGranted) {
+      AppSnackbar.showSnackbarError('Notification permission is required for the foreground capture notification.');
+      return;
+    }
+
+    final started = await ambient.start();
+    if (!mounted) return;
+    if (started) {
+      final localOnly = !prefs.ambientCaptureRawAudioUploadEnabled;
+      AppSnackbar.showSnackbarSuccess(
+        localOnly
+            ? 'Ambient capture started. Audio is local-only until upload is enabled.'
+            : 'Ambient capture started. Audio is routing to WAL and transcription.',
+        duration: const Duration(seconds: 4),
+      );
+    } else {
+      final reason = ambient.health.reason == null
+          ? ambient.health.state.wireName
+          : '${ambient.health.state.wireName}: ${ambient.health.reason}';
+      AppSnackbar.showSnackbarError('Ambient capture did not start: $reason', duration: const Duration(seconds: 5));
+    }
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -303,6 +416,136 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  Widget _buildAmbientSetupRow({
+    required String title,
+    required String subtitle,
+    required bool complete,
+    required VoidCallback? onPressed,
+    String action = 'Enable',
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: complete ? const Color(0xFF14532D) : const Color(0xFF2A2A2E),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(complete ? Icons.check : Icons.priority_high, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(onPressed: complete ? null : onPressed, child: Text(complete ? 'Ready' : action)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAmbientSetupChecklist(AmbientCaptureProvider ambient) {
+    final prefs = SharedPreferencesUtil();
+    final wantsAccessibility =
+        prefs.ambientCaptureAccessibilityModeEnabled || prefs.ambientCaptureCaptionFallbackEnabled;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFF121214), borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Setup checklist',
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton(
+                  onPressed: _ambientSetupLoading ? null : _refreshAmbientSetupState, child: const Text('Refresh')),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _buildAmbientSetupRow(
+            title: 'Microphone',
+            subtitle: 'Required for native Android phone-mic capture.',
+            complete: _ambientMicGranted,
+            onPressed: () async {
+              await Permission.microphone.request();
+              await _refreshAmbientSetupState();
+            },
+          ),
+          _buildAmbientSetupRow(
+            title: 'Notifications',
+            subtitle: 'Required so the foreground microphone notification can stay visible.',
+            complete: _ambientNotificationsGranted,
+            onPressed: () async {
+              await Permission.notification.request();
+              await _refreshAmbientSetupState();
+            },
+          ),
+          _buildAmbientSetupRow(
+            title: 'Battery optimization',
+            subtitle: 'Recommended so Android is less likely to kill long-running capture.',
+            complete: _ambientBatteryExempt,
+            onPressed: () async {
+              await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+              await _refreshAmbientSetupState();
+            },
+          ),
+          if (wantsAccessibility)
+            _buildAmbientSetupRow(
+              title: 'Accessibility service',
+              subtitle: 'Optional. Only needed for foreground-app awareness and caption fallback.',
+              complete: _ambientAccessibilityEnabled,
+              action: 'Open',
+              onPressed: () async {
+                await ambient.service.openAccessibilitySettings();
+                await _refreshAmbientSetupState();
+              },
+            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton(
+                onPressed: _ambientSetupLoading ? null : () => _runAmbientSetup(),
+                child: Text(_ambientSetupLoading ? 'Setting up...' : 'Run setup'),
+              ),
+              OutlinedButton(
+                onPressed: _ambientSetupLoading ? null : () => _runAmbientSetup(enableTranscriptUpload: true),
+                child: const Text('Set up for transcript testing'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            prefs.ambientCaptureRawAudioUploadEnabled
+                ? 'Upload for transcription is enabled. Captured audio still writes to local WAL/spool first.'
+                : 'Upload for transcription is off. Capture can run, but conversations will stay local-only until upload/sync is enabled.',
+            style: TextStyle(
+              color: prefs.ambientCaptureRawAudioUploadEnabled ? Colors.greenAccent.shade100 : Colors.amber.shade200,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAmbientCaptureSection() {
     final prefs = SharedPreferencesUtil();
     return Consumer<AmbientCaptureProvider>(
@@ -330,21 +573,39 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     value: enabled,
                     onChanged: (v) async {
                       prefs.advancedAmbientCaptureEnabled = v;
+                      if (v && prefs.ambientCaptureMode == 'off') {
+                        prefs.ambientCaptureMode = 'normal';
+                      }
                       if (!v && ambient.running) await ambient.stop();
+                      await _refreshAmbientSetupState();
                       setState(() {});
                     },
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Current state: ${ambient.health.state.wireName}',
+                    'Current state: ${ambient.health.state.wireName}'
+                    '${ambient.health.reason == null ? '' : ' (${ambient.health.reason})'}',
                     style: TextStyle(color: Colors.grey.shade300),
                   ),
+                  if (prefs.ambientCapturePluginControlEnabled && prefs.ambientCapturePolicyUrl.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Plugin controller is enabled, but no controller is paired. Turn it off for local testing, or pair '
+                      'a controller before relying on policy-driven capture.',
+                      style: TextStyle(color: Colors.amber.shade200, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _buildAmbientSetupChecklist(ambient),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ElevatedButton(onPressed: enabled ? ambient.start : null, child: const Text('Start')),
+                      ElevatedButton(
+                        onPressed: enabled ? () => _startAmbientCapture(ambient) : null,
+                        child: const Text('Start'),
+                      ),
                       ElevatedButton(onPressed: ambient.running ? ambient.pause : null, child: const Text('Pause')),
                       ElevatedButton(onPressed: ambient.running ? ambient.stop : null, child: const Text('Stop')),
                       ElevatedButton(
@@ -397,7 +658,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   ),
                   SwitchListTile(
                     value: prefs.ambientCaptureAccessibilityModeEnabled,
-                    onChanged: (v) => setState(() => prefs.ambientCaptureAccessibilityModeEnabled = v),
+                    onChanged: (v) async {
+                      prefs.ambientCaptureAccessibilityModeEnabled = v;
+                      if (v && !_ambientAccessibilityEnabled) {
+                        AppSnackbar.showSnackbar(
+                          'Accessibility must be enabled in Android settings before it can be used.',
+                          duration: const Duration(seconds: 4),
+                        );
+                      }
+                      await _refreshAmbientSetupState();
+                    },
                     title: const Text('Accessibility-enhanced mode', style: TextStyle(color: Colors.white)),
                     subtitle: Text(
                       'Optional foreground-app awareness. Caption text is only used when caption fallback is enabled.',
@@ -422,7 +692,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   ),
                   SwitchListTile(
                     value: prefs.ambientCaptureCaptionFallbackEnabled,
-                    onChanged: (v) => setState(() => prefs.ambientCaptureCaptionFallbackEnabled = v),
+                    onChanged: (v) async {
+                      prefs.ambientCaptureCaptionFallbackEnabled = v;
+                      if (v && !_ambientAccessibilityEnabled) {
+                        AppSnackbar.showSnackbar(
+                          'Caption fallback also requires enabling Omi in Android Accessibility settings.',
+                          duration: const Duration(seconds: 4),
+                        );
+                      }
+                      await _refreshAmbientSetupState();
+                    },
                     title: const Text('Caption/accessibility fallback', style: TextStyle(color: Colors.white)),
                     activeColor: const Color(0xFF22C55E),
                     contentPadding: EdgeInsets.zero,
@@ -430,9 +709,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   SwitchListTile(
                     value: prefs.ambientCaptureRawAudioUploadEnabled,
                     onChanged: (v) => setState(() => prefs.ambientCaptureRawAudioUploadEnabled = v),
-                    title: const Text('Raw audio upload', style: TextStyle(color: Colors.white)),
+                    title: const Text('Upload audio for transcription', style: TextStyle(color: Colors.white)),
                     subtitle: Text(
-                      'When off, audio remains queued locally in WAL.',
+                      'When off, audio remains queued locally and will not appear as normal conversations yet.',
                       style: TextStyle(color: Colors.grey.shade500),
                     ),
                     activeColor: const Color(0xFF22C55E),
@@ -657,7 +936,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  @override
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [
@@ -705,6 +983,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
