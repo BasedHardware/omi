@@ -375,7 +375,15 @@ class OmiBleForegroundService : Service() {
 
         val addr = address.uppercase()
 
+        // Android GATT statuses that indicate the OS-level bond is broken / out of sync
+        // with the peripheral's pairing record. Auto-retry will loop forever until the
+        // user forgets the device in system Bluetooth settings.
+        //   137 = GATT_AUTH_FAIL (most common when the peer wiped its bonding info)
+        //    15 = GATT_INSUF_ENCRYPTION
+        val pairingLost = status == 137 || status == 15
+
         val error = when {
+            pairingLost -> "pairing_lost"
             status == 22 -> "paired_to_another_phone"
             status != 0 -> "gatt_status_$status"
             else -> null
@@ -410,6 +418,13 @@ class OmiBleForegroundService : Service() {
         val managed = managedDevices[addr] ?: return
 
         if (isDestroying || status == -1 || !isBluetoothEnabled) return
+
+        // Skip retry when the bond is broken — every retry will fail with the same
+        // status until the user forgets the device in system Bluetooth settings.
+        if (status == 137 || status == 15) {
+            Log.i(TAG, "Skip retry for $addr: pairing lost (status=$status). Waiting for user to forget device in system settings.")
+            return
+        }
 
         managed.retryCount++
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
