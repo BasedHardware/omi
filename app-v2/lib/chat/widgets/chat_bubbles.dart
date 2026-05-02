@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'package:nooto_v2/chat/chat_message.dart';
+import 'package:nooto_v2/chat/widgets/stop_streaming_button.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// Per-message bubble. Dispatches to user vs assistant treatment based on
 /// `message.role`. Keeps the chat-thread render loop a single Widget call.
 class ChatBubble extends StatelessWidget {
-  const ChatBubble({super.key, required this.message});
+  const ChatBubble({super.key, required this.message, this.onStopGenerating});
   final ChatMessage message;
+
+  /// Tap handler for the "Stop generating" button rendered inside the
+  /// streaming assistant bubble. Caller wires to `provider.stopActiveStream`.
+  /// Null disables the button (bubble still renders the streaming caret).
+  final VoidCallback? onStopGenerating;
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +23,9 @@ class ChatBubble extends StatelessWidget {
         : _AssistantBubble(
             text: message.text,
             streaming: message.streaming,
+            stopped: message.stopped,
             toolEvents: message.toolEvents,
+            onStopGenerating: onStopGenerating,
           );
   }
 }
@@ -67,11 +75,15 @@ class _AssistantBubble extends StatelessWidget {
   const _AssistantBubble({
     required this.text,
     required this.streaming,
+    required this.stopped,
     required this.toolEvents,
+    this.onStopGenerating,
   });
   final String text;
   final bool streaming;
+  final bool stopped;
   final List<String> toolEvents;
+  final VoidCallback? onStopGenerating;
 
   @override
   Widget build(BuildContext context) {
@@ -84,54 +96,71 @@ class _AssistantBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: AppStyles.spacingXS),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppStyles.spacingL,
-            vertical: AppStyles.spacingM,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.backgroundSecondary,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(AppStyles.radiusLarge),
-              topRight: Radius.circular(AppStyles.radiusLarge),
-              bottomLeft: Radius.circular(AppStyles.radiusMedium),
-              bottomRight: Radius.circular(AppStyles.radiusLarge),
-            ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-          child: isTyping
-              ? const _TypingDots()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (hasTools) ...[
-                      for (final label in toolEvents)
-                        _ToolEventChip(
-                          label: label,
-                          inProgress: streaming &&
-                              text.isEmpty &&
-                              label == toolEvents.last,
-                        ),
-                      if (text.isNotEmpty)
-                        const SizedBox(height: AppStyles.spacingS),
-                    ],
-                    if (text.isNotEmpty)
-                      MarkdownBody(
-                        data: text,
-                        selectable: true,
-                        softLineBreak: true,
-                        styleSheet: _markdownStyle(context),
-                      )
-                    else if (streaming)
-                      // Tools running but no text yet — show typing dots below.
-                      const Padding(
-                        padding: EdgeInsets.only(top: AppStyles.spacingXS),
-                        child: _TypingDots(),
-                      ),
-                  ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: AppStyles.spacingXS),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppStyles.spacingL,
+                vertical: AppStyles.spacingM,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundSecondary,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(AppStyles.radiusLarge),
+                  topRight: Radius.circular(AppStyles.radiusLarge),
+                  bottomLeft: Radius.circular(AppStyles.radiusMedium),
+                  bottomRight: Radius.circular(AppStyles.radiusLarge),
                 ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              ),
+              child: isTyping
+                  ? const _TypingDots()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hasTools) ...[
+                          for (final label in toolEvents)
+                            _ToolEventChip(
+                              label: label,
+                              inProgress: streaming &&
+                                  text.isEmpty &&
+                                  label == toolEvents.last,
+                            ),
+                          if (text.isNotEmpty)
+                            const SizedBox(height: AppStyles.spacingS),
+                        ],
+                        if (text.isNotEmpty)
+                          MarkdownBody(
+                            data: text,
+                            selectable: true,
+                            softLineBreak: true,
+                            styleSheet: _markdownStyle(context),
+                          )
+                        else if (streaming)
+                          // Tools running but no text yet — show typing dots.
+                          const Padding(
+                            padding: EdgeInsets.only(top: AppStyles.spacingXS),
+                            child: _TypingDots(),
+                          ),
+                        if (stopped) const StoppedMarker(),
+                      ],
+                    ),
+            ),
+            // Stop button outside the bubble, left-aligned beneath it. Only
+            // visible while streaming AND a callback is wired.
+            if (streaming && !stopped && onStopGenerating != null)
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: AppStyles.spacingXS,
+                  top: AppStyles.spacingXS,
+                ),
+                child: StopStreamingButton(onPressed: onStopGenerating!),
+              ),
+          ],
         ),
       ),
     );
