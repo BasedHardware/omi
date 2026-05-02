@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/providers/ambient_capture_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -49,7 +51,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     super.initState();
   }
 
-  Future<void> _toggleMute(CaptureProvider provider) async {
+  bool _isAmbientRecording(AmbientCaptureProvider ambientProvider) {
+    return Platform.isAndroid && ambientProvider.running;
+  }
+
+  Future<void> _toggleMute(CaptureProvider provider, AmbientCaptureProvider ambientProvider) async {
     if (_isMuted) {
       // Unmute - resume recording
       HapticFeedback.mediumImpact();
@@ -57,7 +63,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         _isMuted = false;
       });
 
-      if (provider.havingRecordingDevice) {
+      if (_isAmbientRecording(ambientProvider)) {
+        await ambientProvider.resume();
+      } else if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.resumeDeviceRecording();
       } else {
@@ -74,7 +82,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         _isMuted = true;
       });
 
-      if (provider.havingRecordingDevice) {
+      if (_isAmbientRecording(ambientProvider)) {
+        await ambientProvider.pause();
+      } else if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.pauseDeviceRecording();
       } else {
@@ -110,20 +120,63 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
   }
 
-  Future<void> _stopConversation(CaptureProvider provider) async {
+  Future<void> _stopActiveRecording(CaptureProvider provider, AmbientCaptureProvider ambientProvider) async {
+    if (_isAmbientRecording(ambientProvider)) {
+      await ambientProvider.stop();
+    } else if (provider.recordingState == RecordingState.record) {
+      await provider.stopStreamRecording();
+    }
+  }
+
+  Future<void> _finishConversation(CaptureProvider provider, AmbientCaptureProvider ambientProvider) async {
+    await _stopActiveRecording(provider, ambientProvider);
+    provider.forceProcessingCurrentConversation();
+  }
+
+  Future<void> _handleBack(CaptureProvider provider, AmbientCaptureProvider ambientProvider) async {
+    final isRecording = _isAmbientRecording(ambientProvider) || provider.recordingState == RecordingState.record;
+    if (!isRecording) {
+      Navigator.pop(context);
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return ConfirmationDialog(
+          title: context.l10n.recordingActive,
+          description: "${context.l10n.capturingAudioAndGeneratingTranscript}\n\n${context.l10n.syncingBackground}",
+          cancelText: context.l10n.cancel,
+          confirmText: context.l10n.stopRecording,
+          onCancel: () => Navigator.of(context).pop(),
+          onConfirm: () async {
+            await _finishConversation(provider, ambientProvider);
+            if (!context.mounted) return;
+            Navigator.of(context).pop();
+            Navigator.of(context).pop();
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _stopConversation(CaptureProvider provider, AmbientCaptureProvider ambientProvider) async {
+    final isRecording = _isAmbientRecording(ambientProvider) || provider.recordingState == RecordingState.record;
+    if (isRecording && provider.segments.isEmpty && provider.photos.isEmpty) {
+      await _finishConversation(provider, ambientProvider);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
       Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic)
-        if (provider.recordingState == RecordingState.record) {
-          await provider.stopStreamRecording();
-        }
-        // Then process the conversation
-        provider.forceProcessingCurrentConversation();
+        await _finishConversation(provider, ambientProvider);
       }
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
+        if (!mounted) return;
         Navigator.of(context).pop();
         return;
       }
@@ -157,6 +210,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 onConfirm: () async {
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
+                  if (!mounted || !context.mounted) return;
                   Navigator.of(context).pop();
                   Navigator.of(context).pop();
                 },
@@ -172,8 +226,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
+        final ambientProvider = context.watch<AmbientCaptureProvider>();
+        final isAmbientRecording = _isAmbientRecording(ambientProvider);
+        final isRecording = isAmbientRecording || provider.recordingState == RecordingState.record;
+        final hasCapturedContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
         return PopScope(
-          canPop: true,
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            _handleBack(provider, ambientProvider);
+          },
           child: Scaffold(
             key: scaffoldKey,
             backgroundColor: Theme.of(context).colorScheme.primary,
@@ -186,10 +248,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      return;
-                    },
+                    onPressed: () => _handleBack(provider, ambientProvider),
                     icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
                   ),
                   const SizedBox(width: 4),
@@ -224,11 +283,40 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         Column(
                           children: [
                             Expanded(
-                              child: provider.segments.isEmpty && provider.photos.isEmpty
+                              child: !hasCapturedContent
                                   ? Center(
                                       child: Padding(
-                                        padding: const EdgeInsets.only(top: 50.0),
-                                        child: Text(context.l10n.waitingForTranscriptOrPhotos),
+                                        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isRecording ? Icons.graphic_eq_rounded : Icons.mic_none_rounded,
+                                              color: Colors.white70,
+                                              size: 40,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              isRecording
+                                                  ? context.l10n.capturingAudioAndGeneratingTranscript
+                                                  : context.l10n.waitingForTranscriptOrPhotos,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            if (isRecording) ...[
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                context.l10n.syncingBackground,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
@@ -315,14 +403,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               ],
             ),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+            floatingActionButton: (isRecording || hasCapturedContent)
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Process Now button
                       GestureDetector(
-                        onTap: () => _stopConversation(provider),
+                        onTap: () => _stopConversation(provider, ambientProvider),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                           decoration: BoxDecoration(
@@ -343,7 +431,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                               const FaIcon(FontAwesomeIcons.stop, color: Colors.black, size: 16.0),
                               const SizedBox(width: 10),
                               Text(
-                                context.l10n.processNow,
+                                hasCapturedContent ? context.l10n.processNow : context.l10n.stopRecording,
                                 style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                             ],
@@ -352,26 +440,27 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       ),
                       const SizedBox(width: 12),
                       // Mute button
-                      GestureDetector(
-                        onTap: () => _toggleMute(provider),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                      if (isRecording)
+                        GestureDetector(
+                          onTap: () => _toggleMute(provider, ambientProvider),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  spreadRadius: 2,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(_isMuted ? Icons.mic : Icons.mic_off, color: Colors.white, size: 24),
                           ),
-                          child: const Icon(Icons.mic_off, color: Colors.white, size: 24),
                         ),
-                      ),
                     ],
                   )
                 : null,
