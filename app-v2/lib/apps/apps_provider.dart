@@ -60,12 +60,17 @@ class AppsProvider extends ChangeNotifier {
   /// finished the OAuth flow successfully. Anything else is a failure / cancel.
   static const String _setupSuccess = 'success';
 
-  /// Maps Nooto plugin app ids to backend integration prefs path segment.
-  /// The backend keys `users/{uid}/integration_prefs/{integration_id}` on
-  /// `app.id` directly, so this is currently identity for `nooto-jira`.
-  /// Kept as a map (not a passthrough) so we can apply per-app gating
-  /// when adding integrations that *don't* expose a server-side prefs doc.
-  static const Map<String, String> _integrationIdByAppId = {'nooto-jira': 'nooto-jira'};
+  /// Returns the backend integration_id for an [appId], or null if this app
+  /// has no server-side integration endpoints (plain prompt apps). The
+  /// backend keys redis enabled_plugins, prefs subcollection, and the
+  /// integration route paths on the same string the catalog returned as
+  /// `app.id` (a ULID in production), so the resolution is just "is this
+  /// an OAuth-style external_integration app? then use its id."
+  String? _integrationIdForApp(String appId) {
+    final app = _findApp(appId);
+    if (app?.externalIntegration == null) return null;
+    return appId;
+  }
 
   List<AppGroup> _groups = const [];
   Set<String> _enabledIds = const {};
@@ -298,7 +303,7 @@ class AppsProvider extends ChangeNotifier {
   /// callers shouldn't await this. Failures are logged but never rolled
   /// back into local state.
   Future<void> _pushTwoWaySync(String appId, bool enabled) async {
-    final integrationId = _integrationIdByAppId[appId];
+    final integrationId = _integrationIdForApp(appId);
     if (integrationId == null) return; // Local-only app, no server endpoint.
     try {
       await _client.patch('v1/integrations/$integrationId/prefs', body: {'two_way_sync_enabled': enabled});
@@ -314,11 +319,12 @@ class AppsProvider extends ChangeNotifier {
   /// cross-device toggle changes converge here.
   Future<void> _reconcileTwoWaySyncFromServer() async {
     final pulls = <Future<void>>[];
-    for (final entry in _integrationIdByAppId.entries) {
-      final appId = entry.key;
-      final integrationId = entry.value;
-      if (!_enabledIds.contains(appId)) continue;
-      pulls.add(_pullTwoWaySync(appId, integrationId));
+    for (final group in _groups) {
+      for (final app in group.apps) {
+        if (app.externalIntegration == null) continue;
+        if (!_enabledIds.contains(app.id)) continue;
+        pulls.add(_pullTwoWaySync(app.id, app.id));
+      }
     }
     if (pulls.isEmpty) return;
     await Future.wait(pulls);
@@ -376,14 +382,18 @@ class AppsProvider extends ChangeNotifier {
   /// the "Last synced N min ago" caption updates immediately without
   /// waiting for the next [load] reconcile.
   Future<String?> syncNow(String appId) async {
-    final integrationId = _integrationIdByAppId[appId];
+    final integrationId = _integrationIdForApp(appId);
+    print('[AppsProvider] syncNow($appId) entered. integrationId=$integrationId '
+        'alreadySyncing=${_syncingIds.contains(appId)}');
     if (integrationId == null) return 'not_supported';
     if (_syncingIds.contains(appId)) return null; // Already in flight, no-op.
 
     _syncingIds = {..._syncingIds, appId};
     notifyListeners();
     try {
+      print('[AppsProvider] syncNow POST v1/integrations/$integrationId/sync-now');
       final res = await _client.post('v1/integrations/$integrationId/sync-now', body: const {});
+      print('[AppsProvider] syncNow response status=${res.statusCode} bodyLen=${res.body.length}');
       final body = jsonDecode(res.body);
       if (body is Map) {
         final ts = body['last_synced_at'];
