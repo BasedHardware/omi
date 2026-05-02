@@ -33,7 +33,9 @@ class _PlanScreenState extends State<PlanScreen> {
     if (items.isEmpty) return const _EmptyState();
 
     final groups = _group(items);
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingM;
+    // See apps_screen.dart — MediaQuery.padding.top already covers the
+    // status bar + AppBar when extendBodyBehindAppBar is true.
+    final topInset = MediaQuery.of(context).padding.top + AppStyles.spacingM;
     return RefreshIndicator(
       onRefresh: () => provider.fetchAll(),
       color: AppColors.brandPrimary,
