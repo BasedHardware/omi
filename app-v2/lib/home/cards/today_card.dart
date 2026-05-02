@@ -7,6 +7,7 @@ import 'package:nooto_v2/home/home_nav.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
+import 'package:nooto_v2/widgets/jira_chip.dart';
 
 /// One pending commitment shown in the Today surface card.
 ///
@@ -14,31 +15,37 @@ import 'package:nooto_v2/theme/app_theme.dart';
 /// design doc. Fields beyond `description` are optional so a generator can
 /// emit minimal items when the source schema doesn't carry timing.
 class TodayItem {
-  const TodayItem({
-    required this.description,
-    this.createdAt,
-    this.dueAt,
-  });
+  const TodayItem({required this.description, this.createdAt, this.dueAt, this.externalSource});
 
   final String description;
   final DateTime? createdAt;
   final DateTime? dueAt;
 
+  /// Mirrors [ActionItem.externalSource] — when present, the bullet renders a
+  /// [JiraChip] next to the description so the user can jump straight to the
+  /// source tracker.
+  final ExternalSource? externalSource;
+
   Map<String, dynamic> toJson() => {
-        'description': description,
-        if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
-        if (dueAt != null) 'dueAt': dueAt!.toIso8601String(),
-      };
+    'description': description,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (dueAt != null) 'dueAt': dueAt!.toIso8601String(),
+    if (externalSource != null)
+      'externalSource': {
+        'source': externalSource!.source,
+        'external_id': externalSource!.externalId,
+        'url': externalSource!.url,
+      },
+  };
 
   factory TodayItem.fromJson(Map<String, dynamic> json) {
+    final extRaw = json['externalSource'];
+    final external = extRaw is Map ? ExternalSource.fromJson(Map<String, dynamic>.from(extRaw)) : null;
     return TodayItem(
       description: json['description'] as String? ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String)
-          : null,
-      dueAt: json['dueAt'] != null
-          ? DateTime.tryParse(json['dueAt'] as String)
-          : null,
+      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) : null,
+      dueAt: json['dueAt'] != null ? DateTime.tryParse(json['dueAt'] as String) : null,
+      externalSource: external,
     );
   }
 }
@@ -48,11 +55,7 @@ class TodayItem {
 /// anti-pattern called out in the design doc. Up to 3 bullets; "See all"
 /// links to the Plan tab where bulk action lives.
 final class TodayCard extends CompanionCard {
-  TodayCard({
-    required this.items,
-    required this.generatedAt,
-    this.totalIncomplete,
-  });
+  TodayCard({required this.items, required this.generatedAt, this.totalIncomplete});
 
   /// Up to 3 visible items, newest first. Empty list renders the Day-1
   /// explainer copy in place of bullets.
@@ -82,24 +85,22 @@ final class TodayCard extends CompanionCard {
 
   @override
   Map<String, dynamic> toJson() => {
-        'kind': kind.code,
-        'items': items.map((i) => i.toJson()).toList(),
-        if (totalIncomplete != null) 'totalIncomplete': totalIncomplete,
-        'generatedAt': generatedAt.toIso8601String(),
-      };
+    'kind': kind.code,
+    'items': items.map((i) => i.toJson()).toList(),
+    if (totalIncomplete != null) 'totalIncomplete': totalIncomplete,
+    'generatedAt': generatedAt.toIso8601String(),
+  };
 
   factory TodayCard.fromJson(Map<String, dynamic> json) {
     // Read the rich `items` list when present, otherwise fall back to legacy
     // `descriptions` rows from cards cached before TodayItem existed.
     final rawItems = json['items'] as List<dynamic>?;
     final items = rawItems != null
-        ? rawItems
-            .map((e) => TodayItem.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList()
+        ? rawItems.map((e) => TodayItem.fromJson(Map<String, dynamic>.from(e as Map))).toList()
         : ((json['descriptions'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .map((d) => TodayItem(description: d))
-            .toList();
+              .cast<String>()
+              .map((d) => TodayItem(description: d))
+              .toList();
     return TodayCard(
       items: items,
       totalIncomplete: json['totalIncomplete'] as int?,
@@ -130,11 +131,14 @@ TodayCard? todayCardFor(ActionItemsProvider provider) {
   if (!provider.ready) return null;
   return TodayCard(
     items: provider.incompleteTop3
-        .map((i) => TodayItem(
-              description: i.description,
-              createdAt: i.createdAt,
-              dueAt: i.dueAt,
-            ))
+        .map(
+          (i) => TodayItem(
+            description: i.description,
+            createdAt: i.createdAt,
+            dueAt: i.dueAt,
+            externalSource: i.externalSource,
+          ),
+        )
         .toList(growable: false),
     totalIncomplete: provider.items.length,
     generatedAt: DateTime.now(),
@@ -165,24 +169,16 @@ class _TodayCardView extends StatelessWidget {
             if (hasItems)
               for (var i = 0; i < card.items.length; i++) ...[
                 _Bullet(item: card.items[i]),
-                if (i < card.items.length - 1)
-                  const SizedBox(height: AppStyles.spacingM),
+                if (i < card.items.length - 1) const SizedBox(height: AppStyles.spacingM),
               ]
             else
               const Text(
                 "Once you start a recording I'll surface what you committed "
                 'to here.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textTertiary,
-                  height: 1.4,
-                ),
+                style: TextStyle(fontSize: 14, color: AppColors.textTertiary, height: 1.4),
               ),
             const SizedBox(height: AppStyles.spacingM),
-            _SeeAllRow(
-              enabled: hasItems,
-              onTap: () => card.onAction(context, CardAction.tapThrough),
-            ),
+            _SeeAllRow(enabled: hasItems, onTap: () => card.onAction(context, CardAction.tapThrough)),
           ],
         ),
       ),
@@ -207,21 +203,11 @@ class _Header extends StatelessWidget {
       children: [
         Text(
           l.todayCardHeader,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textTertiary,
-            ),
-          ),
+          Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textTertiary)),
         ],
       ],
     );
@@ -248,6 +234,8 @@ class _Bullet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trailing = _trailingLabel(item);
+    final hasChip = item.externalSource != null;
+    const descriptionStyle = TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -256,24 +244,26 @@ class _Bullet extends StatelessWidget {
           child: Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: AppColors.brandPrimary,
-              shape: BoxShape.circle,
-            ),
+            decoration: const BoxDecoration(color: AppColors.brandPrimary, shape: BoxShape.circle),
           ),
         ),
         const SizedBox(width: AppStyles.spacingM),
+        // Wrap when there's an integration chip so the chip flows below the
+        // description on narrow screens rather than clipping it. Plain Text
+        // path preserved for non-integration items so 2-line ellipsis still
+        // works exactly as it did pre-Jira.
         Expanded(
-          child: Text(
-            item.description,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-          ),
+          child: hasChip
+              ? Wrap(
+                  spacing: AppStyles.spacingS,
+                  runSpacing: AppStyles.spacingXS,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(item.description, style: descriptionStyle),
+                    JiraChip.forSource(item.externalSource),
+                  ],
+                )
+              : Text(item.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: descriptionStyle),
         ),
         if (trailing != null) ...[
           const SizedBox(width: AppStyles.spacingS),
@@ -281,11 +271,7 @@ class _Bullet extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               trailing,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textQuaternary,
-              ),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textQuaternary),
             ),
           ),
         ],
@@ -327,19 +313,13 @@ class _SeeAllRow extends StatelessWidget {
     // the gateway to Plan tab. Quieter textTertiary in the disabled empty
     // state where there's nothing to navigate to.
     final l = AppLocalizations.of(context);
-    final color = enabled
-        ? AppColors.brandPrimary
-        : AppColors.textTertiary.withValues(alpha: 0.5);
+    final color = enabled ? AppColors.brandPrimary : AppColors.textTertiary.withValues(alpha: 0.5);
     final row = Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Text(
           l.todayCardSeeAll,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: color,
-          ),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color),
         ),
         const SizedBox(width: AppStyles.spacingXS),
         Icon(Icons.arrow_forward_rounded, size: 16, color: color),

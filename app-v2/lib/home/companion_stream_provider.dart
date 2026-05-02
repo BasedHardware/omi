@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:hive/hive.dart';
 
 import 'package:nooto_v2/companion/companion_signals.dart';
+import 'package:nooto_v2/home/cards/jira_stuck_issues_card.dart';
 import 'package:nooto_v2/home/cards/morning_brief_card.dart';
 import 'package:nooto_v2/home/cards/today_card.dart';
 import 'package:nooto_v2/home/cards/welcome_card.dart';
@@ -27,9 +28,9 @@ class CompanionStreamProvider extends ChangeNotifier {
     required CompanionSignals signals,
     required ActionItemsProvider actionItems,
     required ChatService chatService,
-  })  : _signals = signals,
-        _actionItems = actionItems,
-        _chatService = chatService {
+  }) : _signals = signals,
+       _actionItems = actionItems,
+       _chatService = chatService {
     _actionItems.addListener(_onActionItemsChanged);
     _init();
   }
@@ -106,6 +107,13 @@ class CompanionStreamProvider extends ChangeNotifier {
           _cardsBox.delete(card.id);
           continue;
         }
+        // Same daily-stamping treatment as the brief: a stuck-issues card
+        // older than today is irrelevant — the user has either acted on it
+        // or hasn't, and either way the next pass should freshly evaluate.
+        if (card is JiraStuckIssuesCard && card.dateKey != today) {
+          _cardsBox.delete(card.id);
+          continue;
+        }
         _cards.add(card);
       } catch (e) {
         debugPrint('[CompanionStream] skipped bad card: $e');
@@ -121,6 +129,10 @@ class CompanionStreamProvider extends ChangeNotifier {
     _maybeEmit(welcomeCardFor(_signals));
     _replaceOrEmit(_cachedBriefCard());
     _replaceOrEmit(todayCardFor(_actionItems));
+    // Stuck-issues card is one-emit-per-day — a `_maybeEmit` so the user
+    // can dismiss it and not see it reappear when the action-items list
+    // changes for an unrelated reason during the same session.
+    _maybeEmit(jiraStuckIssuesCardFor(_actionItems));
   }
 
   /// Synchronous read of today's brief from Hive. Network fetch lives in
@@ -154,8 +166,10 @@ class CompanionStreamProvider extends ChangeNotifier {
       final trimmed = body.trim();
       if (trimmed.isEmpty) return;
       if (_looksLikeBackendError(trimmed)) {
-        debugPrint('[CompanionStream] brief returned backend fallback, '
-            'not caching: $trimmed');
+        debugPrint(
+          '[CompanionStream] brief returned backend fallback, '
+          'not caching: $trimmed',
+        );
         return;
       }
       final card = MorningBriefCard(
@@ -181,8 +195,7 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// a successful response from our wire-protocol POV, so we sniff it here.
   bool _looksLikeBackendError(String body) {
     final lower = body.toLowerCase();
-    return lower.contains('encountered an error') &&
-        lower.contains('try again');
+    return lower.contains('encountered an error') && lower.contains('try again');
   }
 
   static const String _briefPrompt =
@@ -197,10 +210,10 @@ class CompanionStreamProvider extends ChangeNotifier {
     final salutation = hour < 11
         ? 'Good morning'
         : hour < 17
-            ? 'Good afternoon'
-            : hour < 22
-                ? 'Good evening'
-                : 'Hi';
+        ? 'Good afternoon'
+        : hour < 22
+        ? 'Good evening'
+        : 'Hi';
     final n = (name ?? '').trim();
     return n.isEmpty ? '$salutation.' : '$salutation, $n.';
   }
@@ -266,23 +279,15 @@ class CompanionStreamProvider extends ChangeNotifier {
   /// Records an action and removes the card from the active stream. Dismissed
   /// cards stay suppressed via `_isDismissed`; snoozed cards re-emerge once
   /// `now > until`.
-  Future<void> recordAction(
-    CompanionCard card,
-    CardAction action, {
-    DateTime? snoozeUntil,
-  }) async {
-    await _actionsBox.put(
-      _actionKey(card.id, action),
-      {
-        'id': card.id,
-        'action': action.code,
-        'ts': DateTime.now().millisecondsSinceEpoch,
-        if (snoozeUntil != null) 'until': snoozeUntil.millisecondsSinceEpoch,
-      },
-    );
-    final removesFromStream = action == CardAction.accept ||
-        action == CardAction.dismiss ||
-        action == CardAction.snooze;
+  Future<void> recordAction(CompanionCard card, CardAction action, {DateTime? snoozeUntil}) async {
+    await _actionsBox.put(_actionKey(card.id, action), {
+      'id': card.id,
+      'action': action.code,
+      'ts': DateTime.now().millisecondsSinceEpoch,
+      if (snoozeUntil != null) 'until': snoozeUntil.millisecondsSinceEpoch,
+    });
+    final removesFromStream =
+        action == CardAction.accept || action == CardAction.dismiss || action == CardAction.snooze;
     if (removesFromStream) {
       _cards.removeWhere((c) => c.id == card.id);
       await _cardsBox.delete(card.id);
@@ -296,8 +301,7 @@ class CompanionStreamProvider extends ChangeNotifier {
     }
   }
 
-  String _actionKey(String cardId, CardAction action) =>
-      '$cardId::${action.code}';
+  String _actionKey(String cardId, CardAction action) => '$cardId::${action.code}';
 }
 
 /// Card-type registry: dispatches deserialization on the `kind` field. Adding
@@ -313,6 +317,8 @@ CompanionCard? _fromJson(Map<String, dynamic> json) {
       return TodayCard.fromJson(json);
     case CardKind.brief:
       return MorningBriefCard.fromJson(json);
+    case CardKind.jiraStuckIssues:
+      return JiraStuckIssuesCard.fromJson(json);
     case CardKind.commitmentCapture:
     case CardKind.focusBlock:
     case CardKind.relationshipNudge:

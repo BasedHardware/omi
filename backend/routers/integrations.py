@@ -13,6 +13,7 @@ import httpx
 
 import database.users as users_db
 import database.redis_db as redis_db
+import database.integration_prefs as integration_prefs_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 import logging
@@ -230,6 +231,67 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=404, detail="Integration not found")
 
     return None
+
+
+# *****************************
+# ******* INTEGRATION PREFS ***
+# *****************************
+
+
+class IntegrationPrefsResponse(BaseModel):
+    integration_id: str
+    two_way_sync_enabled: bool = Field(
+        default=False,
+        description=(
+            "When true, write tools (e.g. create_issue / add_comment in Jira) are "
+            "available to the chat agent. Default OFF — surprise writes to a user's "
+            "external account are a trust hazard."
+        ),
+    )
+
+
+class IntegrationPrefsUpdate(BaseModel):
+    two_way_sync_enabled: bool = Field(description="Enable or disable writebacks to the integration's external system.")
+
+
+@router.get(
+    "/v1/integrations/{integration_id}/prefs",
+    response_model=IntegrationPrefsResponse,
+    tags=['integrations'],
+)
+def get_integration_prefs(integration_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Return the current per-user preferences for an integration.
+
+    Two-way sync defaults to ``False`` if no doc exists — the chat layer relies
+    on this to gate write tools (Jira create_issue, etc.).
+    """
+    pref = integration_prefs_db.get_integration_pref(uid, integration_id) or {}
+    return IntegrationPrefsResponse(
+        integration_id=integration_id,
+        two_way_sync_enabled=bool(pref.get('two_way_sync_enabled', False)),
+    )
+
+
+@router.patch(
+    "/v1/integrations/{integration_id}/prefs",
+    response_model=IntegrationPrefsResponse,
+    tags=['integrations'],
+)
+def update_integration_prefs(
+    integration_id: str,
+    payload: IntegrationPrefsUpdate,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Persist a preference toggle change for an integration."""
+    integration_prefs_db.set_integration_pref(
+        uid,
+        integration_id,
+        two_way_sync_enabled=payload.two_way_sync_enabled,
+    )
+    return IntegrationPrefsResponse(
+        integration_id=integration_id,
+        two_way_sync_enabled=payload.two_way_sync_enabled,
+    )
 
 
 @router.put("/v1/integrations/apple-health/sync", tags=['integrations'])

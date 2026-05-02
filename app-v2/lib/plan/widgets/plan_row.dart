@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
+import 'package:nooto_v2/widgets/jira_chip.dart';
 
 /// One commitment row in the Plan screen. Tap the checkbox to mark complete
 /// (optimistic, rolls back on server error). Description wraps to 2 lines;
@@ -15,14 +16,12 @@ class PlanRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trailing = _trailingLabel(item);
+    final hasChip = item.externalSource != null;
     return InkWell(
       onTap: onToggle,
       borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppStyles.spacingS,
-          vertical: AppStyles.spacingM,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS, vertical: AppStyles.spacingM),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -31,23 +30,27 @@ class PlanRow extends StatelessWidget {
               child: _Checkbox(checked: item.completed),
             ),
             const SizedBox(width: AppStyles.spacingM),
+            // Wrap so a long description + chip on a narrow viewport flows
+            // the chip below the text rather than clipping the description.
+            // Single-line description rows still render exactly as before
+            // because Wrap collapses to one line when content fits.
             Expanded(
-              child: Text(
-                item.description,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: item.completed
-                      ? AppColors.textTertiary
-                      : AppColors.textPrimary,
-                  height: 1.4,
-                  decoration: item.completed
-                      ? TextDecoration.lineThrough
-                      : TextDecoration.none,
-                  decorationColor: AppColors.textTertiary,
-                ),
-              ),
+              child: hasChip
+                  ? Wrap(
+                      spacing: AppStyles.spacingS,
+                      runSpacing: AppStyles.spacingXS,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(item.description, style: _descriptionStyle(item.completed)),
+                        JiraChip.forSource(item.externalSource),
+                      ],
+                    )
+                  : Text(
+                      item.description,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: _descriptionStyle(item.completed),
+                    ),
             ),
             if (trailing != null) ...[
               const SizedBox(width: AppStyles.spacingS),
@@ -55,11 +58,7 @@ class PlanRow extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
                   trailing,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textTertiary, fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -68,6 +67,14 @@ class PlanRow extends StatelessWidget {
       ),
     );
   }
+
+  static TextStyle _descriptionStyle(bool completed) => TextStyle(
+    fontSize: 15,
+    color: completed ? AppColors.textTertiary : AppColors.textPrimary,
+    height: 1.4,
+    decoration: completed ? TextDecoration.lineThrough : TextDecoration.none,
+    decorationColor: AppColors.textTertiary,
+  );
 
   /// Due → relative ("today", "tomorrow", "3d", "overdue 2d"). Else age of
   /// createdAt ("2d"). Null if neither is set.
@@ -111,19 +118,11 @@ class _Checkbox extends StatelessWidget {
         color: checked ? AppColors.brandPrimary : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: checked
-              ? AppColors.brandPrimary
-              : AppColors.textTertiary.withValues(alpha: 0.5),
+          color: checked ? AppColors.brandPrimary : AppColors.textTertiary.withValues(alpha: 0.5),
           width: 1.5,
         ),
       ),
-      child: checked
-          ? const Icon(
-              Icons.check_rounded,
-              size: 14,
-              color: AppColors.textPrimary,
-            )
-          : null,
+      child: checked ? const Icon(Icons.check_rounded, size: 14, color: AppColors.textPrimary) : null,
     );
   }
 }

@@ -55,18 +55,28 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: dict) -> str:
+def create_action_item(uid: str, action_item_data: dict, external_source: Optional[dict] = None) -> str:
     """
     Create a new action item for a user.
 
     Args:
         uid: User ID
         action_item_data: Action item data including description, dates, etc.
+        external_source: Optional external source descriptor of the form
+            ``{"source": "jira", "external_id": "PROJ-123", "url": "..."}``.
+            When supplied, the dict is embedded as ``external_source`` on the
+            stored document so transcript-derived items and integration-synced
+            items can coexist in the same feed.
 
     Returns:
         The ID of the created action item
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
+
+    if external_source:
+        # Caller can also embed it directly in `action_item_data`; the explicit
+        # arg always wins so integration code can use a single seam.
+        action_item_data['external_source'] = external_source
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
@@ -83,6 +93,65 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     doc_ref = action_items_ref.add(action_item_data)[1]
 
     return doc_ref.id
+
+
+# *****************************
+# ********** UPSERT ***********
+# *****************************
+
+
+def _find_by_external_source(uid: str, source: str, external_id: str) -> Optional[firestore.DocumentSnapshot]:
+    """Return the existing doc snapshot for an external (source, external_id), or None."""
+    user_ref = db.collection('users').document(uid)
+    query = (
+        user_ref.collection(action_items_collection)
+        .where(filter=FieldFilter('external_source.source', '==', source))
+        .where(filter=FieldFilter('external_source.external_id', '==', external_id))
+        .limit(1)
+    )
+    for doc in query.stream():
+        return doc
+    return None
+
+
+def upsert_external_action_item(uid: str, external_source: dict, fields: dict) -> str:
+    """Idempotent upsert keyed on ``external_source.{source, external_id}``.
+
+    - If a matching item exists: merge ``fields`` (description / due_at /
+      completed / url etc.), preserve original ``id`` and ``created_at``,
+      bump ``updated_at`` + ``completed_at`` semantics.
+    - Otherwise: create a new item with ``external_source`` embedded.
+
+    Returns the action item id (existing or newly created).
+    """
+    if not external_source or not external_source.get('source') or not external_source.get('external_id'):
+        raise ValueError("external_source must include both 'source' and 'external_id'")
+
+    source = external_source['source']
+    external_id = external_source['external_id']
+
+    existing = _find_by_external_source(uid, source, external_id)
+    fields = _prepare_action_item_for_write(dict(fields))
+
+    if existing is None:
+        # New: embed external_source and delegate to create_action_item
+        return create_action_item(uid, fields, external_source=external_source)
+
+    # Update path: preserve created_at + id, bump updated_at, refresh external_source
+    update_data = dict(fields)
+    update_data['updated_at'] = datetime.now(timezone.utc)
+    update_data['external_source'] = external_source
+
+    # Mirror create_action_item's completed_at semantics
+    if update_data.get('completed') is True:
+        existing_data = existing.to_dict() or {}
+        if not existing_data.get('completed_at'):
+            update_data['completed_at'] = datetime.now(timezone.utc)
+    elif update_data.get('completed') is False:
+        update_data['completed_at'] = None
+
+    existing.reference.update(update_data)
+    return existing.id
 
 
 def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[str]:

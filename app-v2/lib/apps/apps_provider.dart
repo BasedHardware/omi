@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -37,13 +38,10 @@ Future<String?> _defaultGetUid() async => AuthService.instance.currentUser?.uid;
 /// Two-way-sync (writeback) opt-in is stored in Hive box `apps.prefs.v1`
 /// and defaults to false for any app — surprise writes are a trust hazard.
 class AppsProvider extends ChangeNotifier {
-  AppsProvider({
-    required ApiClient client,
-    LaunchUrlFn? launchUrl,
-    Future<String?> Function()? getUid,
-  })  : _client = client,
-        _launchUrl = launchUrl ?? _defaultLaunchUrl,
-        _getUid = getUid ?? _defaultGetUid {
+  AppsProvider({required ApiClient client, LaunchUrlFn? launchUrl, Future<String?> Function()? getUid})
+    : _client = client,
+      _launchUrl = launchUrl ?? _defaultLaunchUrl,
+      _getUid = getUid ?? _defaultGetUid {
     _hydrateTwoWaySync();
   }
 
@@ -61,6 +59,13 @@ class AppsProvider extends ChangeNotifier {
   /// Status payload from `nooto://app-setup-complete` that means the user
   /// finished the OAuth flow successfully. Anything else is a failure / cancel.
   static const String _setupSuccess = 'success';
+
+  /// Maps Nooto plugin app ids to backend integration prefs path segment.
+  /// The backend keys `users/{uid}/integration_prefs/{integration_id}` on
+  /// `app.id` directly, so this is currently identity for `nooto-jira`.
+  /// Kept as a map (not a passthrough) so we can apply per-app gating
+  /// when adding integrations that *don't* expose a server-side prefs doc.
+  static const Map<String, String> _integrationIdByAppId = {'nooto-jira': 'nooto-jira'};
 
   List<AppGroup> _groups = const [];
   Set<String> _enabledIds = const {};
@@ -94,29 +99,29 @@ class AppsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final results = await Future.wait([
-        _client.get('v2/apps?offset=0&limit=20'),
-        _client.get('v1/apps/enabled'),
-      ]);
+      final results = await Future.wait([_client.get('v2/apps?offset=0&limit=20'), _client.get('v1/apps/enabled')]);
 
       final catalog = jsonDecode(results[0].body) as Map<String, dynamic>;
       final raw = catalog['groups'];
       final parsed = raw is List
           ? raw
-              .whereType<Map>()
-              .map((m) => AppGroup.fromJson(Map<String, dynamic>.from(m)))
-              .where((g) => g.apps.isNotEmpty)
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((m) => AppGroup.fromJson(Map<String, dynamic>.from(m)))
+                .where((g) => g.apps.isNotEmpty)
+                .toList(growable: false)
           : const <AppGroup>[];
 
       final enabledRaw = jsonDecode(results[1].body);
-      final enabledIds = enabledRaw is List
-          ? enabledRaw.map((e) => e.toString()).toSet()
-          : <String>{};
+      final enabledIds = enabledRaw is List ? enabledRaw.map((e) => e.toString()).toSet() : <String>{};
 
       _groups = parsed;
       _enabledIds = enabledIds;
       _hasFetched = true;
+      // Best-effort cross-device pref reconciliation. Runs in the same call
+      // so a single load() leaves the toggle state consistent before the
+      // UI settles. Failures inside _pullTwoWaySync are swallowed — they
+      // don't surface as a load error.
+      await _reconcileTwoWaySyncFromServer();
     } catch (e, st) {
       debugPrint('[AppsProvider] load failed: $e\n$st');
       _error = e.toString();
@@ -150,9 +155,7 @@ class AppsProvider extends ChangeNotifier {
       // plugin — open the browser and keep the optimistic enable. Every
       // other failure (other 4xx, 5xx, network drop, decode error) is a
       // hard failure — roll back.
-      if (e is ApiError &&
-          e.statusCode == 400 &&
-          e.detail == _setupNotCompleted) {
+      if (e is ApiError && e.statusCode == 400 && e.detail == _setupNotCompleted) {
         return await _startOAuthFlow(appId);
       }
       debugPrint('[AppsProvider] install($appId) failed: $e');
@@ -251,10 +254,65 @@ class AppsProvider extends ChangeNotifier {
 
   /// Flip the writeback opt-in for an app and persist to Hive. Notifies so
   /// any toggle UI rebuilds in the same frame.
+  ///
+  /// Best-effort server sync: after the local write, we PATCH the backend's
+  /// per-integration prefs endpoint so it can gate write tools at chat-
+  /// assembly time. The Hive value is the source of truth on-device — if
+  /// the network call fails, we don't roll back. The next successful
+  /// reconcile (in [load]) or the next toggle will close the gap.
   Future<void> setTwoWaySync(String appId, bool enabled) async {
     _twoWaySyncByAppId = {..._twoWaySyncByAppId, appId: enabled};
     await _persistTwoWaySync();
     notifyListeners();
+    unawaited(_pushTwoWaySync(appId, enabled));
+  }
+
+  /// Best-effort PATCH to the integration prefs endpoint. Fire-and-forget —
+  /// callers shouldn't await this. Failures are logged but never rolled
+  /// back into local state.
+  Future<void> _pushTwoWaySync(String appId, bool enabled) async {
+    final integrationId = _integrationIdByAppId[appId];
+    if (integrationId == null) return; // Local-only app, no server endpoint.
+    try {
+      await _client.patch('v1/integrations/$integrationId/prefs', body: {'two_way_sync_enabled': enabled});
+    } catch (e) {
+      debugPrint('[AppsProvider] _pushTwoWaySync($appId) failed: $e');
+    }
+  }
+
+  /// Pull-side reconciliation — called from [load] after a successful
+  /// catalog/enabled fetch. For each known integration whose Nooto app is
+  /// installed, ask the backend for the current prefs and reconcile into
+  /// Hive. Server wins for the value (default OFF if absent or null) so
+  /// cross-device toggle changes converge here.
+  Future<void> _reconcileTwoWaySyncFromServer() async {
+    final pulls = <Future<void>>[];
+    for (final entry in _integrationIdByAppId.entries) {
+      final appId = entry.key;
+      final integrationId = entry.value;
+      if (!_enabledIds.contains(appId)) continue;
+      pulls.add(_pullTwoWaySync(appId, integrationId));
+    }
+    if (pulls.isEmpty) return;
+    await Future.wait(pulls);
+  }
+
+  Future<void> _pullTwoWaySync(String appId, String integrationId) async {
+    try {
+      final res = await _client.get('v1/integrations/$integrationId/prefs');
+      final body = jsonDecode(res.body);
+      // Two-way-sync default OFF is a hard product rule: any missing /
+      // null / non-bool server value collapses to false.
+      final raw = body is Map ? body['two_way_sync_enabled'] : null;
+      final serverEnabled = raw == true;
+      final localEnabled = _twoWaySyncByAppId[appId] ?? false;
+      if (serverEnabled == localEnabled) return;
+      _twoWaySyncByAppId = {..._twoWaySyncByAppId, appId: serverEnabled};
+      await _persistTwoWaySync();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[AppsProvider] _pullTwoWaySync($appId) failed: $e');
+    }
   }
 
   NooApp? _findApp(String appId) {
@@ -271,9 +329,7 @@ class AppsProvider extends ChangeNotifier {
       final box = Hive.box<Map>(AppsBoxes.prefs);
       final raw = box.get(_twoWaySyncKey);
       if (raw is Map) {
-        _twoWaySyncByAppId = Map<String, bool>.from(
-          raw.map((k, v) => MapEntry(k.toString(), v == true)),
-        );
+        _twoWaySyncByAppId = Map<String, bool>.from(raw.map((k, v) => MapEntry(k.toString(), v == true)));
       }
     } catch (e) {
       // Box not open (e.g. main.dart hasn't wired it yet, or running in a

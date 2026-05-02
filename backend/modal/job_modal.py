@@ -4,6 +4,7 @@ import os
 import firebase_admin
 
 from modal import Image, App, Secret, Cron
+from utils.integrations.jira_sync import sync_all_users_jira
 from utils.other.notifications import start_cron_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
@@ -38,3 +39,13 @@ image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_fr
 @app.function(image=image, schedule=Cron('0 * * * *'))  # Run at minute 0 of every hour
 async def notifications_cronjob():
     await start_cron_job()
+
+
+@app.function(image=image, schedule=Cron('*/10 * * * *'))  # Run every 10 minutes
+async def jira_sync_cronjob():
+    """Pull assignee-filtered open Jira issues for users with the Jira app enabled.
+
+    Read-only; the write path is gated separately by the per-user
+    ``two_way_sync_enabled`` toggle in chat tool resolution.
+    """
+    await sync_all_users_jira()

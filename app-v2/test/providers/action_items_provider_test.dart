@@ -8,18 +8,18 @@ import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/services/api_client.dart';
 
 ApiClient _client(MockClient mock) => ApiClient(
-      httpClient: mock,
-      getIdToken: ({bool forceRefresh = false}) async => 'tok',
-      signOut: () async {},
-      baseUrl: 'https://example.test/',
-    );
+  httpClient: mock,
+  getIdToken: ({bool forceRefresh = false}) async => 'tok',
+  signOut: () async {},
+  baseUrl: 'https://example.test/',
+);
 
 Map<String, dynamic> _itemJson(String id, String desc, {bool completed = false}) => {
-      'id': id,
-      'description': desc,
-      'completed': completed,
-      'created_at': '2026-04-30T12:00:00Z',
-    };
+  'id': id,
+  'description': desc,
+  'completed': completed,
+  'created_at': '2026-04-30T12:00:00Z',
+};
 
 void main() {
   group('ActionItemsProvider.fetchAll', () {
@@ -29,10 +29,7 @@ void main() {
         expect(req.url.queryParameters['completed'], 'false');
         return http.Response(
           jsonEncode({
-            'action_items': [
-              _itemJson('a', 'first'),
-              _itemJson('b', 'second'),
-            ],
+            'action_items': [_itemJson('a', 'first'), _itemJson('b', 'second')],
             'has_more': false,
           }),
           200,
@@ -49,10 +46,7 @@ void main() {
     });
 
     test('empty list still flips ready', () async {
-      final mock = MockClient((req) async => http.Response(
-            jsonEncode({'action_items': [], 'has_more': false}),
-            200,
-          ));
+      final mock = MockClient((req) async => http.Response(jsonEncode({'action_items': [], 'has_more': false}), 200));
       final p = ActionItemsProvider(client: _client(mock));
 
       await p.fetchAll();
@@ -76,10 +70,7 @@ void main() {
       final mock = MockClient((req) async {
         requestCount += 1;
         await Future.delayed(const Duration(milliseconds: 30));
-        return http.Response(
-          jsonEncode({'action_items': [], 'has_more': false}),
-          200,
-        );
+        return http.Response(jsonEncode({'action_items': [], 'has_more': false}), 200);
       });
       final p = ActionItemsProvider(client: _client(mock));
 
@@ -91,19 +82,21 @@ void main() {
 
   group('ActionItemsProvider.incompleteTop3', () {
     test('returns at most 3 incomplete items, newest first', () async {
-      final mock = MockClient((req) async => http.Response(
-            jsonEncode({
-              'action_items': [
-                {'id': '1', 'description': 'oldest', 'completed': false, 'created_at': '2026-01-01T00:00:00Z'},
-                {'id': '2', 'description': 'middle', 'completed': false, 'created_at': '2026-03-01T00:00:00Z'},
-                {'id': '3', 'description': 'newest', 'completed': false, 'created_at': '2026-04-01T00:00:00Z'},
-                {'id': '4', 'description': 'fourth', 'completed': false, 'created_at': '2025-12-01T00:00:00Z'},
-                {'id': '5', 'description': 'done already', 'completed': true, 'created_at': '2026-04-15T00:00:00Z'},
-              ],
-              'has_more': false,
-            }),
-            200,
-          ));
+      final mock = MockClient(
+        (req) async => http.Response(
+          jsonEncode({
+            'action_items': [
+              {'id': '1', 'description': 'oldest', 'completed': false, 'created_at': '2026-01-01T00:00:00Z'},
+              {'id': '2', 'description': 'middle', 'completed': false, 'created_at': '2026-03-01T00:00:00Z'},
+              {'id': '3', 'description': 'newest', 'completed': false, 'created_at': '2026-04-01T00:00:00Z'},
+              {'id': '4', 'description': 'fourth', 'completed': false, 'created_at': '2025-12-01T00:00:00Z'},
+              {'id': '5', 'description': 'done already', 'completed': true, 'created_at': '2026-04-15T00:00:00Z'},
+            ],
+            'has_more': false,
+          }),
+          200,
+        ),
+      );
       final p = ActionItemsProvider(client: _client(mock));
 
       await p.fetchAll();
@@ -111,6 +104,96 @@ void main() {
 
       expect(top.length, 3);
       expect(top.map((i) => i.id).toList(), ['3', '2', '1']);
+    });
+  });
+
+  group('ExternalSource.fromJson', () {
+    test('returns null when map is null', () {
+      expect(ExternalSource.fromJson(null), isNull);
+    });
+
+    test('returns null when source missing or empty', () {
+      expect(ExternalSource.fromJson({'external_id': 'X-1', 'url': 'https://a/x'}), isNull);
+      expect(ExternalSource.fromJson({'source': '', 'external_id': 'X-1', 'url': 'https://a/x'}), isNull);
+    });
+
+    test('returns null when external_id missing or empty', () {
+      expect(ExternalSource.fromJson({'source': 'jira', 'url': 'https://a/x'}), isNull);
+      expect(ExternalSource.fromJson({'source': 'jira', 'external_id': '   ', 'url': 'https://a/x'}), isNull);
+    });
+
+    test('returns null when url missing or empty', () {
+      expect(ExternalSource.fromJson({'source': 'jira', 'external_id': 'X-1'}), isNull);
+      expect(ExternalSource.fromJson({'source': 'jira', 'external_id': 'X-1', 'url': ''}), isNull);
+    });
+
+    test('returns instance with trimmed values for valid input', () {
+      final ext = ExternalSource.fromJson({
+        'source': '  jira  ',
+        'external_id': '  PROJ-123  ',
+        'url': '  https://x/PROJ-123  ',
+      });
+      expect(ext, isNotNull);
+      expect(ext!.source, 'jira');
+      expect(ext.externalId, 'PROJ-123');
+      expect(ext.url, 'https://x/PROJ-123');
+    });
+  });
+
+  group('ActionItem.fromJson with externalSource', () {
+    test('parses external_source when present', () {
+      final item = ActionItem.fromJson({
+        'id': 'a',
+        'description': 'fix bug',
+        'completed': false,
+        'external_source': {'source': 'jira', 'external_id': 'PROJ-123', 'url': 'https://x/PROJ-123'},
+      });
+      expect(item.externalSource, isNotNull);
+      expect(item.externalSource!.source, 'jira');
+      expect(item.externalSource!.externalId, 'PROJ-123');
+      expect(item.externalSource!.url, 'https://x/PROJ-123');
+    });
+
+    test('externalSource null when external_source missing', () {
+      final item = ActionItem.fromJson({'id': 'a', 'description': 'transcript thing', 'completed': false});
+      expect(item.externalSource, isNull);
+    });
+
+    test('externalSource null when external_source is JSON null', () {
+      final item = ActionItem.fromJson({
+        'id': 'a',
+        'description': 'transcript thing',
+        'completed': false,
+        'external_source': null,
+      });
+      expect(item.externalSource, isNull);
+    });
+
+    test('externalSource null when partial fields collapse to invalid', () {
+      final item = ActionItem.fromJson({
+        'id': 'a',
+        'description': 'half-broken integration',
+        'completed': false,
+        'external_source': {
+          'source': 'jira',
+          // url missing → invalid
+          'external_id': 'PROJ-9',
+        },
+      });
+      expect(item.externalSource, isNull);
+    });
+
+    test('copyWith preserves externalSource', () {
+      final item = ActionItem.fromJson({
+        'id': 'a',
+        'description': 'fix bug',
+        'completed': false,
+        'external_source': {'source': 'jira', 'external_id': 'PROJ-1', 'url': 'https://x/PROJ-1'},
+      });
+      final copied = item.copyWith(completed: true);
+      expect(copied.completed, isTrue);
+      expect(copied.externalSource, isNotNull);
+      expect(copied.externalSource!.externalId, 'PROJ-1');
     });
   });
 
@@ -169,10 +252,7 @@ void main() {
       final mock = MockClient((req) async {
         requestCount += 1;
         if (req.method == 'GET') {
-          return http.Response(
-            jsonEncode({'action_items': [], 'has_more': false}),
-            200,
-          );
+          return http.Response(jsonEncode({'action_items': [], 'has_more': false}), 200);
         }
         fail('PATCH should not run for unknown id');
       });

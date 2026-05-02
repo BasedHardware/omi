@@ -4,6 +4,38 @@ import 'package:flutter/foundation.dart';
 
 import 'package:nooto_v2/services/api_client.dart';
 
+/// External provenance for an action item. Set when the item came from a
+/// connected integration (Jira, Linear, …) rather than being captured from
+/// transcript. `source` is a stable lower-case identifier (e.g. "jira"),
+/// `externalId` is the provider-native key (e.g. "PROJ-123"), and `url` is
+/// the deep link the user can tap to jump to the item in the source tool.
+///
+/// All three fields are required for a valid `ExternalSource` — if any are
+/// missing or empty, [ExternalSource.fromJson] returns null and the item is
+/// treated as transcript-derived.
+class ExternalSource {
+  const ExternalSource({required this.source, required this.externalId, required this.url});
+
+  final String source;
+  final String externalId;
+  final String url;
+
+  /// Returns null if the JSON is missing/empty for any required field. We
+  /// accept partial drift from the backend (e.g. an integration that hasn't
+  /// shipped a URL yet) by collapsing to the transcript-derived shape rather
+  /// than rendering a half-broken chip.
+  static ExternalSource? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final source = (json['source'] as String?)?.trim();
+    final externalId = (json['external_id'] as String?)?.trim();
+    final url = (json['url'] as String?)?.trim();
+    if (source == null || source.isEmpty) return null;
+    if (externalId == null || externalId.isEmpty) return null;
+    if (url == null || url.isEmpty) return null;
+    return ExternalSource(source: source, externalId: externalId, url: url);
+  }
+}
+
 /// One commitment captured from a conversation. Server schema is richer (lock,
 /// export, indent, sort_order) — v2 ignores those for now and rehydrates them
 /// only when a card type needs them.
@@ -15,6 +47,7 @@ class ActionItem {
     this.createdAt,
     this.dueAt,
     this.conversationId,
+    this.externalSource,
   });
 
   final String id;
@@ -24,29 +57,33 @@ class ActionItem {
   final DateTime? dueAt;
   final String? conversationId;
 
+  /// Non-null when the item was sourced from a connected integration. Drives
+  /// the integration chip on Plan / Home and the proactive stuck-issues card.
+  final ExternalSource? externalSource;
+
   factory ActionItem.fromJson(Map<String, dynamic> json) {
+    final extRaw = json['external_source'];
+    final externalSource = extRaw is Map ? ExternalSource.fromJson(Map<String, dynamic>.from(extRaw)) : null;
     return ActionItem(
       id: json['id'] as String,
       description: json['description'] as String? ?? '',
       completed: json['completed'] as bool? ?? false,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String).toLocal()
-          : null,
-      dueAt: json['due_at'] != null
-          ? DateTime.parse(json['due_at'] as String).toLocal()
-          : null,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at'] as String).toLocal() : null,
+      dueAt: json['due_at'] != null ? DateTime.parse(json['due_at'] as String).toLocal() : null,
       conversationId: json['conversation_id'] as String?,
+      externalSource: externalSource,
     );
   }
 
   ActionItem copyWith({bool? completed}) => ActionItem(
-        id: id,
-        description: description,
-        completed: completed ?? this.completed,
-        createdAt: createdAt,
-        dueAt: dueAt,
-        conversationId: conversationId,
-      );
+    id: id,
+    description: description,
+    completed: completed ?? this.completed,
+    createdAt: createdAt,
+    dueAt: dueAt,
+    conversationId: conversationId,
+    externalSource: externalSource,
+  );
 }
 
 /// Read-only port of legacy `ActionItemsProvider`: fetches the user's open
