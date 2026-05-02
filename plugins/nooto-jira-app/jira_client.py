@@ -218,6 +218,31 @@ def get_issue(
     return resp.json()
 
 
+def update_issue(
+    cloudid: str,
+    token: str,
+    *,
+    key: str,
+    fields: dict[str, Any],
+) -> None:
+    """PUT /rest/api/3/issue/{key} with the given top-level ``fields`` dict.
+
+    Used for direct field mutations (e.g. setting ``duedate`` from a Plan-view
+    snooze action). Caller is responsible for the field shape — this is a thin
+    wrapper around the REST contract.
+
+    Returns nothing on success (Jira returns 204 No Content). Errors propagate
+    via ``_request``'s 401 / 404 / 429 mapping.
+    """
+    _validate_issue_key(key)
+    _request(
+        "PUT",
+        f"{_base(cloudid)}/issue/{key}",
+        token,
+        json_body={"fields": fields},
+    )
+
+
 def list_transitions(
     cloudid: str,
     token: str,

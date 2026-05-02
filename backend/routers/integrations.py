@@ -16,6 +16,7 @@ import database.redis_db as redis_db
 import database.integration_prefs as integration_prefs_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
+from utils.integrations import jira_actions
 import logging
 
 logger = logging.getLogger(__name__)
@@ -292,6 +293,86 @@ def update_integration_prefs(
         integration_id=integration_id,
         two_way_sync_enabled=payload.two_way_sync_enabled,
     )
+
+
+# *****************************
+# ******* JIRA DIRECT ACTIONS *
+# *****************************
+#
+# Mobile Plan-screen direct dispatch: transition an issue's status or push
+# its due date out without opening chat. Both endpoints REQUIRE the user to
+# have flipped on two-way sync for Jira (server-side gate; client toggle is
+# advisory only). The integration_id under the prefs document is
+# ``nooto-jira`` per the convention from PR #31.
+
+JIRA_INTEGRATION_ID = "nooto-jira"
+
+
+class JiraTransitionRequest(BaseModel):
+    action_item_id: str = Field(description="Backend action_item id (Firestore doc id under users/{uid}/action_items).")
+    to_status: str = Field(description="Target Jira status name (free-form per workflow).")
+
+
+class JiraSnoozeRequest(BaseModel):
+    action_item_id: str = Field(description="Backend action_item id.")
+    snooze_until: datetime = Field(description="Absolute ISO8601 timestamp to set as the new due date.")
+
+
+def _two_way_sync_or_403(uid: str) -> None:
+    """Raise 403 unless the user has explicitly opted into Jira write-back."""
+    if not integration_prefs_db.is_two_way_sync_enabled(uid, JIRA_INTEGRATION_ID):
+        # Body shape locked: callers (mobile) check `error == "two_way_sync_disabled"`
+        # to surface a "turn on two-way sync in Settings" CTA.
+        raise HTTPException(status_code=403, detail={"error": "two_way_sync_disabled"})
+
+
+@router.post("/v1/integrations/jira/transition", tags=['integrations'])
+async def jira_transition(
+    payload: JiraTransitionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Move a Jira-linked action item to a new status.
+
+    Calls the plugin's ``/tools/update_issue_status``, mirrors the new
+    status into ``external_source.metadata`` and flips ``completed`` when
+    the resulting status_type is "done". Returns the updated action item.
+    """
+    _two_way_sync_or_403(uid)
+
+    try:
+        updated = await jira_actions.transition_action_item(uid, payload.action_item_id, payload.to_status)
+    except jira_actions.JiraActionNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except jira_actions.JiraActionPluginError as e:
+        # `str(e)` may contain plugin-forwarded text — sanitize the visible
+        # portion. Keep the structural error code clean for the mobile client.
+        logger.warning("[JiraTransition] plugin error uid=%s err=%s", uid, sanitize(str(e)))
+        raise HTTPException(status_code=502, detail={"error": "jira_plugin_error"})
+
+    return updated
+
+
+@router.post("/v1/integrations/jira/snooze", tags=['integrations'])
+async def jira_snooze(
+    payload: JiraSnoozeRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Push the Jira issue's due date out to ``snooze_until``.
+
+    Calls the plugin's ``/tools/update_issue_due_date`` and updates the
+    local ``due_at``. Returns the updated action item.
+    """
+    _two_way_sync_or_403(uid)
+
+    try:
+        updated = await jira_actions.snooze_action_item(uid, payload.action_item_id, payload.snooze_until)
+    except jira_actions.JiraActionNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except jira_actions.JiraActionPluginError as e:
+        logger.warning("[JiraSnooze] plugin error uid=%s err=%s", uid, sanitize(str(e)))
+        raise HTTPException(status_code=502, detail={"error": "jira_plugin_error"})
+
+    return updated
 
 
 @router.put("/v1/integrations/apple-health/sync", tags=['integrations'])

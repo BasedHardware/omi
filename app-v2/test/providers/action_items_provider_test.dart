@@ -265,4 +265,290 @@ void main() {
       expect(requestCount, 1);
     });
   });
+
+  group('ExternalSource metadata', () {
+    test('parses metadata map round-trip', () {
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status': 'In Review', 'status_type': 'indeterminate', 'project_key': 'PROJ', 'priority': 'P2'},
+      });
+      expect(ext, isNotNull);
+      expect(ext!.jiraStatus, 'In Review');
+      expect(ext.jiraStatusType, 'indeterminate');
+      expect(ext.jiraProjectKey, 'PROJ');
+      expect(ext.jiraPriority, 'P2');
+    });
+
+    test('all metadata getters return null when metadata missing', () {
+      final ext = ExternalSource.fromJson({'source': 'jira', 'external_id': 'PROJ-1', 'url': 'https://x/PROJ-1'});
+      expect(ext, isNotNull);
+      expect(ext!.metadata, isNull);
+      expect(ext.jiraStatus, isNull);
+      expect(ext.jiraStatusType, isNull);
+      expect(ext.jiraProjectKey, isNull);
+      expect(ext.jiraPriority, isNull);
+      expect(ext.jiraStatusChangedAt, isNull);
+      expect(ext.daysAtStatus, isNull);
+    });
+
+    test('metadata accepts extra unknown keys without failing', () {
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status': 'Done', 'unknown_field': 'whatever'},
+      });
+      expect(ext, isNotNull);
+      expect(ext!.jiraStatus, 'Done');
+    });
+
+    test('daysAtStatus computes from ISO8601 status_changed_at', () {
+      final fourDaysAgo = DateTime.now().subtract(const Duration(days: 4, hours: 2));
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status_changed_at': fourDaysAgo.toUtc().toIso8601String()},
+      });
+      expect(ext!.daysAtStatus, 4);
+    });
+
+    test('daysAtStatus is null when status_changed_at missing', () {
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status': 'Done'},
+      });
+      expect(ext!.daysAtStatus, isNull);
+    });
+
+    test('daysAtStatus is null on unparseable date', () {
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status_changed_at': 'not a date'},
+      });
+      expect(ext!.daysAtStatus, isNull);
+      expect(ext.jiraStatusChangedAt, isNull);
+    });
+
+    test('copyWith preserves metadata and lets caller swap it', () {
+      final ext = ExternalSource.fromJson({
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status': 'To Do'},
+      });
+      final updated = ext!.copyWith(metadata: {'status': 'Done'});
+      expect(updated.jiraStatus, 'Done');
+      expect(updated.externalId, 'PROJ-1'); // other fields preserved
+    });
+  });
+
+  group('ActionItemsProvider.transition', () {
+    Map<String, dynamic> jiraItemJson(String id, {String status = 'To Do', String statusType = 'todo'}) => {
+      'id': id,
+      'description': 'jira thing',
+      'completed': false,
+      'created_at': '2026-04-30T12:00:00Z',
+      'external_source': {
+        'source': 'jira',
+        'external_id': 'PROJ-1',
+        'url': 'https://x/PROJ-1',
+        'metadata': {'status': status, 'status_type': statusType, 'project_key': 'PROJ'},
+      },
+    };
+
+    test('optimistic update + server confirm on 200', () async {
+      var transitionCalled = false;
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/v1/integrations/jira/transition') {
+          transitionCalled = true;
+          expect(req.method, 'POST');
+          final body = jsonDecode(req.body);
+          expect(body['action_item_id'], 'a');
+          expect(body['to_status'], 'In Progress');
+          return http.Response(jsonEncode(jiraItemJson('a', status: 'In Progress', statusType: 'indeterminate')), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.transition('a', toStatus: 'In Progress');
+
+      expect(ok, isTrue);
+      expect(transitionCalled, isTrue);
+      expect(p.items.first.externalSource!.jiraStatus, 'In Progress');
+      expect(p.items.first.externalSource!.jiraStatusType, 'indeterminate');
+      expect(p.lastActionError, isNull);
+    });
+
+    test('rolls back and stamps lastActionError on 403 two_way_sync_disabled', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'detail': 'two_way_sync_disabled'}), 403);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.transition('a', toStatus: 'Done');
+
+      expect(ok, isFalse);
+      expect(p.items.first.externalSource!.jiraStatus, 'To Do'); // rolled back
+      expect(p.lastActionError, 'two_way_sync_disabled');
+    });
+
+    test('rolls back with generic key on 502 Jira-side error', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'detail': 'jira upstream broken'}), 502);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.transition('a', toStatus: 'Done');
+
+      expect(ok, isFalse);
+      expect(p.items.first.externalSource!.jiraStatus, 'To Do');
+      expect(p.lastActionError, 'jira_error');
+    });
+
+    test('returns false for unknown id and for non-jira items', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [_itemJson('transcript-1', 'no source')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        fail('POST should not run for unknown id or non-jira');
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      expect(await p.transition('does-not-exist', toStatus: 'Done'), isFalse);
+      expect(await p.transition('transcript-1', toStatus: 'Done'), isFalse);
+    });
+  });
+
+  group('ActionItemsProvider.snooze', () {
+    Map<String, dynamic> jiraItemJson(String id, {String? dueAt}) => {
+      'id': id,
+      'description': 'jira thing',
+      'completed': false,
+      'created_at': '2026-04-30T12:00:00Z',
+      if (dueAt != null) 'due_at': dueAt,
+      'external_source': {'source': 'jira', 'external_id': 'PROJ-1', 'url': 'https://x/PROJ-1'},
+    };
+
+    test('optimistic update of dueAt + server confirm', () async {
+      final until = DateTime.utc(2030, 5, 15, 12);
+      var snoozeCalled = false;
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/v1/integrations/jira/snooze') {
+          snoozeCalled = true;
+          final body = jsonDecode(req.body);
+          expect(body['action_item_id'], 'a');
+          expect(body['snooze_until'], until.toUtc().toIso8601String());
+          return http.Response(jsonEncode(jiraItemJson('a', dueAt: until.toIso8601String())), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.snooze('a', snoozeUntil: until);
+
+      expect(ok, isTrue);
+      expect(snoozeCalled, isTrue);
+      expect(p.items.first.dueAt, isNotNull);
+      expect(p.lastActionError, isNull);
+    });
+
+    test('rolls back on 403 two_way_sync_disabled', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'detail': 'two_way_sync_disabled'}), 403);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final originalDue = p.items.first.dueAt;
+      final ok = await p.snooze('a', snoozeUntil: DateTime.now().add(const Duration(days: 1)));
+
+      expect(ok, isFalse);
+      expect(p.items.first.dueAt, originalDue);
+      expect(p.lastActionError, 'two_way_sync_disabled');
+    });
+
+    test('returns false for non-jira items', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [_itemJson('t', 'transcript')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        fail('POST should not run for non-jira items');
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.snooze('t', snoozeUntil: DateTime.now().add(const Duration(days: 1)));
+      expect(ok, isFalse);
+    });
+  });
 }

@@ -34,6 +34,24 @@ _HTTP_TIMEOUT = 20.0
 # Match the existing redis enabled-plugins keyspace — see database.redis_db.is_app_enabled.
 _ENABLED_PLUGINS_KEY_PATTERN = "users:*:enabled_plugins"
 
+# Plugin emits the legacy chat-tool category vocabulary
+# ("todo" / "in_progress" / "done"). The Plan-screen metadata contract uses
+# Jira's canonical statusCategory key ("indeterminate") instead of
+# "in_progress" so it's a stable cross-workflow signal regardless of the
+# chat tool's display preferences. Keep this map narrow — the only mismatch
+# is in_progress → indeterminate; everything else passes through verbatim.
+_STATUS_TYPE_TO_METADATA = {
+    "todo": "todo",
+    "in_progress": "indeterminate",
+    "indeterminate": "indeterminate",
+    "done": "done",
+}
+
+# Fields that get re-derived from Jira on every sync. These must always be
+# overwritten (never preserved from a stale prior sync) — the whole point of
+# the periodic puller is that Jira is the source of truth for these.
+_METADATA_REFRESHABLE_KEYS = ("status", "status_type", "project_key", "priority", "status_changed_at")
+
 
 def _resolve_plugin_base_url() -> Optional[str]:
     """Where to find the Jira plugin.
@@ -91,12 +109,70 @@ def _normalize_task_to_action_item(task: dict) -> dict:
     return fields
 
 
-def _build_external_source(task: dict) -> dict:
-    return {
+def _build_metadata_from_task(task: dict) -> dict:
+    """Pull the Plan-screen metadata fields out of the plugin task payload.
+
+    Only emits keys whose values are present in the task — missing fields are
+    left out (not set to None) so the deep-merge below can preserve a prior
+    value. Translates ``status_type`` from the chat-tool vocabulary
+    (``in_progress``) to the canonical Jira ``statusCategory`` key
+    (``indeterminate``) per the Plan-view metadata contract.
+    """
+    md: dict = {}
+    if isinstance(task.get("status"), str) and task["status"]:
+        md["status"] = task["status"]
+    raw_type = task.get("status_type")
+    if isinstance(raw_type, str) and raw_type:
+        md["status_type"] = _STATUS_TYPE_TO_METADATA.get(raw_type, raw_type)
+    project_key = task.get("project_key") or task.get("project")
+    if isinstance(project_key, str) and project_key:
+        md["project_key"] = project_key
+    if isinstance(task.get("priority"), str) and task["priority"]:
+        md["priority"] = task["priority"]
+    if isinstance(task.get("status_changed_at"), str) and task["status_changed_at"]:
+        md["status_changed_at"] = task["status_changed_at"]
+    return md
+
+
+def _merge_metadata(prior: Optional[dict], incoming: dict) -> dict:
+    """Deep-merge incoming metadata into prior, preserving prior fields that
+    the new sync didn't return.
+
+    Refreshable keys (status / status_type / project_key / priority /
+    status_changed_at) get OVERWRITTEN when present in ``incoming`` — Jira is
+    the source of truth and a stale value would lie to the Plan card. Keys
+    absent from ``incoming`` retain their prior value (handles transient
+    Jira responses missing optional fields like ``statuscategorychangedate``
+    on legacy issues).
+    """
+    merged: dict = dict(prior or {})
+    for k, v in (incoming or {}).items():
+        if v is None:
+            continue
+        merged[k] = v
+    return merged
+
+
+def _build_external_source(task: dict, prior_external_source: Optional[dict] = None) -> dict:
+    """Compose the ``external_source`` dict written to Firestore.
+
+    Always reflects the latest task ``url`` / ``external_id`` / ``source``.
+    Metadata is deep-merged with the prior doc's ``external_source.metadata``
+    so we never zap a previously-known field just because Jira didn't return
+    it on a given poll cycle.
+    """
+    incoming_metadata = _build_metadata_from_task(task)
+    prior_metadata = (prior_external_source or {}).get("metadata") if isinstance(prior_external_source, dict) else None
+    merged_metadata = _merge_metadata(prior_metadata, incoming_metadata)
+
+    out = {
         "source": JIRA_SOURCE_KEY,
         "external_id": task.get("external_id") or "",
         "url": task.get("url") or "",
     }
+    if merged_metadata:
+        out["metadata"] = merged_metadata
+    return out
 
 
 async def sync_user_jira_issues(uid: str, http_client: Optional[httpx.AsyncClient] = None) -> dict:
@@ -156,7 +232,15 @@ async def sync_user_jira_issues(uid: str, http_client: Optional[httpx.AsyncClien
         if not ext_id:
             skipped += 1
             continue
-        external_source = _build_external_source(task)
+        # Read the prior external_source so we can deep-merge metadata —
+        # preserves fields like `priority` if a particular sync response
+        # omits them (Jira occasionally returns sparse fields).
+        prior_doc = action_items_db._find_by_external_source(uid, JIRA_SOURCE_KEY, ext_id)
+        prior_external_source = None
+        if prior_doc is not None:
+            prior_data = prior_doc.to_dict() or {}
+            prior_external_source = prior_data.get("external_source") if isinstance(prior_data, dict) else None
+        external_source = _build_external_source(task, prior_external_source=prior_external_source)
         fields = _normalize_task_to_action_item(task)
         try:
             action_items_db.upsert_external_action_item(uid, external_source, fields)

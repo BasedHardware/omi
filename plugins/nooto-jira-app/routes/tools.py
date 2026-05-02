@@ -34,6 +34,7 @@ from models import (
     JiraListProjectsRequest,
     JiraListReleasesRequest,
     JiraSearchIssuesRequest,
+    JiraUpdateDueDateRequest,
     JiraUpdateStatusRequest,
 )
 
@@ -52,6 +53,9 @@ _DEFAULT_FIELDS = [
     # Pulled into list_my_issues so the desktop chat / Plan view can show a
     # short snippet under the title without a follow-up `get_issue` call.
     "description",
+    # Surfaces "X days at this status" on the Plan card; the backend's
+    # action-item metadata keeps it under `external_source.metadata.status_changed_at`.
+    "statuscategorychangedate",
 ]
 _DETAIL_FIELDS = _DEFAULT_FIELDS + ["reporter"]
 
@@ -92,8 +96,18 @@ def _normalize_jira_issue(it: dict, site_url: str) -> dict:
         "priority": priority,
         "url": f"{site_url}/browse/{key}" if site_url and key else "",
         "project": project,
+        # `project_key` is the canonical Plan-view metadata field name; we
+        # mirror `project` so consumers don't have to hardcode the legacy
+        # alias. Both reflect the prefix of the Jira issue key (e.g. "PROJ"
+        # in "PROJ-123") and are absent only on malformed keys.
+        "project_key": project,
         "assignee": assignee,
         "updated_at": f.get("updated"),
+        # ISO8601 timestamp of the last status transition. Jira returns this
+        # under `statuscategorychangedate`; older issues / custom workflows
+        # may omit it, in which case the field is None and the Plan card
+        # falls back to `updated_at` for "X days at this status".
+        "status_changed_at": f.get("statuscategorychangedate"),
     }
 
 
@@ -233,10 +247,7 @@ async def tool_list_my_issues(req: JiraListMyIssuesRequest) -> ChatToolResponse:
         )
 
     tasks = [_normalize_jira_issue(it, site_url) for it in issues[:limit]]
-    lines = [
-        f"- **{t['external_id']}** [{t['status']}] {_truncate(t['title'], 80)}"
-        for t in tasks
-    ]
+    lines = [f"- **{t['external_id']}** [{t['status']}] {_truncate(t['title'], 80)}" for t in tasks]
     # `tasks` is the cross-plugin shape consumed by the Plan-view aggregator;
     # `raw` is preserved so the chat agent can still read the full Jira payload.
     return ChatToolResponse(
@@ -371,6 +382,53 @@ async def tool_update_issue_status(req: JiraUpdateStatusRequest) -> ChatToolResp
     return ChatToolResponse(
         result=f"Could not find status '{req.new_status}'. Available: {avail_str}",
         data={"issue_key": req.issue_key, "available": available},
+    )
+
+
+@router.post("/tools/update_issue_due_date", response_model=ChatToolResponse)
+async def tool_update_issue_due_date(req: JiraUpdateDueDateRequest) -> ChatToolResponse:
+    """Set or clear the ``duedate`` field on a Jira issue.
+
+    Used by the backend's Plan-view snooze action — the user picks a future
+    date in the mobile UI, the backend forwards the YYYY-MM-DD string here,
+    and we PUT the field. Empty string clears the date (Jira accepts ``null``
+    as "remove the value").
+    """
+    if not _validate_issue_key(req.issue_key):
+        return ChatToolResponse(error=f"Invalid issue key: {req.issue_key!r}.")
+
+    active = _resolve_active(req.uid)
+    if isinstance(active, ChatToolResponse):
+        return active
+    token, cloudid, _ = active
+
+    # Jira accepts a YYYY-MM-DD string or null/None to clear. Anything else
+    # is rejected here so we never round-trip a malformed date to the API.
+    due = (req.due_date or "").strip()
+    if due and not re.match(r"^\d{4}-\d{2}-\d{2}$", due):
+        return ChatToolResponse(error=f"Invalid due_date format (expect YYYY-MM-DD): {req.due_date!r}.")
+
+    fields_payload: dict[str, Any] = {"duedate": due if due else None}
+
+    try:
+        jira_client.update_issue(cloudid, token, key=req.issue_key, fields=fields_payload)
+    except JiraAuthError:
+        return ChatToolResponse(error="Jira auth failed.", oauth_url=_oauth_url(req.uid))
+    except JiraNotFound:
+        return ChatToolResponse(error=f"Issue {req.issue_key} not found.")
+    except JiraRateLimit:
+        return ChatToolResponse(error="Jira is rate-limiting; try again shortly.")
+    except httpx.HTTPStatusError as e:
+        log.warning("update_issue_due_date failed: %s", e)
+        return ChatToolResponse(error=f"Failed to update due date: {e.response.status_code}")
+    except Exception as e:  # pragma: no cover
+        log.exception("update_issue_due_date unexpected error")
+        return ChatToolResponse(error=f"Failed to update due date: {e}")
+
+    label = due or "(cleared)"
+    return ChatToolResponse(
+        result=f"Set **{req.issue_key}** due date to **{label}**.",
+        data={"issue_key": req.issue_key, "due_date": due or None},
     )
 
 

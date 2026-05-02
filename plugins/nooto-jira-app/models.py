@@ -73,6 +73,12 @@ class JiraAddCommentRequest(ChatToolRequest):
     comment: str
 
 
+class JiraUpdateDueDateRequest(ChatToolRequest):
+    issue_key: str
+    # YYYY-MM-DD per Jira's `duedate` field. Empty string clears the date.
+    due_date: str
+
+
 class JiraListProjectsRequest(ChatToolRequest):
     query: Optional[str] = None
 

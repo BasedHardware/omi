@@ -77,6 +77,7 @@ pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_action_items_external_source.py -v
 pytest tests/unit/test_integration_prefs.py -v
 pytest tests/unit/test_jira_sync.py -v
+pytest tests/unit/test_jira_actions.py -v
 pytest tests/unit/test_chat_write_tool_gating.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)

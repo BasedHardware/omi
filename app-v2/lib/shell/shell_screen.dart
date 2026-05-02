@@ -70,9 +70,7 @@ class _ShellScreenState extends State<ShellScreen> {
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
-            ),
+            child: Container(color: AppColors.backgroundPrimary.withValues(alpha: 0.55)),
           ),
         ),
         elevation: 0,
@@ -81,11 +79,7 @@ class _ShellScreenState extends State<ShellScreen> {
             ? null
             : Text(
                 tabs[_index].label,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
               ),
         actions: const [AppBarKebabMenu()],
         bottom: isLibrary
@@ -104,15 +98,9 @@ class _ShellScreenState extends State<ShellScreen> {
         children: [
           for (var i = 0; i < tabs.length; i++)
             if (i == 0)
-              HomeScreen(
-                onSwitchToTab: (idx) =>
-                    _switchTab(idx, focusChat: idx == 1),
-              )
+              HomeScreen(onSwitchToTab: (idx) => _switchTab(idx, focusChat: idx == 1))
             else if (i == 1)
-              ChatScreen(
-                key: ValueKey('chat-$_autoFocusChat'),
-                autoFocus: _autoFocusChat && _index == 1,
-              )
+              ChatScreen(key: ValueKey('chat-$_autoFocusChat'), autoFocus: _autoFocusChat && _index == 1)
             else if (i == 2)
               LibraryScreen(subTab: _librarySubTab)
             else if (i == 3)
