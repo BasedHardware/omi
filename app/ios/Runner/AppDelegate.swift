@@ -345,16 +345,28 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     private func handleAudioChunk(_ message: [String: Any]) {
-        guard isRecordingActive else {
-            print("Ignoring audio chunk - recording not active") // probably started recording with main omi app closed
-            return
-        }
-
         guard let audioChunk = message["audioChunk"] as? Data,
               let chunkIndex = message["chunkIndex"] as? Int,
               let isLast = message["isLast"] as? Bool,
               let sampleRate = message["sampleRate"] as? Double else {
             return
+        }
+
+        if !isRecordingActive {
+            NSLog("[Watch] Audio chunk arrived without prior startRecording — recovering state (chunkIndex=\(chunkIndex))")
+            isRecordingActive = true
+            audioChunks.removeAll()
+            nextExpectedChunkIndex = 0
+            DispatchQueue.main.async {
+                self.flutterWatchAPI?.onRecordingStarted() { result in
+                    switch result {
+                    case .success:
+                        break
+                    case .failure(let error):
+                        print("Recording started (recovered from divergence) sent to Flutter - Error: \(error.message)")
+                    }
+                }
+            }
         }
 
         audioChunks[chunkIndex] = (audioChunk, sampleRate)
