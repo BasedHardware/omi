@@ -95,15 +95,13 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final res = await _client.get('v1/action-items?limit=50&offset=0&completed=false');
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body) as Map<String, dynamic>;
-        final list = (body['action_items'] as List<dynamic>? ?? const [])
-            .map((e) => ActionItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-        _items
-          ..clear()
-          ..addAll(list);
-      }
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      final list = (body['action_items'] as List<dynamic>? ?? const [])
+          .map((e) => ActionItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _items
+        ..clear()
+        ..addAll(list);
     } catch (e, st) {
       debugPrint('[ActionItemsProvider] fetchAll failed: $e\n$st');
     } finally {
@@ -123,13 +121,8 @@ class ActionItemsProvider extends ChangeNotifier {
     _items[idx] = original.copyWith(completed: true);
     notifyListeners();
     try {
-      final res = await _client.patch(
-        'v1/action-items/$id/completed?completed=true',
-      );
-      if (res.statusCode == 200) return true;
-      _items[idx] = original;
-      notifyListeners();
-      return false;
+      await _client.patch('v1/action-items/$id/completed?completed=true');
+      return true;
     } catch (_) {
       _items[idx] = original;
       notifyListeners();
