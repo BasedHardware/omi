@@ -54,25 +54,33 @@ _STATUS_TYPE_TO_METADATA = {
 _METADATA_REFRESHABLE_KEYS = ("status", "status_type", "project_key", "priority", "status_changed_at")
 
 
-def _resolve_plugin_base_url() -> Optional[str]:
+def _resolve_plugin_base_url(integration_id: Optional[str] = None) -> Optional[str]:
     """Where to find the Jira plugin.
 
     Priority:
       1. ``NOOTO_JIRA_PLUGIN_URL`` env var (explicit override)
       2. ``app.external_integration.app_home_url`` from the registered app
          document in Firestore (this is what ``register_jira_app.py`` writes).
+         When ``integration_id`` is provided (e.g. the ULID the catalog
+         returned + that the user's redis set has), look that up first;
+         fall back to :data:`JIRA_APP_ID` for the cron caller that doesn't
+         know which user it's syncing for.
     Returns None if neither is configured — caller logs and bails.
     """
     env_url = os.environ.get("NOOTO_JIRA_PLUGIN_URL")
     if env_url:
         return env_url.rstrip("/")
 
-    app_doc = get_app_by_id_db(JIRA_APP_ID)
-    if not app_doc:
-        return None
-    ext = app_doc.get("external_integration") or {}
-    base = (ext.get("app_home_url") or "").rstrip("/")
-    return base or None
+    candidates = [c for c in [integration_id, JIRA_APP_ID] if c]
+    for candidate in candidates:
+        app_doc = get_app_by_id_db(candidate)
+        if not app_doc:
+            continue
+        ext = app_doc.get("external_integration") or {}
+        base = (ext.get("app_home_url") or "").rstrip("/")
+        if base:
+            return base
+    return None
 
 
 def _normalize_task_to_action_item(task: dict) -> dict:
@@ -176,18 +184,29 @@ def _build_external_source(task: dict, prior_external_source: Optional[dict] = N
     return out
 
 
-async def sync_user_jira_issues(uid: str, http_client: Optional[httpx.AsyncClient] = None) -> dict:
+async def sync_user_jira_issues(
+    uid: str,
+    http_client: Optional[httpx.AsyncClient] = None,
+    integration_id: Optional[str] = None,
+) -> dict:
     """Pull open Jira issues for ``uid`` and upsert them as action items.
 
     Returns ``{"synced": N, "errors": K, "skipped": M}``.
 
     ``skipped`` covers tasks with no ``external_id`` (defensive — should never
     happen for real Jira issues but keeps the pipeline crash-free).
+
+    ``integration_id`` (when provided by the manual sync-now route) is used
+    to look up the app doc in Firestore so the plugin URL resolves even when
+    the catalog assigned the app a ULID instead of the legacy slug.
     """
-    base_url = _resolve_plugin_base_url()
+    base_url = _resolve_plugin_base_url(integration_id=integration_id)
     if not base_url:
         logger.warning(
-            "[JiraSync] No plugin URL configured (NOOTO_JIRA_PLUGIN_URL/app_home_url) — skipping uid=%s", uid
+            "[JiraSync] No plugin URL configured (NOOTO_JIRA_PLUGIN_URL/app_home_url) — "
+            "skipping uid=%s integration_id=%s",
+            uid,
+            integration_id or JIRA_APP_ID,
         )
         return {"synced": 0, "errors": 1, "skipped": 0}
 
@@ -328,7 +347,7 @@ async def sync_user_jira_issues_with_timestamp(
     Returns the existing sync result dict augmented with
     ``last_synced_at`` (ISO8601 UTC).
     """
-    result = await sync_user_jira_issues(uid, http_client=http_client)
+    result = await sync_user_jira_issues(uid, http_client=http_client, integration_id=integration_id)
     last_synced_at = datetime.now(timezone.utc).isoformat()
     prefs_key = integration_id or JIRA_APP_ID
     try:
