@@ -89,12 +89,20 @@ class CompanionStreamProvider extends ChangeNotifier {
   void _hydrateFromHive() {
     _cards.clear();
     final now = DateTime.now();
-    for (final raw in _cardsBox.values) {
+    final today = _todayLocalKey();
+    for (final raw in _cardsBox.values.toList()) {
       try {
         final json = Map<String, dynamic>.from(raw);
         final card = _fromJson(json);
         if (card == null) continue;
         if (card.generatedAt.add(card.ttl).isBefore(now)) {
+          _cardsBox.delete(card.id);
+          continue;
+        }
+        // Brief cards carry a dateKey. We only ever want today's; yesterday's
+        // brief stays cached in _briefBox under its own date but must not
+        // leak into the visible stream past local midnight.
+        if (card is MorningBriefCard && card.dateKey != today) {
           _cardsBox.delete(card.id);
           continue;
         }
