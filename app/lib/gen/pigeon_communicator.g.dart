@@ -1467,6 +1467,33 @@ class BleHostApi {
       return (pigeonVar_replyList[0] as String?)!;
     }
   }
+
+  /// Open the system Bluetooth settings page so the user can forget a stale
+  /// bond. iOS uses the App-Prefs:root=Bluetooth deep-link (falls back to the
+  /// general Settings app on iOS versions where Apple has restricted the URL);
+  /// Android fires the Settings.ACTION_BLUETOOTH_SETTINGS intent.
+  Future<void> openBluetoothSettings() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.openBluetoothSettings$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
 }
 
 abstract class BleFlutterApi {

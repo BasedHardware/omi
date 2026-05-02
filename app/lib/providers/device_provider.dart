@@ -90,7 +90,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         title: dialogContext.l10n.pairingLostTitle,
         description: dialogContext.l10n.pairingLostBody,
         confirmText: dialogContext.l10n.pairingLostButton,
-        onConfirm: () => Navigator.pop(dialogContext),
+        onConfirm: () {
+          Navigator.pop(dialogContext);
+          // Fire-and-forget: open the system Bluetooth settings page so the user
+          // can forget the existing Omi entry. iOS uses App-Prefs:root=Bluetooth
+          // (with a fallback to UIApplication.openSettingsURLString); Android
+          // fires Settings.ACTION_BLUETOOTH_SETTINGS.
+          try {
+            BleHostApi().openBluetoothSettings();
+          } catch (e) {
+            Logger.debug('openBluetoothSettings failed: $e');
+          }
+        },
         onCancel: () {},
       ),
     ).whenComplete(() => _pairingLostDialogShowing = false);
@@ -249,9 +260,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed = _lastBatteryNotifyTime == null
-        ? const Duration(minutes: 999)
-        : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
