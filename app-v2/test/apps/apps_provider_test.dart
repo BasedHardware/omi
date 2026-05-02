@@ -12,11 +12,11 @@ import 'package:nooto_v2/apps/apps_storage.dart';
 import 'package:nooto_v2/services/api_client.dart';
 
 ApiClient _client(MockClient mock) => ApiClient(
-      httpClient: mock,
-      getIdToken: ({bool forceRefresh = false}) async => 'tok',
-      signOut: () async {},
-      baseUrl: 'https://example.test/',
-    );
+  httpClient: mock,
+  getIdToken: ({bool forceRefresh = false}) async => 'tok',
+  signOut: () async {},
+  baseUrl: 'https://example.test/',
+);
 
 /// Records every launch-url invocation so tests can assert the URL the
 /// provider built (target + ?uid=…). Always returns true — the provider
@@ -37,66 +37,63 @@ class _RecordingLauncher {
 }
 
 Map<String, dynamic> _sampleCatalog({bool includeAuthSteps = false}) => {
-      'groups': [
+  'groups': [
+    {
+      'capability': {'id': 'popular', 'title': 'Popular'},
+      'data': [
         {
-          'capability': {'id': 'popular', 'title': 'Popular'},
-          'data': [
-            {
-              'id': 'a1',
-              'name': 'Alpha',
-              'description': 'First app',
-              'image': 'https://x/a1.png',
-              'enabled': true,
-              'installs': 42,
-              'capabilities': ['chat'],
-            },
-            {
-              'id': 'a2',
-              'name': 'Beta',
-              'description': 'Second app',
-              'image': '',
-              'enabled': false,
-              'installs': 7,
-              'capabilities': const [],
-            },
-          ],
+          'id': 'a1',
+          'name': 'Alpha',
+          'description': 'First app',
+          'image': 'https://x/a1.png',
+          'enabled': true,
+          'installs': 42,
+          'capabilities': ['chat'],
         },
         {
-          'capability': {'id': 'integrations', 'title': 'Integrations'},
-          'data': [
-            {
-              'id': 'jira',
-              'name': 'Jira',
-              'description': 'Sync tickets',
-              'image': 'https://x/jira.png',
-              'enabled': false,
-              'installs': 12,
-              'capabilities': ['integration'],
-              if (includeAuthSteps)
-                'external_integration': {
-                  'auth_steps': [
-                    {'name': 'Connect Jira', 'url': 'https://jira.test/oauth/start'},
-                  ],
-                  'app_home_url': 'https://jira.test/home',
-                },
-            },
-          ],
-        },
-        {
-          // Empty groups should be dropped — backend can include them.
-          'capability': {'id': 'empty', 'title': 'Empty'},
-          'data': const [],
+          'id': 'a2',
+          'name': 'Beta',
+          'description': 'Second app',
+          'image': '',
+          'enabled': false,
+          'installs': 7,
+          'capabilities': const [],
         },
       ],
-      'meta': {'capabilities': const [], 'groupCount': 2, 'limit': 20, 'offset': 0},
-    };
+    },
+    {
+      'capability': {'id': 'integrations', 'title': 'Integrations'},
+      'data': [
+        {
+          'id': 'jira',
+          'name': 'Jira',
+          'description': 'Sync tickets',
+          'image': 'https://x/jira.png',
+          'enabled': false,
+          'installs': 12,
+          'capabilities': ['integration'],
+          if (includeAuthSteps)
+            'external_integration': {
+              'auth_steps': [
+                {'name': 'Connect Jira', 'url': 'https://jira.test/oauth/start'},
+              ],
+              'app_home_url': 'https://jira.test/home',
+            },
+        },
+      ],
+    },
+    {
+      // Empty groups should be dropped — backend can include them.
+      'capability': {'id': 'empty', 'title': 'Empty'},
+      'data': const [],
+    },
+  ],
+  'meta': {'capabilities': const [], 'groupCount': 2, 'limit': 20, 'offset': 0},
+};
 
 /// Routes both /v2/apps and /v1/apps/enabled. enabledList is the user's
 /// installed-set returned for /v1/apps/enabled.
-MockClient _routedMock({
-  List<String> enabledList = const [],
-  bool includeAuthSteps = false,
-}) {
+MockClient _routedMock({List<String> enabledList = const [], bool includeAuthSteps = false}) {
   return MockClient((req) async {
     if (req.url.path == '/v2/apps') {
       return http.Response(jsonEncode(_sampleCatalog(includeAuthSteps: includeAuthSteps)), 200);
@@ -196,11 +193,7 @@ void main() {
       return http.Response('not found', 404);
     });
     final launcher = _RecordingLauncher();
-    final provider = AppsProvider(
-      client: _client(mock),
-      launchUrl: launcher.launch,
-      getUid: () async => 'test-uid',
-    );
+    final provider = AppsProvider(client: _client(mock), launchUrl: launcher.launch, getUid: () async => 'test-uid');
     await provider.load();
     expect(provider.isEnabled('a1'), isFalse);
 
@@ -289,41 +282,43 @@ void main() {
   });
 
   group('OAuth install flow', () {
-    test('install() with auth_steps + 400 "App setup is not completed" opens browser and keeps optimistic enable',
-        () async {
-      final mock = MockClient((req) async {
-        if (req.url.path == '/v2/apps') {
-          return http.Response(jsonEncode(_sampleCatalog(includeAuthSteps: true)), 200);
-        }
-        if (req.url.path == '/v1/apps/enabled') {
-          return http.Response('[]', 200);
-        }
-        if (req.url.path == '/v1/apps/enable') {
-          return http.Response(jsonEncode({'detail': 'App setup is not completed'}), 400);
-        }
-        return http.Response('not found', 404);
-      });
-      final launcher = _RecordingLauncher();
-      final provider = AppsProvider(
-        client: _client(mock),
-        launchUrl: launcher.launch,
-        getUid: () async => 'test-uid',
-      );
-      await provider.load();
+    test(
+      'install() with auth_steps + 400 "App setup is not completed" opens browser and keeps optimistic enable',
+      () async {
+        final mock = MockClient((req) async {
+          if (req.url.path == '/v2/apps') {
+            return http.Response(jsonEncode(_sampleCatalog(includeAuthSteps: true)), 200);
+          }
+          if (req.url.path == '/v1/apps/enabled') {
+            return http.Response('[]', 200);
+          }
+          if (req.url.path == '/v1/apps/enable') {
+            return http.Response(jsonEncode({'detail': 'App setup is not completed'}), 400);
+          }
+          return http.Response('not found', 404);
+        });
+        final launcher = _RecordingLauncher();
+        final provider = AppsProvider(
+          client: _client(mock),
+          launchUrl: launcher.launch,
+          getUid: () async => 'test-uid',
+        );
+        await provider.load();
 
-      final ok = await provider.install('jira');
+        final ok = await provider.install('jira');
 
-      // OAuth in flight — caller is told "not actually done yet".
-      expect(ok, isFalse);
-      // Optimistic enable STAYS in place across the OAuth round-trip; the
-      // deep-link callback retries enable when the plugin redirects back.
-      expect(provider.isEnabled('jira'), isTrue);
-      expect(provider.error, isNull);
-      // Browser was opened with auth_steps[0].url + ?uid=test-uid.
-      expect(launcher.calls, hasLength(1));
-      expect(launcher.calls.single.toString(), 'https://jira.test/oauth/start?uid=test-uid');
-      expect(launcher.lastMode, LaunchMode.externalApplication);
-    });
+        // OAuth in flight — caller is told "not actually done yet".
+        expect(ok, isFalse);
+        // Optimistic enable STAYS in place across the OAuth round-trip; the
+        // deep-link callback retries enable when the plugin redirects back.
+        expect(provider.isEnabled('jira'), isTrue);
+        expect(provider.error, isNull);
+        // Browser was opened with auth_steps[0].url + ?uid=test-uid.
+        expect(launcher.calls, hasLength(1));
+        expect(launcher.calls.single.toString(), 'https://jira.test/oauth/start?uid=test-uid');
+        expect(launcher.lastMode, LaunchMode.externalApplication);
+      },
+    );
 
     test('install() with 400 + other detail rolls back enable and surfaces error', () async {
       final mock = MockClient((req) async {
@@ -339,11 +334,7 @@ void main() {
         return http.Response('not found', 404);
       });
       final launcher = _RecordingLauncher();
-      final provider = AppsProvider(
-        client: _client(mock),
-        launchUrl: launcher.launch,
-        getUid: () async => 'test-uid',
-      );
+      final provider = AppsProvider(client: _client(mock), launchUrl: launcher.launch, getUid: () async => 'test-uid');
       await provider.load();
 
       final ok = await provider.install('jira');
@@ -368,11 +359,7 @@ void main() {
         return http.Response('not found', 404);
       });
       final launcher = _RecordingLauncher();
-      final provider = AppsProvider(
-        client: _client(mock),
-        launchUrl: launcher.launch,
-        getUid: () async => 'test-uid',
-      );
+      final provider = AppsProvider(client: _client(mock), launchUrl: launcher.launch, getUid: () async => 'test-uid');
       await provider.load();
 
       final ok = await provider.install('jira');
@@ -402,11 +389,7 @@ void main() {
         return http.Response('not found', 404);
       });
       final launcher = _RecordingLauncher();
-      final provider = AppsProvider(
-        client: _client(mock),
-        launchUrl: launcher.launch,
-        getUid: () async => 'test-uid',
-      );
+      final provider = AppsProvider(client: _client(mock), launchUrl: launcher.launch, getUid: () async => 'test-uid');
       await provider.load();
       // Server still reports jira as not enabled (plugin hasn't flipped it
       // server-side yet). After OAuth redirect, the provider should retry.
@@ -468,11 +451,7 @@ void main() {
         return http.Response('not found', 404);
       });
       final launcher = _RecordingLauncher();
-      final provider = AppsProvider(
-        client: _client(mock),
-        launchUrl: launcher.launch,
-        getUid: () async => 'test-uid',
-      );
+      final provider = AppsProvider(client: _client(mock), launchUrl: launcher.launch, getUid: () async => 'test-uid');
       await provider.load();
       await provider.install('jira'); // OAuth in flight, optimistic enable kept.
       expect(provider.isEnabled('jira'), isTrue);
@@ -548,6 +527,165 @@ void main() {
       await reborn.setTwoWaySync('jira', false);
       final third = AppsProvider(client: _client(_routedMock()));
       expect(third.isTwoWaySyncEnabled('jira'), isFalse);
+    });
+  });
+
+  group('Two-way sync server reconciliation', () {
+    test('setTwoWaySync(nooto-jira, true) PATCHes /v1/integrations/nooto-jira/prefs', () async {
+      String? capturedPath;
+      String? capturedBody;
+      String? capturedMethod;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          capturedPath = req.url.path;
+          capturedMethod = req.method;
+          capturedBody = req.body;
+          return http.Response(jsonEncode({'two_way_sync_enabled': true}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      await provider.setTwoWaySync('nooto-jira', true);
+      // Allow the unawaited best-effort PATCH to settle.
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(capturedMethod, 'PATCH');
+      expect(capturedPath, '/v1/integrations/nooto-jira/prefs');
+      expect(capturedBody, contains('"two_way_sync_enabled":true'));
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isTrue);
+    });
+
+    test('setTwoWaySync server failure does NOT roll back local state', () async {
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          return http.Response('boom', 500);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      await provider.setTwoWaySync('nooto-jira', true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // Hive is the source of truth on-device — a failed PATCH must not
+      // flip the local value back. Cross-device reconcile happens on
+      // next load().
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isTrue);
+    });
+
+    test('setTwoWaySync skips server call for unmapped app ids', () async {
+      var integrationHits = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path.startsWith('/v1/integrations/')) {
+          integrationHits += 1;
+          return http.Response(jsonEncode({'two_way_sync_enabled': true}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      await provider.setTwoWaySync('some-other-app', true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      // No server call — unmapped app id has no integration_id mapping.
+      expect(integrationHits, 0);
+      expect(provider.isTwoWaySyncEnabled('some-other-app'), isTrue);
+    });
+
+    test('load() reconciles server pref into Hive when Jira is installed', () async {
+      // Server says ON, local Hive has nothing → after load() local is ON.
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v2/apps') {
+          return http.Response(jsonEncode(_sampleCatalog()), 200);
+        }
+        if (req.url.path == '/v1/apps/enabled') {
+          return http.Response(jsonEncode(['nooto-jira']), 200);
+        }
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          return http.Response(jsonEncode({'two_way_sync_enabled': true}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isFalse);
+      await provider.load();
+
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isTrue);
+    });
+
+    test('load() reconcile defaults to OFF when server returns null/missing', () async {
+      // Local was previously ON via Hive; server returns null/missing
+      // pref → server wins → local flips back to OFF.
+      // (Two-way-sync default OFF is a hard product rule.)
+      await Hive.box<Map>(AppsBoxes.prefs).put('twoWaySync', {'nooto-jira': true});
+
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v2/apps') {
+          return http.Response(jsonEncode(_sampleCatalog()), 200);
+        }
+        if (req.url.path == '/v1/apps/enabled') {
+          return http.Response(jsonEncode(['nooto-jira']), 200);
+        }
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          // No `two_way_sync_enabled` key in body → defaults to false.
+          return http.Response(jsonEncode({}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+      // Hydrate from Hive happens in constructor.
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isTrue);
+
+      await provider.load();
+
+      expect(provider.isTwoWaySyncEnabled('nooto-jira'), isFalse);
+    });
+
+    test('load() skips reconcile for non-installed apps', () async {
+      var prefsHits = 0;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v2/apps') {
+          return http.Response(jsonEncode(_sampleCatalog()), 200);
+        }
+        if (req.url.path == '/v1/apps/enabled') {
+          return http.Response(jsonEncode(['some-other-app']), 200);
+        }
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          prefsHits += 1;
+          return http.Response(jsonEncode({'two_way_sync_enabled': true}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      await provider.load();
+
+      // No reconcile because nooto-jira isn't installed.
+      expect(prefsHits, 0);
+    });
+
+    test('load() reconcile failure does not surface as load error', () async {
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v2/apps') {
+          return http.Response(jsonEncode(_sampleCatalog()), 200);
+        }
+        if (req.url.path == '/v1/apps/enabled') {
+          return http.Response(jsonEncode(['nooto-jira']), 200);
+        }
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          return http.Response('boom', 500);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      await provider.load();
+
+      // Catalog loaded normally; pref reconcile failure is swallowed.
+      expect(provider.error, isNull);
+      expect(provider.groups, isNotEmpty);
     });
   });
 }
