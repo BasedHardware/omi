@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -687,5 +688,194 @@ void main() {
       expect(provider.error, isNull);
       expect(provider.groups, isNotEmpty);
     });
+
+    test('load() populates lastSyncedAt from prefs response', () async {
+      // Server returns a stamped last_synced_at; the provider parses it
+      // into a DateTime so the UI can render "Last synced: 2 min ago".
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v2/apps') {
+          return http.Response(jsonEncode(_sampleCatalog()), 200);
+        }
+        if (req.url.path == '/v1/apps/enabled') {
+          return http.Response(jsonEncode(['nooto-jira']), 200);
+        }
+        if (req.url.path == '/v1/integrations/nooto-jira/prefs') {
+          return http.Response(
+            jsonEncode({'two_way_sync_enabled': false, 'last_synced_at': '2026-05-01T12:34:56+00:00'}),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+      expect(provider.lastSyncedAt('nooto-jira'), isNull);
+
+      await provider.load();
+
+      final ts = provider.lastSyncedAt('nooto-jira');
+      expect(ts, isNotNull);
+      expect(ts!.toUtc().toIso8601String(), '2026-05-01T12:34:56.000Z');
+    });
   });
+
+  group('syncNow', () {
+    test('200 path returns null and updates lastSyncedAt + lastSyncCount', () async {
+      String? capturedPath;
+      String? capturedMethod;
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/sync-now') {
+          capturedPath = req.url.path;
+          capturedMethod = req.method;
+          return http.Response(
+            jsonEncode({'synced': 3, 'errors': 0, 'last_synced_at': '2026-05-01T12:00:00+00:00'}),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('nooto-jira');
+
+      expect(result, isNull);
+      expect(capturedMethod, 'POST');
+      expect(capturedPath, '/v1/integrations/nooto-jira/sync-now');
+      expect(provider.lastSyncCount('nooto-jira'), 3);
+      expect(provider.lastSyncedAt('nooto-jira')!.toUtc().toIso8601String(), '2026-05-01T12:00:00.000Z');
+      expect(provider.isSyncing('nooto-jira'), isFalse);
+    });
+
+    test('400 jira_not_installed maps to "not_installed"', () async {
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/sync-now') {
+          return http.Response(jsonEncode({'detail': 'jira_not_installed'}), 400);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('nooto-jira');
+
+      expect(result, 'not_installed');
+      expect(provider.isSyncing('nooto-jira'), isFalse);
+    });
+
+    test('502 jira_plugin_error maps to "plugin_error"', () async {
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/sync-now') {
+          return http.Response(jsonEncode({'detail': 'jira_plugin_error'}), 502);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('nooto-jira');
+
+      expect(result, 'plugin_error');
+    });
+
+    test('500 / other ApiError maps to "network"', () async {
+      final mock = MockClient((req) async {
+        if (req.url.path == '/v1/integrations/nooto-jira/sync-now') {
+          return http.Response('boom', 500);
+        }
+        return http.Response('not found', 404);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('nooto-jira');
+
+      expect(result, 'network');
+    });
+
+    test('transport exception maps to "network"', () async {
+      final mock = MockClient((req) async {
+        throw const SocketLikeException('offline');
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('nooto-jira');
+
+      expect(result, 'network');
+    });
+
+    test('unmapped app id returns "not_supported" without hitting the wire', () async {
+      var hits = 0;
+      final mock = MockClient((req) async {
+        hits += 1;
+        return http.Response('{}', 200);
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final result = await provider.syncNow('linear-or-something');
+
+      expect(result, 'not_supported');
+      expect(hits, 0);
+    });
+
+    test('isSyncing flips true mid-call and back to false on completion', () async {
+      // Hold the response until the test releases it so we can observe
+      // the isSyncing transition mid-flight.
+      final completer = Completer<http.Response>();
+      final mock = MockClient((req) async => completer.future);
+      final provider = AppsProvider(client: _client(mock));
+
+      final transitions = <bool>[];
+      provider.addListener(() => transitions.add(provider.isSyncing('nooto-jira')));
+
+      final future = provider.syncNow('nooto-jira');
+      // Yield once so the provider's first notifyListeners (set isSyncing
+      // = true) dispatches. The await on _client.post hands control back.
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isSyncing('nooto-jira'), isTrue);
+
+      completer.complete(
+        http.Response(jsonEncode({'synced': 0, 'errors': 0, 'last_synced_at': '2026-05-01T00:00:00Z'}), 200),
+      );
+      await future;
+
+      expect(provider.isSyncing('nooto-jira'), isFalse);
+      // We expect at least one true transition followed by a false one.
+      expect(transitions, contains(true));
+      expect(transitions.last, isFalse);
+    });
+
+    test('concurrent calls for same appId no-op the second one', () async {
+      var hits = 0;
+      final completer = Completer<http.Response>();
+      final mock = MockClient((req) async {
+        hits += 1;
+        return completer.future;
+      });
+      final provider = AppsProvider(client: _client(mock));
+
+      final first = provider.syncNow('nooto-jira');
+      // Yield so the first call dispatches its POST and isSyncing flips
+      // true. Without this, we'd race the second call ahead of the first.
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isSyncing('nooto-jira'), isTrue);
+
+      final second = await provider.syncNow('nooto-jira');
+
+      // Second call returned null without making a new request; first
+      // call hasn't completed yet.
+      expect(second, isNull);
+      expect(hits, 1);
+
+      completer.complete(
+        http.Response(jsonEncode({'synced': 1, 'errors': 0, 'last_synced_at': '2026-05-01T00:00:00Z'}), 200),
+      );
+      await first;
+    });
+  });
+}
+
+/// Simulates a transport-level failure (the http MockClient handler throws
+/// rather than returning a Response). ApiClient should surface this as a
+/// generic exception, which AppsProvider.syncNow collapses to "network".
+class SocketLikeException implements Exception {
+  const SocketLikeException(this.message);
+  final String message;
+  @override
+  String toString() => 'SocketLikeException($message)';
 }
