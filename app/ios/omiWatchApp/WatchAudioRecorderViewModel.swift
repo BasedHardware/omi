@@ -390,6 +390,22 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
             }
         }
     }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
+        Task { @MainActor in
+            guard let method = applicationContext["method"] as? String else { return }
+            switch method {
+            case "startRecording":
+                self.startRecording()
+            case "stopRecording":
+                self.stopRecording()
+            case "requestMicrophonePermission":
+                self.requestMicrophonePermissionOnly()
+            default:
+                print("Unknown applicationContext method: \(method)")
+            }
+        }
+    }
 }
 
 
