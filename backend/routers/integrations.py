@@ -320,10 +320,11 @@ def update_integration_prefs(
 # Mobile Plan-screen direct dispatch: transition an issue's status or push
 # its due date out without opening chat. Both endpoints REQUIRE the user to
 # have flipped on two-way sync for Jira (server-side gate; client toggle is
-# advisory only). The integration_id under the prefs document is
-# ``nooto-jira`` per the convention from PR #31.
-
-JIRA_INTEGRATION_ID = "nooto-jira"
+# advisory only). The ``integration_id`` path param is whatever the catalog
+# returned as the app's id (typically a ULID), and is also the redis
+# enabled-plugins set member + the prefs subcollection key. Mobile passes
+# ``app.id`` directly so backend + redis + Firestore all agree on the same
+# string.
 
 
 class JiraTransitionRequest(BaseModel):
@@ -336,16 +337,17 @@ class JiraSnoozeRequest(BaseModel):
     snooze_until: datetime = Field(description="Absolute ISO8601 timestamp to set as the new due date.")
 
 
-def _two_way_sync_or_403(uid: str) -> None:
+def _two_way_sync_or_403(uid: str, integration_id: str) -> None:
     """Raise 403 unless the user has explicitly opted into Jira write-back."""
-    if not integration_prefs_db.is_two_way_sync_enabled(uid, JIRA_INTEGRATION_ID):
+    if not integration_prefs_db.is_two_way_sync_enabled(uid, integration_id):
         # Body shape locked: callers (mobile) check `error == "two_way_sync_disabled"`
         # to surface a "turn on two-way sync in Settings" CTA.
         raise HTTPException(status_code=403, detail={"error": "two_way_sync_disabled"})
 
 
-@router.post("/v1/integrations/jira/transition", tags=['integrations'])
+@router.post("/v1/integrations/{integration_id}/transition", tags=['integrations'])
 async def jira_transition(
+    integration_id: str,
     payload: JiraTransitionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -355,7 +357,7 @@ async def jira_transition(
     status into ``external_source.metadata`` and flips ``completed`` when
     the resulting status_type is "done". Returns the updated action item.
     """
-    _two_way_sync_or_403(uid)
+    _two_way_sync_or_403(uid, integration_id)
 
     try:
         updated = await jira_actions.transition_action_item(uid, payload.action_item_id, payload.to_status)
@@ -370,8 +372,9 @@ async def jira_transition(
     return updated
 
 
-@router.post("/v1/integrations/jira/snooze", tags=['integrations'])
+@router.post("/v1/integrations/{integration_id}/snooze", tags=['integrations'])
 async def jira_snooze(
+    integration_id: str,
     payload: JiraSnoozeRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -380,7 +383,7 @@ async def jira_snooze(
     Calls the plugin's ``/tools/update_issue_due_date`` and updates the
     local ``due_at``. Returns the updated action item.
     """
-    _two_way_sync_or_403(uid)
+    _two_way_sync_or_403(uid, integration_id)
 
     try:
         updated = await jira_actions.snooze_action_item(uid, payload.action_item_id, payload.snooze_until)
@@ -397,10 +400,9 @@ async def jira_snooze(
 # *********** SYNC NOW ********
 # *****************************
 #
-# Hard-coded for now: only Jira has a manual-sync affordance. When we add
-# Linear / ClickUp etc. we'll generalize this to a registry keyed by
-# integration_id. Founder uses this to dogfood without waiting on the cron.
-# JIRA_INTEGRATION_ID already declared above for the direct-actions block.
+# Manual sync trigger so dogfooding doesn't wait on the Modal cron.
+# ``integration_id`` is the same string mobile got from the catalog (app.id)
+# — keeps backend + redis + Firestore on a single identity.
 
 
 class JiraSyncNowResponse(BaseModel):
@@ -410,11 +412,14 @@ class JiraSyncNowResponse(BaseModel):
 
 
 @router.post(
-    "/v1/integrations/jira/sync-now",
+    "/v1/integrations/{integration_id}/sync-now",
     response_model=JiraSyncNowResponse,
     tags=['integrations'],
 )
-async def jira_sync_now(uid: str = Depends(auth.get_current_user_uid)):
+async def jira_sync_now(
+    integration_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     """Manually trigger a Jira → action-items sync for the current user.
 
     Read-side only: this endpoint does NOT require ``two_way_sync_enabled``
@@ -425,11 +430,11 @@ async def jira_sync_now(uid: str = Depends(auth.get_current_user_uid)):
     Failures from the underlying plugin call collapse to 502 with a
     sanitized log so plugin tokens / PII never leak to error responses.
     """
-    if not redis_db.is_app_enabled(uid, JIRA_INTEGRATION_ID):
+    if not redis_db.is_app_enabled(uid, integration_id):
         raise HTTPException(status_code=400, detail="jira_not_installed")
 
     try:
-        result = await sync_user_jira_issues_with_timestamp(uid)
+        result = await sync_user_jira_issues_with_timestamp(uid, integration_id=integration_id)
     except HTTPException:
         # Don't double-wrap explicit HTTPExceptions raised downstream.
         raise

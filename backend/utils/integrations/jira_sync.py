@@ -307,22 +307,32 @@ async def sync_all_users_jira() -> dict:
     return summary
 
 
-async def sync_user_jira_issues_with_timestamp(uid: str, http_client: Optional[httpx.AsyncClient] = None) -> dict:
+async def sync_user_jira_issues_with_timestamp(
+    uid: str,
+    http_client: Optional[httpx.AsyncClient] = None,
+    integration_id: Optional[str] = None,
+) -> dict:
     """Wrap :func:`sync_user_jira_issues` with a ``last_synced_at`` timestamp.
 
-    Used by the manual ``POST /v1/integrations/jira/sync-now`` endpoint so the
-    mobile UI can show "Synced 2 minutes ago" without waiting on the next
-    cron tick. Persists the timestamp to ``users/{uid}/integration_prefs/
-    nooto-jira.last_synced_at`` so the next ``GET /prefs`` returns it across
-    devices.
+    Used by the manual ``POST /v1/integrations/{integration_id}/sync-now``
+    endpoint so the mobile UI can show "Synced 2 minutes ago" without
+    waiting on the next cron tick. Persists the timestamp to
+    ``users/{uid}/integration_prefs/{integration_id}.last_synced_at`` so
+    the next ``GET /prefs`` returns it across devices.
+
+    ``integration_id`` defaults to :data:`JIRA_APP_ID` for backward-compat
+    with the cron caller; the route handler always passes through the
+    ``integration_id`` from the URL path so backend + redis + mobile all
+    agree on the same identity (the ULID returned by the catalog).
 
     Returns the existing sync result dict augmented with
     ``last_synced_at`` (ISO8601 UTC).
     """
     result = await sync_user_jira_issues(uid, http_client=http_client)
     last_synced_at = datetime.now(timezone.utc).isoformat()
+    prefs_key = integration_id or JIRA_APP_ID
     try:
-        integration_prefs_db.set_integration_pref(uid, JIRA_APP_ID, last_synced_at=last_synced_at)
+        integration_prefs_db.set_integration_pref(uid, prefs_key, last_synced_at=last_synced_at)
     except Exception as exc:  # pragma: no cover — defensive
         # Never let a Firestore write failure mask a successful sync.
         logger.warning("[JiraSync] Failed to persist last_synced_at uid=%s err=%s", uid, sanitize(str(exc)))
