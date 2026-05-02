@@ -43,6 +43,10 @@ enum CardKind {
   welcome,
   brief,
   actionItem,
+
+  /// Proactive heads-up when Jira items pile up (3+ stuck >3d) or any with
+  /// `due_at` within the next 24h. Generator: `JiraStuckIssuesCard`.
+  jiraStuckIssues,
   // Day 30+ kinds, declared here so the enum stays exhaustive even before
   // the generators ship. Subclasses land alongside the generator.
   commitmentCapture,
@@ -61,13 +65,7 @@ extension CardKindCodec on CardKind {
   }
 }
 
-enum CardAction {
-  accept,
-  snooze,
-  dismiss,
-  tapThrough,
-  open,
-}
+enum CardAction { accept, snooze, dismiss, tapThrough, open }
 
 extension CardActionCodec on CardAction {
   String get code => name;
