@@ -79,6 +79,23 @@ class AppsProvider extends ChangeNotifier {
   /// for any app not in the map.
   Map<String, bool> _twoWaySyncByAppId = const {};
 
+  /// Set of app ids currently mid manual sync. Multiple apps could be
+  /// syncing in parallel in theory (each integration runs independently),
+  /// so this is a set rather than a single id like [_pendingId].
+  Set<String> _syncingIds = const {};
+
+  /// Last successful manual or cron sync timestamp per app, populated from
+  /// the `last_synced_at` field on the integration prefs response and
+  /// updated locally after a successful [syncNow]. Null if never synced.
+  Map<String, DateTime?> _lastSyncedByAppId = const {};
+
+  /// Most recent `synced` count per app from the manual `syncNow` response.
+  /// Used by the Sync now button to render "Synced N items." vs
+  /// "Already up to date." Null until the user has triggered a manual
+  /// sync at least once in this session — the Hive-persisted timestamp
+  /// alone doesn't tell us whether the last batch was empty or not.
+  Map<String, int> _lastSyncCountByAppId = const {};
+
   List<AppGroup> get groups => _groups;
   bool get loading => _loading;
   bool get hasFetched => _hasFetched;
@@ -87,6 +104,16 @@ class AppsProvider extends ChangeNotifier {
 
   bool isEnabled(String appId) => _enabledIds.contains(appId);
   bool isPending(String appId) => _pendingId == appId;
+
+  /// True while a manual `POST /sync-now` is in flight for [appId].
+  bool isSyncing(String appId) => _syncingIds.contains(appId);
+
+  /// Last successful sync timestamp for [appId], or null if never synced.
+  DateTime? lastSyncedAt(String appId) => _lastSyncedByAppId[appId];
+
+  /// Most recent `synced` count from a manual sync this session, or null
+  /// if the user hasn't tapped Sync now yet for [appId].
+  int? lastSyncCount(String appId) => _lastSyncCountByAppId[appId];
 
   /// Idempotent — safe to call from `initState` of every Apps tab arrival.
   /// Subsequent calls no-op unless [force] is set.
@@ -305,13 +332,90 @@ class AppsProvider extends ChangeNotifier {
       // null / non-bool server value collapses to false.
       final raw = body is Map ? body['two_way_sync_enabled'] : null;
       final serverEnabled = raw == true;
+      // last_synced_at is best-effort: any non-string / unparseable value
+      // collapses to null, which the UI treats as "Never synced".
+      DateTime? lastSyncedAt;
+      if (body is Map) {
+        final ts = body['last_synced_at'];
+        if (ts is String && ts.isNotEmpty) {
+          lastSyncedAt = DateTime.tryParse(ts);
+        }
+      }
       final localEnabled = _twoWaySyncByAppId[appId] ?? false;
-      if (serverEnabled == localEnabled) return;
-      _twoWaySyncByAppId = {..._twoWaySyncByAppId, appId: serverEnabled};
-      await _persistTwoWaySync();
+      final localLastSynced = _lastSyncedByAppId[appId];
+      final twoWayChanged = serverEnabled != localEnabled;
+      final lastSyncedChanged = lastSyncedAt != localLastSynced;
+      if (!twoWayChanged && !lastSyncedChanged) return;
+      if (twoWayChanged) {
+        _twoWaySyncByAppId = {..._twoWaySyncByAppId, appId: serverEnabled};
+        await _persistTwoWaySync();
+      }
+      if (lastSyncedChanged) {
+        _lastSyncedByAppId = {..._lastSyncedByAppId, appId: lastSyncedAt};
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('[AppsProvider] _pullTwoWaySync($appId) failed: $e');
+    }
+  }
+
+  /// Manually trigger a backend sync for an installed integration. Pairs
+  /// with the "Sync now" button on the app detail screen — useful when a
+  /// user just flipped a Jira ticket and wants it to land in Plan without
+  /// waiting for the 10-minute cron.
+  ///
+  /// Returns null on success. On failure returns a stable error code:
+  ///   * "not_supported" — appId has no integration mapping (UI never shows
+  ///     the button in this case, but defensive)
+  ///   * "not_installed" — backend returned 400 jira_not_installed
+  ///   * "plugin_error"  — backend returned 502 jira_plugin_error
+  ///   * "network"       — any other ApiError or transport exception
+  ///
+  /// Notifies listeners on isSyncing transitions so the button can show a
+  /// spinner. On success, also bumps [lastSyncedAt] from the response so
+  /// the "Last synced N min ago" caption updates immediately without
+  /// waiting for the next [load] reconcile.
+  Future<String?> syncNow(String appId) async {
+    final integrationId = _integrationIdByAppId[appId];
+    if (integrationId == null) return 'not_supported';
+    if (_syncingIds.contains(appId)) return null; // Already in flight, no-op.
+
+    _syncingIds = {..._syncingIds, appId};
+    notifyListeners();
+    try {
+      final res = await _client.post('v1/integrations/$integrationId/sync-now', body: const {});
+      final body = jsonDecode(res.body);
+      if (body is Map) {
+        final ts = body['last_synced_at'];
+        if (ts is String && ts.isNotEmpty) {
+          final parsed = DateTime.tryParse(ts);
+          if (parsed != null) {
+            _lastSyncedByAppId = {..._lastSyncedByAppId, appId: parsed};
+          }
+        }
+        final synced = body['synced'];
+        if (synced is int) {
+          _lastSyncCountByAppId = {..._lastSyncCountByAppId, appId: synced};
+        } else if (synced is num) {
+          _lastSyncCountByAppId = {..._lastSyncCountByAppId, appId: synced.toInt()};
+        }
+      }
+      return null;
+    } on ApiError catch (e) {
+      if (e.statusCode == 400 && e.detail == 'jira_not_installed') {
+        return 'not_installed';
+      }
+      if (e.statusCode == 502 && e.detail == 'jira_plugin_error') {
+        return 'plugin_error';
+      }
+      debugPrint('[AppsProvider] syncNow($appId) failed: $e');
+      return 'network';
+    } catch (e) {
+      debugPrint('[AppsProvider] syncNow($appId) network error: $e');
+      return 'network';
+    } finally {
+      _syncingIds = {..._syncingIds}..remove(appId);
+      notifyListeners();
     }
   }
 

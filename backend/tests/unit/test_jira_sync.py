@@ -59,6 +59,10 @@ action_items_db.action_items_collection = "action_items"
 apps_db = _stub_module("database.apps")
 apps_db.get_app_by_id_db = MagicMock(return_value=None)
 
+integration_prefs_db = _stub_module("database.integration_prefs")
+integration_prefs_db.set_integration_pref = MagicMock(return_value={})
+integration_prefs_db.get_integration_pref = MagicMock(return_value=None)
+
 
 class _FakeRedis:
     def __init__(self):

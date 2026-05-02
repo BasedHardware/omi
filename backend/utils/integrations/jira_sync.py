@@ -21,6 +21,7 @@ from typing import Optional
 import httpx
 
 import database.action_items as action_items_db
+import database.integration_prefs as integration_prefs_db
 from database.apps import get_app_by_id_db
 from database.redis_db import is_app_enabled, r as redis_client
 from utils.log_sanitizer import sanitize
@@ -304,3 +305,27 @@ async def sync_all_users_jira() -> dict:
     summary = {"users": total_users, "synced": total_synced, "errors": total_errors}
     logger.info("[JiraSync] cron complete %s", summary)
     return summary
+
+
+async def sync_user_jira_issues_with_timestamp(uid: str, http_client: Optional[httpx.AsyncClient] = None) -> dict:
+    """Wrap :func:`sync_user_jira_issues` with a ``last_synced_at`` timestamp.
+
+    Used by the manual ``POST /v1/integrations/jira/sync-now`` endpoint so the
+    mobile UI can show "Synced 2 minutes ago" without waiting on the next
+    cron tick. Persists the timestamp to ``users/{uid}/integration_prefs/
+    nooto-jira.last_synced_at`` so the next ``GET /prefs`` returns it across
+    devices.
+
+    Returns the existing sync result dict augmented with
+    ``last_synced_at`` (ISO8601 UTC).
+    """
+    result = await sync_user_jira_issues(uid, http_client=http_client)
+    last_synced_at = datetime.now(timezone.utc).isoformat()
+    try:
+        integration_prefs_db.set_integration_pref(uid, JIRA_APP_ID, last_synced_at=last_synced_at)
+    except Exception as exc:  # pragma: no cover — defensive
+        # Never let a Firestore write failure mask a successful sync.
+        logger.warning("[JiraSync] Failed to persist last_synced_at uid=%s err=%s", uid, sanitize(str(exc)))
+    out = dict(result)
+    out["last_synced_at"] = last_synced_at
+    return out

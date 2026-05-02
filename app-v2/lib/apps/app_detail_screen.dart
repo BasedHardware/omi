@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/apps/app_model.dart';
 import 'package:nooto_v2/apps/apps_provider.dart';
+import 'package:nooto_v2/apps/widgets/sync_now_button.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 /// Marketplace detail page for a single app. Hero thumbnail + name + author,
@@ -26,20 +27,14 @@ class AppDetailScreen extends StatelessWidget {
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: Container(
-              color: AppColors.backgroundPrimary.withValues(alpha: 0.55),
-            ),
+            child: Container(color: AppColors.backgroundPrimary.withValues(alpha: 0.55)),
           ),
         ),
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         title: Text(
           app.name,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         ),
       ),
       body: _Body(app: app),
@@ -69,14 +64,7 @@ class _Body extends StatelessWidget {
           const SizedBox(height: AppStyles.spacingXL),
           const _SectionLabel('ABOUT'),
           const SizedBox(height: AppStyles.spacingM),
-          Text(
-            app.description,
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppColors.textSecondary,
-              height: 1.5,
-            ),
-          ),
+          Text(app.description, style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5)),
         ],
         if (app.capabilities.isNotEmpty) ...[
           const SizedBox(height: AppStyles.spacingXL),
@@ -85,9 +73,7 @@ class _Body extends StatelessWidget {
           Wrap(
             spacing: AppStyles.spacingS,
             runSpacing: AppStyles.spacingS,
-            children: [
-              for (final cap in app.capabilities) _CapabilityChip(label: cap),
-            ],
+            children: [for (final cap in app.capabilities) _CapabilityChip(label: cap)],
           ),
         ],
         // Two-way sync toggle: only meaningful for external_integration apps
@@ -99,8 +85,54 @@ class _Body extends StatelessWidget {
           const SizedBox(height: AppStyles.spacingM),
           _TwoWaySyncToggle(app: app),
         ],
+        // Maintenance section: manual sync button + last-synced caption.
+        // Only shown for installed integrations — irrelevant otherwise.
+        if (app.externalIntegration != null && context.watch<AppsProvider>().isEnabled(app.id)) ...[
+          const SizedBox(height: AppStyles.spacingXL),
+          const _SectionLabel('MAINTENANCE'),
+          const SizedBox(height: AppStyles.spacingM),
+          SyncNowButton(appId: app.id),
+          const SizedBox(height: AppStyles.spacingS),
+          _LastSyncedCaption(appId: app.id),
+        ],
       ],
     );
+  }
+}
+
+/// Small caption below the Sync now button. Reads [AppsProvider.lastSyncedAt]
+/// and renders "Last synced: 2 min ago" (or "Never synced" when null).
+/// Kept simple — no live ticker; the value updates on next rebuild after
+/// a sync completes or the prefs reconcile runs.
+class _LastSyncedCaption extends StatelessWidget {
+  const _LastSyncedCaption({required this.appId});
+  final String appId;
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = context.watch<AppsProvider>();
+    final ts = apps.lastSyncedAt(appId);
+    final text = ts == null ? 'Never synced' : 'Last synced: ${_relative(ts)}';
+    return Text(text, style: const TextStyle(fontSize: 12, color: AppColors.textTertiary));
+  }
+
+  /// Compact relative time. Mirrors the Library row caption — keep wording
+  /// stable so users don't see two different phrasings for the same idea.
+  static String _relative(DateTime ts) {
+    final now = DateTime.now();
+    final diff = now.difference(ts.toLocal());
+    if (diff.isNegative) return 'just now'; // clock skew — defensive
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) {
+      final m = diff.inMinutes;
+      return '$m min ago';
+    }
+    if (diff.inHours < 24) {
+      final h = diff.inHours;
+      return '$h h ago';
+    }
+    final d = diff.inDays;
+    return '$d d ago';
   }
 }
 
@@ -130,13 +162,7 @@ class _Header extends StatelessWidget {
               ),
               if (app.author != null && app.author!.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(
-                  app.author!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
+                Text(app.author!, style: const TextStyle(fontSize: 13, color: AppColors.textTertiary)),
               ],
               const SizedBox(height: AppStyles.spacingS),
               _MetaRow(app: app),
@@ -172,11 +198,7 @@ class _HeroThumbnail extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 initials,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textTertiary,
-                ),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: AppColors.textTertiary),
               ),
             )
           : Image.network(url, fit: BoxFit.cover),
@@ -198,11 +220,7 @@ class _MetaRow extends StatelessWidget {
     if (parts.isEmpty) return const SizedBox.shrink();
     return Text(
       parts.join('  ·  '),
-      style: const TextStyle(
-        fontSize: 13,
-        color: AppColors.textTertiary,
-        fontWeight: FontWeight.w500,
-      ),
+      style: const TextStyle(fontSize: 13, color: AppColors.textTertiary, fontWeight: FontWeight.w500),
     );
   }
 
@@ -230,48 +248,34 @@ class _InstallButton extends StatelessWidget {
             ? null
             : () async {
                 HapticFeedback.lightImpact();
-                final success = installed
-                    ? await apps.uninstall(app.id)
-                    : await apps.install(app.id);
+                final success = installed ? await apps.uninstall(app.id) : await apps.install(app.id);
                 if (!context.mounted) return;
                 if (!success && apps.error != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(installed
-                          ? "Couldn't uninstall. Try again."
-                          : "Couldn't install. Try again."),
+                      content: Text(installed ? "Couldn't uninstall. Try again." : "Couldn't install. Try again."),
                       backgroundColor: AppColors.backgroundSecondary,
                     ),
                   );
                 }
               },
         style: FilledButton.styleFrom(
-          backgroundColor: installed
-              ? AppColors.backgroundSecondary
-              : AppColors.brandPrimary,
+          backgroundColor: installed ? AppColors.backgroundSecondary : AppColors.brandPrimary,
           foregroundColor: AppColors.textPrimary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-            side: installed
-                ? BorderSide(color: Colors.white.withValues(alpha: 0.06))
-                : BorderSide.none,
+            side: installed ? BorderSide(color: Colors.white.withValues(alpha: 0.06)) : BorderSide.none,
           ),
         ),
         child: pending
             ? const SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.textPrimary,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
               )
             : Text(
                 installed ? 'Installed' : 'Install',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
       ),
     );
@@ -303,10 +307,7 @@ class _CapabilityChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppStyles.spacingM,
-        vertical: AppStyles.spacingXS,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingM, vertical: AppStyles.spacingXS),
       decoration: BoxDecoration(
         color: AppColors.backgroundSecondary,
         borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
@@ -314,11 +315,7 @@ class _CapabilityChip extends StatelessWidget {
       ),
       child: Text(
         _humanize(label),
-        style: const TextStyle(
-          fontSize: 12,
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w500,
-        ),
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -350,10 +347,7 @@ class _TwoWaySyncToggle extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppStyles.spacingL,
-        vertical: AppStyles.spacingM,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingL, vertical: AppStyles.spacingM),
       child: Row(
         children: [
           Expanded(
@@ -362,22 +356,14 @@ class _TwoWaySyncToggle extends StatelessWidget {
               children: [
                 Text(
                   'Allow ${app.name} writes',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   installed
                       ? 'Let Nooto create or update ${app.name} items on your behalf.'
                       : 'Install ${app.name} first to enable writebacks.',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textTertiary,
-                    height: 1.4,
-                  ),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textTertiary, height: 1.4),
                 ),
               ],
             ),
