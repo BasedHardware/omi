@@ -1127,8 +1127,11 @@ async def sync_local_files(
     segmented_paths = set()
 
     try:
-        paths = retrieve_file_paths(files, uid)
-        wav_paths = decode_files_to_wav(paths)
+        try:
+            paths = retrieve_file_paths(files, uid)
+            wav_paths = decode_files_to_wav(paths)
+        except HTTPException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
         vad_errors = []
 
@@ -1241,14 +1244,6 @@ async def sync_local_files(
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
-        # Record subscription usage (transcription credits)
-        try:
-            usage_seconds = int(total_speech_seconds)
-            if usage_seconds > 0:
-                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
-        except Exception as e:
-            logger.error(f'sync: usage record error for {uid}: {e}')
-
         # Build JSON-serializable response
         result = {
             'new_memories': sorted(response['new_memories']),
@@ -1274,6 +1269,14 @@ async def sync_local_files(
                 detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
                 headers=_V1_DEPRECATION_HEADERS,
             )
+
+        # Record subscription usage only when at least one segment succeeded
+        try:
+            usage_seconds = int(total_speech_seconds)
+            if usage_seconds > 0:
+                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+        except Exception as e:
+            logger.error(f'sync: usage record error for {uid}: {e}')
 
         if failed_segments > 0:
             # Partial failure — return 207 Multi-Status so old clients retry the batch
@@ -1395,16 +1398,9 @@ def _process_segments_background(
             except Exception as e:
                 logger.error(f'sync_v2: DG usage record error for {uid}: {e}')
 
-        # Record subscription usage (transcription credits)
-        try:
-            usage_seconds = int(total_speech_seconds)
-            if usage_seconds > 0:
-                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
-        except Exception as e:
-            logger.error(f'sync_v2: usage record error for {uid}: {e}')
-
         # Build result matching v1 response shape
         failed_segments = len(segment_errors)
+        successful_segments = total_segments - failed_segments
         result = {
             'new_memories': sorted(response['new_memories']),
             'updated_memories': sorted(response['updated_memories']),
@@ -1413,6 +1409,15 @@ def _process_segments_background(
             result['failed_segments'] = failed_segments
             result['total_segments'] = total_segments
             result['errors'] = segment_errors[:10]
+
+        # Record subscription usage only when at least one segment succeeded
+        if successful_segments > 0:
+            try:
+                usage_seconds = int(total_speech_seconds)
+                if usage_seconds > 0:
+                    record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+            except Exception as e:
+                logger.error(f'sync_v2: usage record error for {uid}: {e}')
 
         mark_job_completed(
             job_id,
