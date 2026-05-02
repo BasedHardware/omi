@@ -18,6 +18,16 @@
 				<string>com.googleusercontent.apps.1060764816205-i0hf8fsqc7rqebvah1eefnvgdrh8kcrb</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.togodynamics.nooto.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nooto</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Nooto needs your microphone to capture a short voice sample during onboarding so it can recognize you later.</string>
