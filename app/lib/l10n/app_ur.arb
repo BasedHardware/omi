@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "سب منتخب کریں",
   "showCompletedTasks": "مکمل شدہ دکھائیں",
   "startCallRecording": "کال ریکارڈنگ شروع کریں",
-  "startVoiceRecording": "وائس ریکارڈنگ شروع کریں"
+  "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
+  "pairingLostTitle": "آپ کے Omi سے رابطہ نہیں ہو سکتا",
+  "pairingLostBody": "براہ کرم اپنے فون کی بلوٹوتھ سیٹنگز کھولیں، فہرست سے موجودہ Omi کو ہٹائیں، پھر واپس آئیں اور دوبارہ کوشش کریں۔",
+  "pairingLostButton": "بلوٹوتھ کی ترتیبات کھولیں۔"
 }

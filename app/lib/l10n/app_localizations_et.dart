@@ -9225,4 +9225,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Tühista kõigi valik';
+
+  @override
+  String get pairingLostTitle => 'Ei saa teie Omiga ühendust luua';
+
+  @override
+  String get pairingLostBody =>
+      'Palun avage oma telefoni Bluetoothi seaded, eemaldage olemasolev Omi loendist ja proovige uuesti.';
+
+  @override
+  String get pairingLostButton => 'Ava Bluetoothi seaded';
 }

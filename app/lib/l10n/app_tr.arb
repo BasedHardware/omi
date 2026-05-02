@@ -3048,5 +3048,8 @@
   "selectAllTasksMenu": "Tümünü seç",
   "showCompletedTasks": "Tamamlananları göster",
   "startCallRecording": "Arama kaydını başlat",
-  "startVoiceRecording": "Ses kaydını başlat"
+  "startVoiceRecording": "Ses kaydını başlat",
+  "pairingLostTitle": "Omi cihazınıza bağlanamıyorum.",
+  "pairingLostBody": "Lütfen telefonunuzun Bluetooth ayarlarını açın, mevcut Omi uygulamasını listeden kaldırın, ardından geri dönüp tekrar deneyin.",
+  "pairingLostButton": "Bluetooth Ayarlarını Açın"
 }

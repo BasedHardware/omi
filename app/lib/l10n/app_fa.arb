@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "انتخاب همه",
   "showCompletedTasks": "نمایش انجام‌شده‌ها",
   "startCallRecording": "شروع ضبط تماس",
-  "startVoiceRecording": "شروع ضبط صدا"
+  "startVoiceRecording": "شروع ضبط صدا",
+  "pairingLostTitle": "نمی‌توان به Omi شما متصل شد",
+  "pairingLostBody": "لطفاً تنظیمات بلوتوث گوشی خود را باز کنید، Omi موجود را از لیست حذف کنید، سپس برگردید و دوباره امتحان کنید.",
+  "pairingLostButton": "تنظیمات بلوتوث را باز کنید"
 }

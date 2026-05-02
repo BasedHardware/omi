@@ -9237,4 +9237,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Atžymėti viską';
+
+  @override
+  String get pairingLostTitle => 'Nepavyksta prisijungti prie jūsų „Omi“';
+
+  @override
+  String get pairingLostBody =>
+      'Atidarykite telefono „Bluetooth“ nustatymus, pašalinkite esamą „Omi“ iš sąrašo ir bandykite dar kartą.';
+
+  @override
+  String get pairingLostButton => 'Atidaryti „Bluetooth“ nustatymus';
 }

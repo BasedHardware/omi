@@ -3109,5 +3109,8 @@
   "selectAllTasksMenu": "Összes kijelölése",
   "showCompletedTasks": "Befejezettek megjelenítése",
   "startCallRecording": "Hívásfelvétel indítása",
-  "startVoiceRecording": "Hangfelvétel indítása"
+  "startVoiceRecording": "Hangfelvétel indítása",
+  "pairingLostTitle": "Nem tudok csatlakozni az Omi-hoz",
+  "pairingLostBody": "Kérjük, nyissa meg a telefon Bluetooth-beállításait, távolítsa el a meglévő Omi-t a listából, majd próbálja újra.",
+  "pairingLostButton": "Nyissa meg a Bluetooth-beállításokat"
 }

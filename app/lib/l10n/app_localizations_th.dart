@@ -9182,4 +9182,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'ยกเลิกเลือกทั้งหมด';
+
+  @override
+  String get pairingLostTitle => 'ไม่สามารถเชื่อมต่อกับ Omi ของคุณได้';
+
+  @override
+  String get pairingLostBody =>
+      'โปรดเปิดการตั้งค่าบลูทูธในโทรศัพท์ของคุณ ลบแอป Omi ที่มีอยู่จากรายการ แล้วลองใหม่อีกครั้ง';
+
+  @override
+  String get pairingLostButton => 'เปิดการตั้งค่าบลูทูธ';
 }

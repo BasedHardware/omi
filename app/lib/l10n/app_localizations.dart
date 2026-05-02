@@ -17222,6 +17222,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Deselect all'**
   String get deselectAllTasksMenu;
+
+  /// Title of the dialog shown when the BLE pairing between phone and Omi is broken (iOS peerRemovedPairingInformation / Android GATT_AUTH_FAIL or GATT_INSUF_ENCRYPTION). The user must remove the existing Omi from their phone's Bluetooth list to recover.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t connect to your Omi'**
+  String get pairingLostTitle;
+
+  /// Body of the pairing-lost recovery dialog. Plain instructions, no jargon.
+  ///
+  /// In en, this message translates to:
+  /// **'Please open your phone\'s Bluetooth settings, remove the existing Omi from the list, then come back and try again.'**
+  String get pairingLostBody;
+
+  /// Confirm button on the pairing-lost dialog. Acts as the dismiss action; user manually navigates to system Bluetooth settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Bluetooth Settings'**
+  String get pairingLostButton;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

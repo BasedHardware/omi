@@ -2980,5 +2980,8 @@
   "selectAllTasksMenu": "تحديد الكل",
   "showCompletedTasks": "إظهار المكتملة",
   "startCallRecording": "بدء تسجيل المكالمة",
-  "startVoiceRecording": "بدء التسجيل الصوتي"
+  "startVoiceRecording": "بدء التسجيل الصوتي",
+  "pairingLostTitle": "لا يمكن الاتصال بجهاز أومي الخاص بك",
+  "pairingLostBody": "يرجى فتح إعدادات البلوتوث في هاتفك، وإزالة جهاز Omi الموجود من القائمة، ثم العودة والمحاولة مرة أخرى.",
+  "pairingLostButton": "افتح إعدادات البلوتوث"
 }

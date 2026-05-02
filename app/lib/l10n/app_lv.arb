@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Atlasīt visus",
   "showCompletedTasks": "Rādīt pabeigtās",
   "startCallRecording": "Sākt zvana ierakstīšanu",
-  "startVoiceRecording": "Sākt balss ierakstīšanu"
+  "startVoiceRecording": "Sākt balss ierakstīšanu",
+  "pairingLostTitle": "Nevar izveidot savienojumu ar jūsu Omi",
+  "pairingLostBody": "Lūdzu, atveriet tālruņa Bluetooth iestatījumus, noņemiet esošo Omi no saraksta un pēc tam atgriezieties un mēģiniet vēlreiz.",
+  "pairingLostButton": "Atvērt Bluetooth iestatījumus"
 }

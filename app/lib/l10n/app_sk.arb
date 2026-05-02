@@ -3018,5 +3018,8 @@
   "selectAllTasksMenu": "Vybrať všetko",
   "showCompletedTasks": "Zobraziť dokončené",
   "startCallRecording": "Spustiť nahrávanie hovoru",
-  "startVoiceRecording": "Spustiť hlasový záznam"
+  "startVoiceRecording": "Spustiť hlasový záznam",
+  "pairingLostTitle": "Nedá sa pripojiť k vášmu Omi",
+  "pairingLostBody": "Otvorte nastavenia Bluetooth v telefóne, odstráňte existujúce zariadenie Omi zo zoznamu a potom sa vráťte a skúste to znova.",
+  "pairingLostButton": "Otvoriť nastavenia Bluetooth"
 }

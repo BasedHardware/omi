@@ -9297,4 +9297,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'அனைத்தையும் தேர்வு நீக்கு';
+
+  @override
+  String get pairingLostTitle => 'உங்கள் ஓமியுடன் இணைக்க முடியவில்லை';
+
+  @override
+  String get pairingLostBody =>
+      'தயவுசெய்து உங்கள் தொலைபேசியின் புளூடூத் அமைப்புகளைத் திறந்து, பட்டியலில் இருந்து ஏற்கனவே உள்ள ஓமியை அகற்றிவிட்டு, மீண்டும் வந்து முயற்சிக்கவும்.';
+
+  @override
+  String get pairingLostButton => 'புளூடூத் அமைப்புகளைத் திறக்கவும்';
 }

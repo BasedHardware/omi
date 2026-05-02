@@ -9167,4 +9167,14 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'إلغاء تحديد الكل';
+
+  @override
+  String get pairingLostTitle => 'لا يمكن الاتصال بجهاز أومي الخاص بك';
+
+  @override
+  String get pairingLostBody =>
+      'يرجى فتح إعدادات البلوتوث في هاتفك، وإزالة جهاز Omi الموجود من القائمة، ثم العودة والمحاولة مرة أخرى.';
+
+  @override
+  String get pairingLostButton => 'افتح إعدادات البلوتوث';
 }

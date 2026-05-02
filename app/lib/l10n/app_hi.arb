@@ -3014,5 +3014,8 @@
   "selectAllTasksMenu": "सभी चुनें",
   "showCompletedTasks": "पूर्ण दिखाएं",
   "startCallRecording": "कॉल रिकॉर्डिंग शुरू करें",
-  "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें"
+  "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें",
+  "pairingLostTitle": "आपके ओमी से कनेक्ट नहीं हो पा रहा है",
+  "pairingLostBody": "कृपया अपने फोन की ब्लूटूथ सेटिंग खोलें, सूची से मौजूदा ओमी को हटा दें, फिर वापस आकर दोबारा प्रयास करें।",
+  "pairingLostButton": "ब्लूटूथ सेटिंग्स खोलें"
 }

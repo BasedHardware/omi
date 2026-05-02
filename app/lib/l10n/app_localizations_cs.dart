@@ -9224,4 +9224,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Zrušit výběr všech';
+
+  @override
+  String get pairingLostTitle => 'Nelze se připojit k vašemu Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Otevřete prosím nastavení Bluetooth v telefonu, odeberte stávající zařízení Omi ze seznamu a zkuste to znovu.';
+
+  @override
+  String get pairingLostButton => 'Otevřít nastavení Bluetooth';
 }

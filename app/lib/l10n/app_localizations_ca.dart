@@ -9282,4 +9282,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Desselecciona tot';
+
+  @override
+  String get pairingLostTitle => 'No em puc connectar al teu Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Obriu la configuració de Bluetooth del telèfon, elimineu l\'Omi existent de la llista i torneu-ho a provar.';
+
+  @override
+  String get pairingLostButton => 'Obre la configuració de Bluetooth';
 }

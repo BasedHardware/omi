@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Alles selecteren",
   "showCompletedTasks": "Voltooide tonen",
   "startCallRecording": "Gespreksopname starten",
-  "startVoiceRecording": "Spraakopname starten"
+  "startVoiceRecording": "Spraakopname starten",
+  "pairingLostTitle": "Kan geen verbinding maken met uw Omi",
+  "pairingLostBody": "Open de Bluetooth-instellingen van je telefoon, verwijder de Omi uit de lijst en probeer het daarna opnieuw.",
+  "pairingLostButton": "Open de Bluetooth-instellingen"
 }

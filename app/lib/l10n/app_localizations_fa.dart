@@ -9231,4 +9231,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'لغو انتخاب همه';
+
+  @override
+  String get pairingLostTitle => 'نمی‌توان به Omi شما متصل شد';
+
+  @override
+  String get pairingLostBody =>
+      'لطفاً تنظیمات بلوتوث گوشی خود را باز کنید، Omi موجود را از لیست حذف کنید، سپس برگردید و دوباره امتحان کنید.';
+
+  @override
+  String get pairingLostButton => 'تنظیمات بلوتوث را باز کنید';
 }

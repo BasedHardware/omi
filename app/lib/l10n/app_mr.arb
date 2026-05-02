@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "सर्व निवडा",
   "showCompletedTasks": "पूर्ण झालेले दाखवा",
   "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
-  "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा"
+  "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
+  "pairingLostTitle": "तुमच्या ओमीशी कनेक्ट होऊ शकत नाही",
+  "pairingLostBody": "कृपया तुमच्या फोनचे ब्लूटूथ सेटिंग्ज उघडा, यादीतून असलेले 'Omi' काढून टाका, त्यानंतर परत येऊन पुन्हा प्रयत्न करा.",
+  "pairingLostButton": "ब्लूटूथ सेटिंग्ज उघडा"
 }

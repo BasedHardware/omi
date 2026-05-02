@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "সমস্ত নির্বাচন",
   "showCompletedTasks": "সম্পন্ন দেখান",
   "startCallRecording": "কল রেকর্ডিং শুরু করুন",
-  "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন"
+  "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
+  "pairingLostTitle": "আপনার ওমির সাথে সংযোগ করা যাচ্ছে না।",
+  "pairingLostBody": "অনুগ্রহ করে আপনার ফোনের ব্লুটুথ সেটিংসে গিয়ে তালিকা থেকে বিদ্যমান Omi-কে সরিয়ে দিন, তারপর ফিরে এসে আবার চেষ্টা করুন।",
+  "pairingLostButton": "ব্লুটুথ সেটিংস খুলুন"
 }

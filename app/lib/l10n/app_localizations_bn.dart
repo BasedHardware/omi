@@ -9237,4 +9237,14 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'সমস্ত নির্বাচন বাতিল';
+
+  @override
+  String get pairingLostTitle => 'আপনার ওমির সাথে সংযোগ করা যাচ্ছে না।';
+
+  @override
+  String get pairingLostBody =>
+      'অনুগ্রহ করে আপনার ফোনের ব্লুটুথ সেটিংসে গিয়ে তালিকা থেকে বিদ্যমান Omi-কে সরিয়ে দিন, তারপর ফিরে এসে আবার চেষ্টা করুন।';
+
+  @override
+  String get pairingLostButton => 'ব্লুটুথ সেটিংস খুলুন';
 }

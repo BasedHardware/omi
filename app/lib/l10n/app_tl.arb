@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "Piliin lahat",
   "showCompletedTasks": "Ipakita ang tapos na",
   "startCallRecording": "Simulan ang pag-record ng tawag",
-  "startVoiceRecording": "Simulan ang voice recording"
+  "startVoiceRecording": "Simulan ang voice recording",
+  "pairingLostTitle": "Hindi makakonekta sa iyong Omi",
+  "pairingLostBody": "Pakibuksan ang mga setting ng Bluetooth ng iyong telepono, alisin ang kasalukuyang Omi sa listahan, pagkatapos ay bumalik at subukang muli.",
+  "pairingLostButton": "Buksan ang Mga Setting ng Bluetooth"
 }

@@ -9252,4 +9252,14 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Prekliči izbor vseh';
+
+  @override
+  String get pairingLostTitle => 'Ni se mogoče povezati z vašim Omijem';
+
+  @override
+  String get pairingLostBody =>
+      'Odprite nastavitve Bluetooth v telefonu, odstranite obstoječi Omi s seznama in poskusite znova.';
+
+  @override
+  String get pairingLostButton => 'Odprite nastavitve Bluetootha';
 }

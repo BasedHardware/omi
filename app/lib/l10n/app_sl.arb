@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "Izberi vse",
   "showCompletedTasks": "Prikaži dokončane",
   "startCallRecording": "Začni snemanje klica",
-  "startVoiceRecording": "Začni glasovno snemanje"
+  "startVoiceRecording": "Začni glasovno snemanje",
+  "pairingLostTitle": "Ni se mogoče povezati z vašim Omijem",
+  "pairingLostBody": "Odprite nastavitve Bluetooth v telefonu, odstranite obstoječi Omi s seznama in poskusite znova.",
+  "pairingLostButton": "Odprite nastavitve Bluetootha"
 }

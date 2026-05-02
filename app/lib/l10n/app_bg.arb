@@ -2982,5 +2982,8 @@
   "selectAllTasksMenu": "Избиране на всички",
   "showCompletedTasks": "Показване на завършените",
   "startCallRecording": "Стартиране на запис на разговор",
-  "startVoiceRecording": "Стартиране на гласов запис"
+  "startVoiceRecording": "Стартиране на гласов запис",
+  "pairingLostTitle": "Не мога да се свържа с вашия Omi",
+  "pairingLostBody": "Моля, отворете настройките за Bluetooth на телефона си, премахнете съществуващия Omi от списъка, след което се върнете и опитайте отново.",
+  "pairingLostButton": "Отворете настройките на Bluetooth"
 }

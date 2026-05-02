@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Selectați tot",
   "showCompletedTasks": "Afișați finalizate",
   "startCallRecording": "Porniți înregistrarea apelului",
-  "startVoiceRecording": "Porniți înregistrarea vocală"
+  "startVoiceRecording": "Porniți înregistrarea vocală",
+  "pairingLostTitle": "Nu mă pot conecta la Omi-ul tău",
+  "pairingLostBody": "Deschideți setările Bluetooth ale telefonului, eliminați dispozitivul Omi existent din listă, apoi reveniți și încercați din nou.",
+  "pairingLostButton": "Deschideți setările Bluetooth"
 }

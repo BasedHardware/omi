@@ -3018,5 +3018,8 @@
   "selectAllTasksMenu": "Chọn tất cả",
   "showCompletedTasks": "Hiện đã hoàn thành",
   "startCallRecording": "Bắt đầu ghi âm cuộc gọi",
-  "startVoiceRecording": "Bắt đầu ghi âm giọng nói"
+  "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
+  "pairingLostTitle": "Không thể kết nối với Omi của bạn",
+  "pairingLostBody": "Vui lòng mở cài đặt Bluetooth trên điện thoại, xóa thiết bị Omi hiện có khỏi danh sách, sau đó quay lại và thử lại.",
+  "pairingLostButton": "Mở cài đặt Bluetooth"
 }

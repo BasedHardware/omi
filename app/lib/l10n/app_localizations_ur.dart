@@ -9245,4 +9245,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'تمام کا انتخاب ختم کریں';
+
+  @override
+  String get pairingLostTitle => 'آپ کے Omi سے رابطہ نہیں ہو سکتا';
+
+  @override
+  String get pairingLostBody =>
+      'براہ کرم اپنے فون کی بلوٹوتھ سیٹنگز کھولیں، فہرست سے موجودہ Omi کو ہٹائیں، پھر واپس آئیں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get pairingLostButton => 'بلوٹوتھ کی ترتیبات کھولیں۔';
 }

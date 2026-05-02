@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "เลือกทั้งหมด",
   "showCompletedTasks": "แสดงที่เสร็จแล้ว",
   "startCallRecording": "เริ่มบันทึกการโทร",
-  "startVoiceRecording": "เริ่มบันทึกเสียง"
+  "startVoiceRecording": "เริ่มบันทึกเสียง",
+  "pairingLostTitle": "ไม่สามารถเชื่อมต่อกับ Omi ของคุณได้",
+  "pairingLostBody": "โปรดเปิดการตั้งค่าบลูทูธในโทรศัพท์ของคุณ ลบแอป Omi ที่มีอยู่จากรายการ แล้วลองใหม่อีกครั้ง",
+  "pairingLostButton": "เปิดการตั้งค่าบลูทูธ"
 }

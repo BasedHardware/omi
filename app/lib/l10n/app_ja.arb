@@ -3014,5 +3014,8 @@
   "selectAllTasksMenu": "すべて選択",
   "showCompletedTasks": "完了を表示",
   "startCallRecording": "通話録音を開始",
-  "startVoiceRecording": "音声録音を開始"
+  "startVoiceRecording": "音声録音を開始",
+  "pairingLostTitle": "Omiに接続できません",
+  "pairingLostBody": "スマートフォンのBluetooth設定を開き、リストから既存のOmiを削除してから、もう一度お試しください。",
+  "pairingLostButton": "Bluetooth設定を開く"
 }

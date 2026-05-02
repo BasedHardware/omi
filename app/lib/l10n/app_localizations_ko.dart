@@ -9080,4 +9080,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => '모두 선택 해제';
+
+  @override
+  String get pairingLostTitle => 'Omi에 연결할 수 없습니다';
+
+  @override
+  String get pairingLostBody => '휴대폰의 블루투스 설정에서 기존 Omi를 목록에서 제거한 후 다시 시도해 주세요.';
+
+  @override
+  String get pairingLostButton => '블루투스 설정 열기';
 }

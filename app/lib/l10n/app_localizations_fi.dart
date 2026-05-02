@@ -9227,4 +9227,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Poista kaikkien valinta';
+
+  @override
+  String get pairingLostTitle => 'Ei voida muodostaa yhteyttä Omiin';
+
+  @override
+  String get pairingLostBody => 'Avaa puhelimesi Bluetooth-asetukset, poista nykyinen Omi listalta ja yritä uudelleen.';
+
+  @override
+  String get pairingLostButton => 'Avaa Bluetooth-asetukset';
 }

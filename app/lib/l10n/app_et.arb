@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Vali kõik",
   "showCompletedTasks": "Kuva lõpetatud",
   "startCallRecording": "Alusta kõne salvestamist",
-  "startVoiceRecording": "Alusta häälsalvestust"
+  "startVoiceRecording": "Alusta häälsalvestust",
+  "pairingLostTitle": "Ei saa teie Omiga ühendust luua",
+  "pairingLostBody": "Palun avage oma telefoni Bluetoothi seaded, eemaldage olemasolev Omi loendist ja proovige uuesti.",
+  "pairingLostButton": "Ava Bluetoothi seaded"
 }

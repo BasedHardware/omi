@@ -3049,5 +3049,8 @@
   "selectAllTasksMenu": "Selecionar todos",
   "showCompletedTasks": "Mostrar concluídas",
   "startCallRecording": "Iniciar gravação de chamada",
-  "startVoiceRecording": "Iniciar gravação de voz"
+  "startVoiceRecording": "Iniciar gravação de voz",
+  "pairingLostTitle": "Não consigo conectar ao seu Omi.",
+  "pairingLostBody": "Por favor, abra as configurações de Bluetooth do seu telefone, remova o dispositivo Omi da lista e tente novamente.",
+  "pairingLostButton": "Abra as configurações de Bluetooth."
 }

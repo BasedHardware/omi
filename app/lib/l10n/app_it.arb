@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Seleziona tutto",
   "showCompletedTasks": "Mostra completate",
   "startCallRecording": "Avvia registrazione chiamata",
-  "startVoiceRecording": "Avvia registrazione vocale"
+  "startVoiceRecording": "Avvia registrazione vocale",
+  "pairingLostTitle": "Impossibile connettersi al tuo Omi",
+  "pairingLostBody": "Apri le impostazioni Bluetooth del tuo telefono, rimuovi Omi dall'elenco e riprova.",
+  "pairingLostButton": "Apri le impostazioni Bluetooth"
 }

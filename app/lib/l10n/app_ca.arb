@@ -2982,5 +2982,8 @@
   "selectAllTasksMenu": "Selecciona tot",
   "showCompletedTasks": "Mostra les completades",
   "startCallRecording": "Inicia l'enregistrament de trucada",
-  "startVoiceRecording": "Inicia l'enregistrament de veu"
+  "startVoiceRecording": "Inicia l'enregistrament de veu",
+  "pairingLostTitle": "No em puc connectar al teu Omi",
+  "pairingLostBody": "Obriu la configuració de Bluetooth del telèfon, elimineu l'Omi existent de la llista i torneu-ho a provar.",
+  "pairingLostButton": "Obre la configuració de Bluetooth"
 }

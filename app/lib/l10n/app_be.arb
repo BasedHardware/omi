@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "Выбраць усе",
   "showCompletedTasks": "Паказаць завершаныя",
   "startCallRecording": "Пачаць запіс званка",
-  "startVoiceRecording": "Пачаць галасавы запіс"
+  "startVoiceRecording": "Пачаць галасавы запіс",
+  "pairingLostTitle": "Не ўдаецца падключыцца да вашага Omi",
+  "pairingLostBody": "Калі ласка, адкрыйце налады Bluetooth вашага тэлефона, выдаліце існуючы Omi са спісу, а затым вярніцеся і паспрабуйце яшчэ раз.",
+  "pairingLostButton": "Адкрыйце налады Bluetooth"
 }

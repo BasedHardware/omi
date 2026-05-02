@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Välj alla",
   "showCompletedTasks": "Visa slutförda",
   "startCallRecording": "Starta samtalsinspelning",
-  "startVoiceRecording": "Starta röstinspelning"
+  "startVoiceRecording": "Starta röstinspelning",
+  "pairingLostTitle": "Kan inte ansluta till din Omi",
+  "pairingLostBody": "Öppna telefonens Bluetooth-inställningar, ta bort den befintliga Omi från listan och försök sedan igen.",
+  "pairingLostButton": "Öppna Bluetooth-inställningar"
 }

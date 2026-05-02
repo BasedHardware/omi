@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Valitse kaikki",
   "showCompletedTasks": "Näytä valmiit",
   "startCallRecording": "Aloita puhelun nauhoitus",
-  "startVoiceRecording": "Aloita ääninauhoitus"
+  "startVoiceRecording": "Aloita ääninauhoitus",
+  "pairingLostTitle": "Ei voida muodostaa yhteyttä Omiin",
+  "pairingLostBody": "Avaa puhelimesi Bluetooth-asetukset, poista nykyinen Omi listalta ja yritä uudelleen.",
+  "pairingLostButton": "Avaa Bluetooth-asetukset"
 }

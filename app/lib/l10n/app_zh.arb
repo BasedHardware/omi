@@ -3035,5 +3035,8 @@
   "selectAllTasksMenu": "全选",
   "showCompletedTasks": "显示已完成",
   "startCallRecording": "开始通话录音",
-  "startVoiceRecording": "开始语音录音"
+  "startVoiceRecording": "开始语音录音",
+  "pairingLostTitle": "无法连接到您的 Omi",
+  "pairingLostBody": "请打开手机的蓝牙设置，从列表中删除现有的 Omi，然后回来重试。",
+  "pairingLostButton": "打开蓝牙设置"
 }

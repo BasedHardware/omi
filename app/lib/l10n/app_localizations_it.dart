@@ -9283,4 +9283,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Deseleziona tutto';
+
+  @override
+  String get pairingLostTitle => 'Impossibile connettersi al tuo Omi';
+
+  @override
+  String get pairingLostBody => 'Apri le impostazioni Bluetooth del tuo telefono, rimuovi Omi dall\'elenco e riprova.';
+
+  @override
+  String get pairingLostButton => 'Apri le impostazioni Bluetooth';
 }

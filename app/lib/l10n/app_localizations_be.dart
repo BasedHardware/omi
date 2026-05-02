@@ -9254,4 +9254,14 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Зняць выбар усіх';
+
+  @override
+  String get pairingLostTitle => 'Не ўдаецца падключыцца да вашага Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Калі ласка, адкрыйце налады Bluetooth вашага тэлефона, выдаліце існуючы Omi са спісу, а затым вярніцеся і паспрабуйце яшчэ раз.';
+
+  @override
+  String get pairingLostButton => 'Адкрыйце налады Bluetooth';
 }

@@ -9271,4 +9271,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Deselectați tot';
+
+  @override
+  String get pairingLostTitle => 'Nu mă pot conecta la Omi-ul tău';
+
+  @override
+  String get pairingLostBody =>
+      'Deschideți setările Bluetooth ale telefonului, eliminați dispozitivul Omi existent din listă, apoi reveniți și încercați din nou.';
+
+  @override
+  String get pairingLostButton => 'Deschideți setările Bluetooth';
 }

@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Вибрати все",
   "showCompletedTasks": "Показати завершені",
   "startCallRecording": "Почати запис дзвінка",
-  "startVoiceRecording": "Почати голосовий запис"
+  "startVoiceRecording": "Почати голосовий запис",
+  "pairingLostTitle": "Не вдається підключитися до вашого Omi",
+  "pairingLostBody": "Будь ласка, відкрийте налаштування Bluetooth вашого телефону, видаліть існуючий Omi зі списку, а потім поверніться та спробуйте ще раз.",
+  "pairingLostButton": "Відкрийте налаштування Bluetooth"
 }

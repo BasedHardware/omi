@@ -3055,5 +3055,8 @@
   "selectAllTasksMenu": "Pilih semua",
   "showCompletedTasks": "Tampilkan selesai",
   "startCallRecording": "Mulai rekaman panggilan",
-  "startVoiceRecording": "Mulai rekaman suara"
+  "startVoiceRecording": "Mulai rekaman suara",
+  "pairingLostTitle": "Tidak dapat terhubung ke Omi Anda",
+  "pairingLostBody": "Silakan buka pengaturan Bluetooth ponsel Anda, hapus Omi yang ada dari daftar, lalu kembali dan coba lagi.",
+  "pairingLostButton": "Buka Pengaturan Bluetooth"
 }

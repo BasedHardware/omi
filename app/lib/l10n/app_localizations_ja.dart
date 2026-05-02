@@ -9079,4 +9079,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'すべて選択解除';
+
+  @override
+  String get pairingLostTitle => 'Omiに接続できません';
+
+  @override
+  String get pairingLostBody => 'スマートフォンのBluetooth設定を開き、リストから既存のOmiを削除してから、もう一度お試しください。';
+
+  @override
+  String get pairingLostButton => 'Bluetooth設定を開く';
 }

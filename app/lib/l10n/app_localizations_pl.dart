@@ -9248,4 +9248,14 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Odznacz wszystkie';
+
+  @override
+  String get pairingLostTitle => 'Nie można połączyć się z Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Otwórz ustawienia Bluetooth w telefonie, usuń istniejące urządzenie Omi z listy, a następnie wróć i spróbuj ponownie.';
+
+  @override
+  String get pairingLostButton => 'Otwórz ustawienia Bluetooth';
 }

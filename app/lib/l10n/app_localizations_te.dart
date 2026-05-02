@@ -9279,4 +9279,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'అన్ని ఎంపికలు తొలగించు';
+
+  @override
+  String get pairingLostTitle => 'మీ Omiకి కనెక్ట్ అవ్వలేకపోతున్నాను';
+
+  @override
+  String get pairingLostBody =>
+      'దయచేసి మీ ఫోన్ బ్లూటూత్ సెట్టింగ్‌లను తెరిచి, జాబితా నుండి ఇప్పటికే ఉన్న Omiని తీసివేసి, ఆ తర్వాత తిరిగి వచ్చి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get pairingLostButton => 'బ్లూటూత్ సెట్టింగ్‌లను తెరవండి';
 }

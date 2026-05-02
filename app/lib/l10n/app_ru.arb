@@ -3048,5 +3048,8 @@
   "selectAllTasksMenu": "Выбрать все",
   "showCompletedTasks": "Показать завершённые",
   "startCallRecording": "Начать запись звонка",
-  "startVoiceRecording": "Начать голосовую запись"
+  "startVoiceRecording": "Начать голосовую запись",
+  "pairingLostTitle": "Не удаётся подключиться к Omi.",
+  "pairingLostBody": "Пожалуйста, откройте настройки Bluetooth на своем телефоне, удалите существующее приложение Omi из списка, затем вернитесь и попробуйте снова.",
+  "pairingLostButton": "Откройте настройки Bluetooth"
 }

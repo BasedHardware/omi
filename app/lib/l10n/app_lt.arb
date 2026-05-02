@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Pasirinkti viską",
   "showCompletedTasks": "Rodyti užbaigtas",
   "startCallRecording": "Pradėti skambučio įrašymą",
-  "startVoiceRecording": "Pradėti balso įrašymą"
+  "startVoiceRecording": "Pradėti balso įrašymą",
+  "pairingLostTitle": "Nepavyksta prisijungti prie jūsų „Omi“",
+  "pairingLostBody": "Atidarykite telefono „Bluetooth“ nustatymus, pašalinkite esamą „Omi“ iš sąrašo ir bandykite dar kartą.",
+  "pairingLostButton": "Atidaryti „Bluetooth“ nustatymus"
 }

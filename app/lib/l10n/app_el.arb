@@ -3013,5 +3013,8 @@
   "selectAllTasksMenu": "Επιλογή όλων",
   "showCompletedTasks": "Εμφάνιση ολοκληρωμένων",
   "startCallRecording": "Έναρξη εγγραφής κλήσης",
-  "startVoiceRecording": "Έναρξη ηχογράφησης"
+  "startVoiceRecording": "Έναρξη ηχογράφησης",
+  "pairingLostTitle": "Δεν είναι δυνατή η σύνδεση με το Omi σας",
+  "pairingLostBody": "Ανοίξτε τις ρυθμίσεις Bluetooth του τηλεφώνου σας, καταργήστε το υπάρχον Omi από τη λίστα και, στη συνέχεια, επιστρέψτε και προσπαθήστε ξανά.",
+  "pairingLostButton": "Άνοιγμα ρυθμίσεων Bluetooth"
 }

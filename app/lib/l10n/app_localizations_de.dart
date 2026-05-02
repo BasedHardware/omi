@@ -9305,4 +9305,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Alle abwählen';
+
+  @override
+  String get pairingLostTitle => 'Verbindung zu Ihrem Omi nicht möglich';
+
+  @override
+  String get pairingLostBody =>
+      'Bitte öffnen Sie die Bluetooth-Einstellungen Ihres Telefons, entfernen Sie das vorhandene Omi aus der Liste und versuchen Sie es dann erneut.';
+
+  @override
+  String get pairingLostButton => 'Öffnen Sie die Bluetooth-Einstellungen.';
 }

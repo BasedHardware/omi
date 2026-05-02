@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "Избери ги сите",
   "showCompletedTasks": "Прикажи завршени",
   "startCallRecording": "Започни снимање повик",
-  "startVoiceRecording": "Започни гласовно снимање"
+  "startVoiceRecording": "Започни гласовно снимање",
+  "pairingLostTitle": "Не може да се поврзе со вашиот Omi",
+  "pairingLostBody": "Отворете ги поставките за Bluetooth на вашиот телефон, отстранете го постоечкиот Omi од листата, а потоа вратете се и обидете се повторно.",
+  "pairingLostButton": "Отвори поставки за Bluetooth"
 }

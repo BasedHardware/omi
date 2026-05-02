@@ -10721,5 +10721,8 @@
   "selectAllTasksMenu": "בחר הכל",
   "showCompletedTasks": "הצג הושלמו",
   "startCallRecording": "התחל הקלטת שיחה",
-  "startVoiceRecording": "התחל הקלטה קולית"
+  "startVoiceRecording": "התחל הקלטה קולית",
+  "pairingLostTitle": "לא ניתן להתחבר לאומי שלך",
+  "pairingLostBody": "אנא פתח את הגדרות ה-Bluetooth של הטלפון שלך, הסר את ה-Omi הקיים מהרשימה, לאחר מכן חזור ונסה שוב.",
+  "pairingLostButton": "פתח את הגדרות בלוטות'"
 }

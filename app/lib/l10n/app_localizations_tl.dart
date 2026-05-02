@@ -9313,4 +9313,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'I-deselect lahat';
+
+  @override
+  String get pairingLostTitle => 'Hindi makakonekta sa iyong Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Pakibuksan ang mga setting ng Bluetooth ng iyong telepono, alisin ang kasalukuyang Omi sa listahan, pagkatapos ay bumalik at subukang muli.';
+
+  @override
+  String get pairingLostButton => 'Buksan ang Mga Setting ng Bluetooth';
 }
