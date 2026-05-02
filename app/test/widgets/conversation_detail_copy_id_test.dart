@@ -54,6 +54,7 @@ class CopyConversationIdHarness extends StatelessWidget {
                     content: Text(AppLocalizations.of(innerContext)!.conversationIdCopied),
                   ),
                 );
+                HapticFeedback.lightImpact();
               },
               child: const Text('Tap to copy'),
             );
