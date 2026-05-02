@@ -78,6 +78,8 @@ logger = logging.getLogger(__name__)
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
 
+_V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
+
 router = APIRouter()
 
 
@@ -1100,12 +1102,15 @@ async def sync_local_files(
         f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
         f'user_agent={request.headers.get("user-agent", "")}'
     )
-    response.headers['Deprecation'] = 'true'
-    response.headers['Link'] = '</v2/sync-local-files>; rel="successor-version"'
+    response.headers.update(_V1_DEPRECATION_HEADERS)
 
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=_V1_DEPRECATION_HEADERS,
+        )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
     should_lock = not has_transcription_credits(uid)
@@ -1142,7 +1147,7 @@ async def sync_local_files(
             error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
             if len(vad_errors) > 3:
                 error_detail += f" (and {len(vad_errors) - 3} more)"
-            raise HTTPException(status_code=500, detail=error_detail)
+            raise HTTPException(status_code=500, detail=error_detail, headers=_V1_DEPRECATION_HEADERS)
 
         # Fair-use speech tracking from raw VAD segments (#5854)
         # Compute duration from raw segments BEFORE merging (silence gaps not counted)
@@ -1185,7 +1190,7 @@ async def sync_local_files(
             _cleanup_files(list(segmented_paths))
             return JSONResponse(
                 status_code=429,
-                headers={'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'},
+                headers=_V1_DEPRECATION_HEADERS,
                 content={
                     'new_memories': [],
                     'updated_memories': [],
@@ -1267,13 +1272,14 @@ async def sync_local_files(
             raise HTTPException(
                 status_code=500,
                 detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
+                headers=_V1_DEPRECATION_HEADERS,
             )
 
         if failed_segments > 0:
             # Partial failure — return 207 Multi-Status so old clients retry the batch
             return JSONResponse(
                 status_code=207,
-                headers={'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'},
+                headers=_V1_DEPRECATION_HEADERS,
                 content=result,
             )
 
