@@ -1468,6 +1468,9 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         'endpoint': endpoint.strip(),
         'method': tool.get('method', 'POST').upper(),
         'auth_required': tool.get('auth_required', True),
+        # Write tools (create/update/delete on external system) get gated behind
+        # the per-user two-way-sync toggle in chat tool resolution. Default false.
+        'write': bool(tool.get('write', False)),
     }
 
     # Optional: status_message
