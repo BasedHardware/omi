@@ -1,199 +1,73 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nooto_v2/library/library_provider.dart';
-import 'package:nooto_v2/library/memory_model.dart';
-import 'package:nooto_v2/library/widgets/memory_row.dart';
+import 'package:nooto_v2/library/conversation_detail_screen.dart';
+import 'package:nooto_v2/library/conversations_provider.dart';
+import 'package:nooto_v2/library/views/conversations_view.dart';
+import 'package:nooto_v2/library/views/memories_view.dart';
+import 'package:nooto_v2/library/widgets/library_section_tab_bar.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
-/// Tab 2: Library — Memory Map. What Nooto remembers about you, grouped
-/// into 4 user-facing buckets, drilled into via inline expand. Read + delete
-/// in v0; edit/search/manual-add land in v0.1.
-class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+/// Library shell. Mirrors desktop-v2/src/components/library/LibraryPage:
+/// a glass AppBar header with a pill sub-tab strip for Meetings / Memories.
+/// The sub-tab state lives in [ShellScreen] so the pill bar can render
+/// inside the AppBar's `bottom:` slot, unifying the chrome.
+class LibraryScreen extends StatelessWidget {
+  const LibraryScreen({super.key, required this.subTab});
 
-  @override
-  State<LibraryScreen> createState() => _LibraryScreenState();
-}
-
-class _LibraryScreenState extends State<LibraryScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<LibraryProvider>().load();
-    });
-  }
+  final LibrarySubTab subTab;
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<LibraryProvider>();
+    return subTab == LibrarySubTab.meetings
+        ? const ConversationsView()
+        : MemoriesView(
+            onViewConversation: (cid) => _openConversation(context, cid),
+          );
+  }
 
-    if (provider.loading && !provider.hasFetched) return const _Loading();
-    if (provider.error != null && provider.isEmpty) {
-      return _ErrorState(onRetry: () => provider.load(force: true));
+  /// Loads the conversation by id (cached by [ConversationsProvider] in the
+  /// common case) and pushes the detail screen. Falls back to a snack if not
+  /// in cache yet — v0.1 will fetch by id directly.
+  Future<void> _openConversation(BuildContext context, String id) async {
+    final provider = context.read<ConversationsProvider>();
+    if (!provider.hasFetched) {
+      await provider.load();
     }
-    if (provider.isEmpty) return const _EmptyState();
-
-    final groups = provider.groups;
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingM;
-    return RefreshIndicator(
-      onRefresh: () => provider.load(force: true),
-      color: AppColors.brandPrimary,
-      backgroundColor: AppColors.backgroundSecondary,
-      child: ListView.builder(
-        padding: EdgeInsets.fromLTRB(
-          AppStyles.spacingL,
-          topInset,
-          AppStyles.spacingL,
-          AppStyles.spacingXL,
+    final item = provider.byId(id);
+    if (!context.mounted) return;
+    if (item == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't find that conversation. Try refreshing Meetings."),
+          backgroundColor: AppColors.backgroundSecondary,
         ),
-        itemCount: groups.length,
-        itemBuilder: (_, i) => _GroupSection(group: groups[i]),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ConversationDetailScreen(item: item),
       ),
     );
   }
 }
 
-class _GroupSection extends StatelessWidget {
-  const _GroupSection({required this.group});
-  final MemoryGroup group;
+/// Library sub-tab identifier. Lives at module scope so [ShellScreen] can
+/// hoist the active tab and render the pill bar in its AppBar.
+enum LibrarySubTab { meetings, memories }
 
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.read<LibraryProvider>();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppStyles.spacingXL),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS),
-            child: Text(
-              group.bucket.label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textTertiary,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppStyles.spacingS),
-          for (final item in group.items)
-            MemoryRow(
-              key: ValueKey(item.id),
-              item: item,
-              onDelete: () async {
-                HapticFeedback.lightImpact();
-                final ok = await provider.delete(item.id);
-                if (!ok && context.mounted && provider.error != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Couldn't delete that memory. Try again."),
-                      backgroundColor: AppColors.backgroundSecondary,
-                    ),
-                  );
-                }
-              },
-              onViewConversation: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Conversation viewer lands in v0.1.'),
-                    backgroundColor: AppColors.backgroundSecondary,
-                  ),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Loading extends StatelessWidget {
-  const _Loading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: SizedBox(
-        width: 28,
-        height: 28,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: AppColors.brandPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppStyles.spacingXL),
-        child: Text(
-          "Nothing saved yet. As we talk, I'll surface what I learn here.",
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: AppColors.textTertiary,
-            height: 1.5,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.onRetry});
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingXL),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "Couldn't load your memories.",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: AppStyles.spacingS),
-            const Text(
-              'Pull to retry, or tap below.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textTertiary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: AppStyles.spacingL),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text(
-                'Retry',
-                style: TextStyle(color: AppColors.brandPrimary),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// Tab specs (icon + label) used by the shell to build the pill bar. Kept
+/// alongside the enum so a future tab insertion only touches one place.
+const List<LibrarySectionTab<LibrarySubTab>> librarySubTabSpecs = [
+  LibrarySectionTab(
+    id: LibrarySubTab.meetings,
+    label: 'Meetings',
+    icon: Icons.graphic_eq_rounded,
+  ),
+  LibrarySectionTab(
+    id: LibrarySubTab.memories,
+    label: 'Memories',
+    icon: Icons.psychology_alt_rounded,
+  ),
+];
