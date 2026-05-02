@@ -604,6 +604,9 @@ def _load_routers_integrations():
             pass
 
     db_redis.r = _R()
+    # is_app_enabled is imported by routers.integrations for the sync-now path;
+    # default-True so the gating doesn't 400 in tests that don't need it.
+    db_redis.is_app_enabled = MagicMock(return_value=True)
 
     db_prefs = _stub_module("database.integration_prefs")
     db_prefs.get_integration_pref = MagicMock(return_value=None)

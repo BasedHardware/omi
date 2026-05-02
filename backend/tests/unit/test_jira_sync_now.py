@@ -117,13 +117,21 @@ def _fake_field(default=None, **kwargs):
     return default
 
 
-# fastapi
-fastapi_pkg = _stub_package("fastapi")
-fastapi_pkg.APIRouter = _FakeAPIRouter
-fastapi_pkg.Depends = _fake_depends
-fastapi_pkg.HTTPException = _FakeHTTPException
-fastapi_pkg.Query = _fake_query
-fastapi_pkg.Request = object  # never instantiated in our handler
+# fastapi — share the stub if test_jira_actions already installed one this
+# session (collection order can put it first). Otherwise install ours and
+# mark _TEST_STUB so test_jira_actions' guard reuses these classes.
+if "fastapi" in sys.modules and getattr(sys.modules["fastapi"], "_TEST_STUB", False):
+    fastapi_pkg = sys.modules["fastapi"]
+    _FakeHTTPException = fastapi_pkg.HTTPException  # rebind for our local use
+    _FakeAPIRouter = fastapi_pkg.APIRouter
+else:
+    fastapi_pkg = _stub_package("fastapi")
+    fastapi_pkg.APIRouter = _FakeAPIRouter
+    fastapi_pkg.Depends = _fake_depends
+    fastapi_pkg.HTTPException = _FakeHTTPException
+    fastapi_pkg.Query = _fake_query
+    fastapi_pkg.Request = object  # never instantiated in our handler
+    fastapi_pkg._TEST_STUB = True
 
 # fastapi.responses
 fastapi_responses = _stub_module("fastapi.responses")
@@ -201,6 +209,9 @@ redis_db_mod.is_app_enabled = MagicMock(return_value=True)
 
 action_items_db = _stub_module("database.action_items")
 action_items_db.upsert_external_action_item = MagicMock(return_value="item-1")
+# jira_sync deep-merges metadata by reading the prior doc; default-None so the
+# wrapper tests don't need to set up a fake doc to exercise the timestamp path.
+action_items_db._find_by_external_source = MagicMock(return_value=None)
 
 apps_db = _stub_module("database.apps")
 apps_db.get_app_by_id_db = MagicMock(return_value=None)
