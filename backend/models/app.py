@@ -100,6 +100,10 @@ class ChatTool(BaseModel):
     )
     is_mcp: bool = False  # Whether this tool comes from an MCP server
     transport: str = "streamable_http"  # MCP transport: "streamable_http" or "sse"
+    # Whether this tool mutates state in the external system (creates/updates/deletes).
+    # Write tools are gated behind the per-user `two_way_sync_enabled` integration pref —
+    # off by default so we never surprise-write to a user's external account.
+    write: bool = False
 
     @field_validator('parameters', mode='before')
     @classmethod
