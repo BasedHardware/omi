@@ -543,6 +543,21 @@ extension AppDelegate: WCSessionDelegate {
             }
             
             switch method {
+            case "startRecording":
+                self.isRecordingActive = true
+                self.audioChunks.removeAll()
+                self.nextExpectedChunkIndex = 0
+
+                DispatchQueue.main.async {
+                    self.flutterWatchAPI?.onRecordingStarted() { result in
+                        switch result {
+                        case .success:
+                            break
+                        case .failure(let error):
+                            print("Recording started (background) sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
             case "sendAudioChunk":
                 self.handleAudioChunk(userInfo)
             case "stopRecording":
