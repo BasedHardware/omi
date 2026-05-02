@@ -355,7 +355,13 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
     public func sessionDidBecomeInactive(_ session: WCSession) { }
     public func sessionDidDeactivate(_ session: WCSession) { }
 #endif
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {}
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {
+        if let error = error {
+            NSLog("[Watch] WCSession activation failed: \(error.localizedDescription)")
+        } else {
+            NSLog("[Watch] WCSession activated state=\(activationState.rawValue)")
+        }
+    }
     
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {

@@ -425,7 +425,13 @@ func registerPlugins(registry: FlutterPluginRegistry) {
 
 extension AppDelegate: WCSessionDelegate {
     
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) { }
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if let error = error {
+            NSLog("[Watch] phone-side WCSession activation failed: \(error.localizedDescription)")
+        } else {
+            NSLog("[Watch] phone-side WCSession activated state=\(activationState.rawValue)")
+        }
+    }
 
     func session(_ session: WCSession, didFinishUserInfoTransfer userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
         if let error = error {
