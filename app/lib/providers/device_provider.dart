@@ -16,6 +16,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -70,8 +71,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
+  bool _pairingLostDialogShowing = false;
+
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
+    BleBridge.instance.pairingLostCallback = (uuid) => _showPairingLostDialog();
+  }
+
+  void _showPairingLostDialog() {
+    if (_pairingLostDialogShowing) return;
+    final ctx = globalNavigatorKey.currentContext;
+    if (ctx == null) return;
+    _pairingLostDialogShowing = true;
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogContext) => ConfirmationDialog(
+        title: dialogContext.l10n.pairingLostTitle,
+        description: dialogContext.l10n.pairingLostBody,
+        confirmText: dialogContext.l10n.pairingLostButton,
+        onConfirm: () => Navigator.pop(dialogContext),
+        onCancel: () {},
+      ),
+    ).whenComplete(() => _pairingLostDialogShowing = false);
   }
 
   void setProviders(CaptureProvider provider) {
@@ -227,8 +249,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
