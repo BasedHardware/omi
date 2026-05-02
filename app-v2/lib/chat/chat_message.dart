@@ -9,6 +9,11 @@
 /// producing this assistant message (e.g. "Searched memory", "Created
 /// event"). Rendered as quiet chip lines above the bubble text so the user
 /// sees what the assistant looked at before answering.
+///
+/// `sessionId` partitions messages across chat sessions. Nullable on disk
+/// only for pre-migration messages — the provider's hydrate detects nulls
+/// and assigns them to the "Welcome chat" session, then no message has a
+/// null sessionId in memory after migration.
 class ChatMessage {
   ChatMessage({
     required this.id,
@@ -17,6 +22,8 @@ class ChatMessage {
     required this.createdAt,
     this.streaming = false,
     this.toolEvents = const [],
+    this.sessionId,
+    this.stopped = false,
   });
 
   final String id;
@@ -25,11 +32,18 @@ class ChatMessage {
   final DateTime createdAt;
   final bool streaming;
   final List<String> toolEvents;
+  final String? sessionId;
+
+  /// True when the user pressed "Stop generating" mid-stream. Renderer shows
+  /// a "⏹ Stopped" inline marker after the partial text. CEO expansion #1.
+  final bool stopped;
 
   ChatMessage copyWith({
     String? text,
     bool? streaming,
     List<String>? toolEvents,
+    String? sessionId,
+    bool? stopped,
   }) =>
       ChatMessage(
         id: id,
@@ -38,6 +52,8 @@ class ChatMessage {
         createdAt: createdAt,
         streaming: streaming ?? this.streaming,
         toolEvents: toolEvents ?? this.toolEvents,
+        sessionId: sessionId ?? this.sessionId,
+        stopped: stopped ?? this.stopped,
       );
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +63,8 @@ class ChatMessage {
         'createdAt': createdAt.toIso8601String(),
         if (streaming) 'streaming': true,
         if (toolEvents.isNotEmpty) 'toolEvents': toolEvents,
+        if (sessionId != null) 'sessionId': sessionId,
+        if (stopped) 'stopped': true,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -64,6 +82,8 @@ class ChatMessage {
       createdAt: DateTime.parse(json['createdAt'] as String),
       streaming: json['streaming'] as bool? ?? false,
       toolEvents: events,
+      sessionId: json['sessionId'] as String?,
+      stopped: json['stopped'] as bool? ?? false,
     );
   }
 }
