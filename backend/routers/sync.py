@@ -38,6 +38,7 @@ from models.conversation_enums import ConversationSource
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
+from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
@@ -1085,14 +1086,23 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
-@router.post("/v1/sync-local-files")
+@router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
+    request: Request,
+    response: Response,
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
 ):
+    logger.warning(
+        f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
+        f'user_agent={request.headers.get("user-agent", "")}'
+    )
+    response.headers['Deprecation'] = 'true'
+    response.headers['Link'] = '</v2/sync-local-files>; rel="successor-version"'
+
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
@@ -1175,6 +1185,7 @@ async def sync_local_files(
             _cleanup_files(list(segmented_paths))
             return JSONResponse(
                 status_code=429,
+                headers={'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'},
                 content={
                     'new_memories': [],
                     'updated_memories': [],
@@ -1225,6 +1236,14 @@ async def sync_local_files(
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
+        # Record subscription usage (transcription credits)
+        try:
+            usage_seconds = int(total_speech_seconds)
+            if usage_seconds > 0:
+                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+        except Exception as e:
+            logger.error(f'sync: usage record error for {uid}: {e}')
+
         # Build JSON-serializable response
         result = {
             'new_memories': sorted(response['new_memories']),
@@ -1252,7 +1271,11 @@ async def sync_local_files(
 
         if failed_segments > 0:
             # Partial failure — return 207 Multi-Status so old clients retry the batch
-            return JSONResponse(status_code=207, content=result)
+            return JSONResponse(
+                status_code=207,
+                headers={'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'},
+                content=result,
+            )
 
         return result
     finally:
@@ -1365,6 +1388,14 @@ def _process_segments_background(
                     record_dg_usage_ms(uid, dg_ms)
             except Exception as e:
                 logger.error(f'sync_v2: DG usage record error for {uid}: {e}')
+
+        # Record subscription usage (transcription credits)
+        try:
+            usage_seconds = int(total_speech_seconds)
+            if usage_seconds > 0:
+                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+        except Exception as e:
+            logger.error(f'sync_v2: usage record error for {uid}: {e}')
 
         # Build result matching v1 response shape
         failed_segments = len(segment_errors)
