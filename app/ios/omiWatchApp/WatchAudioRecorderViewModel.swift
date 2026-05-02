@@ -391,6 +391,13 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
 
+    func session(_ session: WCSession, didFinishUserInfoTransfer userInfoTransfer: WCSessionUserInfoTransfer, error: (any Error)?) {
+        if let error = error {
+            let method = userInfoTransfer.userInfo["method"] as? String ?? "unknown"
+            NSLog("[Watch] transferUserInfo failed (method=\(method)): \(error.localizedDescription)")
+        }
+    }
+
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
         Task { @MainActor in
             guard let method = applicationContext["method"] as? String else { return }
