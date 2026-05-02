@@ -54,6 +54,7 @@ async def get_omi_tools_manifest() -> dict:
                     "required": ["summary"],
                 },
                 "auth_required": True,
+                "write": True,
                 "status_message": "Creating Jira issue...",
             },
             {
@@ -150,6 +151,7 @@ async def get_omi_tools_manifest() -> dict:
                     "required": ["issue_key", "new_status"],
                 },
                 "auth_required": True,
+                "write": True,
                 "status_message": "Updating Jira issue status...",
             },
             {
@@ -174,6 +176,7 @@ async def get_omi_tools_manifest() -> dict:
                     "required": ["issue_key", "comment"],
                 },
                 "auth_required": True,
+                "write": True,
                 "status_message": "Adding comment to Jira issue...",
             },
             {
