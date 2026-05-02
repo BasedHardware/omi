@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
-from models.app import ChatTool
+from database.apps import get_app_by_id_db
+from database.integration_prefs import is_two_way_sync_enabled
+from database.redis_db import get_enabled_apps
+from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 import logging
 
@@ -232,11 +235,13 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                             cfg = (config or {}).get('configurable') or {}
                             buf = cfg.get('_app_tool_results')
                             if isinstance(buf, list):
-                                buf.append({
-                                    'app_id': app_id,
-                                    'tool_name': app_tool.name,
-                                    'data': result['data'],
-                                })
+                                buf.append(
+                                    {
+                                        'app_id': app_id,
+                                        'tool_name': app_tool.name,
+                                        'data': result['data'],
+                                    }
+                                )
                         except Exception as e:
                             logger.warning("[app_tools] failed to capture tool result: %s", e)
                     if isinstance(result, dict) and 'result' in result:
@@ -273,16 +278,18 @@ def load_app_tools(uid: str) -> List[Callable]:
     """
     Load all tools from enabled apps for a user.
 
+    Two-way-sync gate: tools tagged ``write: true`` (mutating tools like
+    Jira create_issue / add_comment / update_issue_status) are filtered out
+    unless the user has explicitly enabled the per-app ``two_way_sync_enabled``
+    pref. Default is OFF — surprise writes to a user's external account are
+    a hard product no-no.
+
     Args:
         uid: User ID
 
     Returns:
         List of LangChain tool functions
     """
-    from database.redis_db import get_enabled_apps
-    from database.apps import get_app_by_id_db
-    from models.app import App
-
     enabled_app_ids = get_enabled_apps(uid)
     tools = []
 
@@ -306,7 +313,17 @@ def load_app_tools(uid: str) -> List[Callable]:
                 mcp_server_url = app.external_integration.mcp_server_url
                 mcp_oauth_tokens = app.external_integration.mcp_oauth_tokens
 
+            # Resolve two-way-sync once per app to avoid redundant Firestore reads.
+            # `app.id` is the integration_id key for the prefs doc.
+            two_way_sync_on = is_two_way_sync_enabled(uid, app.id)
+
             for app_tool in app.chat_tools:
+                if getattr(app_tool, 'write', False) and not two_way_sync_on:
+                    logger.info(
+                        f"Skipping write tool '{app_tool.name}' from app '{app.name}' ({app_id}) — "
+                        f"two-way sync disabled for uid={uid}"
+                    )
+                    continue
                 try:
                     tool_func = create_app_tool(
                         app_tool,
@@ -316,9 +333,9 @@ def load_app_tools(uid: str) -> List[Callable]:
                         mcp_oauth_tokens=mcp_oauth_tokens,
                     )
                     tools.append(tool_func)
-                    logger.info(f"✅ Loaded tool '{app_tool.name}' from app '{app.name}' ({app_id})")
+                    logger.info(f"Loaded tool '{app_tool.name}' from app '{app.name}' ({app_id})")
                 except Exception as e:
-                    logger.error(f"❌ Error creating tool {app_tool.name} for app {app_id}: {e}")
+                    logger.error(f"Error creating tool {app_tool.name} for app {app_id}: {e}")
 
-    logger.info(f"📦 Loaded {len(tools)} app tools for user {uid}")
+    logger.info(f"Loaded {len(tools)} app tools for user {uid}")
     return tools
