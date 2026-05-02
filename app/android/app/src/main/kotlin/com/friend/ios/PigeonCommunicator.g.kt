@@ -792,6 +792,40 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
       } 
     }
   }
+  fun onWatchReachabilityChanged(isReachableArg: Boolean, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchReachabilityChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(isReachableArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onWatchStateChanged(isPairedArg: Boolean, isWatchAppInstalledArg: Boolean, isReachableArg: Boolean, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(isPairedArg, isWatchAppInstalledArg, isReachableArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
 }
 /**
  * Dart → Native: commands sent from Flutter to the native BLE module.

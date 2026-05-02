@@ -448,6 +448,24 @@ extension AppDelegate: WCSessionDelegate {
         print("Session Watch Deactivate")
         WCSession.default.activate()
     }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        let isReachable = session.isReachable
+        NSLog("[Watch] reachability changed: \(isReachable)")
+        DispatchQueue.main.async {
+            self.flutterWatchAPI?.onWatchReachabilityChanged(isReachable: isReachable) { _ in }
+        }
+    }
+
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        let isPaired = session.isPaired
+        let isInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        NSLog("[Watch] state changed paired=\(isPaired) installed=\(isInstalled) reachable=\(isReachable)")
+        DispatchQueue.main.async {
+            self.flutterWatchAPI?.onWatchStateChanged(isPaired: isPaired, isWatchAppInstalled: isInstalled, isReachable: isReachable) { _ in }
+        }
+    }
     
     // Receive a message from watch (foreground/active)
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {

@@ -404,6 +404,10 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
 
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        NSLog("[Watch] reachability changed: \(session.isReachable)")
+    }
+
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
         Task { @MainActor in
             guard let method = applicationContext["method"] as? String else { return }

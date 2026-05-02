@@ -82,6 +82,12 @@ class WatchTransport extends DeviceTransport {
             }
           }
         },
+        onReachabilityChangedCb: (bool isReachable) {
+          Logger.debug('Watch Transport: Reachability changed: $isReachable');
+        },
+        onWatchStateChangedCb: (bool isPaired, bool isWatchAppInstalled, bool isReachable) {
+          Logger.debug('Watch Transport: State changed paired=$isPaired installed=$isWatchAppInstalled reachable=$isReachable');
+        },
       );
       WatchRecorderFlutterAPI.setUp(_bridge!);
     }
