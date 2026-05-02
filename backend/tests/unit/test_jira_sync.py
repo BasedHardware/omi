@@ -51,6 +51,9 @@ sys.modules["database"].__path__ = [str(BACKEND_DIR / "database")]
 
 action_items_db = _stub_module("database.action_items")
 action_items_db.upsert_external_action_item = MagicMock(return_value="item-1")
+# Default: no prior doc — sync builds metadata from scratch. Tests that
+# exercise the deep-merge path override this with a snapshot stub.
+action_items_db._find_by_external_source = MagicMock(return_value=None)
 action_items_db.action_items_collection = "action_items"
 
 apps_db = _stub_module("database.apps")
@@ -110,6 +113,8 @@ jira_sync = _load_jira_sync()
 def _reset():
     action_items_db.upsert_external_action_item.reset_mock()
     action_items_db.upsert_external_action_item.return_value = "item-1"
+    action_items_db._find_by_external_source.reset_mock()
+    action_items_db._find_by_external_source.return_value = None
     apps_db.get_app_by_id_db.reset_mock()
     apps_db.get_app_by_id_db.return_value = None
     fake_redis.keys = []
@@ -204,7 +209,86 @@ class TestNormalizeTaskToActionItem:
     def test_external_source_shape(self):
         task = {"external_id": "PROJ-1", "url": "https://x/browse/PROJ-1"}
         ext = jira_sync._build_external_source(task)
+        # No metadata-shaped fields in the task → no metadata key emitted at all.
         assert ext == {"source": "jira", "external_id": "PROJ-1", "url": "https://x/browse/PROJ-1"}
+
+
+class TestExternalSourceMetadata:
+    """Plan-screen metadata population: status / status_type / project_key /
+    priority / status_changed_at — all under ``external_source.metadata``."""
+
+    def test_full_metadata_emitted_when_task_has_all_fields(self):
+        task = {
+            "external_id": "PROJ-7",
+            "url": "https://x/PROJ-7",
+            "status": "In Review",
+            "status_type": "in_progress",  # plugin's chat-tool vocabulary
+            "priority": "High",
+            "project_key": "PROJ",
+            "status_changed_at": "2026-04-28T14:00:00.000+0000",
+        }
+        ext = jira_sync._build_external_source(task)
+        md = ext["metadata"]
+        assert md["status"] == "In Review"
+        # status_type is translated from "in_progress" → canonical "indeterminate"
+        assert md["status_type"] == "indeterminate"
+        assert md["priority"] == "High"
+        assert md["project_key"] == "PROJ"
+        assert md["status_changed_at"] == "2026-04-28T14:00:00.000+0000"
+
+    def test_status_type_done_passes_through(self):
+        task = {"external_id": "P-1", "status_type": "done"}
+        ext = jira_sync._build_external_source(task)
+        assert ext["metadata"]["status_type"] == "done"
+
+    def test_status_type_todo_passes_through(self):
+        task = {"external_id": "P-1", "status_type": "todo"}
+        ext = jira_sync._build_external_source(task)
+        assert ext["metadata"]["status_type"] == "todo"
+
+    def test_legacy_project_key_falls_back_to_project(self):
+        # Plugin used to emit only `project`. Sync still recognizes it.
+        task = {"external_id": "P-1", "project": "LEGACY"}
+        ext = jira_sync._build_external_source(task)
+        assert ext["metadata"]["project_key"] == "LEGACY"
+
+    def test_missing_fields_are_omitted_not_nulled(self):
+        task = {"external_id": "P-1", "status": "Open"}
+        ext = jira_sync._build_external_source(task)
+        # Only `status` should be present in metadata — no `priority: None`
+        # leaking through and lying to the Plan card.
+        assert ext["metadata"] == {"status": "Open"}
+
+    def test_deep_merge_preserves_prior_metadata_when_field_missing(self):
+        # Prior sync had every field. New sync only returned `status`.
+        prior = {
+            "source": "jira",
+            "external_id": "P-1",
+            "url": "https://x/P-1",
+            "metadata": {
+                "status": "To Do",
+                "status_type": "todo",
+                "priority": "High",
+                "project_key": "PROJ",
+                "status_changed_at": "2026-04-01T00:00:00Z",
+            },
+        }
+        task = {"external_id": "P-1", "status": "In Review", "status_type": "in_progress"}
+        ext = jira_sync._build_external_source(task, prior_external_source=prior)
+        md = ext["metadata"]
+        # Refreshed fields use the new values
+        assert md["status"] == "In Review"
+        assert md["status_type"] == "indeterminate"
+        # Untouched fields preserved verbatim
+        assert md["priority"] == "High"
+        assert md["project_key"] == "PROJ"
+        assert md["status_changed_at"] == "2026-04-01T00:00:00Z"
+
+    def test_deep_merge_no_prior_metadata(self):
+        prior = {"source": "jira", "external_id": "P-1", "url": "https://x"}
+        task = {"external_id": "P-1", "status": "Open"}
+        ext = jira_sync._build_external_source(task, prior_external_source=prior)
+        assert ext["metadata"] == {"status": "Open"}
 
 
 class TestSyncUserJiraIssues:
@@ -287,6 +371,86 @@ class TestSyncUserJiraIssues:
         assert result["errors"] == 1
         # We didn't even attempt the POST
         assert client.posts == []
+
+    def test_sync_metadata_populated_on_create(self):
+        os.environ["NOOTO_JIRA_PLUGIN_URL"] = "https://plugin.example.com"
+        body = {
+            "data": {
+                "tasks": [
+                    {
+                        "external_id": "PROJ-1",
+                        "title": "Ship",
+                        "status_type": "in_progress",
+                        "status": "In Review",
+                        "priority": "High",
+                        "project_key": "PROJ",
+                        "status_changed_at": "2026-04-28T14:00:00Z",
+                        "url": "https://x/PROJ-1",
+                    }
+                ]
+            }
+        }
+        client = _FakeAsyncClient(_FakeResponse(200, body))
+        _run(jira_sync.sync_user_jira_issues("uid-1", http_client=client))
+
+        ext_arg = action_items_db.upsert_external_action_item.call_args.args[1]
+        md = ext_arg["metadata"]
+        assert md["status"] == "In Review"
+        assert md["status_type"] == "indeterminate"  # translated
+        assert md["priority"] == "High"
+        assert md["project_key"] == "PROJ"
+        assert md["status_changed_at"] == "2026-04-28T14:00:00Z"
+
+    def test_sync_deep_merges_with_prior_external_source(self):
+        os.environ["NOOTO_JIRA_PLUGIN_URL"] = "https://plugin.example.com"
+
+        # Prior doc has a complete metadata block. Stub _find_by_external_source
+        # to return a snapshot whose to_dict() exposes that prior state.
+        class _Snap:
+            def to_dict(self):
+                return {
+                    "external_source": {
+                        "source": "jira",
+                        "external_id": "PROJ-1",
+                        "url": "https://x/PROJ-1",
+                        "metadata": {
+                            "status": "To Do",
+                            "status_type": "todo",
+                            "priority": "High",
+                            "project_key": "PROJ",
+                            "status_changed_at": "2026-04-01T00:00:00Z",
+                        },
+                    }
+                }
+
+        action_items_db._find_by_external_source.return_value = _Snap()
+
+        # New sync returns only `status` + `status_type` (sparse).
+        body = {
+            "data": {
+                "tasks": [
+                    {
+                        "external_id": "PROJ-1",
+                        "title": "Ship",
+                        "status_type": "in_progress",
+                        "status": "In Review",
+                        "url": "https://x/PROJ-1",
+                    }
+                ]
+            }
+        }
+        client = _FakeAsyncClient(_FakeResponse(200, body))
+        _run(jira_sync.sync_user_jira_issues("uid-1", http_client=client))
+
+        ext_arg = action_items_db.upsert_external_action_item.call_args.args[1]
+        md = ext_arg["metadata"]
+        # Refreshed
+        assert md["status"] == "In Review"
+        assert md["status_type"] == "indeterminate"
+        # Preserved from prior
+        assert md["priority"] == "High"
+        assert md["project_key"] == "PROJ"
+        assert md["status_changed_at"] == "2026-04-01T00:00:00Z"
 
 
 class TestIterUidsWithJiraEnabled:
