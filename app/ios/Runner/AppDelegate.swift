@@ -430,9 +430,10 @@ extension AppDelegate: WCSessionDelegate {
     func sessionDidBecomeInactive(_ session: WCSession) {
         print("Session Watch Become Inactive")
     }
-    
+
     func sessionDidDeactivate(_ session: WCSession) {
         print("Session Watch Deactivate")
+        WCSession.default.activate()
     }
     
     // Receive a message from watch (foreground/active)
