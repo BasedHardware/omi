@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
@@ -14,11 +17,13 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
-import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/providers/ambient_capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -172,8 +177,37 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
+  Future<void> _startRecording(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    if (!Platform.isAndroid) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
+      return;
+    }
+
+    AmbientCaptureProvider.applyFullCoverageDefaults();
+    final mic = await Permission.microphone.request();
+    await ForegroundUtil.requestPermissions();
+    if (!context.mounted) return;
+    if (!mic.isGranted) {
+      AppSnackbar.showSnackbarError('Microphone permission is required to start recording.');
+      return;
+    }
+
+    final ambient = context.read<AmbientCaptureProvider>();
+    final started = await ambient.start();
+    if (!context.mounted) return;
+    if (started) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
+    } else {
+      final reason = ambient.health.reason == null
+          ? ambient.health.state.wireName
+          : '${ambient.health.state.wireName}: ${ambient.health.reason}';
+      AppSnackbar.showSnackbarError('Recording did not start: $reason', duration: const Duration(seconds: 5));
+    }
+  }
+
   Widget _buildGetStartedOptions(BuildContext context) {
-    Widget option({
+    Widget primaryOption({
       required IconData icon,
       required String label,
       required VoidCallback onTap,
@@ -183,37 +217,76 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           HapticFeedback.lightImpact();
           onTap();
         },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
-                ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.45),
-                    blurRadius: 28,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 32),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
             ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: 96,
-              child: Text(
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.deepPurple.withValues(alpha: 0.38),
+                blurRadius: 28,
+                spreadRadius: 1,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), shape: BoxShape.circle),
+                child: Icon(icon, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+              const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget secondaryOption({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+    }) {
+      return GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white70, size: 18),
+              const SizedBox(width: 8),
+              Text(
                 label,
-                textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
@@ -221,35 +294,20 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   height: 1.2,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
-    final phoneOption = option(
+    final phoneOption = primaryOption(
       icon: Icons.mic_rounded,
-      label: 'Record with Phone',
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ConversationCapturingPage()),
-        );
-      },
+      label: 'Start recording',
+      onTap: () => _startRecording(context),
     );
-    final callOption = option(
-      icon: Icons.phone_in_talk_rounded,
-      label: 'Record Call',
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-        );
-      },
-    );
-    final deviceOption = option(
+    final deviceOption = secondaryOption(
       icon: Icons.bluetooth_searching_rounded,
-      label: 'Connect Device',
+      label: 'Connect Omi hardware',
       onTap: () {
         Navigator.push(
           context,
@@ -262,17 +320,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
       child: Column(
         children: [
-          // Top of the triangle: Record with Phone (the simplest path).
           phoneOption,
-          const SizedBox(height: 22),
-          // Bottom of the triangle: the other two side by side.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              callOption,
-              deviceOption,
-            ],
+          const SizedBox(height: 14),
+          Text(
+            'Uses phone mic, WAL/spool safety, audio upload, local/fallback transcripts, and communication awareness where Android permits.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 12, height: 1.35),
           ),
+          const SizedBox(height: 18),
+          deviceOption,
         ],
       ),
     );

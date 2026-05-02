@@ -44,6 +44,20 @@ class AmbientCaptureProvider extends ChangeNotifier {
       : service = service ?? AmbientCaptureService(),
         fallbackQueue = fallbackQueue ?? FallbackSegmentQueue();
 
+  static void applyFullCoverageDefaults() {
+    final prefs = SharedPreferencesUtil();
+    prefs.advancedAmbientCaptureEnabled = true;
+    prefs.ambientCaptureMode = 'aggressive';
+    prefs.ambientCaptureSensitivity = 'high';
+    prefs.ambientCaptureTextFallbackEnabled = true;
+    prefs.ambientCaptureLocalSttFallbackEnabled = true;
+    prefs.ambientCaptureCaptionFallbackEnabled = true;
+    prefs.ambientCaptureAccessibilityModeEnabled = true;
+    prefs.ambientCaptureRawAudioUploadEnabled = true;
+    prefs.ambientCaptureCommunicationMode = 'detect_and_caption_fallback';
+    prefs.ambientCaptureRawAudioRetention = 'until_synced';
+  }
+
   bool get isSupported => service.isSupported;
   bool get running => _running;
   bool get privateMode => _privateMode;

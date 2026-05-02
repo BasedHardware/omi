@@ -173,6 +173,7 @@ class AuthenticationProvider extends BaseProvider {
       SharedPreferencesUtil().familyName = 'Tester';
       SharedPreferencesUtil().aiConsentGiven = true;
       SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().permissionsCompleted = true;
       SharedPreferencesUtil().foundOmiSource = 'debug_auth_bypass';
       await AuthService.instance.getIdToken();
 

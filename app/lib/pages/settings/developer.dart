@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -58,7 +59,8 @@ class _DeveloperSettingsPageView extends StatefulWidget {
   State<_DeveloperSettingsPageView> createState() => _DeveloperSettingsPageState();
 }
 
-class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
+class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> with WidgetsBindingObserver {
+  final List<Timer> _ambientPermissionRefreshTimers = [];
   bool _ambientSetupLoading = false;
   bool _ambientMicGranted = false;
   bool _ambientNotificationsGranted = false;
@@ -67,12 +69,83 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
 
   @override
   void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<McpProvider>().fetchKeys();
       await _refreshAmbientSetupState();
     });
-    super.initState();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _scheduleAmbientPermissionRefresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    for (final timer in _ambientPermissionRefreshTimers) {
+      timer.cancel();
+    }
+    _ambientPermissionRefreshTimers.clear();
+    super.dispose();
+  }
+
+  void _scheduleAmbientPermissionRefresh({List<int> delaysMs = const [250, 1000, 2000]}) {
+    if (!Platform.isAndroid) return;
+    for (final delayMs in delaysMs) {
+      final timer = Timer(Duration(milliseconds: delayMs), () {
+        if (mounted) {
+          _refreshAmbientSetupState();
+        }
+      });
+      _ambientPermissionRefreshTimers.add(timer);
+    }
+  }
+
+  ButtonStyle get _ambientPrimaryButtonStyle => ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF2563EB),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0xFF2A2A2E),
+        disabledForegroundColor: Colors.grey.shade600,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      );
+
+  ButtonStyle get _ambientSuccessButtonStyle => ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF16A34A),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0xFF2A2A2E),
+        disabledForegroundColor: Colors.grey.shade600,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      );
+
+  ButtonStyle get _ambientDangerButtonStyle => ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFB91C1C),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: const Color(0xFF2A2A2E),
+        disabledForegroundColor: Colors.grey.shade600,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      );
+
+  ButtonStyle get _ambientOutlineButtonStyle => OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.grey.shade600,
+        side: BorderSide(color: Colors.grey.shade600),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      );
+
+  ButtonStyle get _ambientTextButtonStyle => TextButton.styleFrom(
+        foregroundColor: const Color(0xFF93C5FD),
+        disabledForegroundColor: Colors.grey.shade600,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      );
 
   Future<void> _refreshAmbientSetupState() async {
     if (!Platform.isAndroid || !mounted) return;
@@ -95,19 +168,13 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     });
   }
 
-  Future<void> _runAmbientSetup({bool enableTranscriptUpload = false}) async {
+  Future<void> _runAmbientSetup() async {
     if (!Platform.isAndroid || _ambientSetupLoading) return;
     setState(() => _ambientSetupLoading = true);
     final prefs = SharedPreferencesUtil();
     final ambientService = context.read<AmbientCaptureProvider>().service;
     try {
-      prefs.advancedAmbientCaptureEnabled = true;
-      if (prefs.ambientCaptureMode == 'off') {
-        prefs.ambientCaptureMode = 'normal';
-      }
-      if (enableTranscriptUpload) {
-        prefs.ambientCaptureRawAudioUploadEnabled = true;
-      }
+      AmbientCaptureProvider.applyFullCoverageDefaults();
 
       final mic = await Permission.microphone.request();
       if (!mic.isGranted && mic.isPermanentlyDenied) {
@@ -124,6 +191,18 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           duration: const Duration(seconds: 4),
         );
         await ambientService.openAccessibilitySettings();
+        _scheduleAmbientPermissionRefresh(delaysMs: const [500, 1200, 2200, 4000]);
+        await _showAmbientSetupInstructions(
+          title: 'Enable Accessibility Service',
+          icon: Icons.accessibility_new,
+          instructions: const [
+            'Find Omi in Android Accessibility settings.',
+            'Open it and turn on the Omi service.',
+            'Confirm the Android permission dialog, then return to Omi.',
+          ],
+          note:
+              'Accessibility is optional and only used for foreground-app awareness or caption fallback when you enable it.',
+        );
       }
     } catch (e) {
       Logger.debug('Ambient setup failed: $e');
@@ -175,6 +254,114 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           : '${ambient.health.state.wireName}: ${ambient.health.reason}';
       AppSnackbar.showSnackbarError('Ambient capture did not start: $reason', duration: const Duration(seconds: 5));
     }
+  }
+
+  Future<void> _showAmbientSetupInstructions({
+    required String title,
+    required IconData icon,
+    required List<String> instructions,
+    String? note,
+  }) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          title: Row(
+            children: [
+              Icon(icon, color: const Color(0xFF93C5FD), size: 22),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18))),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < instructions.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle),
+                        child: Center(
+                          child: Text(
+                            '${i + 1}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(instructions[i], style: TextStyle(color: Colors.grey.shade200, fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                ),
+              if (note != null) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: const Color(0xFF172554), borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFF93C5FD), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(note, style: const TextStyle(color: Color(0xFFDBEAFE), fontSize: 12))),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              style: _ambientTextButtonStyle,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _openAmbientAccessibilitySettings(AmbientCaptureProvider ambient) async {
+    await ambient.service.openAccessibilitySettings();
+    _scheduleAmbientPermissionRefresh(delaysMs: const [500, 1200, 2200, 4000]);
+    await _showAmbientSetupInstructions(
+      title: 'Enable Accessibility Service',
+      icon: Icons.accessibility_new,
+      instructions: const [
+        'Find Omi in Android Accessibility settings.',
+        'Open it and turn on the Omi service.',
+        'Confirm the Android permission dialog, then return to Omi.',
+      ],
+      note:
+          'Accessibility is optional and only used for foreground-app awareness or caption fallback when you enable it.',
+    );
+  }
+
+  Future<void> _requestAmbientBatteryOptimization() async {
+    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    _scheduleAmbientPermissionRefresh(delaysMs: const [500, 1500, 3000]);
+    await _showAmbientSetupInstructions(
+      title: 'Battery Reliability',
+      icon: Icons.battery_charging_full,
+      instructions: const [
+        'If Android shows a battery prompt, tap Allow.',
+        'On Pixel, use Battery -> Unrestricted if you land in App Info.',
+        'On Samsung and other phones, look for Allow background activity or Do not optimize.',
+      ],
+      note: 'This does not bypass Android restrictions; it just makes long-running foreground capture less fragile.',
+    );
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -423,35 +610,118 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     required VoidCallback? onPressed,
     String action = 'Enable',
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
+    final statusColor = complete ? const Color(0xFF22C55E) : const Color(0xFFF59E0B);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: complete ? const Color(0xFF14532D) : const Color(0xFF3A2A12)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: complete ? const Color(0xFF14532D) : const Color(0xFF2A2A2E),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(complete ? Icons.check : Icons.priority_high, color: Colors.white, size: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.16), shape: BoxShape.circle),
+                child: Icon(complete ? Icons.check : Icons.priority_high, color: statusColor, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  complete ? 'Ready' : 'Needs setup',
+                  style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              ],
+          if (!complete && onPressed != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                style: _ambientOutlineButtonStyle,
+                onPressed: onPressed,
+                child: Text(action),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(onPressed: complete ? null : onPressed, child: Text(complete ? 'Ready' : action)),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildAmbientInstructionButton({
+    required String label,
+    required VoidCallback? onPressed,
+    bool primary = false,
+  }) {
+    if (primary) {
+      return ElevatedButton(style: _ambientPrimaryButtonStyle, onPressed: onPressed, child: Text(label));
+    }
+    return OutlinedButton(style: _ambientOutlineButtonStyle, onPressed: onPressed, child: Text(label));
+  }
+
+  Widget _buildAmbientControlButton({
+    required String label,
+    required VoidCallback? onPressed,
+    ButtonStyle? style,
+  }) {
+    return ElevatedButton(style: style ?? _ambientPrimaryButtonStyle, onPressed: onPressed, child: Text(label));
+  }
+
+  Widget _buildAmbientDeleteButton({
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFFCA5A5),
+        disabledForegroundColor: Colors.grey.shade600,
+        side: const BorderSide(color: Color(0xFF7F1D1D)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      onPressed: onPressed,
+      child: Text(label),
+    );
+  }
+
+  Widget _buildAmbientSyncButton({
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF93C5FD),
+        disabledForegroundColor: Colors.grey.shade600,
+        side: const BorderSide(color: Color(0xFF1D4ED8)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      onPressed: onPressed,
+      child: Text(label),
     );
   }
 
@@ -474,7 +744,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 ),
               ),
               TextButton(
-                  onPressed: _ambientSetupLoading ? null : _refreshAmbientSetupState, child: const Text('Refresh')),
+                style: _ambientTextButtonStyle,
+                onPressed: _ambientSetupLoading ? null : _refreshAmbientSetupState,
+                child: const Text('Refresh'),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -500,10 +773,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             title: 'Battery optimization',
             subtitle: 'Recommended so Android is less likely to kill long-running capture.',
             complete: _ambientBatteryExempt,
-            onPressed: () async {
-              await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-              await _refreshAmbientSetupState();
-            },
+            onPressed: _requestAmbientBatteryOptimization,
           ),
           if (wantsAccessibility)
             _buildAmbientSetupRow(
@@ -511,30 +781,24 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               subtitle: 'Optional. Only needed for foreground-app awareness and caption fallback.',
               complete: _ambientAccessibilityEnabled,
               action: 'Open',
-              onPressed: () async {
-                await ambient.service.openAccessibilitySettings();
-                await _refreshAmbientSetupState();
-              },
+              onPressed: () => _openAmbientAccessibilitySettings(ambient),
             ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              ElevatedButton(
+              _buildAmbientInstructionButton(
+                label: _ambientSetupLoading ? 'Preparing...' : 'Prepare permissions and defaults',
                 onPressed: _ambientSetupLoading ? null : () => _runAmbientSetup(),
-                child: Text(_ambientSetupLoading ? 'Setting up...' : 'Run setup'),
-              ),
-              OutlinedButton(
-                onPressed: _ambientSetupLoading ? null : () => _runAmbientSetup(enableTranscriptUpload: true),
-                child: const Text('Set up for transcript testing'),
+                primary: true,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             prefs.ambientCaptureRawAudioUploadEnabled
-                ? 'Upload for transcription is enabled. Captured audio still writes to local WAL/spool first.'
+                ? 'Full recording defaults are enabled: local WAL/spool, audio upload, text fallback, local STT, and caption fallback where Android permits.'
                 : 'Upload for transcription is off. Capture can run, but conversations will stay local-only until upload/sync is enabled.',
             style: TextStyle(
               color: prefs.ambientCaptureRawAudioUploadEnabled ? Colors.greenAccent.shade100 : Colors.amber.shade200,
@@ -572,9 +836,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     icon: FontAwesomeIcons.microphone,
                     value: enabled,
                     onChanged: (v) async {
-                      prefs.advancedAmbientCaptureEnabled = v;
-                      if (v && prefs.ambientCaptureMode == 'off') {
-                        prefs.ambientCaptureMode = 'normal';
+                      if (v) {
+                        AmbientCaptureProvider.applyFullCoverageDefaults();
+                      } else {
+                        prefs.advancedAmbientCaptureEnabled = false;
                       }
                       if (!v && ambient.running) await ambient.stop();
                       await _refreshAmbientSetupState();
@@ -602,15 +867,21 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      ElevatedButton(
+                      _buildAmbientControlButton(
+                        label: 'Start recording',
                         onPressed: enabled ? () => _startAmbientCapture(ambient) : null,
-                        child: const Text('Start'),
+                        style: _ambientSuccessButtonStyle,
                       ),
-                      ElevatedButton(onPressed: ambient.running ? ambient.pause : null, child: const Text('Pause')),
-                      ElevatedButton(onPressed: ambient.running ? ambient.stop : null, child: const Text('Stop')),
-                      ElevatedButton(
+                      _buildAmbientControlButton(label: 'Pause', onPressed: ambient.running ? ambient.pause : null),
+                      _buildAmbientControlButton(
+                        label: 'Stop',
+                        onPressed: ambient.running ? ambient.stop : null,
+                        style: _ambientDangerButtonStyle,
+                      ),
+                      _buildAmbientControlButton(
+                        label: 'Private Mode',
                         onPressed: ambient.running ? ambient.enablePrivateMode : null,
-                        child: const Text('Private Mode'),
+                        style: _ambientDangerButtonStyle,
                       ),
                     ],
                   ),
@@ -665,6 +936,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           'Accessibility must be enabled in Android settings before it can be used.',
                           duration: const Duration(seconds: 4),
                         );
+                        await _openAmbientAccessibilitySettings(ambient);
                       }
                       await _refreshAmbientSetupState();
                     },
@@ -699,6 +971,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           'Caption fallback also requires enabling Omi in Android Accessibility settings.',
                           duration: const Duration(seconds: 4),
                         );
+                        await _openAmbientAccessibilitySettings(ambient);
                       }
                       await _refreshAmbientSetupState();
                     },
@@ -779,33 +1052,33 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   Wrap(
                     spacing: 8,
                     children: [
-                      OutlinedButton(
+                      _buildAmbientDeleteButton(
+                        label: 'Delete synced audio',
                         onPressed: () async {
                           ServiceManager.instance().wal.getSyncs().phone.deleteAllSyncedWals();
                           await ambient.deleteNativeSpool(status: 'synced');
                         },
-                        child: const Text('Delete synced audio'),
                       ),
-                      OutlinedButton(
+                      _buildAmbientDeleteButton(
+                        label: 'Delete pending audio',
                         onPressed: () async {
                           ServiceManager.instance().wal.getSyncs().phone.deleteAllPendingWals();
                           await ambient.deleteNativeSpool(status: 'pending');
                         },
-                        child: const Text('Delete pending audio'),
                       ),
-                      OutlinedButton(
+                      _buildAmbientDeleteButton(
+                        label: 'Delete all ambient audio',
                         onPressed: () {
                           ambient.deleteNativeSpool();
                         },
-                        child: const Text('Delete all ambient audio'),
                       ),
-                      OutlinedButton(
+                      _buildAmbientSyncButton(
+                        label: 'Sync native spool',
                         onPressed: ambient.drainNativeSpool,
-                        child: const Text('Sync native spool'),
                       ),
-                      OutlinedButton(
+                      _buildAmbientSyncButton(
+                        label: 'Sync fallback text',
                         onPressed: ambient.drainFallbackQueue,
-                        child: const Text('Sync fallback text'),
                       ),
                     ],
                   ),

@@ -17,8 +17,7 @@ import 'package:omi/widgets/dialog.dart';
 Future<bool> arePermissionsGranted() async {
   final notification = await Permission.notification.isGranted;
   final location = await Permission.location.isGranted;
-  final microphone = await Permission.microphone.isGranted;
-  return notification && location && microphone;
+  return notification && location;
 }
 
 /// Interstitial screen shown when onboarding was completed (from backend)
