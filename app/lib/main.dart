@@ -13,7 +13,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -173,6 +172,11 @@ Future _init() async {
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
   print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
+    if (AuthService.instance.isDebugAuthBypassActive) {
+      SharedPreferencesUtil().aiConsentGiven = true;
+      SharedPreferencesUtil().onboardingCompleted = true;
+      SharedPreferencesUtil().permissionsCompleted = true;
+    }
     PlatformManager.instance.mixpanel.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup

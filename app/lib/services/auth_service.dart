@@ -459,6 +459,12 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
+      if (isDebugAuthBypassActive) {
+        SharedPreferencesUtil().aiConsentGiven = true;
+        SharedPreferencesUtil().onboardingCompleted = true;
+        SharedPreferencesUtil().permissionsCompleted = true;
+        return;
+      }
       print('DEBUG _restoreOnboardingState: fetching from server...');
       final state = await getUserOnboardingState();
       print('DEBUG _restoreOnboardingState: got state=$state');

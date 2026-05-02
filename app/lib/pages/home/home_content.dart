@@ -184,25 +184,32 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       return;
     }
 
+    final ambient = context.read<AmbientCaptureProvider>();
+    if (ambient.running) {
+      await ambient.stop();
+      if (!context.mounted) return;
+      AppSnackbar.showSnackbar(context.l10n.syncingBackground);
+      return;
+    }
+
     AmbientCaptureProvider.applyFullCoverageDefaults();
     final mic = await Permission.microphone.request();
     await ForegroundUtil.requestPermissions();
     if (!context.mounted) return;
     if (!mic.isGranted) {
-      AppSnackbar.showSnackbarError('Microphone permission is required to start recording.');
+      AppSnackbar.showSnackbarError(context.l10n.onboardingMicrophoneRequired);
       return;
     }
 
-    final ambient = context.read<AmbientCaptureProvider>();
     final started = await ambient.start();
     if (!context.mounted) return;
     if (started) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
+      AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully);
     } else {
       final reason = ambient.health.reason == null
           ? ambient.health.state.wireName
           : '${ambient.health.state.wireName}: ${ambient.health.reason}';
-      AppSnackbar.showSnackbarError('Recording did not start: $reason', duration: const Duration(seconds: 5));
+      AppSnackbar.showSnackbarError(context.l10n.errorStartingRecording(reason), duration: const Duration(seconds: 5));
     }
   }
 
@@ -210,6 +217,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     Widget primaryOption({
       required IconData icon,
       required String label,
+      IconData? trailingIcon,
       required VoidCallback onTap,
     }) {
       return GestureDetector(
@@ -256,7 +264,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   ),
                 ),
               ),
-              const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+              Icon(trailingIcon ?? Icons.play_arrow_rounded, color: Colors.white, size: 30),
             ],
           ),
         ),
@@ -300,14 +308,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       );
     }
 
+    final ambientProvider = context.watch<AmbientCaptureProvider>();
     final phoneOption = primaryOption(
-      icon: Icons.mic_rounded,
-      label: 'Start recording',
+      icon: ambientProvider.running ? Icons.stop_rounded : Icons.mic_rounded,
+      label: ambientProvider.running ? context.l10n.stopRecording : context.l10n.startRecording,
+      trailingIcon: ambientProvider.running ? Icons.stop_rounded : Icons.play_arrow_rounded,
       onTap: () => _startRecording(context),
     );
     final deviceOption = secondaryOption(
       icon: Icons.bluetooth_searching_rounded,
-      label: 'Connect Omi hardware',
+      label: context.l10n.connectOmiDevice,
       onTap: () {
         Navigator.push(
           context,
@@ -323,7 +333,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           phoneOption,
           const SizedBox(height: 14),
           Text(
-            'Uses phone mic, WAL/spool safety, audio upload, local/fallback transcripts, and communication awareness where Android permits.',
+            context.l10n.clickTheButtonToCaptureAudio,
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 12, height: 1.35),
           ),
