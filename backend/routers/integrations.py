@@ -14,6 +14,7 @@ import httpx
 import database.users as users_db
 import database.redis_db as redis_db
 import database.integration_prefs as integration_prefs_db
+from utils.integrations.jira_sync import sync_user_jira_issues_with_timestamp
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.integrations import jira_actions
@@ -249,6 +250,13 @@ class IntegrationPrefsResponse(BaseModel):
             "external account are a trust hazard."
         ),
     )
+    last_synced_at: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO8601 UTC timestamp of the last successful manual or cron sync, when "
+            "available. Mobile reads this to render 'Synced 2 minutes ago' labels."
+        ),
+    )
 
 
 class IntegrationPrefsUpdate(BaseModel):
@@ -264,12 +272,22 @@ def get_integration_prefs(integration_id: str, uid: str = Depends(auth.get_curre
     """Return the current per-user preferences for an integration.
 
     Two-way sync defaults to ``False`` if no doc exists — the chat layer relies
-    on this to gate write tools (Jira create_issue, etc.).
+    on this to gate write tools (Jira create_issue, etc.). ``last_synced_at``
+    is surfaced when present so the mobile UI can render "Synced N min ago".
     """
     pref = integration_prefs_db.get_integration_pref(uid, integration_id) or {}
+    last_synced_raw = pref.get('last_synced_at')
+    # Stored value may be an ISO string (manual sync writeback) or a Firestore
+    # datetime (older docs / future writers); normalize to ISO8601 string.
+    last_synced_at: Optional[str] = None
+    if isinstance(last_synced_raw, str) and last_synced_raw:
+        last_synced_at = last_synced_raw
+    elif isinstance(last_synced_raw, datetime):
+        last_synced_at = last_synced_raw.isoformat()
     return IntegrationPrefsResponse(
         integration_id=integration_id,
         two_way_sync_enabled=bool(pref.get('two_way_sync_enabled', False)),
+        last_synced_at=last_synced_at,
     )
 
 
@@ -373,6 +391,57 @@ async def jira_snooze(
         raise HTTPException(status_code=502, detail={"error": "jira_plugin_error"})
 
     return updated
+
+
+# *****************************
+# *********** SYNC NOW ********
+# *****************************
+#
+# Hard-coded for now: only Jira has a manual-sync affordance. When we add
+# Linear / ClickUp etc. we'll generalize this to a registry keyed by
+# integration_id. Founder uses this to dogfood without waiting on the cron.
+# JIRA_INTEGRATION_ID already declared above for the direct-actions block.
+
+
+class JiraSyncNowResponse(BaseModel):
+    synced: int = Field(description="Number of action items upserted from Jira on this sync.")
+    errors: int = Field(description="Number of upsert / plugin errors encountered.")
+    last_synced_at: str = Field(description="ISO8601 UTC timestamp of this sync completion.")
+
+
+@router.post(
+    "/v1/integrations/jira/sync-now",
+    response_model=JiraSyncNowResponse,
+    tags=['integrations'],
+)
+async def jira_sync_now(uid: str = Depends(auth.get_current_user_uid)):
+    """Manually trigger a Jira → action-items sync for the current user.
+
+    Read-side only: this endpoint does NOT require ``two_way_sync_enabled``
+    (write tools gate on that flag separately). It only requires that the
+    user has the Jira plugin installed — anything else returns 400 so the
+    mobile UI can surface "Install Jira first."
+
+    Failures from the underlying plugin call collapse to 502 with a
+    sanitized log so plugin tokens / PII never leak to error responses.
+    """
+    if not redis_db.is_app_enabled(uid, JIRA_INTEGRATION_ID):
+        raise HTTPException(status_code=400, detail="jira_not_installed")
+
+    try:
+        result = await sync_user_jira_issues_with_timestamp(uid)
+    except HTTPException:
+        # Don't double-wrap explicit HTTPExceptions raised downstream.
+        raise
+    except Exception as exc:
+        logger.error("[JiraSyncNow] unhandled error uid=%s err=%s", uid, sanitize(str(exc)))
+        raise HTTPException(status_code=502, detail="jira_plugin_error")
+
+    return JiraSyncNowResponse(
+        synced=int(result.get("synced", 0)),
+        errors=int(result.get("errors", 0)),
+        last_synced_at=str(result.get("last_synced_at", "")),
+    )
 
 
 @router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
