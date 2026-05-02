@@ -115,15 +115,19 @@ class _MessageList extends StatelessWidget {
         final prev = originalIdx > 0 ? messages[originalIdx - 1] : null;
         final showDivider = prev == null ||
             current.createdAt.difference(prev.createdAt) >= _clusterGap;
+        final bubble = ChatBubble(
+          message: current,
+          onStopGenerating: current.streaming ? chat.stopActiveStream : null,
+        );
         final body = showDivider
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _ClusterDivider(time: current.createdAt),
-                  ChatBubble(message: current),
+                  bubble,
                 ],
               )
-            : ChatBubble(message: current);
+            : bubble;
         // Keyed by message id so existing bubbles keep their animation state
         // across list rebuilds — only new messages run the entrance.
         return CardEntrance(key: ValueKey('entrance:${current.id}'), child: body);

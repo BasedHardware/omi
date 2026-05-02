@@ -5,14 +5,20 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:nooto_v2/apps/apps_screen.dart';
 import 'package:nooto_v2/chat/chat_screen.dart';
+import 'package:nooto_v2/chat/widgets/chat_sessions_drawer.dart';
 import 'package:nooto_v2/home/home_screen.dart';
 import 'package:nooto_v2/library/library_screen.dart';
+import 'package:nooto_v2/library/widgets/library_section_tab_bar.dart';
 import 'package:nooto_v2/plan/plan_screen.dart';
 import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/shell/app_bar_kebab_menu.dart';
 import 'package:nooto_v2/shell/bottom_nav_bar.dart';
 import 'package:nooto_v2/shell/stubs/coming_soon_stub.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
+
+/// iOS HIG navigation bar height — Material defaults to 56pt which leaves
+/// dead space below a single-line title; 44pt is the platform standard.
+const double shellToolbarHeight = 44.0;
 
 class ShellScreen extends StatefulWidget {
   const ShellScreen({super.key});
@@ -26,6 +32,10 @@ class _ShellScreenState extends State<ShellScreen> {
   // When the Home composer pill navigates here, we focus the chat input on
   // arrival so the keyboard pops in the same gesture. Reset after consuming.
   bool _autoFocusChat = false;
+  // Library has internal sub-tabs (Meetings / Memories). State lives here so
+  // the AppBar can render the pill row in its `bottom:` slot — that keeps
+  // chrome unified and avoids the "two floating headers with a gap" look.
+  LibrarySubTab _librarySubTab = LibrarySubTab.meetings;
 
   void _switchTab(int idx, {bool focusChat = false}) {
     setState(() {
@@ -44,17 +54,19 @@ class _ShellScreenState extends State<ShellScreen> {
       _Tab(label: l.shellTabPlan, icon: FontAwesomeIcons.calendarCheck),
       _Tab(label: l.shellTabApps, icon: FontAwesomeIcons.tableCellsLarge),
     ];
-    // All tabs share the compact glass AppBar. Home leaves the title slot
-    // empty (the cards carry their own meaning); other tabs show the label.
     final isHome = _index == 0;
-    // Glass-over-content (extendBody) only on tabs that want the iOS scroll-
-    // under-bar effect. Home is short and looked like dead space; sit body
-    // below the bar normally.
+    final isChat = _index == 1;
+    final isLibrary = _index == 2;
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       extendBodyBehindAppBar: !isHome,
+      drawer: isChat ? const ChatSessionsDrawer() : null,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        toolbarHeight: shellToolbarHeight,
+        // Drawer hamburger only on Chat tab; default leading is null on the
+        // others so the AppBar doesn't render an unsupported menu icon.
+        automaticallyImplyLeading: isChat,
         flexibleSpace: ClipRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
@@ -76,6 +88,16 @@ class _ShellScreenState extends State<ShellScreen> {
                 ),
               ),
         actions: const [AppBarKebabMenu()],
+        bottom: isLibrary
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(LibrarySectionTabBar.height),
+                child: LibrarySectionTabBar<LibrarySubTab>(
+                  tabs: librarySubTabSpecs,
+                  active: _librarySubTab,
+                  onChanged: (id) => setState(() => _librarySubTab = id),
+                ),
+              )
+            : null,
       ),
       body: IndexedStack(
         index: _index,
@@ -87,14 +109,12 @@ class _ShellScreenState extends State<ShellScreen> {
                     _switchTab(idx, focusChat: idx == 1),
               )
             else if (i == 1)
-              // Rebuild ChatScreen when autoFocus changes so the post-frame
-              // focus request fires once per arrival from the Home composer.
               ChatScreen(
                 key: ValueKey('chat-$_autoFocusChat'),
                 autoFocus: _autoFocusChat && _index == 1,
               )
             else if (i == 2)
-              const LibraryScreen()
+              LibraryScreen(subTab: _librarySubTab)
             else if (i == 3)
               const PlanScreen()
             else if (i == 4)

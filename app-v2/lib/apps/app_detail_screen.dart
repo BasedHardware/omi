@@ -90,6 +90,15 @@ class _Body extends StatelessWidget {
             ],
           ),
         ],
+        // Two-way sync toggle: only meaningful for external_integration apps
+        // that are currently installed. Defaults OFF — surprise writes to
+        // third-party trackers are a trust hazard.
+        if (app.externalIntegration != null) ...[
+          const SizedBox(height: AppStyles.spacingXL),
+          const _SectionLabel('PERMISSIONS'),
+          const SizedBox(height: AppStyles.spacingM),
+          _TwoWaySyncToggle(app: app),
+        ],
       ],
     );
   }
@@ -319,5 +328,73 @@ class _CapabilityChip extends StatelessWidget {
     if (raw.isEmpty) return raw;
     final cleaned = raw.replaceAll('_', ' ').replaceAll('-', ' ');
     return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+}
+
+/// Per-app writeback opt-in. Defaults OFF for any app — surprise writes to
+/// third-party trackers (Jira tickets, Linear issues) are a trust hazard.
+/// User flips this on after they've decided they trust Nooto to act on their
+/// behalf in the source tracker.
+class _TwoWaySyncToggle extends StatelessWidget {
+  const _TwoWaySyncToggle({required this.app});
+  final NooApp app;
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = context.watch<AppsProvider>();
+    final enabled = apps.isTwoWaySyncEnabled(app.id);
+    final installed = apps.isEnabled(app.id);
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppStyles.spacingL,
+        vertical: AppStyles.spacingM,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Allow ${app.name} writes',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  installed
+                      ? 'Let Nooto create or update ${app.name} items on your behalf.'
+                      : 'Install ${app.name} first to enable writebacks.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textTertiary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppStyles.spacingM),
+          Switch.adaptive(
+            value: enabled,
+            onChanged: installed
+                ? (v) {
+                    HapticFeedback.lightImpact();
+                    apps.setTwoWaySync(app.id, v);
+                  }
+                : null,
+            activeTrackColor: AppColors.brandPrimary,
+          ),
+        ],
+      ),
+    );
   }
 }

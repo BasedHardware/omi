@@ -61,9 +61,6 @@ class LibraryProvider extends ChangeNotifier {
 
     try {
       final res = await _client.get('v3/memories?limit=200&offset=0');
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw Exception('load: HTTP ${res.statusCode}');
-      }
       final body = jsonDecode(res.body);
       final list = body is List
           ? body
@@ -93,10 +90,7 @@ class LibraryProvider extends ChangeNotifier {
     _items = [..._items]..removeAt(idx);
     notifyListeners();
     try {
-      final res = await _client.delete('v3/memories/$id');
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw Exception('delete: HTTP ${res.statusCode}');
-      }
+      await _client.delete('v3/memories/$id');
       return true;
     } catch (e) {
       debugPrint('[LibraryProvider] delete($id) failed: $e');

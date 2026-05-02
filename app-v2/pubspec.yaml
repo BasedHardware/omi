@@ -32,6 +32,10 @@ dependencies:
   # Networking
   http: ^1.2.2
 
+  # Deep links (nooto:// callback from plugin OAuth) + external Safari launcher
+  app_links: ^6.3.2
+  url_launcher: ^6.3.1
+
   # Audio (PCM16 phone-mic capture for the speech-profile turn)
   flutter_sound: 9.25.1
   permission_handler: ^12.0.0+1

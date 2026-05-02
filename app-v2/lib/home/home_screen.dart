@@ -126,8 +126,9 @@ class _QuietEmpty extends StatelessWidget {
 }
 
 /// Tap-target composer that opens the Chat tab. NOT a real `TextField` —
-/// the tap routes to chat via the [onTap] callback. Rectangular tile, no
-/// chrome — the hint text + arrow do all the signalling.
+/// tapping the pill routes to Chat with the input focused, where the real
+/// send button lives. We deliberately don't show a send button here: there's
+/// nothing to send from Home.
 class _Composer extends StatelessWidget {
   const _Composer({required this.onTap});
 
@@ -147,42 +148,39 @@ class _Composer extends StatelessWidget {
         child: Semantics(
           button: true,
           label: "What's on your mind. Opens chat.",
-          child: Material(
-            color: AppColors.backgroundSecondary,
-            borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-              onTap: onTap,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppStyles.spacingL,
-                  vertical: 14,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.backgroundSecondary,
+              borderRadius: BorderRadius.circular(AppStyles.radiusXLarge),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppStyles.spacingL,
+              vertical: AppStyles.spacingM,
+            ),
+            // Use a readOnly TextField (vs. plain Text) so hint metrics —
+            // line-height, letter-spacing, baseline — match the Chat tab
+            // composer exactly. onTap routes to Chat instead of editing.
+            child: IgnorePointer(
+              ignoring: false,
+              child: TextField(
+                readOnly: true,
+                showCursor: false,
+                onTap: onTap,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textPrimary,
                 ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.06),
+                decoration: const InputDecoration(
+                  hintText: "What's on your mind?",
+                  hintStyle: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textTertiary,
                   ),
-                ),
-                child: const Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        "What's on your mind?",
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: AppColors.textTertiary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    SizedBox(width: AppStyles.spacingS),
-                    Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 18,
-                      color: AppColors.textTertiary,
-                    ),
-                  ],
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  isDense: true,
                 ),
               ),
             ),

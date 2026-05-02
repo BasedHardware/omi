@@ -13,6 +13,7 @@ class NooApp {
     this.author,
     this.ratingAvg,
     this.ratingCount,
+    this.externalIntegration,
   });
 
   final String id;
@@ -26,8 +27,14 @@ class NooApp {
   final double? ratingAvg;
   final int? ratingCount;
 
+  /// Present for OAuth-style integrations (Jira, Linear, ClickUp, …). Null for
+  /// plain prompt apps. The provider uses `externalIntegration?.primaryAuthUrl`
+  /// to decide whether `/v1/apps/enable`'s 400 means "open the OAuth flow".
+  final ExternalIntegration? externalIntegration;
+
   factory NooApp.fromJson(Map<String, dynamic> json) {
     final caps = json['capabilities'];
+    final ext = json['external_integration'];
     return NooApp(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
@@ -41,6 +48,9 @@ class NooApp {
       author: json['author'] as String?,
       ratingAvg: (json['rating_avg'] as num?)?.toDouble(),
       ratingCount: (json['rating_count'] as num?)?.toInt(),
+      externalIntegration: ext is Map
+          ? ExternalIntegration.fromJson(Map<String, dynamic>.from(ext))
+          : null,
     );
   }
 }
@@ -68,4 +78,57 @@ class AppGroup {
           : const <NooApp>[],
     );
   }
+}
+
+/// External-integration metadata for OAuth-style apps. Backend shape:
+/// `external_integration: { auth_steps: [{name, url}], app_home_url, … }`.
+///
+/// Only the fields the install/OAuth flow needs are modelled — the manifest
+/// has many more keys (webhook_url, mcp_oauth_tokens, …) that the client
+/// never reads, so widening this model has no caller value.
+class ExternalIntegration {
+  const ExternalIntegration({
+    this.authSteps = const [],
+    this.appHomeUrl,
+    this.setupCompletedUrl,
+  });
+
+  final List<AuthStep> authSteps;
+  final String? appHomeUrl;
+  final String? setupCompletedUrl;
+
+  /// First-step URL (or `appHomeUrl` fallback). Null if neither is set.
+  /// Mirrors desktop-v2's `auth_steps?.[0]?.url ?? app_home_url` pattern —
+  /// `app_home_url` alone usually 404s in a browser, so the auth step is
+  /// preferred when the manifest has one.
+  String? get primaryAuthUrl =>
+      authSteps.isNotEmpty ? authSteps.first.url : appHomeUrl;
+
+  factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
+    final steps = json['auth_steps'];
+    return ExternalIntegration(
+      authSteps: steps is List
+          ? steps
+              .whereType<Map>()
+              .map((m) => AuthStep.fromJson(Map<String, dynamic>.from(m)))
+              .toList(growable: false)
+          : const [],
+      appHomeUrl: json['app_home_url'] as String?,
+      setupCompletedUrl: json['setup_completed_url'] as String?,
+    );
+  }
+}
+
+/// One step in the plugin's OAuth flow. `name` is a human-readable label
+/// (e.g. "Connect Jira"); `url` is what we open in the system browser.
+class AuthStep {
+  const AuthStep({required this.name, required this.url});
+
+  final String name;
+  final String url;
+
+  factory AuthStep.fromJson(Map<String, dynamic> json) => AuthStep(
+        name: json['name'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+      );
 }

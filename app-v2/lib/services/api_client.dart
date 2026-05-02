@@ -5,9 +5,45 @@ import 'package:http/http.dart' as http;
 
 import 'package:nooto_v2/services/auth_service.dart';
 
+/// Typed error thrown by [ApiClient] on non-2xx responses.
+///
+/// Lets callers branch on `statusCode` and `detail` (parsed from the response
+/// body's `detail` field if the body is JSON-shaped). Mirrors desktop-v2's
+/// `ApiError` so cross-platform error handling stays parallel.
+///
+/// Example:
+/// ```dart
+/// try {
+///   await client.post('v1/apps/enable?app_id=$id');
+/// } on ApiError catch (e) {
+///   if (e.statusCode == 400 && e.detail == 'App setup is not completed') {
+///     // open OAuth flow
+///   }
+/// }
+/// ```
+class ApiError implements Exception {
+  ApiError({required this.statusCode, this.detail, required this.body});
+
+  /// HTTP status code (4xx or 5xx — 2xx never throws).
+  final int statusCode;
+
+  /// Parsed `detail` field from the JSON body, if present and the body is
+  /// JSON. Null when the body isn't JSON or has no `detail` key.
+  final String? detail;
+
+  /// Raw response body (capped at the response's natural size; we don't
+  /// truncate). Useful for debug logs when `detail` is null.
+  final String body;
+
+  @override
+  String toString() =>
+      'ApiError($statusCode${detail != null ? ': $detail' : ''})';
+}
+
 /// Lean HTTP client for the v2 backend. Injects the Firebase ID token on
-/// every request, refreshes once on 401, and exposes a streaming entry point
-/// for SSE-style endpoints (`/v2/messages` for the morning brief).
+/// every request, refreshes once on 401, throws [ApiError] on non-2xx, and
+/// exposes a streaming entry point for SSE-style endpoints (`/v2/messages`
+/// for the morning brief).
 ///
 /// Constructor seams (`httpClient`, `getIdToken`, `signOut`, `baseUrl`) make
 /// this testable without spinning up Firebase. Production callers use the
@@ -37,11 +73,13 @@ class ApiClient {
 
   Future<http.Response> get(String path, {Map<String, String>? headers}) async {
     final uri = _resolve(path);
-    return _withAuthRetry(
+    final response = await _withAuthRetry(
       headers: headers,
       timeout: readTimeout,
       run: (hdrs) => _http.get(uri, headers: hdrs).timeout(readTimeout),
     );
+    _throwIfNotOk(response);
+    return response;
   }
 
   Future<http.Response> post(
@@ -51,12 +89,14 @@ class ApiClient {
   }) async {
     final uri = _resolve(path);
     final encoded = _encodeBody(body);
-    return _withAuthRetry(
+    final response = await _withAuthRetry(
       headers: headers,
       timeout: writeTimeout,
       run: (hdrs) =>
           _http.post(uri, headers: hdrs, body: encoded).timeout(writeTimeout),
     );
+    _throwIfNotOk(response);
+    return response;
   }
 
   Future<http.Response> patch(
@@ -66,12 +106,14 @@ class ApiClient {
   }) async {
     final uri = _resolve(path);
     final encoded = _encodeBody(body);
-    return _withAuthRetry(
+    final response = await _withAuthRetry(
       headers: headers,
       timeout: writeTimeout,
       run: (hdrs) =>
           _http.patch(uri, headers: hdrs, body: encoded).timeout(writeTimeout),
     );
+    _throwIfNotOk(response);
+    return response;
   }
 
   Future<http.Response> delete(
@@ -79,18 +121,22 @@ class ApiClient {
     Map<String, String>? headers,
   }) async {
     final uri = _resolve(path);
-    return _withAuthRetry(
+    final response = await _withAuthRetry(
       headers: headers,
       timeout: writeTimeout,
       run: (hdrs) =>
           _http.delete(uri, headers: hdrs).timeout(writeTimeout),
     );
+    _throwIfNotOk(response);
+    return response;
   }
 
   /// Streams the response body byte-chunks. Caller decodes (e.g. SSE parse for
   /// the morning brief). On 401 or 5xx this throws `http.ClientException`
   /// without auto-retry — streaming consumers own retry semantics because
-  /// rewinding mid-stream is rarely what they want.
+  /// rewinding mid-stream is rarely what they want. Streaming intentionally
+  /// does NOT use [ApiError] — the body has already started flowing and
+  /// surfacing a `detail` would mean buffering the whole error first.
   Future<Stream<List<int>>> stream(
     String path, {
     Object? body,
@@ -130,6 +176,29 @@ class ApiClient {
     response = await run(hdrs);
     if (response.statusCode == 401) await _signOut();
     return response;
+  }
+
+  /// Throws [ApiError] when `response.statusCode` is not 2xx. Parses the
+  /// JSON body's `detail` field if present so callers can branch on
+  /// machine-readable error reasons (e.g. "App setup is not completed").
+  void _throwIfNotOk(http.Response response) {
+    final code = response.statusCode;
+    if (code >= 200 && code < 300) return;
+    String? detail;
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map && decoded['detail'] is String) {
+        detail = decoded['detail'] as String;
+      }
+    } catch (_) {
+      // Non-JSON body (HTML error page, plain text, empty) — leave detail
+      // null. Callers can still inspect statusCode and body.
+    }
+    throw ApiError(
+      statusCode: code,
+      detail: detail,
+      body: response.body,
+    );
   }
 
   Future<Map<String, String>> _buildHeaders({Map<String, String>? extra}) async {

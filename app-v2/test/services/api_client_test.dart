@@ -122,9 +122,10 @@ void main() {
         baseUrl: 'https://example.test/',
       );
 
-      final res = await client.get('v1/ping');
-
-      expect(res.statusCode, 401);
+      await expectLater(
+        () => client.get('v1/ping'),
+        throwsA(isA<ApiError>().having((e) => e.statusCode, 'statusCode', 401)),
+      );
       expect(signOutCalled, isTrue);
     });
 
@@ -140,10 +141,68 @@ void main() {
         baseUrl: 'https://example.test/',
       );
 
-      final res = await client.get('v1/ping');
-
-      expect(res.statusCode, 401);
+      await expectLater(
+        () => client.get('v1/ping'),
+        throwsA(isA<ApiError>().having((e) => e.statusCode, 'statusCode', 401)),
+      );
       expect(signOutCalled, isTrue);
+    });
+  });
+
+  group('ApiClient.ApiError', () {
+    test('throws ApiError with parsed detail on 400 + JSON body', () async {
+      final mock = MockClient(
+        (req) async => http.Response('{"detail":"App setup is not completed"}', 400),
+      );
+      final client = ApiClient(
+        httpClient: mock,
+        getIdToken: ({bool forceRefresh = false}) async => 'tok',
+        signOut: () async {},
+        baseUrl: 'https://example.test/',
+      );
+
+      try {
+        await client.post('v1/apps/enable');
+        fail('expected ApiError');
+      } on ApiError catch (e) {
+        expect(e.statusCode, 400);
+        expect(e.detail, 'App setup is not completed');
+        expect(e.body, contains('App setup'));
+      }
+    });
+
+    test('throws ApiError with null detail on non-JSON body', () async {
+      final mock = MockClient((req) async => http.Response('not json', 400));
+      final client = ApiClient(
+        httpClient: mock,
+        getIdToken: ({bool forceRefresh = false}) async => 'tok',
+        signOut: () async {},
+        baseUrl: 'https://example.test/',
+      );
+
+      try {
+        await client.post('v1/apps/enable');
+        fail('expected ApiError');
+      } on ApiError catch (e) {
+        expect(e.statusCode, 400);
+        expect(e.detail, isNull);
+        expect(e.body, 'not json');
+      }
+    });
+
+    test('throws ApiError on 5xx', () async {
+      final mock = MockClient((req) async => http.Response('boom', 500));
+      final client = ApiClient(
+        httpClient: mock,
+        getIdToken: ({bool forceRefresh = false}) async => 'tok',
+        signOut: () async {},
+        baseUrl: 'https://example.test/',
+      );
+
+      await expectLater(
+        () => client.get('v1/anything'),
+        throwsA(isA<ApiError>().having((e) => e.statusCode, 'statusCode', 500)),
+      );
     });
   });
 

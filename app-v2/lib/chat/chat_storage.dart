@@ -2,9 +2,10 @@ import 'package:hive/hive.dart';
 
 /// Hive box names for the Chat tab.
 ///
-/// Single box keyed by message id, holding the ordered conversation. v0 is
-/// one global thread; multi-session support lands when `sessions.v1` shows up
-/// next to this.
+/// Two boxes:
+///   * [messages] — `ChatMessage` rows by id, partitioned at read time by
+///     `sessionId` (provider keeps an in-memory `Map<sessionId, List<msg>>`).
+///   * [sessions] — `ChatSession` rows by id (drawer source of truth).
 class ChatBoxes {
   ChatBoxes._();
 
@@ -12,10 +13,16 @@ class ChatBoxes {
   /// trims older rows on write to keep cold-start hydrate fast.
   static const String messages = 'chat.messages.v1';
 
+  /// Persisted ChatSession rows by id. Drawer renders from this directly.
+  static const String sessions = 'chat.sessions.v1';
+
   /// Soft cap on message count. Older rows past this are dropped on write.
   static const int retentionLimit = 200;
 
-  /// Wipes the chat thread. Called by the debug "Reset onboarding" flow so
-  /// dev resets are total.
-  static Future<void> clearAll() => Hive.box<Map>(messages).clear();
+  /// Wipes every chat thread and session. Called by the debug "Reset
+  /// onboarding" flow so dev resets are total.
+  static Future<void> clearAll() async {
+    await Hive.box<Map>(messages).clear();
+    await Hive.box<Map>(sessions).clear();
+  }
 }

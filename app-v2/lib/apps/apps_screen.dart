@@ -35,7 +35,10 @@ class _AppsScreenState extends State<AppsScreen> {
       return _ErrorState(error: apps.error!, onRetry: () => apps.load(force: true));
     }
     if (apps.isEmpty) return const _EmptyState();
-    final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + AppStyles.spacingM;
+    // Scaffold sets MediaQuery.padding.top = AppBar.preferredSize.height
+    // when extendBodyBehindAppBar is true; already covers status bar +
+    // toolbar. Just add a breathing gap.
+    final topInset = MediaQuery.of(context).padding.top + AppStyles.spacingM;
     return RefreshIndicator(
       onRefresh: () => apps.load(force: true),
       color: AppColors.brandPrimary,
