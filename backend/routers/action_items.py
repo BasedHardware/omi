@@ -31,6 +31,14 @@ class CreateActionItemRequest(BaseModel):
     conversation_id: Optional[str] = Field(
         default=None, description="ID of the conversation this action item came from"
     )
+    external_source: Optional[dict] = Field(
+        default=None,
+        description=(
+            "External source descriptor for items synced from a third-party integration "
+            "(e.g. Jira). Shape: {'source': 'jira', 'external_id': 'PROJ-123', 'url': '...'}. "
+            "Transcript-derived items leave this null."
+        ),
+    )
 
 
 class UpdateActionItemRequest(BaseModel):
@@ -59,6 +67,7 @@ class ActionItemResponse(BaseModel):
     export_platform: Optional[str] = None
     sort_order: int = 0
     indent_level: int = 0
+    external_source: Optional[dict] = None
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -109,7 +118,7 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         'conversation_id': request.conversation_id,
     }
 
-    action_item_id = action_items_db.create_action_item(uid, action_item_data)
+    action_item_id = action_items_db.create_action_item(uid, action_item_data, external_source=request.external_source)
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
@@ -142,6 +151,13 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
+    source: Optional[str] = Query(
+        None,
+        description=(
+            "Filter to action items synced from a specific external source (e.g. 'jira'). "
+            "When omitted, all action items are returned (default legacy behavior)."
+        ),
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
@@ -156,6 +172,9 @@ def get_action_items(
         limit=limit,
         offset=offset,
     )
+
+    if source is not None:
+        action_items = [item for item in action_items if (item.get('external_source') or {}).get('source') == source]
 
     for item in action_items:
         if item.get('is_locked', False):
