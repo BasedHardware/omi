@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import 'package:nooto_v2/apps/apps_provider.dart';
+import 'package:nooto_v2/apps/apps_provider.dart' hide LaunchUrlFn;
+import 'package:nooto_v2/plan/plan_detail_screen.dart';
 import 'package:nooto_v2/plan/plan_grouping.dart';
 import 'package:nooto_v2/plan/widgets/plan_action_sheet.dart';
 import 'package:nooto_v2/plan/widgets/plan_filter_rail.dart';
@@ -10,6 +11,7 @@ import 'package:nooto_v2/plan/widgets/plan_pivot_picker.dart';
 import 'package:nooto_v2/plan/widgets/plan_row.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
+import 'package:nooto_v2/widgets/jira_chip.dart' show LaunchUrlFn;
 
 /// App id for the Jira plugin in the Apps catalog. Centralized here so the
 /// swipe-gating + write-action flows can't drift.
@@ -26,7 +28,11 @@ const String _jiraAppId = 'nooto-jira';
 /// swipe gestures are disabled outright rather than firing a 403 on every
 /// drag.
 class PlanScreen extends StatefulWidget {
-  const PlanScreen({super.key});
+  const PlanScreen({super.key, LaunchUrlFn? launchUrl}) : _launchUrl = launchUrl;
+
+  /// Test seam: lets widget tests pass a fake launcher that records calls
+  /// instead of opening Safari.
+  final LaunchUrlFn? _launchUrl;
 
   @override
   State<PlanScreen> createState() => _PlanScreenState();
@@ -110,10 +116,8 @@ class _PlanScreenState extends State<PlanScreen> {
               sliver: _GroupsSliver(
                 groups: PlanGrouping.group(items, pivot: _pivot),
                 pivot: _pivot,
-                onToggle: (id) async {
-                  HapticFeedback.lightImpact();
-                  await provider.complete(id);
-                },
+                onCheckboxTap: (item) => _onCheckboxTap(item, twoWaySync: twoWaySync),
+                onRowBodyTap: _onRowBodyTap,
                 onProjectTap: (project) {
                   setState(() => _projectFilter = _projectFilter == project ? null : project);
                 },
@@ -149,6 +153,55 @@ class _PlanScreenState extends State<PlanScreen> {
           return due != null && due.isBefore(cutoff);
       }
     }).toList();
+  }
+
+  /// Checkbox tap path. Routes Jira-sourced rows through
+  /// `provider.transition(toStatus: 'Done', optimisticallyComplete: true)`
+  /// so a successful tap both fires the Jira "Done" transition AND
+  /// disappears the row instantly (matching the prior `complete()` UX).
+  /// Transcript-sourced rows go through the local-only `provider.complete`.
+  ///
+  /// Two-way-sync gate: when [twoWaySync] is false on a Jira row, surfaces
+  /// the existing "Enable Jira write-back…" SnackBar without firing any
+  /// provider call. Closes the prior silent-desync bug where row-tap on a
+  /// Jira item used to call `complete()` (local-only PATCH) regardless of
+  /// the toggle.
+  /// Row-body tap path. Pushes [PlanDetailScreen], an in-app read-only
+  /// view of the action item with a primary "Mark as Done" / "Mark
+  /// complete" button that routes through the same provider helpers as
+  /// the row checkbox. The detail screen also surfaces an "Open in Jira"
+  /// link for users who need fields the on-device data doesn't carry
+  /// (description body, comments, history, assignee). For transcript
+  /// items, the caller in `_GroupSection` passes `null` to
+  /// [PlanRow.onRowBodyTap] so the row's `InkWell` is disabled — the
+  /// detail screen for transcript items is a deferred follow-up tied to
+  /// the conversation deep-link work.
+  void _onRowBodyTap(ActionItem item) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlanDetailScreen(itemId: item.id, launchUrl: widget._launchUrl),
+      ),
+    );
+  }
+
+  Future<void> _onCheckboxTap(ActionItem item, {required bool twoWaySync}) async {
+    final ext = item.externalSource;
+    final provider = context.read<ActionItemsProvider>();
+    if (ext?.source == 'jira' && !twoWaySync) {
+      // Surface the same SnackBar swipe-right uses; do NOT fire haptic for
+      // a gesture that didn't actually do anything.
+      _showActionError('two_way_sync_disabled');
+      return;
+    }
+    HapticFeedback.lightImpact();
+    if (ext?.source == 'jira') {
+      final ok = await provider.transition(item.id, toStatus: 'Done', optimisticallyComplete: true);
+      if (!mounted) return;
+      if (!ok) _showActionError(provider.lastActionError);
+      return;
+    }
+    await provider.complete(item.id);
   }
 
   /// Swipe-right path. Single-action — picks a transition target, fires it.
@@ -237,7 +290,8 @@ class _GroupsSliver extends StatelessWidget {
   const _GroupsSliver({
     required this.groups,
     required this.pivot,
-    required this.onToggle,
+    required this.onCheckboxTap,
+    required this.onRowBodyTap,
     required this.onProjectTap,
     required this.jiraSwipeEnabled,
     required this.onTransition,
@@ -247,7 +301,8 @@ class _GroupsSliver extends StatelessWidget {
 
   final List<PlanGroup> groups;
   final PlanPivot pivot;
-  final Future<void> Function(String id) onToggle;
+  final Future<void> Function(ActionItem item) onCheckboxTap;
+  final void Function(ActionItem item) onRowBodyTap;
   final ValueChanged<String> onProjectTap;
   final bool jiraSwipeEnabled;
   final Future<void> Function(ActionItem item) onTransition;
@@ -262,7 +317,8 @@ class _GroupsSliver extends StatelessWidget {
         title: groups[i].title,
         items: groups[i].items,
         pivot: pivot,
-        onToggle: onToggle,
+        onCheckboxTap: onCheckboxTap,
+        onRowBodyTap: onRowBodyTap,
         onProjectTap: onProjectTap,
         jiraSwipeEnabled: jiraSwipeEnabled,
         onTransition: onTransition,
@@ -278,7 +334,8 @@ class _GroupSection extends StatelessWidget {
     required this.title,
     required this.items,
     required this.pivot,
-    required this.onToggle,
+    required this.onCheckboxTap,
+    required this.onRowBodyTap,
     required this.onProjectTap,
     required this.jiraSwipeEnabled,
     required this.onTransition,
@@ -288,7 +345,8 @@ class _GroupSection extends StatelessWidget {
   final String title;
   final List<ActionItem> items;
   final PlanPivot pivot;
-  final Future<void> Function(String id) onToggle;
+  final Future<void> Function(ActionItem item) onCheckboxTap;
+  final void Function(ActionItem item) onRowBodyTap;
   final ValueChanged<String> onProjectTap;
   final bool jiraSwipeEnabled;
   final Future<void> Function(ActionItem item) onTransition;
@@ -328,7 +386,12 @@ class _GroupSection extends StatelessWidget {
               item: item,
               sectionHasMixedSources: mixed,
               pivot: pivot,
-              onToggle: () => onToggle(item.id),
+              onCheckboxTap: () => onCheckboxTap(item),
+              // Row-body tap pushes the in-app detail screen for both Jira
+              // and transcript items — the screen renders only the metadata
+              // each kind actually carries, with a primary "Mark complete"
+              // / "Mark as Done" button.
+              onRowBodyTap: () => onRowBodyTap(item),
               onProjectTap: item.externalSource?.jiraProjectKey != null
                   ? () => onProjectTap(item.externalSource!.jiraProjectKey!)
                   : null,
@@ -357,7 +420,8 @@ class PlanRowSwipeWrapper extends StatelessWidget {
     super.key,
     required this.item,
     required this.sectionHasMixedSources,
-    required this.onToggle,
+    required this.onCheckboxTap,
+    required this.onRowBodyTap,
     required this.onProjectTap,
     required this.jiraSwipeEnabled,
     required this.onTransition,
@@ -368,7 +432,8 @@ class PlanRowSwipeWrapper extends StatelessWidget {
 
   final ActionItem item;
   final bool sectionHasMixedSources;
-  final Future<void> Function() onToggle;
+  final Future<void> Function() onCheckboxTap;
+  final VoidCallback? onRowBodyTap;
   final VoidCallback? onProjectTap;
   final bool jiraSwipeEnabled;
   final Future<void> Function() onTransition;
@@ -382,7 +447,8 @@ class PlanRowSwipeWrapper extends StatelessWidget {
     final isJira = ext?.source == 'jira';
     final row = PlanRow(
       item: item,
-      onToggle: onToggle,
+      onCheckboxTap: onCheckboxTap,
+      onRowBodyTap: onRowBodyTap,
       onProjectTap: onProjectTap,
       sectionHasMixedSources: sectionHasMixedSources,
       pivot: pivot,
