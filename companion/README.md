@@ -32,8 +32,17 @@ app\android\gradlew.bat -p companion\android :app:assembleDebug --no-build-cache
 APK:
 
 ```text
-companion/android/app/build/outputs/apk/debug/app-debug.apk
+companion/android/app/build/outputs/apk/debug/omi-ambient-companion-debug-v0.1.0.apk
 ```
+
+The standalone companion APK must identify as:
+
+```text
+package: com.omi.ambientcompanion
+label: Omi Ambient Companion
+```
+
+It installs next to the official/published Omi app and does not replace or modify it.
 
 ## Personal Setup
 

@@ -18,8 +18,14 @@ jobs:
           java-version: "21"
       - name: Build companion APK
         run: ./app/android/gradlew -p companion/android :app:testDebugUnitTest :app:assembleDebug --no-build-cache
+      - name: Verify standalone APK identity
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt"
+          "$AAPT" dump badging companion/android/app/build/outputs/apk/debug/omi-ambient-companion-debug-v0.1.0.apk | tee apk-badging.txt
+          grep "package: name='com.omi.ambientcompanion'" apk-badging.txt
+          grep "application-label:'Omi Ambient Companion'" apk-badging.txt
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: omi-ambient-companion-debug
-          path: companion/android/app/build/outputs/apk/debug/app-debug.apk
+          name: omi-ambient-companion-standalone-debug-apk
+          path: companion/android/app/build/outputs/apk/debug/omi-ambient-companion-debug-v0.1.0.apk

@@ -14,10 +14,24 @@ app\android\gradlew.bat -p companion\android :app:assembleDebug --no-build-cache
 APK path:
 
 ```text
-companion/android/app/build/outputs/apk/debug/app-debug.apk
+companion/android/app/build/outputs/apk/debug/omi-ambient-companion-debug-v0.1.0.apk
 ```
 
-GitHub Actions also uploads the debug APK from the `Ambient Companion Android` workflow.
+GitHub Actions also uploads the debug APK from the `Ambient Companion Android` workflow. Download the artifact named
+`omi-ambient-companion-standalone-debug-apk`, not the regular Omi app APK.
+
+Before installing, verify the standalone identity:
+
+```powershell
+& C:\Android\Sdk\build-tools\36.0.0\aapt.exe dump badging companion\android\app\build\outputs\apk\debug\omi-ambient-companion-debug-v0.1.0.apk | findstr "package application-label"
+```
+
+Expected:
+
+```text
+package: name='com.omi.ambientcompanion'
+application-label:'Omi Ambient Companion'
+```
 
 ## Controller Setup
 

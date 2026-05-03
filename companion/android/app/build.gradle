@@ -34,4 +34,10 @@ android {
     buildFeatures {
         buildConfig true
     }
+
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            outputFileName = "omi-ambient-companion-${variant.name}-v${variant.versionName}.apk"
+        }
+    }
 }
