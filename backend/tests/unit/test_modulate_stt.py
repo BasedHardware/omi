@@ -478,21 +478,31 @@ class TestRecvLoop(unittest.TestCase):
         self.assertEqual(self.segments, [])
 
     def test_error_message_marks_dead(self):
-        msg = json.dumps({'type': 'error', 'message': 'rate limit'})
+        msg = json.dumps({'type': 'error', 'error': 'rate limit'})
         sock = self._run_recv([msg])
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('rate limit', sock.death_reason)
 
     def test_done_message_continues(self):
-        done = json.dumps({'type': 'done', 'audio_duration_s': 5.0})
-        utt = json.dumps({'type': 'utterance', 'text': 'hello', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1})
+        done = json.dumps({'type': 'done', 'duration_ms': 5000})
+        utt = json.dumps(
+            {
+                'type': 'utterance',
+                'utterance': {'text': 'hello', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
+            }
+        )
         sock = self._run_recv([done, utt])
         self.assertFalse(sock.is_connection_dead)
         self.assertEqual(len(self.segments), 1)
         self.assertEqual(self.segments[0]['text'], 'hello')
 
     def test_utterance_dispatches_segments(self):
-        utt = json.dumps({'type': 'utterance', 'text': 'world', 'start_ms': 500, 'duration_ms': 200, 'speaker': 2})
+        utt = json.dumps(
+            {
+                'type': 'utterance',
+                'utterance': {'text': 'world', 'start_ms': 500, 'duration_ms': 200, 'speaker': 2},
+            }
+        )
         sock = self._run_recv([utt])
         self.assertEqual(len(self.segments), 1)
         self.assertEqual(self.segments[0]['speaker'], 'SPEAKER_01')
@@ -537,12 +547,12 @@ class TestProcessAudioModulate(unittest.TestCase):
             self.assertTrue(hasattr(sock, '_is_safe_dg_socket'))
             call_args = mock_ws_module.connect.call_args
             uri = call_args[0][0]
-            self.assertNotIn('api_key', uri)
+            self.assertIn('api_key=test-key', uri)
             self.assertIn('sample_rate=16000', uri)
             self.assertIn('speaker_diarization=true', uri)
             self.assertIn('language=en', uri)
-            headers = call_args[1].get('extra_headers', {})
-            self.assertEqual(headers.get('X-API-Key'), 'test-key')
+            self.assertIn('audio_format=s16le', uri)
+            self.assertIn('num_channels=1', uri)
         finally:
             loop.close()
 
