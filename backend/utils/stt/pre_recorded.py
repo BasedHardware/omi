@@ -435,6 +435,74 @@ def fal_whisperx(
         return []
 
 
+@timeit
+def modulate_prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    return_language: bool = False,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
+
+    api_key = os.getenv('MODULATE_API_KEY')
+    if not api_key:
+        raise ValueError('MODULATE_API_KEY environment variable is not set')
+
+    try:
+        url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
+        headers = {'X-API-Key': api_key}
+        files = {'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+        data = {'speaker_diarization': str(diarize).lower()}
+
+        with httpx.Client(timeout=300) as client:
+            response = client.post(url, headers=headers, files=files, data=data)
+        response.raise_for_status()
+        result = response.json()
+
+        utterances = result.get('utterances', [])
+        if not utterances:
+            if return_language:
+                return [], 'en'
+            return []
+
+        words = []
+        detected_language = 'en'
+        for utt in utterances:
+            text = utt.get('text', '').strip()
+            if not text:
+                continue
+
+            start_ms = utt.get('start_ms', 0)
+            duration_ms = utt.get('duration_ms', 0)
+            start = start_ms / 1000.0
+            end = (start_ms + duration_ms) / 1000.0
+
+            raw_speaker = utt.get('speaker')
+            if isinstance(raw_speaker, int) and raw_speaker >= 1:
+                speaker_idx = raw_speaker - 1
+            else:
+                speaker_idx = 0
+            speaker = f'SPEAKER_{speaker_idx:02d}'
+
+            words.append({'timestamp': [start, end], 'speaker': speaker, 'text': text})
+
+            lang = utt.get('language')
+            if lang:
+                detected_language = lang
+
+        if return_language:
+            return words, detected_language
+
+        return words
+
+    except Exception as e:
+        logger.error(f'Modulate prerecorded error: {e}')
+        if attempts < 2:
+            return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
+        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
+
+
 def _words_cleaning(words: List[dict]):
     words_cleaned: List[dict] = []
     for i, w in enumerate(words):
