@@ -1,4 +1,4 @@
-// API proxy routes — forward Gemini and Deepgram requests to upstream APIs.
+// API proxy routes — forward Gemini requests to upstream APIs.
 // Keys stay server-side; desktop client authenticates via Firebase token only.
 //
 // Issue #5861: Remove client-side API key exposure risk.
@@ -10,7 +10,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{any, post},
+    routing::post,
     Router,
 };
 
@@ -371,216 +371,6 @@ async fn gemini_stream_proxy(
         .unwrap())
 }
 
-/// Epoch seconds for Deepgram proxy deprecation: 2026-04-05 05:00:00 UTC.
-const DEEPGRAM_DEPRECATION_EPOCH: u64 = 1_775_365_200;
-
-/// Check if the Deepgram proxy deprecation period has passed.
-/// Returns true after 2026-04-05 05:00:00 UTC (~26h after PR #6287 merge, rounded up).
-fn is_deepgram_proxy_deprecated() -> bool {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() >= DEEPGRAM_DEPRECATION_EPOCH)
-        .unwrap_or(false)
-}
-
-/// Testable: returns true when `now_epoch` is at or after the deprecation cutoff.
-#[cfg(test)]
-fn is_deprecated_at(now_epoch: u64) -> bool {
-    now_epoch >= DEEPGRAM_DEPRECATION_EPOCH
-}
-
-/// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
-/// STT moved to Python backend endpoints: POST /v2/voice-message/transcribe
-/// and WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_listen_proxy(
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-    body: Bytes,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_listen_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram proxy is deprecated. Use POST /v2/voice-message/transcribe instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-
-    let query = original_uri.query().unwrap_or("");
-    let url = build_deepgram_rest_url(query);
-
-    let upstream = reqwest::Client::new()
-        .post(&url)
-        .header("authorization", build_deepgram_auth_header(dg_key))
-        .header("content-type", "application/octet-stream")
-        .body(body)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("deepgram_listen_proxy: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
-
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("deepgram_listen_proxy: failed to read upstream body: {}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
-
-    Ok((status, bytes).into_response())
-}
-
-/// WS /v1/proxy/deepgram/ws/v1/listen — DEPRECATED.
-/// STT moved to Python backend: WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_ws_proxy(
-    ws: axum::extract::WebSocketUpgrade,
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_ws_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram WS proxy is deprecated. Use WS /v2/voice-message/transcribe-stream instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
-        .clone();
-
-    let query = original_uri.query().unwrap_or("").to_string();
-    let upstream_url = build_deepgram_ws_url(&query);
-
-    Ok(ws.on_upgrade(move |client_socket| async move {
-        if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
-            tracing::error!("deepgram_ws_proxy: proxy error: {}", e);
-        }
-    })
-    .into_response())
-}
-
-/// Which side of the proxy terminated first
-#[derive(Debug)]
-enum ProxyCloseOrigin {
-    ClientClosed,
-    UpstreamClosed,
-    ClientError,
-    UpstreamError,
-}
-
-/// Bidirectional WebSocket proxy between client (axum) and upstream (tokio-tungstenite).
-/// When one side closes or errors, a close frame is forwarded to the other side before teardown.
-async fn proxy_ws_bidirectional(
-    client_socket: axum::extract::ws::WebSocket,
-    upstream_url: &str,
-    api_key: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::extract::ws::Message as AxumMsg;
-    use futures::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::{
-        client::IntoClientRequest, http::HeaderValue, Message as TungMsg,
-    };
-
-    // Connect to upstream Deepgram with auth header
-    let mut request = upstream_url.into_client_request()?;
-    request.headers_mut().insert(
-        "Authorization",
-        HeaderValue::from_str(&format!("Token {}", api_key))?,
-    );
-
-    let (upstream_ws, _) = tokio_tungstenite::connect_async(request).await?;
-    let (mut upstream_sink, mut upstream_stream) = upstream_ws.split();
-    let (mut client_sink, mut client_stream) = client_socket.split();
-
-    // Client → Upstream
-    let client_to_upstream = async {
-        while let Some(result) = client_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let tung_msg = match msg {
-                        AxumMsg::Text(t) => TungMsg::Text(t),
-                        AxumMsg::Binary(b) => TungMsg::Binary(b),
-                        AxumMsg::Ping(p) => TungMsg::Ping(p),
-                        AxumMsg::Pong(p) => TungMsg::Pong(p),
-                        AxumMsg::Close(_) => {
-                            let _ = upstream_sink.close().await;
-                            return ProxyCloseOrigin::ClientClosed;
-                        }
-                    };
-                    if upstream_sink.send(tung_msg).await.is_err() {
-                        return ProxyCloseOrigin::UpstreamError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::ClientError,
-            }
-        }
-        ProxyCloseOrigin::ClientClosed
-    };
-
-    // Upstream → Client
-    let upstream_to_client = async {
-        while let Some(result) = upstream_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let axum_msg = match msg {
-                        TungMsg::Text(t) => AxumMsg::Text(t),
-                        TungMsg::Binary(b) => AxumMsg::Binary(b),
-                        TungMsg::Ping(p) => AxumMsg::Ping(p),
-                        TungMsg::Pong(p) => AxumMsg::Pong(p),
-                        TungMsg::Close(_) => {
-                            let _ = client_sink.close().await;
-                            return ProxyCloseOrigin::UpstreamClosed;
-                        }
-                        TungMsg::Frame(_) => continue,
-                    };
-                    if client_sink.send(axum_msg).await.is_err() {
-                        return ProxyCloseOrigin::ClientError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::UpstreamError,
-            }
-        }
-        ProxyCloseOrigin::UpstreamClosed
-    };
-
-    // Run both directions concurrently; when either ends, gracefully close the other side
-    let origin = tokio::select! {
-        origin = client_to_upstream => origin,
-        origin = upstream_to_client => origin,
-    };
-
-    // Forward close frame to the surviving side with a timeout to prevent hanging
-    let close_timeout = std::time::Duration::from_secs(5);
-    tracing::debug!("deepgram_ws_proxy: proxy ended ({:?})", origin);
-    match origin {
-        ProxyCloseOrigin::UpstreamClosed | ProxyCloseOrigin::UpstreamError => {
-            let _ = tokio::time::timeout(close_timeout, client_sink.close()).await;
-        }
-        ProxyCloseOrigin::ClientClosed | ProxyCloseOrigin::ClientError => {
-            let _ = tokio::time::timeout(close_timeout, upstream_sink.close()).await;
-        }
-    }
-
-    Ok(())
-}
-
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")
 fn extract_gemini_action(path: &str) -> &str {
     path.rsplit(':').next().unwrap_or("")
@@ -830,34 +620,12 @@ fn build_gemini_stream_url(
     url
 }
 
-/// Build upstream Deepgram REST URL preserving query params
-fn build_deepgram_rest_url(query: &str) -> String {
-    format!("https://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build upstream Deepgram WS URL preserving query params
-fn build_deepgram_ws_url(query: &str) -> String {
-    format!("wss://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build Deepgram auth header
-fn build_deepgram_auth_header(api_key: &str) -> String {
-    format!("Token {}", api_key)
-}
-
 pub fn proxy_routes() -> Router<AppState> {
     Router::new()
         // Gemini HTTP proxy (non-streaming)
         .route("/v1/proxy/gemini/*path", post(gemini_proxy))
         // Gemini streaming proxy (SSE)
         .route("/v1/proxy/gemini-stream/*path", post(gemini_stream_proxy))
-        // Deepgram batch (pre-recorded) transcription proxy
-        .route("/v1/proxy/deepgram/v1/listen", post(deepgram_listen_proxy))
-        // Deepgram streaming WebSocket proxy
-        .route(
-            "/v1/proxy/deepgram/ws/v1/listen",
-            any(deepgram_ws_proxy),
-        )
         // Issue #6624: 5 MB body size limit for proxy routes only (not global).
         // Normal app payloads are 300-600 KB; 5 MB gives ~8x headroom.
         .layer(DefaultBodyLimit::max(GEMINI_MAX_BODY_SIZE))
@@ -1577,36 +1345,6 @@ mod tests {
         );
     }
 
-    // --- Deepgram URL construction ---
-
-    #[test]
-    fn deepgram_rest_url_preserves_query() {
-        let url = build_deepgram_rest_url("model=nova-3&language=en&encoding=linear16");
-        assert_eq!(
-            url,
-            "https://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16"
-        );
-    }
-
-    #[test]
-    fn deepgram_ws_url_preserves_query() {
-        let url = build_deepgram_ws_url("model=nova-3&channels=2");
-        assert_eq!(
-            url,
-            "wss://api.deepgram.com/v1/listen?model=nova-3&channels=2"
-        );
-    }
-
-    // --- Deepgram auth header ---
-
-    #[test]
-    fn deepgram_auth_header_format() {
-        assert_eq!(
-            build_deepgram_auth_header("dg-test-key"),
-            "Token dg-test-key"
-        );
-    }
-
     // --- ProxyError::RateLimited response ---
 
     #[tokio::test]
@@ -1631,54 +1369,6 @@ mod tests {
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
-    }
-
-    // --- ProxyCloseOrigin ---
-
-    // --- Deepgram deprecation boundary ---
-
-    #[test]
-    fn deepgram_deprecation_timestamp_matches_target_date() {
-        // 2026-04-05 05:00:00 UTC
-        assert_eq!(DEEPGRAM_DEPRECATION_EPOCH, 1_775_365_200);
-    }
-
-    #[test]
-    fn deepgram_deprecation_before_cutoff() {
-        assert!(!is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH - 1));
-    }
-
-    #[test]
-    fn deepgram_deprecation_at_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH));
-    }
-
-    #[test]
-    fn deepgram_deprecation_after_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH + 1));
-    }
-
-    // --- ProxyCloseOrigin ---
-
-    #[test]
-    fn proxy_close_origin_debug_variants() {
-        // Verify all variants exist and produce distinct debug output
-        let variants = [
-            ProxyCloseOrigin::ClientClosed,
-            ProxyCloseOrigin::UpstreamClosed,
-            ProxyCloseOrigin::ClientError,
-            ProxyCloseOrigin::UpstreamError,
-        ];
-        let debug_strs: Vec<String> = variants.iter().map(|v| format!("{:?}", v)).collect();
-        assert_eq!(debug_strs.len(), 4);
-        // All distinct
-        let unique: std::collections::HashSet<&String> = debug_strs.iter().collect();
-        assert_eq!(unique.len(), 4, "All ProxyCloseOrigin variants should have distinct Debug output");
-        // Verify expected names
-        assert!(debug_strs.contains(&"ClientClosed".to_string()));
-        assert!(debug_strs.contains(&"UpstreamClosed".to_string()));
-        assert!(debug_strs.contains(&"ClientError".to_string()));
-        assert!(debug_strs.contains(&"UpstreamError".to_string()));
     }
 
     // --- Embedding body transform (AI Studio → Vertex AI predict) ---
