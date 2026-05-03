@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var audit: TextView
     private lateinit var storage: TextView
+    private lateinit var diagnostics: TextView
     private lateinit var pluginUrl: EditText
     private lateinit var userId: EditText
 
@@ -97,6 +98,9 @@ class MainActivity : Activity() {
             button("App Info") { openAppInfo() },
         ))
         root.addView(row(
+            button("Refresh Diagnostics") { refreshDiagnostics() },
+        ))
+        root.addView(row(
             button("Delete Synced") { deleteSpool("synced") },
             button("Delete Pending") { deleteSpool("pending") },
             button("Delete All Audio") { deleteSpool(null) },
@@ -106,9 +110,13 @@ class MainActivity : Activity() {
         storage = text("", 12)
         root.addView(storage)
         audit = text("", 12)
+        diagnostics = text("", 12)
+        root.addView(text("Diagnostics", 18, bold = true))
+        root.addView(diagnostics)
         root.addView(text("Audit log", 18, bold = true))
         root.addView(audit)
         refreshStorage()
+        refreshDiagnostics()
         return ScrollView(this).apply { addView(root) }
     }
 
@@ -140,6 +148,7 @@ class MainActivity : Activity() {
     private fun requestRuntimePermissions() {
         val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) permissions += Manifest.permission.POST_NOTIFICATIONS
+        if (Build.VERSION.SDK_INT >= 31) permissions += Manifest.permission.BLUETOOTH_CONNECT
         requestPermissions(permissions.toTypedArray(), 42)
     }
 
@@ -166,7 +175,14 @@ class MainActivity : Activity() {
     private fun refreshStorage() {
         if (::storage.isInitialized) {
             val currentSession = CaptureSessionStore(this).current()?.toString() ?: "none"
-            storage.text = "Storage: ${CaptureSpoolStore(this).stats()}\nCurrent session: $currentSession"
+            storage.text = "Storage: ${CaptureSpoolStore(this).stats()}\nCurrent session: $currentSession\nContext: ${ContextSignals.snapshot()}"
+        }
+    }
+
+    private fun refreshDiagnostics() {
+        if (::diagnostics.isInitialized) {
+            DiagnosticsStore(this).write("ui_refresh")
+            diagnostics.text = DiagnosticsStore(this).read()
         }
     }
 

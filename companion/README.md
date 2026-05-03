@@ -19,6 +19,8 @@ This is not an Omi plugin and does not modify the official Omi app. The plugin r
 - Tracks capture sessions, storage status, and local delete pending/synced/all-audio controls.
 - Runs best-effort Android on-device speech recognition over finalized spools on Android 13+ when supported by the device.
 - Supports explicit, user-approved MediaProjection audio capture for apps/audio usages Android allows.
+- Starts capture from context triggers such as meeting/call notifications, Live Transcribe/Sound Notifications, wired headset, Bluetooth audio, and SCO route changes.
+- Shows a structured diagnostics snapshot in the app UI for field testing.
 
 ## Build
 

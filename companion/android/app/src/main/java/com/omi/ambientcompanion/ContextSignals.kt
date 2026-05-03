@@ -8,6 +8,9 @@ object ContextSignals {
     @Volatile var foregroundPackage: String? = null
     @Volatile var lastTriggerReason: String = "manual"
     @Volatile var captionFallbackActive: Boolean = false
+    @Volatile var lastNotificationAtMs: Long = 0
+    @Volatile var lastRouteChangeAtMs: Long = 0
+    @Volatile var lastHighRiskAtMs: Long = 0
     private var lastCaptionText: String = ""
 
     val highRiskPackages = setOf(
@@ -23,6 +26,7 @@ object ContextSignals {
         if (packageName.isNullOrBlank()) return
         foregroundPackage = packageName
         if (packageName in highRiskPackages) {
+            lastHighRiskAtMs = System.currentTimeMillis()
             lastTriggerReason = "high_risk_foreground:$packageName"
             AuditLog(context).record("high_risk_app_active", mapOf("package" to packageName))
             AmbientForegroundMicService.start(context, "accessibility_high_risk_app")
@@ -53,21 +57,34 @@ object ContextSignals {
     }
 
     fun triggerFromNotification(context: Context, packageName: String?, title: String, text: String) {
-        val combined = "$title $text".lowercase()
-        val interesting = listOf("meeting", "call", "transcribe", "caption", "sound notification", "teams", "zoom", "meet")
-            .any { combined.contains(it) }
-        if (!interesting) return
-        lastTriggerReason = "notification:${packageName.orEmpty()}"
+        triggerFromNotification(context, packageName, title, text, "", "")
+    }
+
+    fun triggerFromNotification(context: Context, packageName: String?, title: String, text: String, subText: String, bigText: String) {
+        val trigger = NotificationClassifier.classify(packageName, title, text, subText, bigText)
+        if (!trigger.shouldStartCapture) return
+        lastNotificationAtMs = System.currentTimeMillis()
+        lastTriggerReason = trigger.reason
         AuditLog(context).record("notification_trigger", mapOf("package" to packageName, "title" to title.take(80)))
-        if (combined.contains("caption") || combined.contains("transcribe") || combined.contains("sound notification")) {
+        if (trigger.shouldQueueCaption) {
             enqueueCaption(context, text.ifBlank { title }, FallbackSource.LIVE_CAPTION_NOTIFICATION)
         } else {
             AmbientForegroundMicService.start(context, "notification_context")
         }
     }
 
+    fun triggerFromAudioRoute(context: Context, reason: String) {
+        lastRouteChangeAtMs = System.currentTimeMillis()
+        lastTriggerReason = reason
+        AuditLog(context).record("audio_route_trigger", mapOf("reason" to reason))
+        AmbientForegroundMicService.start(context, reason)
+    }
+
     fun snapshot(): JSONObject = JSONObject()
         .put("foreground_package", foregroundPackage)
         .put("last_trigger_reason", lastTriggerReason)
         .put("caption_fallback_active", captionFallbackActive)
+        .put("last_notification_at_ms", lastNotificationAtMs)
+        .put("last_route_change_at_ms", lastRouteChangeAtMs)
+        .put("last_high_risk_at_ms", lastHighRiskAtMs)
 }

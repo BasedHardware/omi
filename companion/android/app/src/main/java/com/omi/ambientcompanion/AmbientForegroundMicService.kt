@@ -248,6 +248,7 @@ class AmbientForegroundMicService : Service() {
     private fun updateHealth(event: HealthEvent) {
         lastHealth = event
         lastState = event.state
+        DiagnosticsStore(this).write("health:${event.state.name}")
         if (event.state == AmbientHealthState.AUDIO_SILENCED_BY_SYSTEM ||
             event.state == AmbientHealthState.COMMUNICATION_MODE_DEGRADED
         ) {
