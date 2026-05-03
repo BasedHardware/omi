@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nooto_v2/plan/plan_screen.dart';
+import 'package:nooto_v2/plan/widgets/plan_pivot_picker.dart';
+import 'package:nooto_v2/plan/widgets/plan_row.dart';
 import 'package:nooto_v2/providers/action_items_provider.dart';
 
 ActionItem _jiraItem({String id = 'PROJ-1', String? statusType = 'indeterminate'}) => ActionItem(
@@ -32,7 +34,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: false,
           onTransition: () async {},
@@ -52,7 +55,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: true,
           onTransition: () async {},
@@ -72,7 +76,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _transcriptItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: true,
           onTransition: () async {},
@@ -93,7 +98,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: false,
           onTransition: () async {},
@@ -109,5 +115,27 @@ void main() {
     await tester.pump();
 
     expect(longPressed, isTrue);
+  });
+
+  testWidgets('wrapper plumbs pivot through to PlanRow', (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        PlanRowSwipeWrapper(
+          item: _jiraItem(),
+          sectionHasMixedSources: false,
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
+          onProjectTap: () {},
+          jiraSwipeEnabled: false,
+          onTransition: () async {},
+          onSnooze: () async {},
+          onLongPress: () async {},
+          pivot: PlanPivot.byProject,
+        ),
+      ),
+    );
+
+    final planRow = tester.widget<PlanRow>(find.byType(PlanRow));
+    expect(planRow.pivot, PlanPivot.byProject);
   });
 }

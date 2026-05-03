@@ -81,11 +81,14 @@ def _normalize_jira_issue(it: dict, site_url: str) -> dict:
     assignee = (f.get("assignee") or {}).get("displayName")
     priority = (f.get("priority") or {}).get("name")
     # Jira stores description as ADF (Atlassian Document Format) — flatten
-    # to plain text and cap so chat pills / cards aren't dominated by long
-    # bodies. Caller can hit `get_issue` for the full thing when needed.
+    # to plain text and cap. The 2000 char cap balances "rich enough for the
+    # Plan detail screen" with "small enough to fit comfortably in Firestore
+    # action_item docs and on-device caches." Long-form descriptions
+    # (release notes, runbooks) get truncated; users tap "Open in Jira" for
+    # the full thing.
     description = _adf_to_text(f.get("description"))
-    if description and len(description) > 240:
-        description = description[:239].rstrip() + "…"
+    if description and len(description) > 2000:
+        description = description[:1999].rstrip() + "…"
     return {
         "external_id": key,
         "title": (f.get("summary") or "") or key,

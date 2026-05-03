@@ -383,17 +383,13 @@ class AppsProvider extends ChangeNotifier {
   /// waiting for the next [load] reconcile.
   Future<String?> syncNow(String appId) async {
     final integrationId = _integrationIdForApp(appId);
-    print('[AppsProvider] syncNow($appId) entered. integrationId=$integrationId '
-        'alreadySyncing=${_syncingIds.contains(appId)}');
     if (integrationId == null) return 'not_supported';
     if (_syncingIds.contains(appId)) return null; // Already in flight, no-op.
 
     _syncingIds = {..._syncingIds, appId};
     notifyListeners();
     try {
-      print('[AppsProvider] syncNow POST v1/integrations/$integrationId/sync-now');
       final res = await _client.post('v1/integrations/$integrationId/sync-now', body: const {});
-      print('[AppsProvider] syncNow response status=${res.statusCode} bodyLen=${res.body.length}');
       final body = jsonDecode(res.body);
       if (body is Map) {
         final ts = body['last_synced_at'];

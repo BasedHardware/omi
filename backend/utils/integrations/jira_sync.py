@@ -140,6 +140,12 @@ def _build_metadata_from_task(task: dict) -> dict:
         md["priority"] = task["priority"]
     if isinstance(task.get("status_changed_at"), str) and task["status_changed_at"]:
         md["status_changed_at"] = task["status_changed_at"]
+    # Plain-text Jira issue body — fed by the plugin's _adf_to_text and
+    # capped there. We surface it under a dedicated key (the action item's
+    # top-level `description` is the Jira summary/title; this is the body).
+    # Plan detail screen reads it as `externalSource.jiraDescriptionBody`.
+    if isinstance(task.get("description"), str) and task["description"]:
+        md["description_body"] = task["description"]
     return md
 
 
