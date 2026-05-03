@@ -181,6 +181,35 @@ class TestSafeModulateSocket(unittest.TestCase):
         sock.finish()
         sock.send(b'\x00' * 10)  # Should not raise
 
+    def test_send_then_drain_ordering(self):
+        """Audio sent via send() must arrive at ws.send() before EOS from drain_and_close()."""
+        sent_data = []
+        ws = AsyncMock()
+        ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
+        ws.close = AsyncMock()
+
+        loop = asyncio.new_event_loop()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
+            sock.set_wav_header(b'')  # empty header for simplicity
+            sock._recv_task.cancel()
+            # send() uses call_soon_threadsafe, then drain_and_close() enqueues EOS
+            sock.send(b'audio_chunk')
+            await sock.drain_and_close()
+            return sent_data
+
+        try:
+            result = loop.run_until_complete(run())
+            # audio_chunk must appear before EOS ('')
+            audio_idx = next((i for i, d in enumerate(result) if d == b'audio_chunk'), None)
+            eos_idx = next((i for i, d in enumerate(result) if d == ''), None)
+            self.assertIsNotNone(audio_idx, 'audio_chunk was not sent')
+            self.assertIsNotNone(eos_idx, 'EOS was not sent')
+            self.assertLess(audio_idx, eos_idx, 'audio must be sent before EOS')
+        finally:
+            loop.close()
+
 
 class TestUtteranceHandling(unittest.TestCase):
     def setUp(self):
