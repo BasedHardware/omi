@@ -160,31 +160,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get onboardingSpeechSkip => 'Pular por agora';
 
   @override
-  String get decisionsSection => 'DECISIONS';
-
-  @override
-  String get decisionsEmptyForMeeting =>
-      'No decisions extracted from this meeting';
-
-  @override
-  String get decisionsViewRelatedActionsOne => 'View 1 related action';
-
-  @override
-  String decisionsViewRelatedActionsMany(int count) {
-    return 'View $count related actions';
-  }
-
-  @override
-  String decisionsOwnerDueFormat(String owner, String date) {
-    return '$owner · due $date';
-  }
-
-  @override
-  String decisionsOpenQuestionsMore(int count) {
-    return '+$count more';
-  }
-
-  @override
   String get shellTabHome => 'Início';
 
   @override

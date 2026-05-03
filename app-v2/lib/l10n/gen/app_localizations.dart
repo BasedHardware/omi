@@ -362,42 +362,6 @@ abstract class AppLocalizations {
   /// **'Skip for now'**
   String get onboardingSpeechSkip;
 
-  /// Eyebrow header for the Decisions section in conversation detail.
-  ///
-  /// In en, this message translates to:
-  /// **'DECISIONS'**
-  String get decisionsSection;
-
-  /// Caption shown when Decisions extraction ran but found no decisions for this meeting.
-  ///
-  /// In en, this message translates to:
-  /// **'No decisions extracted from this meeting'**
-  String get decisionsEmptyForMeeting;
-
-  /// Link label when a decision has exactly 1 related action item.
-  ///
-  /// In en, this message translates to:
-  /// **'View 1 related action'**
-  String get decisionsViewRelatedActionsOne;
-
-  /// Link label when a decision has multiple related action items.
-  ///
-  /// In en, this message translates to:
-  /// **'View {count} related actions'**
-  String decisionsViewRelatedActionsMany(int count);
-
-  /// Caption format for decision owner and due date.
-  ///
-  /// In en, this message translates to:
-  /// **'{owner} · due {date}'**
-  String decisionsOwnerDueFormat(String owner, String date);
-
-  /// Overflow pill shown when a decision has more than 3 open questions.
-  ///
-  /// In en, this message translates to:
-  /// **'+{count} more'**
-  String decisionsOpenQuestionsMore(int count);
-
   /// No description provided for @shellTabHome.
   ///
   /// In en, this message translates to:
