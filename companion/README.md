@@ -1,0 +1,57 @@
+# Omi Ambient Companion
+
+Personal Android companion app for local-first ambient capture. The companion app owns Android permissions, foreground microphone capture, VAD, encrypted spool, accessibility/caption fallback, notification triggers, and sync to the Ambient Second Brain Controller plugin.
+
+This is not an Omi plugin and does not modify the official Omi app. The plugin remains the controller/import bridge.
+
+## What It Does
+
+- Starts a visible microphone foreground service.
+- Uses `AudioRecord` PCM16 mono 16 kHz.
+- Runs lightweight RMS/VAD first with a RAM pre-roll buffer.
+- Writes speech-triggered audio to encrypted app-private spool files.
+- Uses AccessibilityService for foreground app and allowlisted caption/transcript fallback.
+- Uses NotificationListenerService for meeting/call/Sound Notifications/Live Transcribe context triggers.
+- Detects communication mode, mic silencing, low signal, network buffering, private mode, and storage limits.
+- Registers with `plugins/ambient-second-brain-controller` and pins its policy key.
+- Uploads telemetry, fallback segments, and audio payloads to the controller backend.
+
+## Build
+
+```powershell
+Copy-Item app\android\local.properties companion\android\local.properties
+app\android\gradlew.bat -p companion\android :app:assembleDebug --no-build-cache
+```
+
+APK:
+
+```text
+companion/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+## Personal Setup
+
+1. Install the APK on the Pixel.
+2. Open `Omi Ambient Companion`.
+3. Enter the Ambient Second Brain Controller base URL and Omi user id.
+4. Tap `Register`.
+5. Tap `Permissions`, grant microphone and notifications.
+6. Tap `Accessibility`, enable Omi Ambient Companion.
+7. Tap `Notifications`, enable Omi Ambient Companion notification access.
+8. Tap `Battery`, allow unrestricted/background operation.
+9. Tap `Start`.
+
+The app does not auto-record after reboot. Boot handling only resets stale recovery state.
+
+## Safety
+
+- Persistent notification is always visible while the mic service is running.
+- Private Mode stops active capture/upload locally.
+- The app does not use `VoiceInteractionService`, SoundTrigger HAL, hidden recording, arbitrary screen scraping, or silent media sessions.
+- Call/meeting capture is degraded when Android blocks audio. Captions/transcripts are labeled as fallback sources.
+
+## Known V1 Limits
+
+- Local STT has a worker hook and spool drain point, but no bundled Whisper/model runtime yet.
+- MediaProjection is scaffolded as an explicit-session service; full screen/internal-audio capture UI is not wired yet.
+- Audio upload targets the plugin `/webhooks/omi/audio-bytes` endpoint; final Omi conversation import depends on the controller/backend deployment.

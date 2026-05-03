@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Omi Ambient Companion</string>
+    <string name="accessibility_service_description">Detects foreground apps and allowlisted captions for Omi ambient fallback transcripts.</string>
+</resources>
