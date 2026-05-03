@@ -34,10 +34,6 @@ pub struct TranscriptionPreferences {
     pub vocabulary: Vec<String>,
 }
 
-fn default_private_cloud_sync() -> bool {
-    true
-}
-
 /// Notification settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationSettings {
