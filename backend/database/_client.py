@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -6,15 +7,36 @@ import uuid
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
-    try:
-        service_account_info = json.loads(json_str)
-    except json.JSONDecodeError:
-        # Handle escaped JSON from Coolify (quotes are escaped as \")
-        cleaned = json_str.replace('\\', '')
-        service_account_info = json.loads(cleaned)
-    # create google-credentials.json
+
+def _load_service_account_info() -> dict | None:
+    """Resolve the service-account credential dict from one of two env vars.
+
+    Coolify (and other deploy targets) sometimes ship credentials as raw JSON
+    in ``SERVICE_ACCOUNT_JSON`` and sometimes base64-encoded in
+    ``SERVICE_ACCOUNT_JSON_BASE64`` (the base64 variant avoids quote-escaping
+    issues with multi-line dashboards). Try the plain variant first, fall
+    back to base64. Returns ``None`` when neither is set, leaving Application
+    Default Credentials (ADC) to handle local dev / GCP-native deploys.
+    """
+    raw = os.environ.get('SERVICE_ACCOUNT_JSON')
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            # Handle escaped JSON from Coolify (quotes are escaped as \")
+            return json.loads(raw.replace('\\', ''))
+    encoded = os.environ.get('SERVICE_ACCOUNT_JSON_BASE64')
+    if encoded:
+        decoded = base64.b64decode(encoded).decode('utf-8')
+        return json.loads(decoded)
+    return None
+
+
+service_account_info = _load_service_account_info()
+if service_account_info is not None:
+    # create google-credentials.json — relative path resolves to the
+    # container's WORKDIR (/app for both backend and pusher Dockerfiles),
+    # which is exactly where GOOGLE_APPLICATION_CREDENTIALS points.
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
 
@@ -22,13 +44,11 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 # For authorized_user credentials, we need to explicitly set the project
 project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('GCP_PROJECT_ID')
 
-# Extract project from credentials if not in env
-if not project_id and os.environ.get('SERVICE_ACCOUNT_JSON'):
-    try:
-        creds = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
-        project_id = creds.get('project_id') or creds.get('quota_project_id')
-    except:
-        pass
+# Fall back to the project_id baked into the service account credentials.
+# Using the already-decoded service_account_info means this works whether the
+# credential came from SERVICE_ACCOUNT_JSON or SERVICE_ACCOUNT_JSON_BASE64.
+if not project_id and service_account_info is not None:
+    project_id = service_account_info.get('project_id') or service_account_info.get('quota_project_id')
 
 print(f"Initializing Firestore with project_id: {project_id}")
 
