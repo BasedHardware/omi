@@ -53,7 +53,3 @@ pub struct AdviceDB {
     #[serde(default)]
     pub is_dismissed: bool,
 }
-
-fn default_limit() -> usize {
-    100
-}
