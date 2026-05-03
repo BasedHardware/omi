@@ -34,7 +34,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: false,
           onTransition: () async {},
@@ -54,7 +55,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: true,
           onTransition: () async {},
@@ -74,7 +76,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _transcriptItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: true,
           onTransition: () async {},
@@ -95,7 +98,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: null,
           jiraSwipeEnabled: false,
           onTransition: () async {},
@@ -119,7 +123,8 @@ void main() {
         PlanRowSwipeWrapper(
           item: _jiraItem(),
           sectionHasMixedSources: false,
-          onToggle: () async {},
+          onCheckboxTap: () async {},
+          onRowBodyTap: null,
           onProjectTap: () {},
           jiraSwipeEnabled: false,
           onTransition: () async {},
