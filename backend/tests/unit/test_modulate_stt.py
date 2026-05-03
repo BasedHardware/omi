@@ -441,6 +441,65 @@ class TestModulatePrerecorded(unittest.TestCase):
             modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
 
 
+class TestRecvLoop(unittest.TestCase):
+    def setUp(self):
+        self.loop = asyncio.new_event_loop()
+        self.segments = []
+
+    def tearDown(self):
+        self.loop.close()
+
+    def _run_recv(self, messages):
+        ws = AsyncMock()
+        ws.close = AsyncMock()
+
+        msg_iter = iter(messages)
+
+        async def aiter_messages():
+            for m in messages:
+                yield m
+
+        ws.__aiter__ = lambda s: aiter_messages()
+
+        async def create():
+            sock = SafeModulateSocket(ws, lambda s: self.segments.extend(s), self.loop, preseconds=0)
+            sock._send_task.cancel()
+            sock._recv_task.cancel()
+            sock.set_wav_header(b'')
+            self.segments.clear()
+            await sock._recv_loop()
+            return sock
+
+        return self.loop.run_until_complete(create())
+
+    def test_invalid_json_skipped(self):
+        sock = self._run_recv(['not json', '{{bad'])
+        self.assertFalse(sock.is_connection_dead)
+        self.assertEqual(self.segments, [])
+
+    def test_error_message_marks_dead(self):
+        msg = json.dumps({'type': 'error', 'message': 'rate limit'})
+        sock = self._run_recv([msg])
+        self.assertTrue(sock.is_connection_dead)
+        self.assertIn('rate limit', sock.death_reason)
+
+    def test_done_message_continues(self):
+        done = json.dumps({'type': 'done', 'audio_duration_s': 5.0})
+        utt = json.dumps({'type': 'utterance', 'text': 'hello', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1})
+        sock = self._run_recv([done, utt])
+        self.assertFalse(sock.is_connection_dead)
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'hello')
+
+    def test_utterance_dispatches_segments(self):
+        utt = json.dumps({'type': 'utterance', 'text': 'world', 'start_ms': 500, 'duration_ms': 200, 'speaker': 2})
+        sock = self._run_recv([utt])
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['speaker'], 'SPEAKER_01')
+        self.assertAlmostEqual(self.segments[0]['start'], 0.5)
+        self.assertAlmostEqual(self.segments[0]['end'], 0.7)
+
+
 class TestProcessAudioModulate(unittest.TestCase):
     @patch.dict('os.environ', {}, clear=False)
     def test_missing_api_key_raises(self):
@@ -455,6 +514,145 @@ class TestProcessAudioModulate(unittest.TestCase):
                     loop.run_until_complete(process_audio_modulate(lambda s: None, 16000, 'en'))
         finally:
             loop.close()
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.streaming.websockets')
+    def test_successful_connection(self, mock_ws_module):
+        from utils.stt.streaming import process_audio_modulate
+
+        mock_ws = AsyncMock()
+        mock_ws.__aiter__ = AsyncMock(return_value=iter([]))
+        mock_ws.close = AsyncMock()
+        mock_ws_module.connect = AsyncMock(return_value=mock_ws)
+        mock_ws_module.exceptions = MagicMock()
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                sock = await process_audio_modulate(lambda s: None, 16000, 'en')
+                return sock
+
+            sock = loop.run_until_complete(run())
+            self.assertTrue(hasattr(sock, '_is_safe_dg_socket'))
+            call_args = mock_ws_module.connect.call_args
+            uri = call_args[0][0]
+            self.assertNotIn('api_key', uri)
+            self.assertIn('sample_rate=16000', uri)
+            self.assertIn('speaker_diarization=true', uri)
+            self.assertIn('language=en', uri)
+            headers = call_args[1].get('extra_headers', {})
+            self.assertEqual(headers.get('X-API-Key'), 'test-key')
+        finally:
+            loop.close()
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.streaming.websockets')
+    def test_multi_language_omitted_from_url(self, mock_ws_module):
+        from utils.stt.streaming import process_audio_modulate
+
+        mock_ws = AsyncMock()
+        mock_ws.__aiter__ = AsyncMock(return_value=iter([]))
+        mock_ws.close = AsyncMock()
+        mock_ws_module.connect = AsyncMock(return_value=mock_ws)
+        mock_ws_module.exceptions = MagicMock()
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                return await process_audio_modulate(lambda s: None, 16000, 'multi')
+
+            loop.run_until_complete(run())
+            uri = mock_ws_module.connect.call_args[0][0]
+            self.assertNotIn('language=', uri)
+        finally:
+            loop.close()
+
+
+class TestPrerecordedRequestShape(unittest.TestCase):
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_request_url_and_headers(self, mock_client_cls):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'utterances': []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        call_kwargs = mock_client.post.call_args
+        self.assertEqual(call_kwargs[1]['headers'], {'X-API-Key': 'test-key'})
+        self.assertIn('velma-2-stt-batch', call_kwargs[0][0])
+        self.assertEqual(call_kwargs[1]['data'], {'speaker_diarization': 'true'})
+        mock_client_cls.assert_called_once_with(timeout=300)
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_retry_then_success(self, mock_client_cls):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        success_response = MagicMock()
+        success_response.json.return_value = {
+            'utterances': [{'text': 'ok', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1}]
+        }
+        success_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.side_effect = [Exception('timeout'), success_response]
+        mock_client_cls.return_value = mock_client
+
+        result = modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['text'], 'ok')
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_diarize_false(self, mock_client_cls):
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'utterances': []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        modulate_prerecorded_from_bytes(b'\x00' * 100, 16000, diarize=False)
+        call_kwargs = mock_client.post.call_args
+        self.assertEqual(call_kwargs[1]['data'], {'speaker_diarization': 'false'})
+
+
+class TestLanguageRoutingExtended(unittest.TestCase):
+    @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
+    def test_multi_lang_disabled(self):
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
+        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(lang, 'fr')
+
+    @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
+    def test_multi_lang_enabled_french(self):
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
+        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(lang, 'multi')
+
+    @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
+    def test_empty_language_fallback(self):
+        service, lang, model = get_stt_service_for_language('')
+        self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(lang, 'en')
 
 
 if __name__ == '__main__':
