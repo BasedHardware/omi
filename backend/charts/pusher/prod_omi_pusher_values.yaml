@@ -138,6 +138,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
