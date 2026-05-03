@@ -90,14 +90,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         title: dialogContext.l10n.pairingLostTitle,
         description: dialogContext.l10n.pairingLostBody,
         confirmText: dialogContext.l10n.pairingLostButton,
-        onConfirm: () {
+        onConfirm: () async {
           Navigator.pop(dialogContext);
-          // Fire-and-forget: open the system Bluetooth settings page so the user
-          // can forget the existing Omi entry. iOS uses App-Prefs:root=Bluetooth
-          // (with a fallback to UIApplication.openSettingsURLString); Android
-          // fires Settings.ACTION_BLUETOOTH_SETTINGS.
+          // Open the system Bluetooth settings page so the user can forget the
+          // existing Omi entry. iOS uses App-Prefs:root=Bluetooth (with a fallback
+          // to UIApplication.openSettingsURLString); Android fires
+          // Settings.ACTION_BLUETOOTH_SETTINGS. await so PlatformException from
+          // the Pigeon channel is caught here rather than escaping as an
+          // unhandled future error.
           try {
-            BleHostApi().openBluetoothSettings();
+            await BleHostApi().openBluetoothSettings();
           } catch (e) {
             Logger.debug('openBluetoothSettings failed: $e');
           }
@@ -380,6 +382,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
+    BleBridge.instance.pairingLostCallback = null;
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }

@@ -104,15 +104,22 @@ final class BleHostApiImpl: BleHostApi {
     }
 
     func openBluetoothSettings() throws {
-        // Try the Bluetooth-specific deep-link first; Apple has restricted this URL on
-        // newer iOS versions, in which case the system silently ignores it. Fall back
-        // to the app's settings page (UIApplication.openSettingsURLString) which is
-        // guaranteed to open and at least gets the user into Settings.
+        // Try the Bluetooth-specific deep-link first; Apple has restricted this URL
+        // on newer iOS versions. canOpenURL would always return false here without
+        // an LSApplicationQueriesSchemes entry for App-Prefs (a non-public scheme),
+        // so check the open() completion handler's success flag instead — that
+        // reflects what actually happened. Fall back to the app's settings page
+        // (UIApplication.openSettingsURLString) which is guaranteed to open and at
+        // least gets the user into Settings.
         let bluetoothUrl = URL(string: "App-Prefs:root=Bluetooth")
         let appSettingsUrl = URL(string: UIApplication.openSettingsURLString)
         DispatchQueue.main.async {
-            if let url = bluetoothUrl, UIApplication.shared.canOpenURL(url) {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            if let url = bluetoothUrl {
+                UIApplication.shared.open(url, options: [:]) { success in
+                    if !success, let settingsUrl = appSettingsUrl {
+                        UIApplication.shared.open(settingsUrl, options: [:], completionHandler: nil)
+                    }
+                }
             } else if let url = appSettingsUrl {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
             }
