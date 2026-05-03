@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import 'package:nooto_v2/library/conversation_model.dart';
+import 'package:nooto_v2/library/conversations_provider.dart';
+import 'package:nooto_v2/library/widgets/app_result_markdown.dart';
+import 'package:nooto_v2/library/widgets/summarized_apps_sheet.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 final _detailDateFormat = DateFormat('EEEE, MMM d · h:mm a');
@@ -9,6 +13,12 @@ final _detailDateFormat = DateFormat('EEEE, MMM d · h:mm a');
 /// Conversation detail screen — title, when, overview, action items, and
 /// transcript segments. Pushed by the Meetings list and by the "View
 /// conversation" affordance on a memory row.
+///
+/// The OVERVIEW slot renders the active app's markdown via
+/// [AppResultMarkdown]. Falls back to plain `Structured.overview` when no
+/// app summary exists. Tap the attribution row to swap apps via
+/// [SummarizedAppsBottomSheet]; the screen rebuilds when
+/// [ConversationsProvider] reprocess completes.
 class ConversationDetailScreen extends StatelessWidget {
   const ConversationDetailScreen({super.key, required this.item});
 
@@ -16,6 +26,14 @@ class ConversationDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Read the latest conversation from the provider when one is in scope —
+    // `reprocessWithApp` splices a fresh ConversationItem into the cache,
+    // so reading from the provider lets the screen rebuild with new
+    // apps_results without a re-push. Falls back to the constructor item
+    // when hosted outside a ConversationsProvider (e.g. widget tests).
+    final ConversationsProvider? convs = context.watch<ConversationsProvider?>();
+    final ConversationItem item = convs?.byId(this.item.id) ?? this.item;
+    final reprocessing = convs?.isReprocessing(item.id) ?? false;
     final raw = item.raw;
     final structured = raw['structured'] is Map
         ? Map<String, dynamic>.from(raw['structured'] as Map)
@@ -74,15 +92,16 @@ class ConversationDetailScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (item.overview.trim().isNotEmpty) ...[
-            _SectionHeader(label: 'OVERVIEW'),
+          if (item.overview.trim().isNotEmpty || item.summarizedApp != null || reprocessing) ...[
+            const _SectionHeader(label: 'OVERVIEW'),
             const SizedBox(height: AppStyles.spacingS),
-            Text(
-              item.overview.trim(),
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textSecondary,
-                height: 1.5,
+            AppResultMarkdown(
+              item: item,
+              reprocessing: reprocessing,
+              onPickApp: () => SummarizedAppsBottomSheet.show(
+                context,
+                conversationId: item.id,
+                currentAppId: item.summarizedApp?.appId,
               ),
             ),
             const SizedBox(height: AppStyles.spacingXL),
