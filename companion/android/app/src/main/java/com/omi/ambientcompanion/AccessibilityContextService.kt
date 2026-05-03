@@ -21,6 +21,7 @@ class AccessibilityContextService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     private fun maybeCollectCaption(event: AccessibilityEvent, packageName: String?) {
+        if (!AppPrefs(this).allowCaptionFallback) return
         if (packageName !in captionPackages) return
         val className = event.className?.toString()?.lowercase().orEmpty()
         val looksLikeCaptionSurface = captionClassTokens.any { className.contains(it) }

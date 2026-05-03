@@ -30,6 +30,15 @@ class PolicyVerifier(private val prefs: AppPrefs) {
         val validUntil = Instant.parse(payload.optString("valid_until"))
         if (validUntil <= now) return PolicyVerifyResult(false, "expired")
         if (issuedAt.isAfter(now.plusSeconds(300))) return PolicyVerifyResult(false, "issued_in_future")
+        prefs.silenceDetectionSeconds = payload.optInt("silence_detection_seconds", prefs.silenceDetectionSeconds)
+        prefs.rmsSilenceDbfsThreshold = payload.optDouble(
+            "rms_silence_dbfs_threshold",
+            prefs.rmsSilenceDbfsThreshold.toDouble(),
+        ).toFloat()
+        prefs.zeroFrameThreshold = payload.optDouble("zero_frame_threshold", prefs.zeroFrameThreshold.toDouble()).toFloat()
+        prefs.allowAudioUpload = payload.optBoolean("allow_audio_upload", prefs.allowAudioUpload)
+        prefs.allowLocalSttFallback = payload.optBoolean("allow_local_stt_fallback", prefs.allowLocalSttFallback)
+        prefs.allowCaptionFallback = payload.optBoolean("allow_caption_fallback", prefs.allowCaptionFallback)
         prefs.lastAcceptedSequence = sequence
         return PolicyVerifyResult(true, "ok", payload)
     }

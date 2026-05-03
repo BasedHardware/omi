@@ -9,7 +9,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from models import CaptureSettings
 
-
 DEFAULT_DB_PATH = Path(__file__).with_name("ambient_second_brain.sqlite3")
 DATABASE_URL = os.getenv("DATABASE_URL") or str(DEFAULT_DB_PATH)
 
@@ -39,8 +38,7 @@ def now_iso() -> str:
 
 def init_db() -> None:
     with connect() as conn:
-        conn.executescript(
-            """
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
                 omi_user_id TEXT PRIMARY KEY,
                 created_at TEXT NOT NULL
@@ -92,6 +90,25 @@ def init_db() -> None:
                 foreground_app TEXT,
                 metadata TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS capture_audio_spools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                omi_user_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                bytes INTEGER NOT NULL,
+                duration_estimate REAL NOT NULL,
+                sample_rate INTEGER NOT NULL,
+                channels INTEGER NOT NULL,
+                codec TEXT NOT NULL,
+                status TEXT NOT NULL,
+                omi_conversation_id TEXT,
+                metadata TEXT NOT NULL,
+                dedupe_key TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                imported_at TEXT
             );
             CREATE TABLE IF NOT EXISTS fallback_segments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,8 +172,7 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            """
-        )
+            """)
 
 
 def row_to_dict(row: sqlite3.Row | None) -> Optional[Dict[str, Any]]:
@@ -353,6 +369,42 @@ def store_fallback_segment(segment: Dict[str, Any]) -> bool:
                     json.dumps(segment["metadata"], sort_keys=True),
                     segment["dedupe_key"],
                     now_iso(),
+                ),
+            )
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def store_audio_spool(spool: Dict[str, Any]) -> bool:
+    try:
+        with connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO capture_audio_spools (
+                    omi_user_id, device_id, session_id, filename, file_path, bytes, duration_estimate,
+                    sample_rate, channels, codec, status, omi_conversation_id, metadata, dedupe_key,
+                    created_at, imported_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    spool["omi_user_id"],
+                    spool["device_id"],
+                    spool["session_id"],
+                    spool["filename"],
+                    spool["file_path"],
+                    spool["bytes"],
+                    spool["duration_estimate"],
+                    spool["sample_rate"],
+                    spool["channels"],
+                    spool["codec"],
+                    spool["status"],
+                    spool.get("omi_conversation_id"),
+                    json.dumps(spool.get("metadata", {}), sort_keys=True),
+                    spool["dedupe_key"],
+                    now_iso(),
+                    spool.get("imported_at"),
                 ),
             )
         return True

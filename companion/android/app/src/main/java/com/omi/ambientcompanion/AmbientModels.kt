@@ -59,10 +59,18 @@ data class FallbackSegment(
     val foregroundApp: String? = null,
     val uploaded: Boolean = false,
 ) {
+    fun apiSource(): String = when (source) {
+        FallbackSource.LOCAL_STT -> "local_stt"
+        FallbackSource.ACCESSIBILITY_CAPTION -> "accessibility_caption"
+        FallbackSource.LIVE_CAPTION_NOTIFICATION -> "live_caption"
+        FallbackSource.SOUND_NOTIFICATION -> "gap_marker"
+        FallbackSource.GAP_MARKER -> "gap_marker"
+    }
+
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("text", text)
-        .put("source", source.name.lowercase())
+        .put("source", apiSource())
         .put("start", start.toString())
         .put("end", end.toString())
         .put("confidence", confidence)
@@ -72,10 +80,19 @@ data class FallbackSegment(
         .put("uploaded", uploaded)
 
     companion object {
+        private fun sourceFromApi(value: String): FallbackSource = when (value) {
+            "local_stt" -> FallbackSource.LOCAL_STT
+            "accessibility_caption" -> FallbackSource.ACCESSIBILITY_CAPTION
+            "live_caption" -> FallbackSource.LIVE_CAPTION_NOTIFICATION
+            "sound_notification" -> FallbackSource.SOUND_NOTIFICATION
+            "gap_marker" -> FallbackSource.GAP_MARKER
+            else -> FallbackSource.valueOf(value.uppercase())
+        }
+
         fun fromJson(json: JSONObject): FallbackSegment = FallbackSegment(
             id = json.optString("id"),
             text = json.optString("text"),
-            source = FallbackSource.valueOf(json.optString("source").uppercase()),
+            source = sourceFromApi(json.optString("source")),
             start = Instant.parse(json.optString("start")),
             end = Instant.parse(json.optString("end")),
             confidence = if (json.has("confidence") && !json.isNull("confidence")) json.optDouble("confidence") else null,

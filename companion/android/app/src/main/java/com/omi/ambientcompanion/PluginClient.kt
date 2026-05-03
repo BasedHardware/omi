@@ -3,8 +3,11 @@ package com.omi.ambientcompanion
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.Instant
 
 class PluginClient(private val context: Context) {
@@ -31,6 +34,7 @@ class PluginClient(private val context: Context) {
         prefs.policyUrl = json.optString("policy_url")
         prefs.telemetryUrl = json.optString("telemetry_url")
         prefs.fallbackSegmentsUrl = json.optString("fallback_segments_url")
+        prefs.audioSpoolUrl = json.optString("audio_spool_url", "${prefs.pluginBaseUrl}/capture/audio-spool")
         prefs.controllerPublicKey = json.optString("plugin_public_key")
         prefs.controllerKeyId = json.optString("key_id")
         secureStore.putSecret("device_token", json.optString("device_token"))
@@ -85,20 +89,25 @@ class PluginClient(private val context: Context) {
     }
 
     fun uploadAudioFile(meta: SpoolMetadata, chunks: Sequence<ByteArray>): Boolean {
-        val url = prefs.pluginBaseUrl.ifBlank { return false } + "/webhooks/omi/audio-bytes"
-        val bytes = chunks.fold(java.io.ByteArrayOutputStream()) { out, chunk ->
+        val url = prefs.audioSpoolUrl.ifBlank { prefs.pluginBaseUrl.ifBlank { return false } + "/capture/audio-spool" }
+        val bytes = chunks.fold(ByteArrayOutputStream()) { out, chunk ->
+            out.write(intLe(chunk.size))
             out.write(chunk)
             out
         }.toByteArray()
         if (bytes.isEmpty()) return false
+        val filename = "ambient_android_pcm16_16000_1_${meta.startedAt.toEpochMilli()}_1.bin"
         val body = JSONObject()
             .put("omi_user_id", prefs.omiUserId)
             .put("device_id", prefs.deviceId)
             .put("session_id", meta.sessionId)
+            .put("filename", filename)
             .put("started_at", meta.startedAt.toString())
+            .put("duration_estimate", meta.durationEstimateSeconds)
             .put("sample_rate", 16000)
             .put("channels", 1)
             .put("codec", "pcm16")
+            .put("format", "length_prefixed_pcm")
             .put("audio_base64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
         val response = request("POST", url, body.toString(), authHeaders())
         return response.status in 200..299
@@ -106,8 +115,20 @@ class PluginClient(private val context: Context) {
 
     private fun authHeaders(): Map<String, String> {
         val token = secureStore.getSecret("device_token")
-        return if (token.isBlank()) emptyMap() else mapOf("Authorization" to "Bearer $token")
+        return if (token.isBlank()) {
+            emptyMap()
+        } else {
+            mapOf(
+                "Authorization" to "Bearer $token",
+                "X-Omi-User-Id" to prefs.omiUserId,
+                "X-Omi-Device-Id" to prefs.deviceId,
+                "X-Omi-App-Id" to PolicyVerifier.PLUGIN_ID,
+                "X-Last-Policy-Sequence" to prefs.lastAcceptedSequence.toString(),
+            )
+        }
     }
+
+    private fun intLe(value: Int): ByteArray = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array()
 
     private fun request(method: String, url: String, body: String?, headers: Map<String, String>): HttpResponse {
         return try {

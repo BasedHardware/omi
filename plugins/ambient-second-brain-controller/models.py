@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-
 PLUGIN_ID = "ambient_second_brain_controller"
 POLICY_SCOPE = "ambient_capture_controller"
 
@@ -34,6 +33,7 @@ class DeviceRegisterResponse(BaseModel):
     policy_url: str
     telemetry_url: str
     fallback_segments_url: str
+    audio_spool_url: str
     plugin_public_key: str
     key_id: str
     key_fingerprint: str
@@ -137,6 +137,21 @@ class FallbackSegmentsRequest(BaseModel):
     device_id: str
     session_id: str
     segments: List[FallbackSegmentIn]
+
+
+class AudioSpoolUploadRequest(BaseModel):
+    omi_user_id: str
+    device_id: str
+    session_id: str
+    filename: str
+    started_at: datetime
+    duration_estimate: float = 0.0
+    sample_rate: int = 16000
+    channels: int = 1
+    codec: Literal["pcm16"] = "pcm16"
+    format: Literal["length_prefixed_pcm"] = "length_prefixed_pcm"
+    audio_base64: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class OmiWebhookPayload(BaseModel):

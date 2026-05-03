@@ -25,6 +25,7 @@ class MainActivity : Activity() {
     private lateinit var prefs: AppPrefs
     private lateinit var status: TextView
     private lateinit var audit: TextView
+    private lateinit var storage: TextView
     private lateinit var pluginUrl: EditText
     private lateinit var userId: EditText
 
@@ -90,12 +91,19 @@ class MainActivity : Activity() {
             button("Battery") { openBatterySettings() },
             button("App Info") { openAppInfo() },
         ))
+        root.addView(row(
+            button("Delete Synced") { deleteSpool("synced") },
+            button("Delete Pending") { deleteSpool("pending") },
+            button("Delete All Audio") { deleteSpool(null) },
+        ))
         status = text("Status: ${AmbientForegroundMicService.lastHealthState().name}", 16, bold = true)
         root.addView(status)
-        root.addView(text("Storage: ${CaptureSpoolStore(this).stats()}", 12))
+        storage = text("", 12)
+        root.addView(storage)
         audit = text("", 12)
         root.addView(text("Audit log", 18, bold = true))
         root.addView(audit)
+        refreshStorage()
         return ScrollView(this).apply { addView(root) }
     }
 
@@ -134,6 +142,20 @@ class MainActivity : Activity() {
 
     private fun refreshAudit() {
         audit.text = AuditLog(this).tail(40).joinToString("\n")
+        refreshStorage()
+    }
+
+    private fun refreshStorage() {
+        if (::storage.isInitialized) {
+            val currentSession = CaptureSessionStore(this).current()?.toString() ?: "none"
+            storage.text = "Storage: ${CaptureSpoolStore(this).stats()}\nCurrent session: $currentSession"
+        }
+    }
+
+    private fun deleteSpool(status: String?) {
+        CaptureSpoolStore(this).deleteByStatus(status)
+        AuditLog(this).record("spool_deleted", mapOf("status" to (status ?: "all")))
+        refreshAudit()
     }
 
     private fun prettyHealth(json: JSONObject): String {

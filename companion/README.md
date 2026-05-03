@@ -14,7 +14,9 @@ This is not an Omi plugin and does not modify the official Omi app. The plugin r
 - Uses NotificationListenerService for meeting/call/Sound Notifications/Live Transcribe context triggers.
 - Detects communication mode, mic silencing, low signal, network buffering, private mode, and storage limits.
 - Registers with `plugins/ambient-second-brain-controller` and pins its policy key.
-- Uploads telemetry, fallback segments, and audio payloads to the controller backend.
+- Uploads telemetry, fallback segments, and decrypted length-prefixed PCM spools to the controller backend.
+- The controller can forward companion PCM files into Omi's existing `/v1/sync-local-files` audio pipeline.
+- Tracks capture sessions, storage status, and local delete pending/synced/all-audio controls.
 
 ## Build
 
@@ -54,4 +56,4 @@ The app does not auto-record after reboot. Boot handling only resets stale recov
 
 - Local STT has a worker hook and spool drain point, but no bundled Whisper/model runtime yet.
 - MediaProjection is scaffolded as an explicit-session service; full screen/internal-audio capture UI is not wired yet.
-- Audio upload targets the plugin `/webhooks/omi/audio-bytes` endpoint; final Omi conversation import depends on the controller/backend deployment.
+- Audio upload targets the plugin `/capture/audio-spool` endpoint. Final Omi conversation import depends on `OMI_API_BASE_URL` and `OMI_API_KEY`/`OMI_APP_SECRET` being configured for the controller deployment.

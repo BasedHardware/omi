@@ -30,6 +30,7 @@ object ContextSignals {
     }
 
     fun enqueueCaption(context: Context, text: String, source: FallbackSource) {
+        if (!AppPrefs(context).allowCaptionFallback) return
         val normalized = text.trim().replace(Regex("\\s+"), " ")
         if (normalized.length < 3 || normalized == lastCaptionText) return
         lastCaptionText = normalized

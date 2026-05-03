@@ -6,6 +6,7 @@ from fastapi import Body, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 import accountability
+import audio_spool
 import fallback_segments
 import integrations
 import policy
@@ -20,6 +21,7 @@ from models import (
     ChatToolCall,
     DeviceRegisterRequest,
     DeviceRegisterResponse,
+    AudioSpoolUploadRequest,
     DeviceRevokeRequest,
     FallbackSegmentsRequest,
     OmiWebhookPayload,
@@ -123,6 +125,7 @@ def register_device(request: DeviceRegisterRequest):
         policy_url=f"{base_url()}/capture/policy/current",
         telemetry_url=f"{base_url()}/capture/telemetry",
         fallback_segments_url=f"{base_url()}/capture/fallback-segments",
+        audio_spool_url=f"{base_url()}/capture/audio-spool",
         plugin_public_key=public_key,
         key_id=security.get_key_id(),
         key_fingerprint=security.key_fingerprint(public_key),
@@ -164,13 +167,32 @@ def current_policy(
 
 
 @app.post("/capture/telemetry")
-def capture_telemetry(event: TelemetryIn):
+def capture_telemetry(
+    event: TelemetryIn,
+    authorization: Optional[str] = Header(default=None),
+    x_omi_app_id: str = Header(default=PLUGIN_ID, alias="X-Omi-App-Id"),
+):
+    policy.authenticate_device(event.omi_user_id, event.device_id, x_omi_app_id, authorization)
     return telemetry.ingest_telemetry(event)
 
 
 @app.post("/capture/fallback-segments")
-def capture_fallback_segments(request: FallbackSegmentsRequest):
+def capture_fallback_segments(
+    request: FallbackSegmentsRequest,
+    authorization: Optional[str] = Header(default=None),
+    x_omi_app_id: str = Header(default=PLUGIN_ID, alias="X-Omi-App-Id"),
+):
+    policy.authenticate_device(request.omi_user_id, request.device_id, x_omi_app_id, authorization)
     return fallback_segments.ingest_fallback_segments(request)
+
+
+@app.post("/capture/audio-spool")
+def capture_audio_spool(
+    request: AudioSpoolUploadRequest,
+    authorization: Optional[str] = Header(default=None),
+    x_omi_app_id: str = Header(default=PLUGIN_ID, alias="X-Omi-App-Id"),
+):
+    return audio_spool.ingest_audio_spool(request, authorization, x_omi_app_id)
 
 
 @app.get("/settings")
@@ -202,7 +224,7 @@ def transcript_processed(payload: OmiWebhookPayload):
 @app.post("/webhooks/omi/audio-bytes")
 def audio_bytes_webhook(payload: Dict[str, Any]):
     storage.audit(payload.get("omi_user_id") or payload.get("user_id"), None, "audio_bytes_webhook_ignored", {})
-    return {"status": "ignored", "reason": "plugin_does_not_accept_audio"}
+    return {"status": "ignored", "reason": "use /capture/audio-spool with device token auth"}
 
 
 @app.post("/tools/{tool_name}")

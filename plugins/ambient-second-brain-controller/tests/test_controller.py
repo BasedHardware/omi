@@ -1,4 +1,6 @@
+import base64
 import json
+import struct
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import security
 import storage
+import audio_spool
 import task_extraction
 from main import app
 
@@ -17,6 +20,7 @@ from main import app
 @pytest.fixture(autouse=True)
 def temp_db(tmp_path, monkeypatch):
     storage.DATABASE_URL = str(tmp_path / "test.sqlite3")
+    audio_spool.AUDIO_DIR = tmp_path / "audio_spool_uploads"
     monkeypatch.setenv("WEBHOOK_BASE_URL", "http://testserver")
     monkeypatch.setenv("AMBIENT_PLUGIN_ID", "ambient_second_brain_controller")
     storage.init_db()
@@ -109,9 +113,10 @@ def test_revoked_device_cannot_receive_policy(client):
 
 
 def test_telemetry_storage_and_unsafe_rejection(client):
-    register(client)
+    registration = register(client)
     ok = client.post(
         "/capture/telemetry",
+        headers=policy_headers(registration["device_token"]),
         json={
             "omi_user_id": "user-1",
             "device_id": "device-1",
@@ -124,6 +129,7 @@ def test_telemetry_storage_and_unsafe_rejection(client):
     )
     bad = client.post(
         "/capture/telemetry",
+        headers=policy_headers(registration["device_token"]),
         json={
             "omi_user_id": "user-1",
             "device_id": "device-1",
@@ -138,7 +144,7 @@ def test_telemetry_storage_and_unsafe_rejection(client):
 
 
 def test_fallback_segment_storage_and_dedupe(client):
-    register(client)
+    registration = register(client)
     payload = {
         "omi_user_id": "user-1",
         "device_id": "device-1",
@@ -156,12 +162,61 @@ def test_fallback_segment_storage_and_dedupe(client):
         ],
     }
 
-    first = client.post("/capture/fallback-segments", json=payload)
-    second = client.post("/capture/fallback-segments", json=payload)
+    first = client.post(
+        "/capture/fallback-segments", headers=policy_headers(registration["device_token"]), json=payload
+    )
+    second = client.post(
+        "/capture/fallback-segments", headers=policy_headers(registration["device_token"]), json=payload
+    )
 
     assert first.json()["inserted"] == 1
     assert second.json()["inserted"] == 0
     assert second.json()["skipped"] == 1
+
+
+def test_capture_endpoints_require_device_token(client):
+    register(client)
+    event = {
+        "omi_user_id": "user-1",
+        "device_id": "device-1",
+        "event_type": "audio_ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "metadata": {},
+    }
+
+    response = client.post("/capture/telemetry", json=event)
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "missing_device_token"
+
+
+def test_audio_spool_storage_and_dedupe(client):
+    registration = register(client)
+    pcm = b"\x01\x00" * 320
+    audio = struct.pack("<I", len(pcm)) + pcm
+    payload = {
+        "omi_user_id": "user-1",
+        "device_id": "device-1",
+        "session_id": "session-audio-1",
+        "filename": "ambient_android_pcm16_16000_1_1715000000000_1.bin",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "duration_estimate": 0.04,
+        "sample_rate": 16000,
+        "channels": 1,
+        "codec": "pcm16",
+        "format": "length_prefixed_pcm",
+        "audio_base64": base64.b64encode(audio).decode("ascii"),
+    }
+
+    first = client.post("/capture/audio-spool", headers=policy_headers(registration["device_token"]), json=payload)
+    second = client.post("/capture/audio-spool", headers=policy_headers(registration["device_token"]), json=payload)
+
+    assert first.status_code == 200
+    assert first.json()["inserted"] is True
+    assert first.json()["imported"] is False
+    assert first.json()["frames"] == 1
+    assert second.status_code == 200
+    assert second.json()["inserted"] is False
 
 
 def test_task_extraction_confidence_levels():

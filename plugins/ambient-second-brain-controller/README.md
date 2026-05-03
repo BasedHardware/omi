@@ -47,6 +47,7 @@ PY
 - `GET /capture/policy/current`
 - `POST /capture/telemetry`
 - `POST /capture/fallback-segments`
+- `POST /capture/audio-spool`
 - `POST /webhooks/omi/memory-created`
 - `POST /webhooks/omi/transcript-processed`
 - `POST /webhooks/omi/audio-bytes`
@@ -61,12 +62,21 @@ PY
 - policy URL
 - telemetry URL
 - fallback segments URL
+- audio spool URL
 - plugin public key
 - key id
 - key fingerprint
 - device token
 
-The device token is used as `Authorization: Bearer <device_token>` for policy pulls.
+The device token is used as `Authorization: Bearer <device_token>` for policy pulls, telemetry, fallback segments,
+and audio spool uploads.
+
+## Audio Spool Import
+
+`POST /capture/audio-spool` accepts the companion app's length-prefixed PCM16/16 kHz/mono `.bin` payload, validates
+the frame format, stores it locally, and forwards it to Omi's existing `/v1/sync-local-files` pipeline when
+`OMI_API_BASE_URL` plus `OMI_API_KEY` or `OMI_APP_SECRET` are configured. The plugin still does not capture audio
+itself; it only receives explicitly uploaded local spools from the registered device.
 
 ## Conservative Defaults
 
@@ -90,6 +100,7 @@ Covered:
 - revoked device policy denial
 - telemetry storage and unsafe field rejection
 - fallback segment storage and dedupe
+- audio spool storage and dedupe
 - task extraction confidence levels
 - chat tools manifest schema
 - settings persistence

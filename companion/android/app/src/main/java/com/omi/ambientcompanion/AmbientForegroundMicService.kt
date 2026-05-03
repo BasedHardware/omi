@@ -23,16 +23,18 @@ import kotlin.concurrent.thread
 
 class AmbientForegroundMicService : Service() {
     private lateinit var spoolStore: CaptureSpoolStore
+    private lateinit var sessionStore: CaptureSessionStore
     private lateinit var audit: AuditLog
     private lateinit var pluginClient: PluginClient
     private lateinit var communicationMonitor: CommunicationStateMonitor
+    private lateinit var prefs: AppPrefs
     private var recorder: AudioRecord? = null
     private var captureThread: Thread? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val capturing = AtomicBoolean(false)
     private val paused = AtomicBoolean(false)
     private val privateMode = AtomicBoolean(false)
-    private val vad = VadWatchEngine()
+    private var vad = VadWatchEngine()
     private var lastHealth = HealthEvent(AmbientHealthState.IDLE_CONTEXT_WATCH, "created")
     private var speechSessionActive = false
     private var lastAudioAt = 0L
@@ -42,7 +44,9 @@ class AmbientForegroundMicService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        prefs = AppPrefs(this)
         spoolStore = CaptureSpoolStore(this)
+        sessionStore = CaptureSessionStore(this)
         audit = AuditLog(this)
         pluginClient = PluginClient(this)
         communicationMonitor = CommunicationStateMonitor(this) { health -> updateHealth(health) }
@@ -68,12 +72,14 @@ class AmbientForegroundMicService : Service() {
 
     private fun startCapture(reason: String) {
         if (capturing.get()) return
+        configureVadFromPrefs()
         startForeground(NOTIFICATION_ID, buildNotification("VAD watch"))
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             updateHealth(HealthEvent(AmbientHealthState.PERMISSION_MISSING, "record_audio_missing"))
             return
         }
-        AppPrefs(this).explicitSessionStarted = true
+        prefs.explicitSessionStarted = true
+        sessionStore.start(reason)
         ContextSignals.lastTriggerReason = reason
         paused.set(false)
         privateMode.set(false)
@@ -156,6 +162,7 @@ class AmbientForegroundMicService : Service() {
 
     private fun pauseCapture() {
         paused.set(true)
+        sessionStore.update("paused", AmbientHealthState.VAD_WATCH)
         if (speechSessionActive) spoolStore.closeSession()
         speechSessionActive = false
         releaseWakeLock()
@@ -168,6 +175,7 @@ class AmbientForegroundMicService : Service() {
     private fun resumeCapture() {
         paused.set(false)
         privateMode.set(false)
+        sessionStore.update("running", AmbientHealthState.VAD_WATCH)
         updateHealth(HealthEvent(AmbientHealthState.VAD_WATCH, "resumed"))
         updateNotification("VAD watch")
         audit.record("capture_resumed")
@@ -177,6 +185,7 @@ class AmbientForegroundMicService : Service() {
     private fun enterPrivateMode() {
         privateMode.set(true)
         paused.set(true)
+        sessionStore.finish("private")
         if (speechSessionActive) spoolStore.closeSession("private")
         speechSessionActive = false
         releaseWakeLock()
@@ -197,6 +206,7 @@ class AmbientForegroundMicService : Service() {
         communicationMonitor.stop()
         stopPolicyLoop()
         recorder = null
+        sessionStore.finish("stopped")
         updateHealth(HealthEvent(AmbientHealthState.IDLE_CONTEXT_WATCH, "stopped"))
         audit.record("capture_stopped")
         pluginClient.sendTelemetry("capture_stopped", lastHealth)
@@ -210,6 +220,7 @@ class AmbientForegroundMicService : Service() {
         policyLoop = Runnable {
             val result = pluginClient.fetchPolicy()
             if (result.accepted) {
+                configureVadFromPrefs()
                 audit.record("policy_applied")
             } else {
                 audit.record("policy_rejected", mapOf("reason" to result.reason))
@@ -223,6 +234,14 @@ class AmbientForegroundMicService : Service() {
     private fun stopPolicyLoop() {
         policyLoop?.let { mainHandler.removeCallbacks(it) }
         policyLoop = null
+    }
+
+    private fun configureVadFromPrefs() {
+        vad = VadWatchEngine(
+            rmsSpeechDbfsThreshold = prefs.rmsSilenceDbfsThreshold.toDouble(),
+            zeroRatioSilenceThreshold = prefs.zeroFrameThreshold.toDouble(),
+            silenceFramesToEnd = (prefs.silenceDetectionSeconds * 1000 / 30).coerceAtLeast(10),
+        )
     }
 
     private fun updateHealth(event: HealthEvent) {

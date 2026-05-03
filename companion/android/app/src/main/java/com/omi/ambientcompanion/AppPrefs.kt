@@ -48,6 +48,10 @@ class AppPrefs(context: Context) {
         get() = prefs.getString("fallback_segments_url", "") ?: ""
         set(value) = prefs.edit().putString("fallback_segments_url", value).apply()
 
+    var audioSpoolUrl: String
+        get() = prefs.getString("audio_spool_url", "") ?: ""
+        set(value) = prefs.edit().putString("audio_spool_url", value).apply()
+
     var lastAcceptedSequence: Long
         get() = prefs.getLong("last_accepted_sequence", 0)
         set(value) = prefs.edit().putLong("last_accepted_sequence", value).apply()
@@ -63,4 +67,32 @@ class AppPrefs(context: Context) {
     var minFreeStorageMb: Int
         get() = prefs.getInt("min_free_storage_mb", 512)
         set(value) = prefs.edit().putInt("min_free_storage_mb", value).apply()
+
+    var deleteSyncedAudio: Boolean
+        get() = prefs.getBoolean("delete_synced_audio", true)
+        set(value) = prefs.edit().putBoolean("delete_synced_audio", value).apply()
+
+    var silenceDetectionSeconds: Int
+        get() = prefs.getInt("silence_detection_seconds", 12)
+        set(value) = prefs.edit().putInt("silence_detection_seconds", value).apply()
+
+    var rmsSilenceDbfsThreshold: Float
+        get() = prefs.getFloat("rms_silence_dbfs_threshold", -60f)
+        set(value) = prefs.edit().putFloat("rms_silence_dbfs_threshold", value).apply()
+
+    var zeroFrameThreshold: Float
+        get() = prefs.getFloat("zero_frame_threshold", 0.98f)
+        set(value) = prefs.edit().putFloat("zero_frame_threshold", value).apply()
+
+    var allowAudioUpload: Boolean
+        get() = prefs.getBoolean("allow_audio_upload", true)
+        set(value) = prefs.edit().putBoolean("allow_audio_upload", value).apply()
+
+    var allowCaptionFallback: Boolean
+        get() = prefs.getBoolean("allow_caption_fallback", true)
+        set(value) = prefs.edit().putBoolean("allow_caption_fallback", value).apply()
+
+    var allowLocalSttFallback: Boolean
+        get() = prefs.getBoolean("allow_local_stt_fallback", true)
+        set(value) = prefs.edit().putBoolean("allow_local_stt_fallback", value).apply()
 }
