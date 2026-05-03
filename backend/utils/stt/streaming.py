@@ -580,8 +580,9 @@ class SafeModulateSocket:
 
     async def drain_and_close(self):
         try:
-            # Drain queued audio through send loop, then send EOS via queue
-            # to avoid racing EOS ahead of buffered audio
+            # Yield to process any pending call_soon_threadsafe(send) callbacks
+            # before enqueueing EOS, ensuring all buffered audio is queued first
+            await asyncio.sleep(0)
             _EOS_SENTINEL = b'__EOS__'
             await self._send_queue.put(_EOS_SENTINEL)
             # Wait for send loop to finish (it exits on EOS sentinel)
