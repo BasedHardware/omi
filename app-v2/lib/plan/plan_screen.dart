@@ -109,6 +109,7 @@ class _PlanScreenState extends State<PlanScreen> {
               ),
               sliver: _GroupsSliver(
                 groups: PlanGrouping.group(items, pivot: _pivot),
+                pivot: _pivot,
                 onToggle: (id) async {
                   HapticFeedback.lightImpact();
                   await provider.complete(id);
@@ -235,6 +236,7 @@ List<String> _transitionOptionsFor(String? statusType) {
 class _GroupsSliver extends StatelessWidget {
   const _GroupsSliver({
     required this.groups,
+    required this.pivot,
     required this.onToggle,
     required this.onProjectTap,
     required this.jiraSwipeEnabled,
@@ -244,6 +246,7 @@ class _GroupsSliver extends StatelessWidget {
   });
 
   final List<PlanGroup> groups;
+  final PlanPivot pivot;
   final Future<void> Function(String id) onToggle;
   final ValueChanged<String> onProjectTap;
   final bool jiraSwipeEnabled;
@@ -258,6 +261,7 @@ class _GroupsSliver extends StatelessWidget {
       itemBuilder: (_, i) => _GroupSection(
         title: groups[i].title,
         items: groups[i].items,
+        pivot: pivot,
         onToggle: onToggle,
         onProjectTap: onProjectTap,
         jiraSwipeEnabled: jiraSwipeEnabled,
@@ -273,6 +277,7 @@ class _GroupSection extends StatelessWidget {
   const _GroupSection({
     required this.title,
     required this.items,
+    required this.pivot,
     required this.onToggle,
     required this.onProjectTap,
     required this.jiraSwipeEnabled,
@@ -282,6 +287,7 @@ class _GroupSection extends StatelessWidget {
   });
   final String title;
   final List<ActionItem> items;
+  final PlanPivot pivot;
   final Future<void> Function(String id) onToggle;
   final ValueChanged<String> onProjectTap;
   final bool jiraSwipeEnabled;
@@ -321,6 +327,7 @@ class _GroupSection extends StatelessWidget {
               key: ValueKey(item.id),
               item: item,
               sectionHasMixedSources: mixed,
+              pivot: pivot,
               onToggle: () => onToggle(item.id),
               onProjectTap: item.externalSource?.jiraProjectKey != null
                   ? () => onProjectTap(item.externalSource!.jiraProjectKey!)
@@ -356,6 +363,7 @@ class PlanRowSwipeWrapper extends StatelessWidget {
     required this.onTransition,
     required this.onSnooze,
     required this.onLongPress,
+    this.pivot = PlanPivot.byDate,
   });
 
   final ActionItem item;
@@ -366,6 +374,7 @@ class PlanRowSwipeWrapper extends StatelessWidget {
   final Future<void> Function() onTransition;
   final Future<void> Function() onSnooze;
   final Future<void> Function() onLongPress;
+  final PlanPivot pivot;
 
   @override
   Widget build(BuildContext context) {
@@ -376,6 +385,7 @@ class PlanRowSwipeWrapper extends StatelessWidget {
       onToggle: onToggle,
       onProjectTap: onProjectTap,
       sectionHasMixedSources: sectionHasMixedSources,
+      pivot: pivot,
     );
     if (!isJira) return row;
 
