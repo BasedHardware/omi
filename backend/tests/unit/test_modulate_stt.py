@@ -210,6 +210,42 @@ class TestSafeModulateSocket(unittest.TestCase):
         finally:
             loop.close()
 
+    def test_send_queue_full_marks_dead(self):
+        """QueueFull inside event loop callback must mark socket dead."""
+        ws = AsyncMock()
+        ws.close = AsyncMock()
+        loop = asyncio.new_event_loop()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
+            sock._recv_task.cancel()
+            sock._send_task.cancel()
+            sock.set_wav_header(b'')
+            sock._send_queue = asyncio.Queue(maxsize=1)
+            sock._send_queue.put_nowait(b'fill')
+            sock.send(b'overflow')
+            await asyncio.sleep(0)
+            return sock
+
+        try:
+            sock = loop.run_until_complete(run())
+            self.assertTrue(sock.is_connection_dead)
+            self.assertEqual(sock.death_reason, 'send queue full')
+        finally:
+            loop.close()
+
+    def test_header_not_double_prepended_under_lock(self):
+        """_header_sent inside lock prevents double WAV header prepend."""
+        sock = self._make_socket()
+        header = _build_wav_header(16000)
+        audio = b'\x00' * 50
+
+        sock.send(audio)
+        self.assertTrue(sock._header_sent)
+
+        sock.send(audio)
+        self.assertTrue(sock._header_sent)
+
 
 class TestUtteranceHandling(unittest.TestCase):
     def setUp(self):
