@@ -95,6 +95,13 @@ class TestLanguageRouting(unittest.TestCase):
         service, lang, model = get_stt_service_for_language('en')
         self.assertEqual(service, STTService.modulate)
 
+    @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
+    def test_dg_unsupported_falls_through_to_modulate(self):
+        service, lang, model = get_stt_service_for_language('af')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'af')
+        self.assertEqual(model, 'velma-2')
+
 
 class TestWAVHeader(unittest.TestCase):
     def test_wav_header_valid(self):
