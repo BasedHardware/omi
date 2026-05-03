@@ -224,7 +224,7 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
                 return STTService.deepgram, 'multi', dg_model
             if language in deepgram_nova3_languages:
                 return STTService.deepgram, language, dg_model
-            break
+            continue
         if m == 'modulate-velma-2':
             if language in modulate_languages:
                 return STTService.modulate, language, 'velma-2'
@@ -585,12 +585,12 @@ class SafeModulateSocket:
 
     async def drain_and_close(self):
         try:
-            # Yield to process any pending call_soon_threadsafe(send) callbacks
-            # before enqueueing EOS, ensuring all buffered audio is queued first
             await asyncio.sleep(0)
             _EOS_SENTINEL = b'__EOS__'
-            await self._send_queue.put(_EOS_SENTINEL)
-            # Wait for send loop to finish (it exits on EOS sentinel)
+            try:
+                self._send_queue.put_nowait(_EOS_SENTINEL)
+            except asyncio.QueueFull:
+                pass
             try:
                 await asyncio.wait_for(self._send_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
@@ -697,7 +697,7 @@ async def process_audio_modulate(
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10, additional_headers={'X-API-Key': api_key})
+    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10, extra_headers={'X-API-Key': api_key})
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
     sock.set_wav_header(_build_wav_header(sample_rate))
