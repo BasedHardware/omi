@@ -9,10 +9,6 @@ use super::category::MemoryCategory;
 // REQUEST TYPES
 // =========================================================================
 
-fn default_limit() -> usize {
-    5000  // Match Python backend behavior for first page
-}
-
 // =========================================================================
 // RESPONSE TYPES
 // =========================================================================
@@ -81,10 +77,6 @@ pub struct MemoryDB {
     pub current_activity: Option<String>,
     /// Window title when memory was extracted
     pub window_title: Option<String>,
-}
-
-fn default_visibility() -> String {
-    "private".to_string()
 }
 
 fn default_visibility_field() -> String {
