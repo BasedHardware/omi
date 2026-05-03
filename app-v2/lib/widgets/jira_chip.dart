@@ -35,9 +35,15 @@ const Color _jiraBlue = Color(0xFF2684FF);
 ///     widths instead of clipping the text.
 ///   * Home Today card bullet — same chip, same tap target, same blue dot.
 ///
-/// 44pt minimum tap target is preserved by the surrounding `InkWell`'s
-/// padding plus the parent row's vertical spacing — visually the chip is
-/// 22pt tall, but the InkWell's hit-test extends to the full row's tap area.
+/// Tap target: the chip uses its own [InkWell] for the open-Jira tap (and
+/// a separate one inside [_ProjectPill] for the filter tap). Visually the
+/// chip is ~22pt tall — below Apple HIG's 44pt minimum. We accept this as a
+/// best-effort affordance: the chip's primary purpose is to identify the
+/// row's source, not to be the canonical tap target. The Plan-row checkbox
+/// (44×44 hit region) and the swipe-right action sheet are the canonical
+/// completion / transition gestures. The chip's small hit region is fine
+/// for a deliberate tap-to-open action; it's not load-bearing for the
+/// row's primary verbs.
 class JiraChip extends StatelessWidget {
   const JiraChip({
     super.key,
