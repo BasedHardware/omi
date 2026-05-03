@@ -99,5 +99,6 @@
   "suggestedForThisConversation": "Suggested for this conversation",
   "summarizedAppsSuggestedSection": "Suggested",
   "summarizedAppsAvailableSection": "Installed",
-  "summarizedAppsEmpty": "No apps installed yet"
+  "summarizedAppsEmpty": "No apps installed yet",
+  "summarizeWithApp": "Summarize with an app"
 }

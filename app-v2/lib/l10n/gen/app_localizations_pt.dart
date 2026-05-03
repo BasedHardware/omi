@@ -243,4 +243,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get summarizedAppsEmpty => 'No apps installed yet';
+
+  @override
+  String get summarizeWithApp => 'Summarize with an app';
 }

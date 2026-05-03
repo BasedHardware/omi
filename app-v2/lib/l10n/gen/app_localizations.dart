@@ -499,6 +499,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No apps installed yet'**
   String get summarizedAppsEmpty;
+
+  /// No description provided for @summarizeWithApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize with an app'**
+  String get summarizeWithApp;
 }
 
 class _AppLocalizationsDelegate
