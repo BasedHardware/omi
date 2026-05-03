@@ -150,6 +150,7 @@ class AmbientForegroundMicService : Service() {
                 releaseWakeLock()
                 updateHealth(HealthEvent(AmbientHealthState.VAD_WATCH, "silence_timeout", ContextSignals.foregroundPackage, result.dbfs, result.zeroRatio))
                 updateNotification("VAD watch")
+                LocalSttWorker(applicationContext).drainSpoolForLocalTranscripts()
                 SyncWorker.drainAsync(applicationContext)
             }
             if (System.currentTimeMillis() - lastAudioAt > 30_000) {

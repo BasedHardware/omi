@@ -111,6 +111,7 @@ data class SpoolMetadata(
     val bytes: Long,
     val durationEstimateSeconds: Double,
     val status: String,
+    val localSttStatus: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("session_id", sessionId)
@@ -119,4 +120,5 @@ data class SpoolMetadata(
         .put("bytes", bytes)
         .put("duration_estimate", durationEstimateSeconds)
         .put("status", status)
+        .put("local_stt_status", localSttStatus)
 }

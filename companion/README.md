@@ -17,6 +17,8 @@ This is not an Omi plugin and does not modify the official Omi app. The plugin r
 - Uploads telemetry, fallback segments, and decrypted length-prefixed PCM spools to the controller backend.
 - The controller can forward companion PCM files into Omi's existing `/v1/sync-local-files` audio pipeline.
 - Tracks capture sessions, storage status, and local delete pending/synced/all-audio controls.
+- Runs best-effort Android on-device speech recognition over finalized spools on Android 13+ when supported by the device.
+- Supports explicit, user-approved MediaProjection audio capture for apps/audio usages Android allows.
 
 ## Build
 
@@ -52,8 +54,8 @@ The app does not auto-record after reboot. Boot handling only resets stale recov
 - The app does not use `VoiceInteractionService`, SoundTrigger HAL, hidden recording, arbitrary screen scraping, or silent media sessions.
 - Call/meeting capture is degraded when Android blocks audio. Captions/transcripts are labeled as fallback sources.
 
-## Known V1 Limits
+## Known Limits
 
-- Local STT has a worker hook and spool drain point, but no bundled Whisper/model runtime yet.
-- MediaProjection is scaffolded as an explicit-session service; full screen/internal-audio capture UI is not wired yet.
+- Local STT uses Android's on-device recognizer when available. It is not a bundled Whisper/Vosk model and may be unavailable or limited by the system recognizer.
+- MediaProjection captures only audio Android and the source app permit. It does not bypass protected meeting/call audio.
 - Audio upload targets the plugin `/capture/audio-spool` endpoint. Final Omi conversation import depends on `OMI_API_BASE_URL` and `OMI_API_KEY`/`OMI_APP_SECRET` being configured for the controller deployment.

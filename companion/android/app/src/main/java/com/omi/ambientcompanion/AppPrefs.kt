@@ -95,4 +95,12 @@ class AppPrefs(context: Context) {
     var allowLocalSttFallback: Boolean
         get() = prefs.getBoolean("allow_local_stt_fallback", true)
         set(value) = prefs.edit().putBoolean("allow_local_stt_fallback", value).apply()
+
+    var syncFailureCount: Int
+        get() = prefs.getInt("sync_failure_count", 0)
+        set(value) = prefs.edit().putInt("sync_failure_count", value).apply()
+
+    var nextSyncAfterMs: Long
+        get() = prefs.getLong("next_sync_after_ms", 0)
+        set(value) = prefs.edit().putLong("next_sync_after_ms", value).apply()
 }

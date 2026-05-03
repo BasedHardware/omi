@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.media.projection.MediaProjectionManager
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -83,6 +84,10 @@ class MainActivity : Activity() {
             button("Private") { AmbientForegroundMicService.command(this, AmbientForegroundMicService.ACTION_PRIVATE) },
         ))
         root.addView(row(
+            button("Screen Audio") { requestMediaProjection() },
+            button("Stop Screen Audio") { MediaProjectionSessionService.stop(this) },
+        ))
+        root.addView(row(
             button("Permissions") { requestRuntimePermissions() },
             button("Accessibility") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
             button("Notifications") { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
@@ -105,6 +110,14 @@ class MainActivity : Activity() {
         root.addView(audit)
         refreshStorage()
         return ScrollView(this).apply { addView(root) }
+    }
+
+    @Deprecated("Deprecated by platform, but sufficient for this simple personal native activity.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == MEDIA_PROJECTION_REQUEST && resultCode == RESULT_OK && data != null) {
+            MediaProjectionSessionService.start(this, resultCode, data)
+        }
     }
 
     private fun registerDevice() {
@@ -138,6 +151,11 @@ class MainActivity : Activity() {
 
     private fun openAppInfo() {
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:$packageName")))
+    }
+
+    private fun requestMediaProjection() {
+        val manager = getSystemService(MediaProjectionManager::class.java)
+        startActivityForResult(manager.createScreenCaptureIntent(), MEDIA_PROJECTION_REQUEST)
     }
 
     private fun refreshAudit() {
@@ -196,5 +214,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             views.forEach { addView(it, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)) }
         }
+    }
+
+    companion object {
+        private const val MEDIA_PROJECTION_REQUEST = 7304
     }
 }

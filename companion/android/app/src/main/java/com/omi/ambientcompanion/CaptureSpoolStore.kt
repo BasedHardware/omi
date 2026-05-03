@@ -97,6 +97,16 @@ class CaptureSpoolStore(private val context: Context) {
         }
     }
 
+    fun updateMetadata(filePath: String, updates: Map<String, Any?>) {
+        metaDir.listFiles { file -> file.extension == "json" }?.forEach { file ->
+            val json = JSONObject(file.readText())
+            if (json.optString("file_path") == filePath) {
+                updates.forEach { (key, value) -> json.put(key, value) }
+                file.writeText(json.toString())
+            }
+        }
+    }
+
     fun deleteByStatus(status: String?) {
         list(status).forEach { meta ->
             File(meta.filePath).delete()
@@ -139,6 +149,7 @@ class CaptureSpoolStore(private val context: Context) {
         bytes = json.optLong("bytes"),
         durationEstimateSeconds = json.optDouble("duration_estimate"),
         status = json.optString("status"),
+        localSttStatus = json.optString("local_stt_status").ifBlank { null },
     )
 
     private fun encryptLengthPrefixedChunk(pcm: ByteArray): ByteArray {
