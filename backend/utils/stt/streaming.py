@@ -595,7 +595,7 @@ class SafeModulateSocket:
                 await asyncio.wait_for(self._send_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 pass
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
         except Exception:
             pass
         self._recv_task.cancel()
