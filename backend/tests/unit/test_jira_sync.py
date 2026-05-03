@@ -230,6 +230,7 @@ class TestExternalSourceMetadata:
             "priority": "High",
             "project_key": "PROJ",
             "status_changed_at": "2026-04-28T14:00:00.000+0000",
+            "description": "Validate Partner status on WO assignment.",
         }
         ext = jira_sync._build_external_source(task)
         md = ext["metadata"]
@@ -239,6 +240,17 @@ class TestExternalSourceMetadata:
         assert md["priority"] == "High"
         assert md["project_key"] == "PROJ"
         assert md["status_changed_at"] == "2026-04-28T14:00:00.000+0000"
+        assert md["description_body"] == "Validate Partner status on WO assignment."
+
+    def test_description_body_omitted_when_empty_or_missing(self):
+        # Empty string → not emitted (so deep-merge doesn't zap a prior body).
+        task = {"external_id": "P-1", "description": ""}
+        ext = jira_sync._build_external_source(task)
+        assert "description_body" not in ext.get("metadata", {})
+        # Missing key → not emitted.
+        task2 = {"external_id": "P-1"}
+        ext2 = jira_sync._build_external_source(task2)
+        assert "description_body" not in ext2.get("metadata", {})
 
     def test_status_type_done_passes_through(self):
         task = {"external_id": "P-1", "status_type": "done"}
