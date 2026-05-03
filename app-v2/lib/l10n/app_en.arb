@@ -87,5 +87,21 @@
     }
   },
   "todayCardSeeAll": "See all",
-  "todayCardSeeAllSemantics": "See all action items, opens Plan tab"
+  "todayCardSeeAllSemantics": "See all action items, opens Plan tab",
+  "summaryTemplate": "Summary template",
+  "summarizedBy": "Summarized by {name}",
+  "@summarizedBy": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "noSummaryForApp": "No summary available — tap to choose another app",
+  "reprocessingConversation": "Reprocessing…",
+  "reprocessFailed": "Couldn't reprocess. Try again.",
+  "chooseSummarizationApp": "Choose a summarization app",
+  "currentlyUsing": "Currently using",
+  "suggestedForThisConversation": "Suggested for this conversation",
+  "summarizedAppsSuggestedSection": "Suggested",
+  "summarizedAppsAvailableSection": "Installed",
+  "summarizedAppsEmpty": "No apps installed yet"
 }

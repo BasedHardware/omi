@@ -433,6 +433,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'See all action items, opens Plan tab'**
   String get todayCardSeeAllSemantics;
+
+  /// No description provided for @summaryTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary template'**
+  String get summaryTemplate;
+
+  /// No description provided for @summarizedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarized by {name}'**
+  String summarizedBy(String name);
+
+  /// No description provided for @noSummaryForApp.
+  ///
+  /// In en, this message translates to:
+  /// **'No summary available — tap to choose another app'**
+  String get noSummaryForApp;
+
+  /// No description provided for @reprocessingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocessing…'**
+  String get reprocessingConversation;
+
+  /// No description provided for @reprocessFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reprocess. Try again.'**
+  String get reprocessFailed;
+
+  /// No description provided for @chooseSummarizationApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a summarization app'**
+  String get chooseSummarizationApp;
+
+  /// No description provided for @currentlyUsing.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently using'**
+  String get currentlyUsing;
+
+  /// No description provided for @suggestedForThisConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested for this conversation'**
+  String get suggestedForThisConversation;
+
+  /// No description provided for @summarizedAppsSuggestedSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get summarizedAppsSuggestedSection;
+
+  /// No description provided for @summarizedAppsAvailableSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get summarizedAppsAvailableSection;
+
+  /// No description provided for @summarizedAppsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps installed yet'**
+  String get summarizedAppsEmpty;
 }
 
 class _AppLocalizationsDelegate

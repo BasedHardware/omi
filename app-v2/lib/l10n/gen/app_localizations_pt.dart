@@ -207,4 +207,40 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get todayCardSeeAllSemantics => 'Ver todas as ações, abre a aba Plano';
+
+  @override
+  String get summaryTemplate => 'Summary template';
+
+  @override
+  String summarizedBy(String name) {
+    return 'Summarized by $name';
+  }
+
+  @override
+  String get noSummaryForApp =>
+      'No summary available — tap to choose another app';
+
+  @override
+  String get reprocessingConversation => 'Reprocessing…';
+
+  @override
+  String get reprocessFailed => 'Couldn\'t reprocess. Try again.';
+
+  @override
+  String get chooseSummarizationApp => 'Choose a summarization app';
+
+  @override
+  String get currentlyUsing => 'Currently using';
+
+  @override
+  String get suggestedForThisConversation => 'Suggested for this conversation';
+
+  @override
+  String get summarizedAppsSuggestedSection => 'Suggested';
+
+  @override
+  String get summarizedAppsAvailableSection => 'Installed';
+
+  @override
+  String get summarizedAppsEmpty => 'No apps installed yet';
 }
