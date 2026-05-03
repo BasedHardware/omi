@@ -47,6 +47,15 @@ class ExternalSource {
   /// "Medium"). The UI hides "Medium"/"None" because they're noise.
   String? get jiraPriority => metadata?['priority'] as String?;
 
+  /// Plain-text body of the Jira issue's description field. Fed by the
+  /// nooto-jira plugin's ADF→text flattener and capped at 2000 chars
+  /// server-side. Null when the issue has no description, or when this
+  /// item predates the description-body sync (older docs in Firestore
+  /// won't have it until the next /v1/integrations/jira/sync-now or
+  /// scheduled sync). The Plan detail screen renders this; chat pills /
+  /// rows do not.
+  String? get jiraDescriptionBody => metadata?['description_body'] as String?;
+
   /// When the issue last transitioned status. Optional. Null when missing
   /// or not parseable as ISO8601.
   DateTime? get jiraStatusChangedAt {
@@ -238,7 +247,16 @@ class ActionItemsProvider extends ChangeNotifier {
   /// status_type immediately, replaces from server response on success,
   /// rolls back on failure. On 403 with detail "two_way_sync_disabled" the
   /// caller can branch on `lastActionError`.
-  Future<bool> transition(String id, {required String toStatus}) async {
+  ///
+  /// When [optimisticallyComplete] is true, also flips `completed=true`
+  /// locally before the round-trip so list filters that hide completed rows
+  /// (e.g. the Plan tab) drop the item instantly. Caller is responsible for
+  /// only passing `true` when [toStatus] resolves to `status_type='done'`
+  /// server-side. The backend already flips `completed=true` on a Done
+  /// transition, so the server response that lands in `_items[idx]` keeps
+  /// the row hidden after rollback-or-confirm. On failure the rollback to
+  /// `original` reverts `completed` alongside `metadata`.
+  Future<bool> transition(String id, {required String toStatus, bool optimisticallyComplete = false}) async {
     final idx = _items.indexWhere((i) => i.id == id);
     if (idx == -1) return false;
     final original = _items[idx];
@@ -251,7 +269,13 @@ class ActionItemsProvider extends ChangeNotifier {
     // outlives a round-trip.
     final newType = toStatus.toLowerCase() == 'done' ? 'done' : 'indeterminate';
     final optimisticMeta = <String, dynamic>{...?ext.metadata, 'status': toStatus, 'status_type': newType};
-    _items[idx] = original.copyWith(externalSource: ext.copyWith(metadata: optimisticMeta));
+    _items[idx] = original.copyWith(
+      externalSource: ext.copyWith(metadata: optimisticMeta),
+      // copyWith treats `null` as "preserve original" — using
+      // original.completed here makes the read explicit instead of relying
+      // on the reader to know that null means preserve.
+      completed: optimisticallyComplete ? true : original.completed,
+    );
     notifyListeners();
     try {
       final res = await _client.post(
