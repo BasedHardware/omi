@@ -45,7 +45,7 @@ Widget _harness(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
   testWidgets('Jira row renders status text in metadata strip', (tester) async {
-    await tester.pumpWidget(_harness(PlanRow(item: _jiraItem(), onToggle: () async {})));
+    await tester.pumpWidget(_harness(PlanRow(item: _jiraItem(), onCheckboxTap: () async {})));
 
     expect(find.text('In Review'), findsOneWidget);
     // PROJ appears once: in the metadata strip (no project pill split unless onProjectTap is set).
@@ -57,7 +57,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(priority: 'Medium'),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
         ),
       ),
     );
@@ -67,7 +67,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(priority: 'P1'),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
         ),
       ),
     );
@@ -80,7 +80,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(statusChangedAt: fiveDaysAgo),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
         ),
       ),
     );
@@ -90,7 +90,7 @@ void main() {
 
   testWidgets('Transcript row in mixed-source group renders "From conversation" prefix', (tester) async {
     await tester.pumpWidget(
-      _harness(PlanRow(item: _transcriptItem(), onToggle: () async {}, sectionHasMixedSources: true)),
+      _harness(PlanRow(item: _transcriptItem(), onCheckboxTap: () async {}, sectionHasMixedSources: true)),
     );
 
     expect(find.text('From conversation'), findsOneWidget);
@@ -99,7 +99,7 @@ void main() {
 
   testWidgets('Transcript row in single-source group drops "From conversation" prefix', (tester) async {
     await tester.pumpWidget(
-      _harness(PlanRow(item: _transcriptItem(), onToggle: () async {}, sectionHasMixedSources: false)),
+      _harness(PlanRow(item: _transcriptItem(), onCheckboxTap: () async {}, sectionHasMixedSources: false)),
     );
 
     // Suppression rule: when no Jira items are visible in the group, the
@@ -110,35 +110,115 @@ void main() {
 
   testWidgets('Transcript row with no createdAt shows no metadata strip', (tester) async {
     final noAge = ActionItem(id: 't2', description: 'no age', completed: false);
-    await tester.pumpWidget(_harness(PlanRow(item: noAge, onToggle: () async {})));
+    await tester.pumpWidget(_harness(PlanRow(item: noAge, onCheckboxTap: () async {})));
 
     expect(find.text('From conversation'), findsNothing);
   });
 
-  testWidgets('tap on row triggers onToggle', (tester) async {
-    var toggled = false;
+  // REGRESSION: row body tap must NOT mark the item complete. The prior
+  // behavior (whole-row InkWell → onToggle) caused silent Jira desyncs:
+  // tapping a Jira row called the local-only `complete()` PATCH without
+  // firing a Jira transition, so the row disappeared from Plan while the
+  // Jira ticket stayed open. Locking the regression here so that path can
+  // never come back even though the row-body InkWell is back (now wired to
+  // onRowBodyTap, NOT onCheckboxTap).
+  testWidgets('tap on row body does NOT trigger onCheckboxTap (regression)', (tester) async {
+    var checkboxTapped = false;
+    var bodyTapped = false;
     await tester.pumpWidget(
       _harness(
         PlanRow(
           item: _jiraItem(),
-          onToggle: () async {
-            toggled = true;
+          onCheckboxTap: () async {
+            checkboxTapped = true;
+          },
+          onRowBodyTap: () {
+            bodyTapped = true;
           },
         ),
       ),
     );
 
-    // Tap on the description text — the InkWell wraps the whole row.
     await tester.tap(find.text('Fix the bug'));
     await tester.pumpAndSettle();
 
-    expect(toggled, isTrue);
+    // Row body fires its OWN handler (open-Jira-URL in production); never
+    // the completion handler.
+    expect(checkboxTapped, isFalse, reason: 'row body must never trigger completion');
+    expect(bodyTapped, isTrue, reason: 'row body should fire its own callback');
+  });
+
+  testWidgets('row InkWell is disabled when onRowBodyTap is null (transcript rows)', (tester) async {
+    var checkboxTapped = false;
+    await tester.pumpWidget(
+      _harness(
+        PlanRow(
+          item: _transcriptItem(),
+          onCheckboxTap: () async {
+            checkboxTapped = true;
+          },
+          // onRowBodyTap omitted → defaults to null → InkWell disabled.
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Talk to designer about onboarding'));
+    await tester.pumpAndSettle();
+
+    expect(checkboxTapped, isFalse);
+  });
+
+  testWidgets('tap on checkbox triggers onCheckboxTap and not onRowBodyTap', (tester) async {
+    var checkboxTapped = false;
+    var bodyTapped = false;
+    await tester.pumpWidget(
+      _harness(
+        PlanRow(
+          item: _jiraItem(),
+          onCheckboxTap: () async {
+            checkboxTapped = true;
+          },
+          onRowBodyTap: () {
+            bodyTapped = true;
+          },
+        ),
+      ),
+    );
+
+    // The checkbox lives inside a Semantics(button:true, label:'Mark complete')
+    // wrapper. Its GestureDetector(behavior:opaque) intercepts taps before the
+    // row InkWell catches them.
+    await tester.tap(find.bySemanticsLabel('Mark complete'));
+    await tester.pumpAndSettle();
+
+    expect(checkboxTapped, isTrue);
+    expect(bodyTapped, isFalse, reason: 'checkbox must not propagate to row body');
+  });
+
+  testWidgets('checkbox hit region is HIG-compliant vertically + at least the original spacingM gap horizontally', (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        PlanRow(item: _jiraItem(), onCheckboxTap: () async {}),
+      ),
+    );
+
+    // The Semantics wrapper sits directly above the GestureDetector +
+    // SizedBox(32, 44). Width is intentionally 32pt (20 visual + 12 gap)
+    // so the description still lands at 32pt from the row's left edge —
+    // matching the layout that shipped before the gesture refactor. The
+    // row's outer InkWell extends the *effective* tap area horizontally
+    // by routing taps anywhere outside the checkbox to the row-body
+    // handler (open-Jira-URL on Jira items), so there's no dead zone for
+    // big thumbs even at 32pt nominal width.
+    final hitTarget = tester.getSize(find.bySemanticsLabel('Mark complete'));
+    expect(hitTarget.height, greaterThanOrEqualTo(44.0), reason: 'HIG vertical minimum');
+    expect(hitTarget.width, greaterThanOrEqualTo(32.0), reason: 'matches checkbox + spacingM');
   });
 
   testWidgets('onProjectTap renders splits the chip and tapping the project pill calls back', (tester) async {
     var tapped = false;
     await tester.pumpWidget(
-      _harness(PlanRow(item: _jiraItem(), onToggle: () async {}, onProjectTap: () => tapped = true)),
+      _harness(PlanRow(item: _jiraItem(), onCheckboxTap: () async {}, onProjectTap: () => tapped = true)),
     );
 
     // Project pill has the "PROJ" text in a separate widget. Tap on the
@@ -161,7 +241,7 @@ void main() {
       _harness(
         SizedBox(
           width: 320,
-          child: PlanRow(item: _jiraItem(description: longTitle), onToggle: () async {}),
+          child: PlanRow(item: _jiraItem(description: longTitle), onCheckboxTap: () async {}),
         ),
       ),
     );
@@ -184,7 +264,7 @@ void main() {
       _harness(
         SizedBox(
           width: 320,
-          child: PlanRow(item: transcript, onToggle: () async {}),
+          child: PlanRow(item: transcript, onCheckboxTap: () async {}),
         ),
       ),
     );
@@ -201,7 +281,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
           onProjectTap: () {},
           pivot: PlanPivot.byProject,
         ),
@@ -224,7 +304,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(status: 'Backlog', statusChangedAt: threeDaysAgo),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
           pivot: PlanPivot.byStatus,
         ),
       ),
@@ -242,7 +322,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(status: 'Backlog', priority: 'P1'),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
           pivot: PlanPivot.byStatus,
         ),
       ),
@@ -258,7 +338,7 @@ void main() {
       _harness(
         PlanRow(
           item: _jiraItem(),
-          onToggle: () async {},
+          onCheckboxTap: () async {},
           onProjectTap: () {},
           pivot: PlanPivot.byDate,
         ),
