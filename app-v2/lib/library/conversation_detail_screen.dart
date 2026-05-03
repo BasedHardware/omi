@@ -128,11 +128,17 @@ class ConversationDetailScreen extends StatelessWidget {
             for (final a in actionItems) _ActionItemRow(action: a),
             const SizedBox(height: AppStyles.spacingXL),
           ],
-          if (segments.isNotEmpty) ...[
-            _SectionHeader(label: 'TRANSCRIPT'),
-            const SizedBox(height: AppStyles.spacingS),
-            for (final s in segments) _SegmentRow(segment: s),
-          ] else
+          if (segments.isNotEmpty)
+            _TranscriptSection(
+              segments: segments,
+              // Collapse by default when there's higher-priority content
+              // above (summary or action items). Transcript-only meetings
+              // render expanded so the screen isn't a single tap target.
+              initiallyCollapsed: item.summarizedApp != null ||
+                  item.overview.trim().isNotEmpty ||
+                  actionItems.isNotEmpty,
+            )
+          else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: AppStyles.spacingL),
               child: Text(
@@ -207,16 +213,92 @@ class _ActionItemRow extends StatelessWidget {
   }
 }
 
-class _SegmentRow extends StatelessWidget {
-  const _SegmentRow({required this.segment});
-  final Map<String, dynamic> segment;
+/// Collapsible TRANSCRIPT section. Renders a tappable header row showing
+/// segment count; expands on tap to reveal speaker-grouped paragraphs.
+///
+/// Speaker grouping merges consecutive same-speaker segments into one block
+/// with a single header — instead of N "You / text" rows for N short
+/// utterances, you get one "You" header and a paragraph. Massive visual
+/// cleanup for poetry / song / repeated-phrase transcripts.
+class _TranscriptSection extends StatefulWidget {
+  const _TranscriptSection({required this.segments, required this.initiallyCollapsed});
+
+  final List<Map<String, dynamic>> segments;
+  final bool initiallyCollapsed;
+
+  @override
+  State<_TranscriptSection> createState() => _TranscriptSectionState();
+}
+
+class _TranscriptSectionState extends State<_TranscriptSection> {
+  late bool _collapsed = widget.initiallyCollapsed;
 
   @override
   Widget build(BuildContext context) {
-    final text = (segment['text'] as String?) ?? '';
-    final speaker = (segment['speaker'] as String?) ?? '';
-    final isUser = segment['is_user'] == true || speaker == 'SPEAKER_0';
+    final segments = widget.segments;
+    final groups = groupConsecutiveSegmentsBySpeaker(segments);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          button: true,
+          label: 'TRANSCRIPT, ${segments.length} segments, ${_collapsed ? "tap to expand" : "tap to collapse"}',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _collapsed = !_collapsed),
+            child: Container(
+              height: AppStyles.touchTargetMinimum,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: [
+                  const Text(
+                    'TRANSCRIPT',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textTertiary,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(width: AppStyles.spacingS),
+                  Text(
+                    '· ${segments.length}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _collapsed ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_up_rounded,
+                    size: 18,
+                    color: AppColors.textTertiary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (!_collapsed) ...[
+          const SizedBox(height: AppStyles.spacingS),
+          for (final g in groups) _SpeakerGroupRow(group: g),
+        ],
+      ],
+    );
+  }
+}
+
+/// A consecutive run of segments by the same speaker, rendered as one
+/// labeled paragraph instead of N separate rows.
+class _SpeakerGroupRow extends StatelessWidget {
+  const _SpeakerGroupRow({required this.group});
+  final List<Map<String, dynamic>> group;
+
+  @override
+  Widget build(BuildContext context) {
+    if (group.isEmpty) return const SizedBox.shrink();
+    final first = group.first;
+    final speaker = (first['speaker'] as String?) ?? '';
+    final isUser = first['is_user'] == true || speaker == 'SPEAKER_0';
     final label = isUser ? 'You' : _prettifySpeaker(speaker);
+    final text = group.map((s) => (s['text'] as String?) ?? '').where((t) => t.isNotEmpty).join(' ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
@@ -234,18 +316,14 @@ class _SegmentRow extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             text,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
           ),
         ],
       ),
     );
   }
 
-  String _prettifySpeaker(String raw) {
+  static String _prettifySpeaker(String raw) {
     if (raw.isEmpty) return 'Speaker';
     return raw
         .replaceAll('_', ' ')
@@ -254,4 +332,25 @@ class _SegmentRow extends StatelessWidget {
         .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
         .join(' ');
   }
+}
+
+/// Groups consecutive transcript segments by speaker. A new group starts
+/// whenever `is_user` flips OR `speaker` changes. Visible-for-test.
+List<List<Map<String, dynamic>>> groupConsecutiveSegmentsBySpeaker(List<Map<String, dynamic>> segments) {
+  final groups = <List<Map<String, dynamic>>>[];
+  for (final seg in segments) {
+    if (groups.isEmpty) {
+      groups.add([seg]);
+      continue;
+    }
+    final last = groups.last.last;
+    final sameUser = (last['is_user'] == true) == (seg['is_user'] == true);
+    final sameSpeaker = (last['speaker'] ?? '') == (seg['speaker'] ?? '');
+    if (sameUser && sameSpeaker) {
+      groups.last.add(seg);
+    } else {
+      groups.add([seg]);
+    }
+  }
+  return groups;
 }
