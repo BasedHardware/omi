@@ -20,11 +20,21 @@ class ConversationsProvider extends ChangeNotifier {
   String? _error;
   String? _pendingId;
 
+  /// Set of conversation ids currently mid-`reprocessWithApp`. Distinct
+  /// from `_pendingId` (used by delete) so the picker sheet can show a
+  /// shimmer while the network call is in flight without blocking other
+  /// list-level mutations.
+  Set<String> _reprocessingIds = const {};
+
   bool get loading => _loading;
   bool get hasFetched => _hasFetched;
   String? get error => _error;
   bool get isEmpty => _items.isEmpty;
   bool isPending(String id) => _pendingId == id;
+
+  /// True while `reprocessWithApp` is in flight for [id].
+  bool isReprocessing(String id) => _reprocessingIds.contains(id);
+
   List<ConversationItem> get items => _items;
 
   ConversationItem? byId(String id) {
@@ -75,12 +85,13 @@ class ConversationsProvider extends ChangeNotifier {
       final body = jsonDecode(res.body);
       final list = body is List
           ? body
-              .whereType<Map>()
-              .map((m) => ConversationItem.fromJson(Map<String, dynamic>.from(m)))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map((m) => ConversationItem.fromJson(Map<String, dynamic>.from(m)))
+                .toList(growable: false)
           : const <ConversationItem>[];
       // Top-level sort by createdAt desc. groups recomputes per read.
-      final sorted = [...list]..sort((a, b) {
+      final sorted = [...list]
+        ..sort((a, b) {
           final ad = a.createdAt;
           final bd = b.createdAt;
           if (ad == null && bd == null) return 0;
@@ -95,6 +106,44 @@ class ConversationsProvider extends ChangeNotifier {
       _error = e.toString();
     } finally {
       _loading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Reprocess a conversation with the chosen summarization app. Hits
+  /// `POST /v1/conversations/{id}/reprocess?app_id={appId}` (the same
+  /// endpoint the legacy `/app` ConversationDetailProvider uses). The
+  /// backend re-runs `_trigger_apps()` with the explicit app id and
+  /// returns the updated conversation document, which we splice back
+  /// into our local list so the detail screen rebuilds with the new
+  /// `apps_results[0].content` immediately.
+  ///
+  /// Returns true on success, false on any error. Sets `_error` only on
+  /// failure so the detail screen can surface a snackbar without
+  /// stomping the global "load failed" message from [load].
+  Future<bool> reprocessWithApp(String conversationId, String appId) async {
+    if (_reprocessingIds.contains(conversationId)) return false;
+    _reprocessingIds = {..._reprocessingIds, conversationId};
+    notifyListeners();
+    try {
+      final res = await _client.post(
+        'v1/conversations/$conversationId/reprocess?app_id=${Uri.encodeQueryComponent(appId)}',
+        body: const {},
+      );
+      final body = jsonDecode(res.body);
+      if (body is! Map) return false;
+      final updated = ConversationItem.fromRaw(Map<String, dynamic>.from(body));
+      final idx = _items.indexWhere((c) => c.id == conversationId);
+      if (idx >= 0) {
+        _items = [..._items]..[idx] = updated;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[ConversationsProvider] reprocessWithApp($conversationId, $appId) failed: $e');
+      _error = e.toString();
+      return false;
+    } finally {
+      _reprocessingIds = {..._reprocessingIds}..remove(conversationId);
       notifyListeners();
     }
   }
