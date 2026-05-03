@@ -78,3 +78,62 @@ Deferred work captured during planning. Add to a sprint when picking up.
 **Context:** Surfaced during `/plan-ceo-review` of chat-sessions design (2026-05-01, SELECTIVE EXPANSION mode). Considered for v0 inclusion and explicitly deferred — see CEO plan at `~/.gstack/projects/togodynamicslab-omi/ceo-plans/2026-05-01-chat-sessions.md` for the deferral reasoning.
 
 **Depends on:** Backend session_id TODO (above) shipping first — search becomes meaningful once session history is cross-device.
+
+## Promote DOGFOOD allowlist from env var to Firestore-backed feature flag
+
+**What:** Replace the `DECISIONS_DOGFOOD_UIDS` env var (parsed at module import in `backend/utils/decisions.py`) with a Firestore-backed feature-flag pattern: `feature_flags/decisions_dogfood/uids: List[str]`. The same pattern can serve any future feature flag (lens picker, transcript collapse rollout, etc).
+
+**Why:** Env var works for one user, but every allowlist change requires a Cloud Run config edit + service restart. Once Decisions widens past 2 dogfooders, the friction compounds. A Firestore doc edit is instant, doesn't need a deploy, and can be admin-UI'd later.
+
+**Pros:**
+- Allowlist changes become a Firestore console edit instead of a Cloud Run deploy.
+- Same flag pattern reusable for future features.
+- Dynamic admin UI possible later without re-architecting.
+
+**Cons:**
+- One Firestore read per `process_conversation()` invocation (mitigatable with a 30-second in-process cache).
+- New flag-management surface to think about.
+
+**Context:** Surfaced during `/plan-eng-review` of the Meetings Decisions design (2026-05-03). Full design at `~/.gstack/projects/togodynamicslab-omi/matheusoliviera-main-design-meetings-decisions-20260503-110745.md`. v0 chose env var (option B in eng review 2A) explicitly to keep v0 scope tight.
+
+**Depends on:** Decisions clearing v0 dogfood (Day 14 success criteria) AND allowlist needs to grow beyond 2 uids. Until then, env var is fine.
+
+## Promote `decisions_preflight.py` to nightly CI eval
+
+**What:** Wrap `backend/scripts/decisions_preflight.py` in a pytest harness that runs nightly over a fixture corpus of 10–20 anonymized conversations. Snapshot the baseline metrics (median decisions/meeting, % zero-decision, max invalid-index rate) and alert when current run drops below baseline by >20%.
+
+**Why:** Today the pre-flight script is a one-off; it runs when the founder remembers. Nightly CI catches prompt regressions silently introduced by model upgrades, prompt tweaks, or unrelated refactors before users see them. Without it, prompt quality drifts and you only find out at the next dogfood cycle.
+
+**Pros:**
+- Catches prompt regressions in CI, not in production.
+- Same script doubles as both the v0 manual eval and the v0.1 automated regression test — zero duplicated logic.
+- Sets up the eval-discipline pattern for future lenses (sales, technical) without per-lens infrastructure.
+
+**Cons:**
+- Requires a fixture corpus (10–20 anonymized conversations with hand-verified expected outputs).
+- Adds CI minutes (one LLM call per fixture per night).
+- Must invest in baseline-tuning to avoid flake (LLM non-determinism).
+
+**Context:** Surfaced during `/plan-eng-review` (2026-05-03). The pre-flight script lives at `backend/scripts/decisions_preflight.py` per eng review decision 1E option B. The fixture corpus doesn't exist yet — it's produced as a by-product of v0 Day 0 dogfood.
+
+**Depends on:** Decisions extraction shipping in v0 AND a fixture corpus existing (built from founder's Day 0 + Day 14 dogfood conversations). Cannot ship before the data exists.
+
+## Migrate ActionItem cross-link from integer indexes to stable uuids
+
+**What:** Add a stable `id: str` field to `ActionItem` (uuid4, backend-generated). Change `Decision.related_action_item_ids` from `List[int]` (array indexes) to `List[str]` (referencing ActionItem.id). Backfill existing ActionItems with generated ids on next conversation read.
+
+**Why:** v0 cross-links Decisions to Action Items by integer index into `Structured.action_items`. This works because of a stability invariant: nothing reorders the array post-extraction. The invariant is enforced by reading the code, not the type system. Any future caller that sorts, filters, or dedups action items silently breaks Decisions cross-links. Stable ids make the contract structural, not conventional.
+
+**Pros:**
+- Cross-link survives any downstream reorder/filter/dedup.
+- Decisions become referenceable by id instead of position; opens up cross-meeting decision rollups (Plan tab pulls decisions related to its action items).
+- Same uuid pattern matches existing `Conversation.id` and `Decision.id` conventions.
+
+**Cons:**
+- Real schema migration: backfill ids onto every existing ActionItem.
+- Requires migrating any existing `related_action_item_ids` in Firestore from indexes to ids (one-shot script).
+- More code change than v0 budget allows.
+
+**Context:** Surfaced during `/plan-eng-review` (2026-05-03). Design premise #3 documents the v0 stability invariant: `Structured.action_items` is frozen post-extraction; downstream code must NOT reorder. Defense-in-depth via stable ids was deferred to keep v0 additive.
+
+**Depends on:** Decisions clearing v0 dogfood. The migration is mechanical once dogfood validates the lens.
