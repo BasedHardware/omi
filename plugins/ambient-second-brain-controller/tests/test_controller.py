@@ -239,6 +239,46 @@ def test_chat_tools_manifest_schema(client):
     assert "create_accountability_rule" in names
 
 
+def test_health_and_ready_endpoints(client):
+    health = client.get("/healthz")
+    ready = client.get("/readyz")
+
+    assert health.status_code == 200
+    assert health.json()["status"] == "ok"
+    assert ready.status_code == 200
+    body = ready.json()
+    assert body["status"] == "ready"
+    assert body["base_url"] == "http://testserver"
+    assert body["key_id"]
+    assert body["key_fingerprint"]
+
+
+def test_controller_manifests_include_secure_registration_data(client):
+    controller = client.get("/.well-known/ambient-controller.json")
+    registration = client.get("/.well-known/omi-app-registration.json")
+
+    assert controller.status_code == 200
+    assert registration.status_code == 200
+    controller_body = controller.json()
+    registration_body = registration.json()
+    assert controller_body["policy_url"] == "http://testserver/capture/policy/current"
+    assert controller_body["public_key"]
+    assert registration_body["external_integration"]["capture_controller_public_key"] == controller_body["public_key"]
+    assert registration_body["external_integration"]["capture_controller_key_id"] == controller_body["key_id"]
+    assert "ambient_capture_controller" in registration_body["capabilities"]
+
+
+def test_device_registration_creates_enabled_default_settings(client):
+    register(client)
+    settings = storage.get_settings("user-1")
+
+    assert settings.advanced_capture_enabled is True
+    assert settings.default_capture_mode == "normal"
+    assert settings.allow_accessibility_mode is True
+    assert settings.allow_caption_fallback is True
+    assert settings.allow_audio_upload is True
+
+
 def test_settings_persistence(client):
     response = client.post(
         "/settings",

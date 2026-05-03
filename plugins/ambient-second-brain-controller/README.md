@@ -26,6 +26,15 @@ Copy-Item .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
+## Free HTTPS Deployment
+
+For personal testing with the companion app, deploy this plugin to Render Free. Render provides a real HTTPS URL with
+minimal setup, which is enough for device registration, signed policy pulls, telemetry, fallback segments, and audio
+spool upload testing.
+
+See `DEPLOY_RENDER.md` for the exact Render setup, environment variables, verification URLs, and companion app test
+steps.
+
 ## Environment
 
 See `.env.example`.
@@ -41,6 +50,10 @@ PY
 
 ## Endpoints
 
+- `GET /healthz`
+- `GET /readyz`
+- `GET /.well-known/ambient-controller.json`
+- `GET /.well-known/omi-app-registration.json`
 - `GET /.well-known/omi-tools.json`
 - `POST /device/register`
 - `POST /device/revoke`
@@ -71,6 +84,11 @@ PY
 The device token is used as `Authorization: Bearer <device_token>` for policy pulls, telemetry, fallback segments,
 and audio spool uploads.
 
+On first registration, the plugin creates per-user capture settings from the `AMBIENT_DEFAULT_*` environment variables.
+For companion testing, the checked-in Render defaults enable normal capture, local STT fallback, caption fallback,
+transcript upload, audio upload, and communication awareness. The Android app still owns local permissions, private
+mode, and user-visible stop/pause controls.
+
 ## Audio Spool Import
 
 `POST /capture/audio-spool` accepts the companion app's length-prefixed PCM16/16 kHz/mono `.bin` payload, validates
@@ -78,13 +96,18 @@ the frame format, stores it locally, and forwards it to Omi's existing `/v1/sync
 `OMI_API_BASE_URL` plus `OMI_API_KEY` or `OMI_APP_SECRET` are configured. The plugin still does not capture audio
 itself; it only receives explicitly uploaded local spools from the registered device.
 
-## Conservative Defaults
+## Baseline Safety Defaults
+
+The Pydantic model defaults are conservative when no deployment defaults are supplied:
 
 - Capture disabled.
 - Accessibility disabled.
 - Raw audio upload disabled.
 - Telemetry text disabled.
 - Communication mode is awareness-only by default.
+
+The Render/test deployment intentionally sets `AMBIENT_DEFAULT_*` values to make a newly registered personal companion
+device useful immediately. Do not use Render Free SQLite storage as the long-term production database for public users.
 
 ## Tests
 
@@ -103,6 +126,8 @@ Covered:
 - audio spool storage and dedupe
 - task extraction confidence levels
 - chat tools manifest schema
+- health, readiness, and controller registration manifests
+- registration-time default settings
 - settings persistence
 
 ## Omi App Registration

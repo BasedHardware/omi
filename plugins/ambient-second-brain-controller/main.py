@@ -47,6 +47,27 @@ def base_url() -> str:
     return os.getenv("WEBHOOK_BASE_URL", "http://localhost:8000").rstrip("/")
 
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok", "plugin_id": os.getenv("AMBIENT_PLUGIN_ID", PLUGIN_ID)}
+
+
+@app.get("/readyz")
+def readyz():
+    try:
+        storage.init_db()
+        public_key = security.get_public_key_b64()
+        return {
+            "status": "ready",
+            "base_url": base_url(),
+            "key_id": security.get_key_id(),
+            "key_fingerprint": security.key_fingerprint(public_key),
+            "omi_import_configured": bool(os.getenv("OMI_API_KEY") or os.getenv("OMI_APP_SECRET")),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"not_ready:{exc.__class__.__name__}") from exc
+
+
 @app.get("/", response_class=HTMLResponse)
 def app_home(omi_user_id: Optional[str] = Query(default=None), device_id: Optional[str] = Query(default=None)):
     user = omi_user_id or "demo"
@@ -71,6 +92,45 @@ def app_home(omi_user_id: Optional[str] = Query(default=None), device_id: Option
       </body>
     </html>
     """
+
+
+@app.get("/.well-known/ambient-controller.json")
+def ambient_controller_manifest():
+    public_key = security.get_public_key_b64()
+    return {
+        "plugin_id": os.getenv("AMBIENT_PLUGIN_ID", PLUGIN_ID),
+        "name": "Ambient Second Brain Controller",
+        "base_url": base_url(),
+        "policy_url": f"{base_url()}/capture/policy/current",
+        "telemetry_url": f"{base_url()}/capture/telemetry",
+        "fallback_segments_url": f"{base_url()}/capture/fallback-segments",
+        "audio_spool_url": f"{base_url()}/capture/audio-spool",
+        "public_key": public_key,
+        "key_id": security.get_key_id(),
+        "key_fingerprint": security.key_fingerprint(public_key),
+    }
+
+
+@app.get("/.well-known/omi-app-registration.json")
+def omi_app_registration_manifest():
+    public_key = security.get_public_key_b64()
+    return {
+        "id": os.getenv("AMBIENT_PLUGIN_ID", PLUGIN_ID),
+        "name": "Ambient Second Brain Controller",
+        "description": "Issues signed ambient capture policies and extracts tasks, reminders, commitments, and accountability prompts from Omi conversations.",
+        "capabilities": ["ambient_capture_controller", "chat_tools", "external_integration"],
+        "app_home_url": f"{base_url()}/",
+        "webhook_url": f"{base_url()}/webhooks/omi/transcript-processed",
+        "chat_tools_url": f"{base_url()}/.well-known/omi-tools.json",
+        "external_integration": {
+            "capture_policy_url": f"{base_url()}/capture/policy/current",
+            "capture_telemetry_url": f"{base_url()}/capture/telemetry",
+            "fallback_segments_url": f"{base_url()}/capture/fallback-segments",
+            "capture_controller_public_key": public_key,
+            "capture_controller_key_id": security.get_key_id(),
+            "capture_controller_scopes": ["ambient_capture_controller"],
+        },
+    }
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -112,6 +172,7 @@ def omi_tools_manifest():
 @app.post("/device/register", response_model=DeviceRegisterResponse)
 def register_device(request: DeviceRegisterRequest):
     token = storage.register_device(request.model_dump(mode="json"))
+    settings = storage.ensure_default_settings_for_registration(request.omi_user_id)
     public_key = security.get_public_key_b64()
     storage.audit(
         request.omi_user_id,
@@ -120,6 +181,12 @@ def register_device(request: DeviceRegisterRequest):
         {"plugin_id": os.getenv("AMBIENT_PLUGIN_ID", PLUGIN_ID)},
     )
     storage.audit(request.omi_user_id, request.device_id, "controller_key_pinned", {"key_id": security.get_key_id()})
+    storage.audit(
+        request.omi_user_id,
+        request.device_id,
+        "registration_settings_ready",
+        {"capture_mode": settings.default_capture_mode, "advanced_capture_enabled": settings.advanced_capture_enabled},
+    )
     return DeviceRegisterResponse(
         device_registered=True,
         policy_url=f"{base_url()}/capture/policy/current",

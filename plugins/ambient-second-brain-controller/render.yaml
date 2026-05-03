@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: ambient-second-brain-controller
+    runtime: python
+    plan: free
+    rootDir: plugins/ambient-second-brain-controller
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: AMBIENT_PLUGIN_ID
+        value: ambient_second_brain_controller
+      - key: AMBIENT_POLICY_KEY_ID
+        value: ambient-controller-key-1
+      - key: WEBHOOK_BASE_URL
+        sync: false
+      - key: AMBIENT_POLICY_PRIVATE_KEY
+        sync: false
+      - key: AMBIENT_POLICY_PUBLIC_KEY
+        sync: false
+      - key: OMI_API_BASE_URL
+        value: https://api.omi.me
+      - key: OMI_API_KEY
+        sync: false
+      - key: OMI_APP_SECRET
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite:///./ambient_second_brain.sqlite3
+      - key: AMBIENT_DEFAULT_CAPTURE_ENABLED
+        value: "true"
+      - key: AMBIENT_DEFAULT_CAPTURE_MODE
+        value: normal
+      - key: AMBIENT_DEFAULT_ACCESSIBILITY_MODE
+        value: "true"
+      - key: AMBIENT_DEFAULT_LOCAL_STT_FALLBACK
+        value: "true"
+      - key: AMBIENT_DEFAULT_CAPTION_FALLBACK
+        value: "true"
+      - key: AMBIENT_DEFAULT_AUDIO_UPLOAD
+        value: "true"
+      - key: AMBIENT_DEFAULT_TRANSCRIPT_UPLOAD
+        value: "true"
+      - key: AMBIENT_DEFAULT_RAW_AUDIO_RETENTION
+        value: until_synced
+      - key: AMBIENT_DEFAULT_COMMUNICATION_MODE
+        value: detect_and_caption_fallback
+      - key: AMBIENT_DEFAULT_NOTIFICATION_AGGRESSIVENESS
+        value: normal

@@ -9,7 +9,6 @@ import security
 import storage
 from models import CapturePolicyPayload, CaptureSettings, PLUGIN_ID, POLICY_SCOPE, SignedPolicy
 
-
 POLICY_VALIDITY_MINUTES = 10
 
 

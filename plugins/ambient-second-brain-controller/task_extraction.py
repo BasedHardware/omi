@@ -4,7 +4,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from models import ExtractedTask
 
-
 HIGH_PATTERNS = [
     r"\bremind me to (?P<task>[^.?!]+)",
     r"\bdon't let me forget to (?P<task>[^.?!]+)",

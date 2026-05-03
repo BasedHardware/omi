@@ -13,6 +13,34 @@ DEFAULT_DB_PATH = Path(__file__).with_name("ambient_second_brain.sqlite3")
 DATABASE_URL = os.getenv("DATABASE_URL") or str(DEFAULT_DB_PATH)
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def env_list(name: str, default: List[str]) -> List[str]:
+    value = os.getenv(name)
+    if not value:
+        return default
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 def _db_path() -> str:
     if DATABASE_URL.startswith("sqlite:///"):
         return DATABASE_URL.removeprefix("sqlite:///")
@@ -196,6 +224,57 @@ def get_settings(omi_user_id: str) -> CaptureSettings:
         save_settings(omi_user_id, settings.model_dump(mode="json"))
         return settings
     return CaptureSettings.model_validate(json.loads(row["data"]))
+
+
+def has_settings(omi_user_id: str) -> bool:
+    ensure_user(omi_user_id)
+    with connect() as conn:
+        row = conn.execute("SELECT 1 FROM settings WHERE omi_user_id = ?", (omi_user_id,)).fetchone()
+    return row is not None
+
+
+def default_capture_settings_from_env() -> CaptureSettings:
+    base = CaptureSettings().model_dump(mode="json")
+    base.update(
+        {
+            "advanced_capture_enabled": env_bool("AMBIENT_DEFAULT_CAPTURE_ENABLED", True),
+            "default_capture_mode": os.getenv("AMBIENT_DEFAULT_CAPTURE_MODE", "normal"),
+            "sensitivity": os.getenv("AMBIENT_DEFAULT_SENSITIVITY", "medium"),
+            "silence_detection_seconds": env_int("AMBIENT_DEFAULT_SILENCE_SECONDS", 12),
+            "rms_silence_dbfs_threshold": env_float("AMBIENT_DEFAULT_RMS_DBFS_THRESHOLD", -75),
+            "zero_frame_threshold": env_float("AMBIENT_DEFAULT_ZERO_FRAME_THRESHOLD", 0.98),
+            "allow_accessibility_mode": env_bool("AMBIENT_DEFAULT_ACCESSIBILITY_MODE", True),
+            "allow_local_stt_fallback": env_bool("AMBIENT_DEFAULT_LOCAL_STT_FALLBACK", True),
+            "allow_caption_fallback": env_bool("AMBIENT_DEFAULT_CAPTION_FALLBACK", True),
+            "allow_audio_upload": env_bool("AMBIENT_DEFAULT_AUDIO_UPLOAD", True),
+            "allow_transcript_upload": env_bool("AMBIENT_DEFAULT_TRANSCRIPT_UPLOAD", True),
+            "raw_audio_retention": os.getenv("AMBIENT_DEFAULT_RAW_AUDIO_RETENTION", "until_synced"),
+            "communication_mode": os.getenv("AMBIENT_DEFAULT_COMMUNICATION_MODE", "detect_and_caption_fallback"),
+            "high_risk_apps": env_list(
+                "AMBIENT_DEFAULT_HIGH_RISK_APPS",
+                [
+                    "com.microsoft.teams",
+                    "us.zoom.videomeetings",
+                    "com.google.android.apps.meetings",
+                    "com.Slack",
+                    "com.google.android.dialer",
+                    "com.samsung.android.dialer",
+                ],
+            ),
+            "notification_aggressiveness": os.getenv("AMBIENT_DEFAULT_NOTIFICATION_AGGRESSIVENESS", "normal"),
+            "audit_level": os.getenv("AMBIENT_DEFAULT_AUDIT_LEVEL", "basic"),
+        }
+    )
+    return CaptureSettings.model_validate(base)
+
+
+def ensure_default_settings_for_registration(omi_user_id: str) -> CaptureSettings:
+    if has_settings(omi_user_id):
+        return get_settings(omi_user_id)
+    settings = default_capture_settings_from_env()
+    save_settings(omi_user_id, settings.model_dump(mode="json"))
+    audit(omi_user_id, None, "default_settings_created_on_registration", settings.model_dump(mode="json"))
+    return settings
 
 
 def save_settings(omi_user_id: str, data: Dict[str, Any]) -> CaptureSettings:

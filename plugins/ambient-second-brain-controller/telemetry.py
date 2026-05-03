@@ -5,7 +5,6 @@ from fastapi import HTTPException
 import storage
 from models import TelemetryIn
 
-
 FORBIDDEN_TELEMETRY_FIELDS = {"audio", "raw_audio", "pcm", "payload"}
 TEXT_FIELDS = {"text", "transcript", "caption", "segments"}
 
