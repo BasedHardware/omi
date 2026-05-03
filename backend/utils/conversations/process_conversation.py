@@ -50,8 +50,6 @@ from utils.llm.conversation_processing import (
     assign_conversation_to_folder,
     extract_action_items,
 )
-from utils.llm.decisions import extract_decisions
-from utils.decisions import is_dogfood_uid
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
@@ -643,25 +641,6 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
-
-    # Decisions lens (v0 dogfood gate). Fail-open: any error leaves structured.decisions = [].
-    if not discarded and is_dogfood_uid(uid):
-        try:
-            transcript_text = (
-                conversation.get_transcript(False, people=people) if hasattr(conversation, 'get_transcript') else ''
-            )
-            structured.decisions = extract_decisions(
-                structured,
-                transcript_text,
-                conversation_id=getattr(conversation, 'id', 'unknown'),
-            )
-        except Exception as e:
-            logger.error(
-                f"[Decisions] extraction failed conv={getattr(conversation, 'id', 'unknown')} "
-                f"error={type(e).__name__}: {str(e)}"
-            )
-            # Fail-open: structured.decisions stays []
-
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     # AI-based folder assignment

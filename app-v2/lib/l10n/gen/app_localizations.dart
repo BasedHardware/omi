@@ -362,42 +362,6 @@ abstract class AppLocalizations {
   /// **'Skip for now'**
   String get onboardingSpeechSkip;
 
-  /// Eyebrow header for the Decisions section in conversation detail.
-  ///
-  /// In en, this message translates to:
-  /// **'DECISIONS'**
-  String get decisionsSection;
-
-  /// Caption shown when Decisions extraction ran but found no decisions for this meeting.
-  ///
-  /// In en, this message translates to:
-  /// **'No decisions extracted from this meeting'**
-  String get decisionsEmptyForMeeting;
-
-  /// Link label when a decision has exactly 1 related action item.
-  ///
-  /// In en, this message translates to:
-  /// **'View 1 related action'**
-  String get decisionsViewRelatedActionsOne;
-
-  /// Link label when a decision has multiple related action items.
-  ///
-  /// In en, this message translates to:
-  /// **'View {count} related actions'**
-  String decisionsViewRelatedActionsMany(int count);
-
-  /// Caption format for decision owner and due date.
-  ///
-  /// In en, this message translates to:
-  /// **'{owner} · due {date}'**
-  String decisionsOwnerDueFormat(String owner, String date);
-
-  /// Overflow pill shown when a decision has more than 3 open questions.
-  ///
-  /// In en, this message translates to:
-  /// **'+{count} more'**
-  String decisionsOpenQuestionsMore(int count);
-
   /// No description provided for @shellTabHome.
   ///
   /// In en, this message translates to:
@@ -469,6 +433,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'See all action items, opens Plan tab'**
   String get todayCardSeeAllSemantics;
+
+  /// No description provided for @summaryTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary template'**
+  String get summaryTemplate;
+
+  /// No description provided for @summarizedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Summarized by {name}'**
+  String summarizedBy(String name);
+
+  /// No description provided for @noSummaryForApp.
+  ///
+  /// In en, this message translates to:
+  /// **'No summary available — tap to choose another app'**
+  String get noSummaryForApp;
+
+  /// No description provided for @reprocessingConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocessing…'**
+  String get reprocessingConversation;
+
+  /// No description provided for @reprocessFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reprocess. Try again.'**
+  String get reprocessFailed;
+
+  /// No description provided for @chooseSummarizationApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a summarization app'**
+  String get chooseSummarizationApp;
+
+  /// No description provided for @currentlyUsing.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently using'**
+  String get currentlyUsing;
+
+  /// No description provided for @suggestedForThisConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested for this conversation'**
+  String get suggestedForThisConversation;
+
+  /// No description provided for @summarizedAppsSuggestedSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get summarizedAppsSuggestedSection;
+
+  /// No description provided for @summarizedAppsAvailableSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get summarizedAppsAvailableSection;
+
+  /// No description provided for @summarizedAppsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps installed yet'**
+  String get summarizedAppsEmpty;
 }
 
 class _AppLocalizationsDelegate

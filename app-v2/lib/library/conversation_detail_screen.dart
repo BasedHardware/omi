@@ -1,87 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
-import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/library/conversation_model.dart';
+import 'package:nooto_v2/library/conversations_provider.dart';
+import 'package:nooto_v2/library/widgets/app_result_markdown.dart';
+import 'package:nooto_v2/library/widgets/summarized_apps_sheet.dart';
 import 'package:nooto_v2/theme/app_theme.dart';
 
 final _detailDateFormat = DateFormat('EEEE, MMM d · h:mm a');
-final _decisionDueDateFormat = DateFormat('EEE MMM d');
 
-/// Conversation detail screen — title, when, overview, decisions (when the
-/// backend extracted any), action items, and transcript segments. Pushed by
-/// the Meetings list and by the "View conversation" affordance on a memory
-/// row.
+/// Conversation detail screen — title, when, overview, action items, and
+/// transcript segments. Pushed by the Meetings list and by the "View
+/// conversation" affordance on a memory row.
 ///
-/// Stateful so the Decisions section can light up matched action-item rows
-/// briefly after the user taps "View N related actions". The action-items
-/// list rendering is lifted into this widget's build so the highlight state
-/// can flow down without an extra widget seam.
-class ConversationDetailScreen extends StatefulWidget {
+/// The OVERVIEW slot renders the active app's markdown via
+/// [AppResultMarkdown]. Falls back to plain `Structured.overview` when no
+/// app summary exists. Tap the attribution row to swap apps via
+/// [SummarizedAppsBottomSheet]; the screen rebuilds when
+/// [ConversationsProvider] reprocess completes.
+class ConversationDetailScreen extends StatelessWidget {
   const ConversationDetailScreen({super.key, required this.item});
 
   final ConversationItem item;
 
   @override
-  State<ConversationDetailScreen> createState() => _ConversationDetailScreenState();
-}
-
-class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
-  /// Positional indexes into the action_items list that should be visually
-  /// tinted right now (post-tap on a "View N related actions" link). Cleared
-  /// after ~1500ms; reduced-motion skips it entirely.
-  final Set<int> _highlightedActionItemIndexes = <int>{};
-
-  /// Anchor for `Scrollable.ensureVisible` when the user taps "View N related
-  /// actions". Attached to the ACTION ITEMS section header.
-  final GlobalKey _actionItemsHeaderKey = GlobalKey();
-
-  Future<void> _scrollAndHighlight(List<int> indexes) async {
-    final headerCtx = _actionItemsHeaderKey.currentContext;
-    if (headerCtx != null) {
-      await Scrollable.ensureVisible(
-        headerCtx,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        alignment: 0,
-      );
-    }
-    if (!mounted) return;
-    // Reduced motion: scroll only, skip the tint.
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
-    if (reducedMotion) return;
-    setState(() {
-      _highlightedActionItemIndexes
-        ..clear()
-        ..addAll(indexes);
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    if (!mounted) return;
-    setState(() {
-      _highlightedActionItemIndexes.clear();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final item = widget.item;
+    // Read the latest conversation from the provider when one is in scope —
+    // `reprocessWithApp` splices a fresh ConversationItem into the cache,
+    // so reading from the provider lets the screen rebuild with new
+    // apps_results without a re-push. Falls back to the constructor item
+    // when hosted outside a ConversationsProvider (e.g. widget tests).
+    final ConversationsProvider? convs = context.watch<ConversationsProvider?>();
+    final ConversationItem item = convs?.byId(this.item.id) ?? this.item;
+    final reprocessing = convs?.isReprocessing(item.id) ?? false;
     final raw = item.raw;
     final structured = raw['structured'] is Map
         ? Map<String, dynamic>.from(raw['structured'] as Map)
         : const <String, dynamic>{};
     final actionItems = structured['action_items'] is List
         ? List<Map<String, dynamic>>.from(
-            (structured['action_items'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+            (structured['action_items'] as List).whereType<Map>().map(
+                  (e) => Map<String, dynamic>.from(e),
+                ),
           )
         : const <Map<String, dynamic>>[];
     final segments = raw['transcript_segments'] is List
         ? List<Map<String, dynamic>>.from(
-            (raw['transcript_segments'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+            (raw['transcript_segments'] as List).whereType<Map>().map(
+                  (e) => Map<String, dynamic>.from(e),
+                ),
           )
         : const <Map<String, dynamic>>[];
-
-    final decisions = item.decisions;
-    final showDecisionsSection = item.hasDecisionsField;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
@@ -96,46 +66,54 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           item.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(AppStyles.spacingL, 0, AppStyles.spacingL, AppStyles.spacingXL),
+        padding: const EdgeInsets.fromLTRB(
+          AppStyles.spacingL,
+          0,
+          AppStyles.spacingL,
+          AppStyles.spacingXL,
+        ),
         children: [
           if (item.createdAt != null)
             Padding(
               padding: const EdgeInsets.only(bottom: AppStyles.spacingM),
               child: Text(
                 _detailDateFormat.format(item.createdAt!),
-                style: const TextStyle(fontSize: 13, color: AppColors.textTertiary),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textTertiary,
+                ),
               ),
             ),
-          if (item.overview.trim().isNotEmpty) ...[
+          if (item.overview.trim().isNotEmpty || item.summarizedApp != null || reprocessing) ...[
             const _SectionHeader(label: 'OVERVIEW'),
             const SizedBox(height: AppStyles.spacingS),
-            Text(
-              item.overview.trim(),
-              style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
-            ),
-            const SizedBox(height: AppStyles.spacingXL),
-          ],
-          if (showDecisionsSection) ...[
-            DecisionsSection(
-              decisions: decisions,
-              actionItemCount: actionItems.length,
-              onViewRelatedActions: _scrollAndHighlight,
+            AppResultMarkdown(
+              item: item,
+              reprocessing: reprocessing,
+              onPickApp: () => SummarizedAppsBottomSheet.show(
+                context,
+                conversationId: item.id,
+                currentAppId: item.summarizedApp?.appId,
+              ),
             ),
             const SizedBox(height: AppStyles.spacingXL),
           ],
           if (actionItems.isNotEmpty) ...[
-            _SectionHeader(label: 'ACTION ITEMS', anchorKey: _actionItemsHeaderKey),
+            _SectionHeader(label: 'ACTION ITEMS'),
             const SizedBox(height: AppStyles.spacingS),
-            for (var i = 0; i < actionItems.length; i++)
-              _ActionItemRow(action: actionItems[i], highlighted: _highlightedActionItemIndexes.contains(i)),
+            for (final a in actionItems) _ActionItemRow(action: a),
             const SizedBox(height: AppStyles.spacingXL),
           ],
           if (segments.isNotEmpty) ...[
-            const _SectionHeader(label: 'TRANSCRIPT'),
+            _SectionHeader(label: 'TRANSCRIPT'),
             const SizedBox(height: AppStyles.spacingS),
             for (final s in segments) _SegmentRow(segment: s),
           ] else
@@ -143,7 +121,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
               padding: EdgeInsets.symmetric(vertical: AppStyles.spacingL),
               child: Text(
                 'No transcript captured for this conversation.',
-                style: TextStyle(fontSize: 13, color: AppColors.textTertiary),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textTertiary,
+                ),
               ),
             ),
         ],
@@ -153,15 +134,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label, this.anchorKey});
+  const _SectionHeader({required this.label});
   final String label;
-  final Key? anchorKey;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       label,
-      key: anchorKey,
       style: const TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
@@ -172,214 +151,16 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-/// DECISIONS section. Single chromed surface card per DESIGN.md card grammar
-/// — divider-separated decision rows live INSIDE one container, never one
-/// surface card per decision (stacking surface cards is a hard rejection).
-///
-/// Renders one of two states based on `decisions.isEmpty`:
-///   * non-empty: eyebrow + per-decision rows separated by 1px dividers
-///   * empty: eyebrow + a single muted caption ("No decisions extracted from
-///     this meeting") — appears when the backend extraction ran but produced
-///     nothing. The parent gates on `hasDecisionsField` so this only shows
-///     for allowlisted users.
-class DecisionsSection extends StatelessWidget {
-  const DecisionsSection({
-    super.key,
-    required this.decisions,
-    required this.actionItemCount,
-    required this.onViewRelatedActions,
-  });
-
-  final List<DecisionItem> decisions;
-  final int actionItemCount;
-
-  /// Called when the user taps "View N related actions" on a decision row.
-  /// The parent screen scrolls the Action Items section to the top of the
-  /// viewport and briefly tints the matched rows.
-  final Future<void> Function(List<int> indexes) onViewRelatedActions;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.backgroundSecondary,
-        borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      padding: const EdgeInsets.all(AppStyles.spacingL),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l.decisionsSection,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textTertiary,
-              letterSpacing: 0.8,
-            ),
-          ),
-          if (decisions.isEmpty) ...[
-            const SizedBox(height: AppStyles.spacingM),
-            Text(
-              l.decisionsEmptyForMeeting,
-              style: const TextStyle(fontSize: 13, color: AppColors.textTertiary, height: 1.4),
-            ),
-          ] else ...[
-            const SizedBox(height: AppStyles.spacingM),
-            for (var i = 0; i < decisions.length; i++) ...[
-              _DecisionRow(
-                decision: decisions[i],
-                actionItemCount: actionItemCount,
-                onViewRelatedActions: onViewRelatedActions,
-              ),
-              if (i < decisions.length - 1)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppStyles.spacingM),
-                  child: Container(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-                ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DecisionRow extends StatelessWidget {
-  const _DecisionRow({required this.decision, required this.actionItemCount, required this.onViewRelatedActions});
-
-  final DecisionItem decision;
-  final int actionItemCount;
-  final Future<void> Function(List<int> indexes) onViewRelatedActions;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final caption = _ownerDueCaption(l, decision);
-    final questions = decision.openQuestions;
-    final visibleQuestions = questions.length > 3 ? questions.take(3).toList() : questions;
-    final overflow = questions.length > 3 ? questions.length - 3 : 0;
-    // Filter related ids to ones that are positional-valid given current
-    // action_items length. Stops a stale index from causing a no-op flash.
-    final relatedIds = decision.relatedActionItemIds.where((i) => i >= 0 && i < actionItemCount).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          decision.statement,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: AppColors.textPrimary, height: 1.4),
-        ),
-        if (caption != null) ...[
-          const SizedBox(height: AppStyles.spacingXS),
-          Text(
-            caption,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: AppColors.textTertiary),
-          ),
-        ],
-        if (visibleQuestions.isNotEmpty) ...[
-          const SizedBox(height: AppStyles.spacingS),
-          Wrap(
-            spacing: AppStyles.spacingS,
-            runSpacing: AppStyles.spacingS,
-            children: [
-              for (final q in visibleQuestions) _OpenQuestionPill(label: q),
-              if (overflow > 0) _OpenQuestionPill(label: l.decisionsOpenQuestionsMore(overflow)),
-            ],
-          ),
-        ],
-        if (relatedIds.isNotEmpty) ...[
-          const SizedBox(height: AppStyles.spacingS),
-          _ViewRelatedActionsLink(count: relatedIds.length, onTap: () => onViewRelatedActions(relatedIds)),
-        ],
-      ],
-    );
-  }
-
-  static String? _ownerDueCaption(AppLocalizations l, DecisionItem d) {
-    final owner = d.ownerName;
-    final due = d.dueAt;
-    if (owner == null && due == null) return null;
-    if (owner != null && due != null) {
-      return l.decisionsOwnerDueFormat(owner, _decisionDueDateFormat.format(due));
-    }
-    if (owner != null) return owner;
-    return 'due ${_decisionDueDateFormat.format(due!)}';
-  }
-}
-
-class _OpenQuestionPill extends StatelessWidget {
-  const _OpenQuestionPill({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS, vertical: AppStyles.spacingXS),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundTertiary,
-        borderRadius: BorderRadius.circular(AppStyles.radiusPill),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w400),
-      ),
-    );
-  }
-}
-
-class _ViewRelatedActionsLink extends StatelessWidget {
-  const _ViewRelatedActionsLink({required this.count, required this.onTap});
-
-  final int count;
-  final Future<void> Function() onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final label = count == 1 ? l.decisionsViewRelatedActionsOne : l.decisionsViewRelatedActionsMany(count);
-    return Semantics(
-      button: true,
-      label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          height: AppStyles.touchTargetMinimum,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.brandPrimary),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ActionItemRow extends StatelessWidget {
-  const _ActionItemRow({required this.action, this.highlighted = false});
+  const _ActionItemRow({required this.action});
   final Map<String, dynamic> action;
-  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     final desc = (action['description'] as String?) ?? (action['content'] as String?) ?? '';
     final completed = action['completed'] == true;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: highlighted ? AppColors.brandPrimary.withValues(alpha: 0.08) : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: AppStyles.spacingXS),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -435,7 +216,14 @@ class _SegmentRow extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4)),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );

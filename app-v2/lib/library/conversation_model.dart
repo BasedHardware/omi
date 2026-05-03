@@ -27,35 +27,42 @@ class ConversationItem {
   final int appResultCount;
   final Map<String, dynamic> raw;
 
-  /// Parsed `decisions` array from `structured.decisions`. Returns an empty
-  /// list when the key is absent (legacy/non-allowlisted backend response)
-  /// or when the field is not a list. Computed lazily on each read — there's
-  /// at most a handful of decisions per conversation, so this is cheap.
-  List<DecisionItem> get decisions {
-    final structured = raw['structured'];
-    if (structured is! Map) return const [];
-    final list = structured['decisions'];
+  /// Per-app summary outputs from the backend's `_trigger_apps()`. Each
+  /// entry is markdown (potentially containing generative-UI XML tags
+  /// like `<rich-list>`, `<chart>`, `<accordion>`) keyed to the producing
+  /// app. v0 only ever has one entry — the picked summarization app —
+  /// but the backend models a list because historical conversations may
+  /// have multiple. We always render `appsResults.first`.
+  List<AppResult> get appsResults {
+    final list = raw['apps_results'];
     if (list is! List) return const [];
     return list
         .whereType<Map>()
-        .map((m) => DecisionItem.fromJson(Map<String, dynamic>.from(m)))
+        .map((m) => AppResult.fromJson(Map<String, dynamic>.from(m)))
         .toList(growable: false);
   }
 
-  /// True when the backend wrote a `decisions` key onto `structured`,
-  /// regardless of whether the array has any entries. Lets the detail
-  /// screen distinguish "extraction ran but found nothing" (zero-state
-  /// caption) from "user is not allowlisted" (no section at all).
-  bool get hasDecisionsField {
-    final structured = raw['structured'];
-    if (structured is! Map) return false;
-    return structured.containsKey('decisions');
+  /// The active summarized app result rendered in the OVERVIEW slot. Null
+  /// when the backend never produced any app summary for this conversation
+  /// (in which case the OVERVIEW falls back to plain `Structured.overview`).
+  AppResult? get summarizedApp => appsResults.isNotEmpty ? appsResults.first : null;
+
+  /// App ids the backend's prompt picker suggested for this conversation
+  /// before settling on one. Surfaced inside the picker sheet to highlight
+  /// relevant choices first.
+  List<String> get suggestedSummarizationApps {
+    final list = raw['suggested_summarization_apps'];
+    if (list is! List) return const [];
+    return List<String>.from(list.whereType<String>());
   }
 
+  /// Re-derives a [ConversationItem] from a server-fresh raw JSON map.
+  /// Used by [ConversationsProvider.reprocessWithApp] after the backend
+  /// returns the updated conversation document.
+  static ConversationItem fromRaw(Map<String, dynamic> raw) => fromJson(raw);
+
   static ConversationItem fromJson(Map<String, dynamic> j) {
-    final structured = j['structured'] is Map
-        ? Map<String, dynamic>.from(j['structured'] as Map)
-        : const <String, dynamic>{};
+    final structured = j['structured'] is Map ? Map<String, dynamic>.from(j['structured'] as Map) : const <String, dynamic>{};
     final segs = j['transcript_segments'];
     final actions = structured['action_items'];
     final apps = j['apps_results'];
@@ -72,53 +79,6 @@ class ConversationItem {
       actionItemCount: actions is List ? actions.length : 0,
       appResultCount: apps is List ? apps.length : 0,
       raw: j,
-    );
-  }
-
-  static DateTime? _parseDate(Object? v) {
-    if (v is String && v.isNotEmpty) {
-      return DateTime.tryParse(v)?.toLocal();
-    }
-    return null;
-  }
-}
-
-/// One decision extracted from a meeting transcript. Lives in the
-/// `decisions` array on `structured`. v0 is built-in (not app-produced);
-/// v0.1 may externalize as an app capability.
-class DecisionItem {
-  const DecisionItem({
-    required this.id,
-    required this.statement,
-    this.ownerName,
-    this.dueAt,
-    required this.status,
-    required this.openQuestions,
-    required this.relatedActionItemIds,
-  });
-
-  final String id;
-  final String statement;
-  final String? ownerName;
-  final DateTime? dueAt;
-  final String status; // "open" | "done" | "blocked"
-  final List<String> openQuestions;
-  // Indexes into structured.action_items (positional). v0.1 graduates to stable ids — see app-v2/TODOS.md.
-  final List<int> relatedActionItemIds;
-
-  static DecisionItem fromJson(Map<String, dynamic> j) {
-    return DecisionItem(
-      id: (j['id'] as String?) ?? '',
-      statement: (j['statement'] as String?) ?? '',
-      ownerName: j['owner_name'] as String?,
-      dueAt: _parseDate(j['due_at']),
-      status: (j['status'] as String?) ?? 'open',
-      openQuestions: (j['open_questions'] is List)
-          ? List<String>.from((j['open_questions'] as List).whereType<String>())
-          : const <String>[],
-      relatedActionItemIds: (j['related_action_item_ids'] is List)
-          ? List<int>.from((j['related_action_item_ids'] as List).whereType<num>().map((n) => n.toInt()))
-          : const <int>[],
     );
   }
 
@@ -149,18 +109,8 @@ String conversationDateBucket(DateTime? d, {DateTime? now}) {
 }
 
 const _months = <String>[
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 String _monthLong(int month) => _months[(month - 1).clamp(0, 11)];
@@ -169,4 +119,24 @@ class ConversationGroup {
   const ConversationGroup({required this.label, required this.items});
   final String label;
   final List<ConversationItem> items;
+}
+
+/// One app's summarization output for a conversation. Mirrors the backend's
+/// `apps_results` array entry: `{ app_id: "...", content: "..." }`.
+///
+/// The content can be plain markdown or markdown with embedded generative-UI
+/// XML tags (rich-list, chart, accordion, timeline, …). See
+/// `lib/widgets/generative_ui/` for the renderer.
+class AppResult {
+  const AppResult({this.appId, required this.content});
+
+  final String? appId;
+  final String content;
+
+  factory AppResult.fromJson(Map<String, dynamic> j) {
+    return AppResult(
+      appId: j['app_id'] as String?,
+      content: (j['content'] as String?) ?? '',
+    );
+  }
 }

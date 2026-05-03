@@ -166,23 +166,6 @@ class ActionItemsExtraction(BaseModel):
     action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
 
 
-class DecisionStatus(str, Enum):
-    open = "open"  # decision made; follow-through pending
-    done = "done"  # all related action items completed
-    blocked = "blocked"  # explicitly stalled (raised by transcript)
-
-
-class Decision(BaseModel):
-    id: str = Field(description="UUID4 hex; backend-generated, stable per-conversation")
-    statement: str = Field(description="One-sentence agreement, max 200 chars")
-    owner_name: Optional[str] = Field(default=None, description="Speaker label or named person; null if unstated")
-    due_at: Optional[datetime] = Field(default=None, description="ISO 8601 datetime if stated, else null")
-    status: DecisionStatus = Field(default=DecisionStatus.open)
-    open_questions: List[str] = Field(default=[], description="Unresolved sub-questions; max 5")
-    # Indexes into Structured.action_items (positional). MUST NOT be reordered post-extraction.
-    related_action_item_ids: List[int] = Field(default=[], description="Indexes into Structured.action_items")
-
-
 class Structured(BaseModel):
     title: str = Field(description="A title/name for this conversation", default='')
     overview: str = Field(
@@ -191,17 +174,10 @@ class Structured(BaseModel):
     )
     emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
-    # NOTE: action_items array order is FROZEN at extraction time. Decision.related_action_item_ids
-    # references positional indexes into this array. Downstream code MUST NOT reorder, filter, or
-    # dedup. v0.1 will graduate to stable uuids on each ActionItem (see app-v2/TODOS.md).
     action_items: List[ActionItem] = Field(description="A list of action items from the conversation", default=[])
     events: List[Event] = Field(
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
         default=[],
-    )
-    decisions: List[Decision] = Field(
-        default=[],
-        description="Specialized 'Decisions' lens; populated only for allowlisted uids in v0.",
     )
 
     @field_validator('category', mode='before')

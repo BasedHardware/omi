@@ -158,31 +158,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingSpeechSkip => 'Skip for now';
 
   @override
-  String get decisionsSection => 'DECISIONS';
-
-  @override
-  String get decisionsEmptyForMeeting =>
-      'No decisions extracted from this meeting';
-
-  @override
-  String get decisionsViewRelatedActionsOne => 'View 1 related action';
-
-  @override
-  String decisionsViewRelatedActionsMany(int count) {
-    return 'View $count related actions';
-  }
-
-  @override
-  String decisionsOwnerDueFormat(String owner, String date) {
-    return '$owner · due $date';
-  }
-
-  @override
-  String decisionsOpenQuestionsMore(int count) {
-    return '+$count more';
-  }
-
-  @override
   String get shellTabHome => 'Home';
 
   @override
@@ -230,4 +205,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get todayCardSeeAllSemantics => 'See all action items, opens Plan tab';
+
+  @override
+  String get summaryTemplate => 'Summary template';
+
+  @override
+  String summarizedBy(String name) {
+    return 'Summarized by $name';
+  }
+
+  @override
+  String get noSummaryForApp =>
+      'No summary available — tap to choose another app';
+
+  @override
+  String get reprocessingConversation => 'Reprocessing…';
+
+  @override
+  String get reprocessFailed => 'Couldn\'t reprocess. Try again.';
+
+  @override
+  String get chooseSummarizationApp => 'Choose a summarization app';
+
+  @override
+  String get currentlyUsing => 'Currently using';
+
+  @override
+  String get suggestedForThisConversation => 'Suggested for this conversation';
+
+  @override
+  String get summarizedAppsSuggestedSection => 'Suggested';
+
+  @override
+  String get summarizedAppsAvailableSection => 'Installed';
+
+  @override
+  String get summarizedAppsEmpty => 'No apps installed yet';
 }
