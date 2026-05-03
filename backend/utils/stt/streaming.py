@@ -689,7 +689,6 @@ async def process_audio_modulate(
         raise ValueError('MODULATE_API_KEY environment variable is not set')
 
     params = {
-        'api_key': api_key,
         'speaker_diarization': 'true',
         'sample_rate': str(sample_rate),
     }
@@ -698,7 +697,7 @@ async def process_audio_modulate(
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10, additional_headers={'X-API-Key': api_key})
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
     sock.set_wav_header(_build_wav_header(sample_rate))
