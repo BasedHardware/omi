@@ -74,6 +74,7 @@ from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
     process_audio_dg,
+    process_audio_modulate,
 )
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -968,7 +969,7 @@ async def _stream_handler(
         return
 
     # Process STT
-    deepgram_socket = None
+    stt_socket = None
 
     vad_gate = None
 
@@ -977,16 +978,22 @@ async def _stream_handler(
         # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
 
+    async def _create_stt_socket(callback, lang, sr, model, kw=None, use_vad_gate=None, active_check=None):
+        if stt_service == STTService.modulate:
+            return await process_audio_modulate(callback, sr, lang, preseconds=speech_profile_preseconds)
+        return await process_audio_dg(
+            callback, lang, sr, 1, model=model, keywords=kw, vad_gate=use_vad_gate, is_active=active_check
+        )
+
     async def _process_stt():
         nonlocal websocket_close_code
-        nonlocal deepgram_socket
+        nonlocal stt_socket
         try:
             if use_custom_stt:
                 logger.info(f"Custom STT mode enabled - using suggested transcripts from app {uid} {session_id}")
                 return None
 
             if is_multi_channel:
-                # Create one STT connection per channel
                 for i, ch_config in enumerate(channel_configs):
 
                     def make_multi_channel_callback(cfg):
@@ -999,57 +1006,51 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
-                    stt_sockets_multi[i] = await process_audio_dg(
-                        callback,
-                        stt_language,
-                        TARGET_SAMPLE_RATE,
-                        1,
-                        model=stt_model,
+                    stt_sockets_multi[i] = await _create_stt_socket(
+                        callback, stt_language, TARGET_SAMPLE_RATE, stt_model
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
                 )
                 return None
 
-            # Initialize VAD gate for all eligible DG sessions.
-            # Gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
-            # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
-            # (the "8"/"16" refers to sample rate kHz, not bit depth).
-            # DG always receives mono (channels=1), so clamp gate channels to 1.
+            # VAD gate only for Deepgram — Modulate handles VAD/endpointing internally
             nonlocal vad_gate
-            gate_enabled_by_override = vad_gate_override == 'enabled'
-            gate_disabled_by_override = vad_gate_override == 'disabled'
-            if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
-                gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
-                try:
-                    vad_gate = VADStreamingGate(
-                        sample_rate=sample_rate,
-                        channels=1,  # DG always receives mono (encoding=linear16, channels=1)
-                        mode=gate_mode,
-                        uid=uid,
-                        session_id=session_id,
-                    )
-                    logger.info(
-                        'VAD gate initialized mode=%s codec=%s sample_rate=%s uid=%s session=%s',
-                        gate_mode,
-                        codec,
-                        sample_rate,
-                        uid,
-                        session_id,
-                    )
-                except Exception:
-                    logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
-                    vad_gate = None
+            if stt_service == STTService.deepgram:
+                gate_enabled_by_override = vad_gate_override == 'enabled'
+                gate_disabled_by_override = vad_gate_override == 'disabled'
+                if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
+                    gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
+                    try:
+                        vad_gate = VADStreamingGate(
+                            sample_rate=sample_rate,
+                            channels=1,
+                            mode=gate_mode,
+                            uid=uid,
+                            session_id=session_id,
+                        )
+                        logger.info(
+                            'VAD gate initialized mode=%s codec=%s sample_rate=%s uid=%s session=%s',
+                            gate_mode,
+                            codec,
+                            sample_rate,
+                            uid,
+                            session_id,
+                        )
+                    except Exception:
+                        logger.exception(
+                            'VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id
+                        )
+                        vad_gate = None
 
-            deepgram_socket = await process_audio_dg(
+            stt_socket = await _create_stt_socket(
                 stream_transcript,
                 stt_language,
                 sample_rate,
-                1,
-                model=stt_model,
-                keywords=vocabulary[:100] if vocabulary else None,
-                vad_gate=vad_gate,
-                is_active=lambda: websocket_active,
+                stt_model,
+                kw=vocabulary[:100] if vocabulary else None,
+                use_vad_gate=vad_gate,
+                active_check=lambda: websocket_active,
             )
             return None
 
@@ -2673,7 +2674,7 @@ async def _stream_handler(
             pusher_tasks.append(asyncio.create_task(pusher_heartbeat(), name=f"ws:{uid}:pusher_heartbeat"))
 
         # Tasks
-        data_process_task = asyncio.create_task(receive_data(deepgram_socket), name=f"ws:{uid}:receive")
+        data_process_task = asyncio.create_task(receive_data(stt_socket), name=f"ws:{uid}:receive")
         stream_transcript_task = asyncio.create_task(stream_transcript_process(), name=f"ws:{uid}:stream_transcript")
         record_usage_task = asyncio.create_task(_record_usage_periodically(), name=f"ws:{uid}:record_usage")
 
@@ -2769,6 +2770,19 @@ async def _stream_handler(
         except Exception as e:
             logger.error(f"Error flushing pending translations: {e} {uid} {session_id}")
 
+        # Modulate EOS drain: send EOS and wait for final transcripts while
+        # stream_transcript_process is still running (websocket_active=True)
+        if stt_service == STTService.modulate:
+            try:
+                if is_multi_channel:
+                    for mc_stt_socket in stt_sockets_multi:
+                        if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
+                            await mc_stt_socket.drain_and_close()
+                elif stt_socket and hasattr(stt_socket, 'drain_and_close'):
+                    await stt_socket.drain_and_close()
+            except Exception as e:
+                logger.error(f"Error draining Modulate EOS: {e} {uid} {session_id}")
+
         websocket_active = False
 
         # STT sockets
@@ -2778,9 +2792,8 @@ async def _stream_handler(
                     if mc_stt_socket:
                         mc_stt_socket.finish()
             else:
-                if deepgram_socket:
-                    # GatedDeepgramSocket.finish() handles finalize automatically
-                    deepgram_socket.finish()
+                if stt_socket:
+                    stt_socket.finish()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
