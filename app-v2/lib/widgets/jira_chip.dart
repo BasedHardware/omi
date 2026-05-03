@@ -39,15 +39,25 @@ const Color _jiraBlue = Color(0xFF2684FF);
 /// padding plus the parent row's vertical spacing — visually the chip is
 /// 22pt tall, but the InkWell's hit-test extends to the full row's tap area.
 class JiraChip extends StatelessWidget {
-  const JiraChip({super.key, required this.source, LaunchUrlFn? launchUrl, this.onProjectTap})
-    : _launchUrl = launchUrl ?? _defaultLaunchUrl;
+  const JiraChip({
+    super.key,
+    required this.source,
+    LaunchUrlFn? launchUrl,
+    this.onProjectTap,
+    this.showProject = true,
+  }) : _launchUrl = launchUrl ?? _defaultLaunchUrl;
 
   /// Convenience: pass the [ExternalSource] from an [ActionItem]. Returns a
   /// [SizedBox.shrink] when null so callers can spread the result without
   /// branching.
-  static Widget forSource(ExternalSource? source, {LaunchUrlFn? launchUrl, VoidCallback? onProjectTap}) {
+  static Widget forSource(
+    ExternalSource? source, {
+    LaunchUrlFn? launchUrl,
+    VoidCallback? onProjectTap,
+    bool showProject = true,
+  }) {
     if (source == null) return const SizedBox.shrink();
-    return JiraChip(source: source, launchUrl: launchUrl, onProjectTap: onProjectTap);
+    return JiraChip(source: source, launchUrl: launchUrl, onProjectTap: onProjectTap, showProject: showProject);
   }
 
   final ExternalSource source;
@@ -59,11 +69,17 @@ class JiraChip extends StatelessWidget {
   /// chip stays a single pill that opens the URL.
   final VoidCallback? onProjectTap;
 
+  /// Hide the leading project pill — used when the surrounding context
+  /// already names the project (e.g. Plan grouped By Project, where the
+  /// section header is the project key). The id pill always renders so the
+  /// tap-to-open path stays reachable.
+  final bool showProject;
+
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(AppStyles.radiusSmall);
     final projectKey = source.jiraProjectKey;
-    final showSplit = onProjectTap != null && projectKey != null && projectKey.isNotEmpty;
+    final showSplit = showProject && onProjectTap != null && projectKey != null && projectKey.isNotEmpty;
     if (showSplit) {
       return Row(
         mainAxisSize: MainAxisSize.min,
