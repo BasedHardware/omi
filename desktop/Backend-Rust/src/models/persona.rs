@@ -8,40 +8,6 @@ use serde::{Deserialize, Serialize};
 // REQUEST TYPES
 // =========================================================================
 
-/// Request to create a new persona
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreatePersonaRequest {
-    /// Display name for the persona
-    pub name: String,
-    /// Unique username (optional, auto-generated if not provided)
-    pub username: Option<String>,
-}
-
-/// Request to update an existing persona
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdatePersonaRequest {
-    /// Display name for the persona
-    pub name: Option<String>,
-    /// Short description (max 250 chars)
-    pub description: Option<String>,
-    /// Custom persona prompt (overrides auto-generated)
-    pub persona_prompt: Option<String>,
-    /// Avatar image URL
-    pub image: Option<String>,
-}
-
-/// Request to regenerate persona prompt from current memories
-#[derive(Debug, Clone, Deserialize)]
-pub struct GeneratePromptRequest {
-    // Empty for now, but allows adding options in the future
-}
-
-/// Query parameters for checking username availability
-#[derive(Debug, Clone, Deserialize)]
-pub struct CheckUsernameQuery {
-    pub username: String,
-}
-
 // =========================================================================
 // RESPONSE TYPES
 // =========================================================================
@@ -70,28 +36,6 @@ pub struct PersonaResponse {
     pub updated_at: DateTime<Utc>,
     /// Number of public memories used to build the persona
     pub public_memories_count: Option<i32>,
-}
-
-/// Simple status response
-#[derive(Debug, Clone, Serialize)]
-pub struct PersonaStatusResponse {
-    pub status: String,
-    pub message: Option<String>,
-}
-
-/// Response for username availability check
-#[derive(Debug, Clone, Serialize)]
-pub struct UsernameAvailableResponse {
-    pub available: bool,
-    pub username: String,
-}
-
-/// Response for prompt generation
-#[derive(Debug, Clone, Serialize)]
-pub struct GeneratePromptResponse {
-    pub persona_prompt: String,
-    pub description: String,
-    pub memories_used: i32,
 }
 
 // =========================================================================
