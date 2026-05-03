@@ -42,10 +42,6 @@ pub struct FocusSessionDB {
     pub duration_seconds: Option<i64>,
 }
 
-fn default_limit() -> usize {
-    100
-}
-
 /// Entry for a distraction app/site with time spent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistractionEntry {
