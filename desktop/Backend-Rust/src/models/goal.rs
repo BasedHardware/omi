@@ -83,7 +83,3 @@ pub struct GoalHistoryEntry {
     pub recorded_at: DateTime<Utc>,
 }
 
-fn default_history_days() -> u32 {
-    30
-}
-
