@@ -7,6 +7,8 @@ from concurrent.futures import as_completed
 
 from utils.executors import critical_executor, storage_executor
 
+logger = logging.getLogger(__name__)
+
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
@@ -98,7 +100,12 @@ def extract_knowledge_from_memory(
 
         with track_usage(uid, Features.KNOWLEDGE_GRAPH):
             response = get_llm('knowledge_graph').invoke(prompt)
-        extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+
+        try:
+            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+        except Exception as e:
+            logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+            extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
         label_to_node_id = {}
         for existing in existing_nodes:
@@ -190,7 +197,12 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
 
             with track_usage(uid, Features.KNOWLEDGE_GRAPH):
                 response = get_llm('knowledge_graph').invoke(prompt)
-            extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+
+            try:
+                extraction: KnowledgeGraphExtraction = parser.parse(response.content)
+            except Exception as e:
+                logger.error(f"KG extraction parse failed for memory {memory_id}: {type(e).__name__}")
+                extraction = KnowledgeGraphExtraction(nodes=[], edges=[])
 
             created_nodes = []
             created_edges = []

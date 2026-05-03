@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/services/auth_service.dart';
@@ -9,16 +10,17 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/permissions_page.dart';
 import 'package:omi/pages/settings/profile.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -28,9 +30,16 @@ import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'phone_call_settings_page.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
+
+class _SearchableItem {
+  final String title;
+  final Widget icon;
+  final VoidCallback onTap;
+
+  const _SearchableItem({required this.title, required this.icon, required this.onTap});
+}
 
 class SettingsDrawer extends StatefulWidget {
   const SettingsDrawer({super.key});
@@ -53,10 +62,24 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   String? buildVersion;
   String? shortDeviceInfo;
 
+  bool _isSearching = false;
+  String _searchQuery = '';
+  late TextEditingController _searchController;
+  late FocusNode _searchFocusNode;
+
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
     _loadAppAndDeviceInfo();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   Future<String> _getShortDeviceInfo() async {
@@ -257,6 +280,202 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     });
   }
 
+  List<_SearchableItem> _buildSearchableItems(BuildContext context) {
+    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+
+    void goToProfile() => routeToPage(context, const ProfilePage());
+    void goToNotifications() => routeToPage(context, const NotificationsSettingsPage());
+    void goToUsage() => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage()));
+    void goToSync() {
+      final page = SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+      Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
+    }
+
+    void goToDevice() => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
+    void goToIntegrations() =>
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
+    void goToPermissions() {
+      MixpanelManager().permissionsSettingsOpened();
+      routeToPage(context, const PermissionsPage());
+    }
+
+    void goToMemories() => routeToPage(context, const MemoriesPage());
+    void goToDeveloper() async => await routeToPage(context, const DeveloperSettingsPage());
+
+    const profileIcon = FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20);
+    const notifIcon = FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20);
+    const usageIcon = FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20);
+    const deviceIcon = FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20);
+    const permIcon = FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF8E8E93), size: 20);
+    const memIcon = FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20);
+    const devIcon = FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20);
+    const intIcon = FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20);
+    const syncIcon = FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20);
+
+    final items = <_SearchableItem>[
+      // --- Profile ---
+      _SearchableItem(title: context.l10n.profile, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.name, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.email, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.language, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.customVocabulary, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.speechProfile, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.identifyingOthers, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.voiceResponseMode, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.paymentMethods, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.conversationDisplay, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.dataPrivacy, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.deleteAccountTitle, icon: profileIcon, onTap: goToProfile),
+      // --- Notifications ---
+      _SearchableItem(title: context.l10n.notifications, icon: notifIcon, onTap: goToNotifications),
+      _SearchableItem(title: context.l10n.notificationFrequency, icon: notifIcon, onTap: goToNotifications),
+      _SearchableItem(title: context.l10n.dailySummary, icon: notifIcon, onTap: goToNotifications),
+      _SearchableItem(title: context.l10n.deliveryTime, icon: notifIcon, onTap: goToNotifications),
+      // --- Plan & Usage ---
+      _SearchableItem(title: context.l10n.planAndUsage, icon: usageIcon, onTap: goToUsage),
+      // --- Offline Sync ---
+      _SearchableItem(title: context.l10n.offlineSync, icon: syncIcon, onTap: goToSync),
+      // --- Device Settings (only when connected) ---
+      if (deviceProvider.isConnected) ...[
+        _SearchableItem(title: context.l10n.deviceSettings, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.deviceName, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.firmware, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.sdCardSync, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.wifiSync, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.doubleTap, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.ledBrightness, icon: deviceIcon, onTap: goToDevice),
+        _SearchableItem(title: context.l10n.micGain, icon: deviceIcon, onTap: goToDevice),
+      ],
+      // --- Integrations ---
+      _SearchableItem(title: context.l10n.integrations, icon: intIcon, onTap: goToIntegrations),
+      // --- Permissions ---
+      _SearchableItem(title: context.l10n.permissions, icon: permIcon, onTap: goToPermissions),
+      _SearchableItem(title: context.l10n.microphone, icon: permIcon, onTap: goToPermissions),
+      _SearchableItem(title: context.l10n.bluetooth, icon: permIcon, onTap: goToPermissions),
+      _SearchableItem(title: context.l10n.location, icon: permIcon, onTap: goToPermissions),
+      _SearchableItem(title: context.l10n.backgroundActivity, icon: permIcon, onTap: goToPermissions),
+      // --- Memories ---
+      _SearchableItem(title: context.l10n.memories, icon: memIcon, onTap: goToMemories),
+      // --- Support ---
+      if (PlatformService.isIntercomSupported) ...[
+        _SearchableItem(
+          title: context.l10n.feedbackBug,
+          icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
+          onTap: () async {
+            final Uri url = Uri.parse('https://feedback.omi.me/');
+            if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+          },
+        ),
+        _SearchableItem(
+          title: context.l10n.helpCenter,
+          icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
+          onTap: () async {
+            final Uri url = Uri.parse('https://help.omi.me/en/');
+            if (await canLaunchUrl(url)) {
+              try {
+                await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+              } catch (e) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            }
+          },
+        ),
+      ],
+      // --- Developer ---
+      _SearchableItem(title: context.l10n.developerSettings, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.apiKeys, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.debugAndDiagnostics, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.conversationEvents, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.realTimeTranscript, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.audioBytes, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.daySummary, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.autoCreateSpeakers, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.goalTracker, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.apiEnvironment, icon: devIcon, onTap: goToDeveloper),
+      // --- What's New ---
+      _SearchableItem(
+        title: context.l10n.whatsNew,
+        icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
+        onTap: () {
+          MixpanelManager().whatsNewOpened();
+          ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
+        },
+      ),
+      // --- Mac app ---
+      _SearchableItem(
+        title: context.l10n.getOmiForMac,
+        icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
+        onTap: () async {
+          final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        },
+      ),
+      // --- Referral ---
+      _SearchableItem(
+        title: context.l10n.referralProgram,
+        icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReferralPage())),
+      ),
+      // --- Sign Out ---
+      _SearchableItem(
+        title: context.l10n.signOut,
+        icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+        onTap: () async {
+          final navigator = Navigator.of(context);
+          navigator.pop();
+          await showDialog(
+            context: context,
+            builder: (ctx) {
+              return getDialog(
+                ctx,
+                () => Navigator.of(ctx).pop(),
+                () async {
+                  Navigator.of(ctx).pop();
+                  final rootCtx = globalNavigatorKey.currentContext;
+                  if (rootCtx != null && rootCtx.mounted) {
+                    clearAllUserState(rootCtx);
+                  }
+                  await SharedPreferencesUtil().clear();
+                  await AuthService.instance.signOut();
+                  if (rootCtx != null && rootCtx.mounted) {
+                    routeToPage(rootCtx, const AppShell(), replace: true);
+                  }
+                },
+                context.l10n.signOutQuestion,
+                context.l10n.signOutConfirmation,
+              );
+            },
+          );
+        },
+      ),
+    ];
+
+    return items;
+  }
+
+  Widget _buildSearchResults(BuildContext context) {
+    final allItems = _buildSearchableItems(context);
+    final query = _searchQuery.toLowerCase();
+    final filtered = allItems.where((item) => item.title.toLowerCase().contains(query)).toList();
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 48),
+          child: Text(
+            'No results',
+            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16, fontWeight: FontWeight.w400),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children:
+          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+    );
+  }
+
   Widget _buildOmiModeContent(BuildContext context) {
     return Consumer<UsageProvider>(
       builder: (context, usageProvider, child) {
@@ -338,9 +557,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
-                        ? const AutoSyncPage()
-                        : const SyncPage();
+                    final page =
+                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -372,28 +590,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
                   },
                 ),
-                Consumer<UsageProvider>(
-                  builder: (context, usageProvider, child) {
-                    final sp2 = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited =
-                        sp2 == PlanType.unlimited || sp2 == PlanType.operator || sp2 == PlanType.architect;
-                    if (!isUnlimited) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildSettingsItem(
-                          title: 'Phone Calls',
-                          icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
-                          onTap: () {
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const PhoneCallSettingsPage()));
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
                   title: context.l10n.permissions,
@@ -401,6 +597,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   onTap: () {
                     MixpanelManager().permissionsSettingsOpened();
                     routeToPage(context, const PermissionsPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.memories,
+                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const MemoriesPage());
                   },
                 ),
               ],
@@ -501,10 +705,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           () => Navigator.of(ctx).pop(),
                           () async {
                             Navigator.of(ctx).pop();
+                            // The drawer's context is unmounted by the time we
+                            // get here (we popped it before opening the
+                            // confirm dialog), so routing through it is a
+                            // silent no-op. Use the root navigator instead so
+                            // we always land back on the auth screen.
+                            final rootCtx = globalNavigatorKey.currentContext;
+                            if (rootCtx != null && rootCtx.mounted) {
+                              clearAllUserState(rootCtx);
+                            }
                             await SharedPreferencesUtil().clear();
                             await AuthService.instance.signOut();
-                            if (context.mounted) {
-                              routeToPage(context, const AppShell(), replace: true);
+                            if (rootCtx != null && rootCtx.mounted) {
+                              routeToPage(rootCtx, const AppShell(), replace: true);
                             }
                           },
                           context.l10n.signOutQuestion,
@@ -533,52 +746,130 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       height: MediaQuery.of(context).size.height * 0.9,
       decoration: const BoxDecoration(
         color: Color(0xFF000000),
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(28), topRight: Radius.circular(28)),
       ),
-      child: Column(
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            height: 4,
-            width: 36,
-            decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-          ),
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Stack(
-              children: [
-                // Centered title
-                Center(
-                  child: Text(
-                    context.l10n.settings,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                // Done button positioned to the right
-                Positioned(
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Text(
-                      context.l10n.done,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(28), topRight: Radius.circular(28)),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              height: 4,
+              width: 36,
+              decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+            ),
+            // Header
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+              child: _isSearching
+                  ? Padding(
+                      key: const ValueKey('search-header'),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              autofocus: true,
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              cursorColor: Colors.white,
+                              decoration: InputDecoration(
+                                hintText: 'Search settings…',
+                                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+                                filled: true,
+                                fillColor: const Color(0xFF1C1C1E),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                  borderSide: BorderSide.none,
+                                ),
+                                prefixIcon: const Icon(Icons.search, color: Colors.white60),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? GestureDetector(
+                                        onTap: () {
+                                          setState(() => _searchQuery = '');
+                                          _searchController.clear();
+                                        },
+                                        child: const Icon(Icons.close, color: Colors.white60),
+                                      )
+                                    : null,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                              onChanged: (value) => setState(() => _searchQuery = value),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isSearching = false;
+                                _searchQuery = '';
+                                _searchController.clear();
+                              });
+                              _searchFocusNode.unfocus();
+                            },
+                            child: const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Padding(
+                      key: const ValueKey('normal-header'),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _isSearching = true);
+                              Future.microtask(() => _searchFocusNode.requestFocus());
+                            },
+                            child: const Icon(Icons.search, color: Colors.white, size: 22),
+                          ),
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                context.l10n.settings,
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                              child: Text(
+                                context.l10n.done,
+                                style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          // Content
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _buildOmiModeContent(context),
+            const SizedBox(height: 16),
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _isSearching && _searchQuery.isNotEmpty
+                    ? _buildSearchResults(context)
+                    : _buildOmiModeContent(context),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

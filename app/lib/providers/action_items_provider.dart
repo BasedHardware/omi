@@ -1,13 +1,16 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/action_items/services/action_item_export_service.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -42,6 +45,11 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
 
+  // Search state — lexical client-side filter over already-loaded items.
+  // Backend vector search will replace the filter implementation behind
+  // the same getters in a follow-up PR.
+  String _searchQuery = '';
+
   // Getters
   List<ActionItemWithMetadata> get actionItems => _actionItems;
   bool get isLoading => _isLoading;
@@ -58,6 +66,18 @@ class ActionItemsProvider extends ChangeNotifier {
   Set<String> get selectedItems => _selectedItems;
   int get selectedCount => _selectedItems.length;
   bool get hasSelection => _selectedItems.isNotEmpty;
+
+  // Search getters
+  String get searchQuery => _searchQuery;
+  bool get isSearching => _searchQuery.isNotEmpty;
+
+  /// Items matching the active search query, or all items when no query is set.
+  /// Lexical case-insensitive substring match on description.
+  List<ActionItemWithMetadata> get filteredActionItems {
+    if (_searchQuery.isEmpty) return _actionItems;
+    final q = _searchQuery.toLowerCase();
+    return _actionItems.where((i) => i.description.toLowerCase().contains(q)).toList();
+  }
 
   // Group action items by completion status
   List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
@@ -638,12 +658,16 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.contains(itemId)) {
       _selectedItems.remove(itemId);
     } else {
+      final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
+      if (item != null && item.exported) return;
       _selectedItems.add(itemId);
     }
     notifyListeners();
   }
 
   void selectItem(String itemId) {
+    final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
+    if (item != null && item.exported) return;
     if (!_selectedItems.contains(itemId)) {
       _selectedItems.add(itemId);
       notifyListeners();
@@ -660,7 +684,7 @@ class ActionItemsProvider extends ChangeNotifier {
   void selectAllItems() {
     _selectedItems.clear();
     for (final item in _actionItems) {
-      _selectedItems.add(item.id);
+      if (!item.exported) _selectedItems.add(item.id);
     }
     notifyListeners();
   }
@@ -682,13 +706,21 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     for (final item in itemsToSelect) {
-      _selectedItems.add(item.id);
+      if (!item.exported) _selectedItems.add(item.id);
     }
     notifyListeners();
   }
 
   void clearSelection() {
     _selectedItems.clear();
+    notifyListeners();
+  }
+
+  void clearUserData() {
+    _actionItems = [];
+    _selectedItems = {};
+    _pendingSortUpdates.clear();
+    _pendingIndentUpdates.clear();
     notifyListeners();
   }
 
@@ -721,9 +753,65 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void startSelectionWithItem(String itemId) {
+    final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
+    if (item != null && item.exported) return;
     _isSelectionMode = true;
     _selectedItems = {itemId};
     notifyListeners();
+  }
+
+  // Search methods
+  void setSearchQuery(String query) {
+    final next = query.trim();
+    if (next == _searchQuery) return;
+    _searchQuery = next;
+    notifyListeners();
+  }
+
+  void clearSearchQuery() {
+    if (_searchQuery.isEmpty) return;
+    _searchQuery = '';
+    notifyListeners();
+  }
+
+  /// Fan-out export of every currently selected item to [platform].
+  /// Snackbar feedback is posted via [context]; selection mode exits when done.
+  Future<void> bulkExportSelected(BuildContext context, TaskIntegrationApp platform) async {
+    if (_selectedItems.isEmpty) return;
+
+    final ids = _selectedItems.toList(growable: false);
+    final items = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
+    final total = items.length;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(context.l10n.bulkExportInProgress),
+        duration: const Duration(seconds: 30),
+        backgroundColor: Colors.blue,
+      ),
+    );
+
+    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    final successCount = results.where((r) => r == ExportResult.success).length;
+
+    // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
+    await fetchActionItems();
+    endSelection();
+
+    if (!context.mounted) return;
+    messenger.clearSnackBars();
+    final message = successCount == total
+        ? context.l10n.bulkExportSuccess(successCount, platform.displayName)
+        : context.l10n.bulkExportPartial(successCount, total, platform.displayName);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: successCount == total ? Colors.green : Colors.orange,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override

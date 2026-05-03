@@ -573,7 +573,9 @@ class TestClearCacheEndpoint:
                 resp = await client.post("/v2/desktop/clear-cache", headers={"secret-key": "real-secret"})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
-        mock_delete.assert_called_once_with("github_releases_desktop")
+        # Both the live cache and the last-known-good fallback are cleared.
+        cleared_keys = {call.args[0] for call in mock_delete.call_args_list}
+        assert cleared_keys == {"github_releases_desktop", "github_releases_desktop:lkg"}
 
     @pytest.mark.asyncio
     async def test_missing_header_returns_422(self):

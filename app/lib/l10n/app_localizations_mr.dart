@@ -2377,6 +2377,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get batteryLevel => 'बॅटरी स्तर';
 
   @override
+  String get charging => 'चार्ज होत आहे';
+
+  @override
   String get productUpdate => 'उत्पादन अपडेट';
 
   @override
@@ -2503,12 +2506,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'मुख्यपृष्ठावर आपल्या व्यक्तिगत लक्ष्यांचा मागोवा घ्या';
-
-  @override
-  String get dailyReflection => 'दैनिक चिंतन';
-
-  @override
-  String get get9PmReminderToReflect => 'आपल्या दिवसावर विचार करण्यासाठी रात्रि ९ वाजताचा स्मरण मिळवा';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'कृती आयटमचे वर्णन रिक्त असू शकत नाही';
@@ -3923,10 +3920,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'होमपेजवर व्यक्तिगत लक्ष्य ट्रॅक करा';
-
-  @override
-  String get dailyReflectionDescription =>
-      'आपल्या दिवसावर चिंतन करण्यासाठी आणि आपल्या विचार कॅप्चर करण्यासाठी रात्री ९ वाजता स्मरणपत्र प्राप्त करा.';
 
   @override
   String get endpointURL => 'एंडपॉइंट URL';
@@ -7195,12 +7188,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'दैनिक प्रतिबिंबसाठी वेळ';
-
-  @override
-  String get dailyReflectionNotificationBody => 'मला तुमच्या दिवसाविषयी सांगा';
-
-  @override
   String get actionItemReminderTitle => 'Omi स्मरणपत्र';
 
   @override
@@ -8314,6 +8301,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'फोन कॉल सेटिंग्ज';
 
   @override
+  String get showPhoneCallButtonTitle => 'फोन कॉल बटण दाखवा';
+
+  @override
+  String get showPhoneCallButtonDesc => 'मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा';
+
+  @override
   String get yourVerifiedNumbers => 'तुमचे सत्यापित नंबर';
 
   @override
@@ -9150,6 +9143,117 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'तुम्ही तुमची मासिक मर्यादा गाठली आहे. निर्बंधांशिवाय Omi सोबत चॅट सुरू ठेवण्यासाठी अपग्रेड करा.';
+
+  @override
+  String get voiceResponseAudio => 'Omi चे उत्तर मोठ्याने वाचा';
+
+  @override
+  String get voiceResponseMode => 'व्हॉइस प्रतिसाद';
+
+  @override
+  String get voiceResponseModeTitle => 'प्रतिसाद केव्हा बोलायचा';
+
+  @override
+  String get voiceResponseOff => 'बंद';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'फक्त हेडफोन';
+
+  @override
+  String get voiceResponseAlways => 'नेहमी';
+
+  @override
+  String get agreeAndContinue => 'सहमत व्हा आणि सुरू ठेवा';
+
+  @override
+  String get startVoiceRecording => 'व्हॉइस रेकॉर्डिंग सुरू करा';
+
+  @override
+  String get startCallRecording => 'कॉल रेकॉर्डिंग सुरू करा';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'व्हॉइस मोड';
+
+  @override
+  String get quickActionAskOmi => 'Omi ला काहीही विचारा';
+
+  @override
+  String get record => 'रेकॉर्ड';
+
+  @override
+  String get stop => 'थांबवा';
+
+  @override
+  String get recordWithPhoneMic => 'फोन माइकने रेकॉर्ड करा';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'तुमच्या आजूबाजूचा ऑडिओ कॅप्चर करा';
+
+  @override
+  String get phoneCall => 'फोन कॉल';
+
+  @override
+  String get phoneCallSubtitle => 'लाइव्ह ट्रान्स्क्रिप्शनसह कॉल रेकॉर्ड करा';
+
+  @override
+  String get searchActionItems => 'कृती आयटम शोधा';
+
+  @override
+  String get selectActionItems => 'अनेक निवडा';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count आयटम निर्यात करा…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'निर्यात होत आहे…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count $platform वर निर्यात केले';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total पैकी $success $platform वर निर्यात केले';
+  }
+
+  @override
+  String get showCompletedTasks => 'पूर्ण झालेले दाखवा';
+
+  @override
+  String get hideCompletedTasks => 'पूर्ण झालेले लपवा';
+
+  @override
+  String get selectAllTasksMenu => 'सर्व निवडा';
+
+  @override
+  String get connectTaskAppToExport => 'निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा';
+
+  @override
+  String get connectAction => 'जोडा';
+
+  @override
+  String get deselectAllTasksMenu => 'सर्वांची निवड रद्द करा';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

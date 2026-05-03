@@ -176,7 +176,7 @@ class AppListItem extends StatelessWidget {
                           ),
                           child: Center(
                             child: Text(
-                              state.enabled ? 'Open' : 'Add',
+                              state.enabled ? 'Open' : 'Enable',
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                             ),
                           ),

@@ -271,6 +271,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Transcripts, photos + inline WAL safety indicator
                         Column(
                           children: [
+                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                             Expanded(
                               child: provider.segments.isEmpty && provider.photos.isEmpty
                                   ? Center(
@@ -342,7 +343,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           },
                                         ),
                             ),
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                           ],
                         ),
                         // Summary Tab

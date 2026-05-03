@@ -21,6 +21,7 @@ import {
 import { OmiApp, OmiAppCapability } from '@/lib/services/omi-api/types';
 import { AppDetailView } from '@/components/dashboard/app-detail-view';
 import { useAppDetails } from '@/hooks/useAppDetails';
+import { WelcomeOverview } from '@/components/dashboard/welcome-overview';
 
 // Simple spinner placeholder (consider moving to shared UI)
 const Spinner = () => (
@@ -292,7 +293,9 @@ export default function AppsPage() {
   // --- End Combined States ---
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
+      <WelcomeOverview />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Apps Management</h1>
@@ -301,7 +304,7 @@ export default function AppsPage() {
           </p>
         </div>
       </div>
-      
+
       {/* --- Filter Controls --- */}
       <div className="flex flex-col gap-4 rounded-md border p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

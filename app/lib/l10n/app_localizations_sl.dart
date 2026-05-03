@@ -2377,6 +2377,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get batteryLevel => 'Raven baterije';
 
   @override
+  String get charging => 'Polnjenje';
+
+  @override
   String get productUpdate => 'Posodobitev proizvoda';
 
   @override
@@ -2503,12 +2506,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sledite svojim osebnim ciljem na domači strani';
-
-  @override
-  String get dailyReflection => 'Dnevna razmislek';
-
-  @override
-  String get get9PmReminderToReflect => 'Prejmi opomnik ob 21. uri, da razmisliš o svojem dnevu';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Opis akcijske točke ne sme biti prazen';
@@ -3924,10 +3921,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Sledite osebnim ciljem na domači strani';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Dobite opomnik ob 21:00, da se porazmislite o svojem dnevu in zajamete svoje misli.';
 
   @override
   String get endpointURL => 'Končna točka URL';
@@ -7200,12 +7193,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Čas za Dnevni Razmislek';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Povejte mi o vaš dan';
-
-  @override
   String get actionItemReminderTitle => 'Opomnik Omi';
 
   @override
@@ -8326,6 +8313,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastavitve telefonskih klicev';
 
   @override
+  String get showPhoneCallButtonTitle => 'Pokaži gumb za klic';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Prikaži gumb za telefonski klic na domačem zaslonu';
+
+  @override
   String get yourVerifiedNumbers => 'Tvoje preverjene številke';
 
   @override
@@ -9163,6 +9156,117 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosegli ste svojo mesečno omejitev. Nadgradite, da nadaljujete pogovor z Omi brez omejitev.';
+
+  @override
+  String get voiceResponseAudio => 'Preberi odgovor Omi na glas';
+
+  @override
+  String get voiceResponseMode => 'Glasovni odgovor';
+
+  @override
+  String get voiceResponseModeTitle => 'Kdaj prebrati odgovore';
+
+  @override
+  String get voiceResponseOff => 'Izklop';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Samo slušalke';
+
+  @override
+  String get voiceResponseAlways => 'Vedno';
+
+  @override
+  String get agreeAndContinue => 'Strinjam se in nadaljuj';
+
+  @override
+  String get startVoiceRecording => 'Začni glasovno snemanje';
+
+  @override
+  String get startCallRecording => 'Začni snemanje klica';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Glasovni način';
+
+  @override
+  String get quickActionAskOmi => 'Vprašajte Omi karkoli';
+
+  @override
+  String get record => 'Posnemi';
+
+  @override
+  String get stop => 'Ustavi';
+
+  @override
+  String get recordWithPhoneMic => 'Snemaj s telefonskim mikrofonom';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Posnemite zvok okoli sebe';
+
+  @override
+  String get phoneCall => 'Telefonski klic';
+
+  @override
+  String get phoneCallSubtitle => 'Posnemite klic s prepisom v živo';
+
+  @override
+  String get searchActionItems => 'Iskanje akcijskih elementov';
+
+  @override
+  String get selectActionItems => 'Izberi več';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Izvozi $count element(ov) v…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Izvažanje…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Izvoženo $count v $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Izvoženo $success od $total v $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Prikaži dokončane';
+
+  @override
+  String get hideCompletedTasks => 'Skrij dokončane';
+
+  @override
+  String get selectAllTasksMenu => 'Izberi vse';
+
+  @override
+  String get connectTaskAppToExport => 'Povežite aplikacijo za naloge v Nastavitvah za izvoz';
+
+  @override
+  String get connectAction => 'Poveži';
+
+  @override
+  String get deselectAllTasksMenu => 'Prekliči izbor vseh';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

@@ -2374,6 +2374,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get batteryLevel => 'سطح باتری';
 
   @override
+  String get charging => 'در حال شارژ';
+
+  @override
   String get productUpdate => 'بروزرسانی محصول';
 
   @override
@@ -2500,12 +2503,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ردیابی اهداف شخصی خود در صفحه اصلی';
-
-  @override
-  String get dailyReflection => 'تأمل روزانه';
-
-  @override
-  String get get9PmReminderToReflect => 'یادآوری ساعت 9 شب برای تأمل در روز خود';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'توضیح مورد اقدام نمی‌تواند خالی باشد';
@@ -3921,9 +3918,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'پیگیری اهداف شخصی در صفحه اصلی';
-
-  @override
-  String get dailyReflectionDescription => 'یادآوری در ساعت ۹ شب برای تفکر در روز خود و ثبت افکار خود.';
 
   @override
   String get endpointURL => 'URL نقطه پایانی';
@@ -7187,12 +7181,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'وقت تأمل روزانه';
-
-  @override
-  String get dailyReflectionNotificationBody => 'درباره روز خود برای من بگویید';
-
-  @override
   String get actionItemReminderTitle => 'یادآور Omi';
 
   @override
@@ -8306,6 +8294,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'تنظیمات تماس تلفنی';
 
   @override
+  String get showPhoneCallButtonTitle => 'نمایش دکمه تماس';
+
+  @override
+  String get showPhoneCallButtonDesc => 'نمایش دکمه تماس تلفنی در صفحه اصلی';
+
+  @override
   String get yourVerifiedNumbers => 'شماره‌های تأیید شده شما';
 
   @override
@@ -9141,6 +9135,117 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'شما به حد ماهانه خود رسیده‌اید. برای ادامه گفتگو با Omi بدون محدودیت ارتقا دهید.';
+
+  @override
+  String get voiceResponseAudio => 'خواندن پاسخ Omi با صدای بلند';
+
+  @override
+  String get voiceResponseMode => 'پاسخ صوتی';
+
+  @override
+  String get voiceResponseModeTitle => 'چه زمانی پاسخ‌ها خوانده شوند';
+
+  @override
+  String get voiceResponseOff => 'خاموش';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'فقط هدفون';
+
+  @override
+  String get voiceResponseAlways => 'همیشه';
+
+  @override
+  String get agreeAndContinue => 'موافقم و ادامه';
+
+  @override
+  String get startVoiceRecording => 'شروع ضبط صدا';
+
+  @override
+  String get startCallRecording => 'شروع ضبط تماس';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'حالت صوتی';
+
+  @override
+  String get quickActionAskOmi => 'از Omi هر چیزی بپرسید';
+
+  @override
+  String get record => 'ضبط';
+
+  @override
+  String get stop => 'توقف';
+
+  @override
+  String get recordWithPhoneMic => 'ضبط با میکروفون تلفن';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'صدای اطراف خود را ضبط کنید';
+
+  @override
+  String get phoneCall => 'تماس تلفنی';
+
+  @override
+  String get phoneCallSubtitle => 'یک تماس را با رونویسی زنده ضبط کنید';
+
+  @override
+  String get searchActionItems => 'جستجوی موارد اقدام';
+
+  @override
+  String get selectActionItems => 'انتخاب چندگانه';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'صادرات $count مورد به…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'در حال صادرات…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count به $platform صادر شد';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success از $total به $platform صادر شد';
+  }
+
+  @override
+  String get showCompletedTasks => 'نمایش انجام‌شده‌ها';
+
+  @override
+  String get hideCompletedTasks => 'پنهان کردن انجام‌شده‌ها';
+
+  @override
+  String get selectAllTasksMenu => 'انتخاب همه';
+
+  @override
+  String get connectTaskAppToExport => 'برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید';
+
+  @override
+  String get connectAction => 'اتصال';
+
+  @override
+  String get deselectAllTasksMenu => 'لغو انتخاب همه';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

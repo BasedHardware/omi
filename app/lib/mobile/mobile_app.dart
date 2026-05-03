@@ -18,6 +18,14 @@ class MobileApp extends StatelessWidget {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isSignedIn()) {
+          // Returning users who haven't yet given consent under the new
+          // model must see the consent screen before any AI processing
+          // begins, even if the server says they completed onboarding
+          // previously. OnboardingWrapper renders the consent step in
+          // that case and routes them straight to home after Continue.
+          if (!SharedPreferencesUtil().aiConsentGiven) {
+            return const OnboardingWrapper();
+          }
           if (SharedPreferencesUtil().onboardingCompleted) {
             if (!SharedPreferencesUtil().permissionsCompleted) {
               return const _PermissionsGate();

@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "ಬ್ಯಾಟರಿ ಸ್ತರ",
+    "charging": "ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "ಹೋಮ್‌ಪೇಜ್‌ನಲ್ಲಿ ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಲಕ್ಷ್ಯಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "ದೈನಿಕ ಪ್ರತಿಫಲನ",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "ನಿಮ್ಮ ದಿನದ ಮೇಲೆ ಪ್ರತಿಫಲಿತ ಮಾಡಲು ರಾತ್ರಿ 9 ಬಾರಿ ಸ್ಮರಣೆ ಪಡೆಯಿರಿ",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "ಕ್ರಿಯೆ ಪದ ವಿವರಣೆ ಖಾಲಿ ಇರಬಾರದು",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "API ಕೀಲಿಗಳು ಇಲ್ಲ. ಪ್ರಾರಂಭಿಸಲು ಒಂದು ರಚಿಸಿ.",
     "autoCreateWhenDetected": "ಹೆಸರನ್ನು ಪತ್ತೆ ಮಾಡಿದಾಗ ಸ್ವಯಂ-ರಚಿಸಿ",
     "trackPersonalGoals": "ಮುಖ್ಯ ಪುಟದಲ್ಲಿ ವ್ಯಕ್ತಿಗತ ಲಕ್ಷ್ಯಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ",
-    "dailyReflectionDescription": "ನಿಮ್ಮ ದಿನವನ್ನು ಪ್ರತಿಫಲಿತ ಮಾಡಲು ಮತ್ತು ನಿಮ್ಮ ಆಲೋಚನೆಗಳನ್ನು ಹಿಡಿದುಕೊಳ್ಳಲು ರಾತ್ರಿ 9 ಗಂಟೆಗೆ ಸ್ಮರಣೀಯ ಪಡೆಯಿರಿ.",
     "endpointURL": "ಸಮಾಪ್ತಿ URL",
     "links": "ಲಿಂಕ್‌ಗಳು",
     "discordMemberCount": "Discord ಮಲ್ಲಸದಲ್ಲಿ 8000+ ಸದಸ್ಯರು",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "ಆಫ್",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "ದೈನಿಕ ಪ್ರತಿಫಲನದ ಸಮಯ",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ ನನಗೆ ಹೇಳಿ",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi ಜ್ಞಾಪಕ",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "ಸ್ಪೀಕರ್",
     "phoneEndCall": "ಅವಸಾನ",
     "phoneCallSettingsTitle": "ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "showPhoneCallButtonTitle": "ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ",
+    "showPhoneCallButtonDesc": "ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ",
     "yourVerifiedNumbers": "ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು",
     "verifiedNumbersDescription": "ನೀವು ಯಾರನನ್ನೂ ಕರೆ ಮಾಡುವಾಗ, ಅವರು ತಮ್ಮ ಫೋನ ಉದ್ದಿಂದ ಈ ಸಂಖ್ಯೆ ನೋಡುತ್ತಾರೆ",
     "noVerifiedNumbers": "ಯಾವುದೇ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆ ಇಲ್ಲ",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "ಬ್ಯಾಟರಿ",
     "day": "ದಿನ",
     "noBatteryDataYet": "ಇನ್ನೂ ಬ್ಯಾಟರಿ ಡೇಟಾ ಇಲ್ಲ",
-    "week": "ವಾರ"
+    "week": "ವಾರ",
+    "voiceResponseAudio": "Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ",
+    "voiceResponseMode": "ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ",
+    "voiceResponseModeTitle": "ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ",
+    "voiceResponseOff": "ಆಫ್",
+    "voiceResponseHeadphonesOnly": "ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ",
+    "voiceResponseAlways": "ಯಾವಾಗಲೂ",
+    "agreeAndContinue": "ಒಪ್ಪಿಗೆ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "ಧ್ವನಿ ಮೋಡ್",
+    "quickActionAskOmi": "Omi ಗೆ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ",
+    "record": "ರೆಕಾರ್ಡ್",
+    "stop": "ನಿಲ್ಲಿಸಿ",
+    "recordWithPhoneMic": "ಫೋನ್ ಮೈಕ್‌ನೊಂದಿಗೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "recordWithPhoneMicSubtitle": "ನಿಮ್ಮ ಸುತ್ತಲಿನ ಆಡಿಯೋ ಸೆರೆಹಿಡಿಯಿರಿ",
+    "phoneCall": "ಫೋನ್ ಕರೆ",
+    "phoneCallSubtitle": "ಲೈವ್ ಪ್ರತಿಲೇಖನದೊಂದಿಗೆ ಕರೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "bulkExportInProgress": "ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "bulkExportPartial": "{total} ರಲ್ಲಿ {success} ಅನ್ನು {platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
+    "bulkExportSuccess": "{count} ಅನ್ನು {platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
+    "chooseExportDestination": "{count} ಐಟಂ(ಗಳನ್ನು) ರಫ್ತು ಮಾಡಿ…",
+    "connectAction": "ಸಂಪರ್ಕಿಸಿ",
+    "connectTaskAppToExport": "ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ",
+    "deselectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ",
+    "hideCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ",
+    "searchActionItems": "ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ",
+    "selectActionItems": "ಬಹು ಆಯ್ಕೆ",
+    "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
+    "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
+    "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ"
 }

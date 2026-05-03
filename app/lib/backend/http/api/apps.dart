@@ -65,7 +65,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
 }
 
 Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
-retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
+    retrieveCapabilityAppsGroupedByCategory({required String capability, bool includeReviews = true}) async {
   final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {

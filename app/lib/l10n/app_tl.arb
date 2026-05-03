@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Antas ng Baterya",
+    "charging": "Nagcha-charge",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Subaybayan ang iyong personal na mga layunin sa homepage",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Pang-araw-araw na Pag-iisip",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Makatanggap ng 9 PM reminder upang mag-isip sa iyong araw",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Ang paglalarawan ng action item ay hindi maaaring walang laman",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Walang API keys. Lumikha ng isa upang magsimula.",
     "autoCreateWhenDetected": "Auto-create kapag na-detect ang pangalan",
     "trackPersonalGoals": "Subaybayan ang personal na mga layunin sa homepage",
-    "dailyReflectionDescription": "Makatanggap ng reminder sa 9 PM upang mag-isip tungkol sa iyong araw at kunin ang iyong mga iisip.",
     "endpointURL": "Endpoint URL",
     "links": "Mga Link",
     "discordMemberCount": "8000+ members sa Discord",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "I-off",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Panahon na para sa Daily Reflection",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Sabihin sa akin ang tungkol sa iyong araw",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi Reminder",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "Tapos",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Ipakita ang button ng tawag",
+    "showPhoneCallButtonDesc": "Ipakita ang button ng tawag sa home screen",
     "yourVerifiedNumbers": "Ang Iyong Na-verify na Mga Numero",
     "verifiedNumbersDescription": "Kapag tumatawag ka sa isang tao, makikita nila ang numerong ito sa kanilang phone",
     "noVerifiedNumbers": "Walang na-verify na mga numero",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "Baterya",
     "day": "Araw",
     "noBatteryDataYet": "Wala pang datos ng baterya",
-    "week": "Linggo"
+    "week": "Linggo",
+    "voiceResponseAudio": "Basahin nang malakas ang sagot ng Omi",
+    "voiceResponseMode": "Tugon sa boses",
+    "voiceResponseModeTitle": "Kailan bibigkasin ang tugon",
+    "voiceResponseOff": "Naka-off",
+    "voiceResponseHeadphonesOnly": "Headphones lang",
+    "voiceResponseAlways": "Palagi",
+    "agreeAndContinue": "Sumasang-ayon at Magpatuloy",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Voice Mode",
+    "quickActionAskOmi": "Tanungin si Omi ng kahit ano",
+    "record": "Mag-record",
+    "stop": "Itigil",
+    "recordWithPhoneMic": "Mag-record gamit ang mikropono ng telepono",
+    "recordWithPhoneMicSubtitle": "Kunan ang audio sa paligid mo",
+    "phoneCall": "Tawag sa telepono",
+    "phoneCallSubtitle": "Mag-record ng tawag na may live na transkripsyon",
+    "bulkExportInProgress": "Nag-e-export…",
+    "bulkExportPartial": "Na-export ang {success} sa {total} sa {platform}",
+    "bulkExportSuccess": "Na-export ang {count} sa {platform}",
+    "chooseExportDestination": "I-export ang {count} item sa…",
+    "connectAction": "Ikonekta",
+    "connectTaskAppToExport": "Ikonekta ang isang task app sa Settings para mag-export",
+    "deselectAllTasksMenu": "I-deselect lahat",
+    "hideCompletedTasks": "Itago ang tapos na",
+    "searchActionItems": "Maghanap ng mga action item",
+    "selectActionItems": "Pumili ng marami",
+    "selectAllTasksMenu": "Piliin lahat",
+    "showCompletedTasks": "Ipakita ang tapos na",
+    "startCallRecording": "Simulan ang pag-record ng tawag",
+    "startVoiceRecording": "Simulan ang voice recording"
 }

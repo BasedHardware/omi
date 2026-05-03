@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "سطح باتری",
+    "charging": "در حال شارژ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "ردیابی اهداف شخصی خود در صفحه اصلی",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "تأمل روزانه",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "یادآوری ساعت 9 شب برای تأمل در روز خود",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "توضیح مورد اقدام نمی‌تواند خالی باشد",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "کلید API نیست. یکی ایجاد کنید تا شروع کنید.",
     "autoCreateWhenDetected": "ایجاد خودکار زمانی که نام تشخیص داده شود",
     "trackPersonalGoals": "پیگیری اهداف شخصی در صفحه اصلی",
-    "dailyReflectionDescription": "یادآوری در ساعت ۹ شب برای تفکر در روز خود و ثبت افکار خود.",
     "endpointURL": "URL نقطه پایانی",
     "links": "پیوندها",
     "discordMemberCount": "۸۰۰۰+ عضو بر روی Discord",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "خاموش",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "وقت تأمل روزانه",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "درباره روز خود برای من بگویید",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "یادآور Omi",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "بلندگو",
     "phoneEndCall": "پایان",
     "phoneCallSettingsTitle": "تنظیمات تماس تلفنی",
+    "showPhoneCallButtonTitle": "نمایش دکمه تماس",
+    "showPhoneCallButtonDesc": "نمایش دکمه تماس تلفنی در صفحه اصلی",
     "yourVerifiedNumbers": "شماره‌های تأیید شده شما",
     "verifiedNumbersDescription": "هنگامی که شما تماس می‌گیرید، طرف مقابل این شماره را روی تلفن خود خواهد دید",
     "noVerifiedNumbers": "بدون شماره تأیید شده",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "باتری",
     "day": "روز",
     "noBatteryDataYet": "هنوز داده‌ای از باتری موجود نیست",
-    "week": "هفته"
+    "week": "هفته",
+    "voiceResponseAudio": "خواندن پاسخ Omi با صدای بلند",
+    "voiceResponseMode": "پاسخ صوتی",
+    "voiceResponseModeTitle": "چه زمانی پاسخ‌ها خوانده شوند",
+    "voiceResponseOff": "خاموش",
+    "voiceResponseHeadphonesOnly": "فقط هدفون",
+    "voiceResponseAlways": "همیشه",
+    "agreeAndContinue": "موافقم و ادامه",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "حالت صوتی",
+    "quickActionAskOmi": "از Omi هر چیزی بپرسید",
+    "record": "ضبط",
+    "stop": "توقف",
+    "recordWithPhoneMic": "ضبط با میکروفون تلفن",
+    "recordWithPhoneMicSubtitle": "صدای اطراف خود را ضبط کنید",
+    "phoneCall": "تماس تلفنی",
+    "phoneCallSubtitle": "یک تماس را با رونویسی زنده ضبط کنید",
+    "bulkExportInProgress": "در حال صادرات…",
+    "bulkExportPartial": "{success} از {total} به {platform} صادر شد",
+    "bulkExportSuccess": "{count} به {platform} صادر شد",
+    "chooseExportDestination": "صادرات {count} مورد به…",
+    "connectAction": "اتصال",
+    "connectTaskAppToExport": "برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید",
+    "deselectAllTasksMenu": "لغو انتخاب همه",
+    "hideCompletedTasks": "پنهان کردن انجام‌شده‌ها",
+    "searchActionItems": "جستجوی موارد اقدام",
+    "selectActionItems": "انتخاب چندگانه",
+    "selectAllTasksMenu": "انتخاب همه",
+    "showCompletedTasks": "نمایش انجام‌شده‌ها",
+    "startCallRecording": "شروع ضبط تماس",
+    "startVoiceRecording": "شروع ضبط صدا"
 }

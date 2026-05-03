@@ -321,6 +321,7 @@ class OverageInfoResponse(BaseModel):
     plan_type: str
     is_overage_plan: bool
     included_questions: Optional[int] = None
+    included_cost_usd: Optional[float] = None
     used_questions: int = 0
     excess_questions: int = 0
     real_cost_usd: float = 0.0
@@ -351,6 +352,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
         plan_type=plan.value,
         is_overage_plan=is_overage_plan(plan),
         included_questions=snapshot['included_questions'],
+        included_cost_usd=snapshot.get('included_cost_usd'),
         used_questions=snapshot['used_questions'],
         excess_questions=snapshot['excess_questions'],
         real_cost_usd=snapshot['real_cost_usd'],
@@ -378,7 +380,10 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
-    session = stripe_utils.create_subscription_checkout_session(uid, request.price_id, idempotency_key)
+    existing_customer_id = users_db.get_stripe_customer_id(uid)
+    session = stripe_utils.create_subscription_checkout_session(
+        uid, request.price_id, idempotency_key, customer_id=existing_customer_id
+    )
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
@@ -774,8 +779,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         account = event['data']['object']
         if account['charges_enabled'] and account['details_submitted']:
             # account is fully onboarded
-            uid = account['metadata']['uid']
-            if get_default_payment_method(uid) is None:
+            uid = (account.get('metadata') or {}).get('uid')
+            if uid and get_default_payment_method(uid) is None:
                 set_default_payment_method(uid, 'stripe')
 
     # TODO: handle this event to link transfers?

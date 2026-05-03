@@ -13,14 +13,26 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
-class AiAppGeneratorPage extends StatefulWidget {
+class AiAppGeneratorPage extends StatelessWidget {
   const AiAppGeneratorPage({super.key});
 
   @override
-  State<AiAppGeneratorPage> createState() => _AiAppGeneratorPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => AiAppGeneratorProvider(),
+      child: const _AiAppGeneratorPageView(),
+    );
+  }
 }
 
-class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
+class _AiAppGeneratorPageView extends StatefulWidget {
+  const _AiAppGeneratorPageView();
+
+  @override
+  State<_AiAppGeneratorPageView> createState() => _AiAppGeneratorPageState();
+}
+
+class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   final TextEditingController _promptController = TextEditingController();
   final FocusNode _promptFocusNode = FocusNode();
   bool _isDescriptionExpanded = false;
@@ -327,27 +339,27 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                ? const Color(0xFF6366F1).withOpacity(0.2)
-                                : const Color(0xFF2A2A2E),
+                                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                                    : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
                           child: Center(
                             child: isCompleted
                                 ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
-                                  ),
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
+                                      ),
                           ),
                         ),
                         const SizedBox(width: 14),

@@ -112,8 +112,12 @@ class TestPagination:
         assert "Omi_DK2_v2.0.10" in tags
         # Verify no desktop releases leaked through
         assert not any("macos" in r["tag_name"] for r in result)
-        # Verify cache was set
-        mock_set_cache.assert_called_once()
+        # Verify both short cache (5min) and last-known-good cache (24h)
+        # were set on a successful non-empty fetch.
+        cache_keys_set = [call.args[0] for call in mock_set_cache.call_args_list]
+        assert "test_key" in cache_keys_set
+        assert "test_key:lkg" in cache_keys_set
+        assert mock_set_cache.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_pagination_without_filter(self):
@@ -201,4 +205,124 @@ class TestCacheBehavior:
             result = await get_omi_github_releases("test_key")
 
         assert result == []
-        mock_set.assert_called_once_with("test_key", [], ttl=300)
+        # Empty fetch with no LKG fallback caches with the SHORT TTL (60s)
+        # so the next request retries GitHub soon, instead of poisoning
+        # the cache with empty for the full 5-minute success TTL.
+        mock_set.assert_called_once_with("test_key", [], ttl=60)
+
+
+class TestLastKnownGoodFallback:
+    """When GitHub returns empty / errors, serve the previous good cache."""
+
+    @pytest.mark.asyncio
+    async def test_empty_fetch_falls_back_to_lkg(self):
+        """If GitHub returns [] but we have an LKG, return the LKG instead."""
+        lkg = _desktop_releases(3)
+
+        # First call (short key) misses; second call (LKG key) hits.
+        cache_calls = []
+
+        def fake_get(key):
+            cache_calls.append(key)
+            return None if key == "test_key" else lkg
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = []  # GitHub outage signature
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+        # Both keys were consulted
+        assert "test_key" in cache_calls and "test_key:lkg" in cache_calls
+        # LKG was re-cached under the short key with a short TTL so we
+        # retry GitHub soon, but service stays up.
+        mock_set.assert_called_once_with("test_key", lkg, ttl=60)
+
+    @pytest.mark.asyncio
+    async def test_500_response_falls_back_to_lkg(self):
+        """If GitHub returns a non-200, fall back to LKG instead of raising 500."""
+        lkg = _desktop_releases(2)
+
+        def fake_get(key):
+            return None if key == "test_key" else lkg
+
+        mock_response = MagicMock()
+        mock_response.status_code = 503
+        mock_response.text = "Service Unavailable"
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+
+    @pytest.mark.asyncio
+    async def test_exception_falls_back_to_lkg(self):
+        """Network exception → LKG fallback (instead of bubbling)."""
+        lkg = _desktop_releases(4)
+
+        def fake_get(key):
+            return None if key == "test_key" else lkg
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=RuntimeError("connection reset"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_writes_both_caches(self):
+        """Non-empty fetch refreshes both short cache (5min) and LKG (24h)."""
+        releases = _desktop_releases(5)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = releases
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == releases
+        ttl_by_key = {call.args[0]: call.kwargs.get("ttl") for call in mock_set.call_args_list}
+        assert ttl_by_key["test_key"] == 300
+        assert ttl_by_key["test_key:lkg"] == 86400

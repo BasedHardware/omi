@@ -143,8 +143,13 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
     target = 'app'
     if app.external_integration and app.external_integration.chat_messages_enabled:
         target = app.external_integration.chat_messages_target
-        chat_app_id = None if target == 'main' else app.id
-        add_integration_chat_message(data['message'], chat_app_id, uid)
+        if target == 'main':
+            # Prefix app name so users can identify which integration sent the message,
+            # especially useful when an external app's error appears in the main chat.
+            prefixed = f"[{app.name}]: {data['message']}"
+            add_integration_chat_message(prefixed, None, uid)
+        else:
+            add_integration_chat_message(data['message'], app.id, uid)
 
     # Always send push notification
     send_app_notification(uid, app.name, app.id, data['message'], target=target)

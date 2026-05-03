@@ -229,7 +229,7 @@ class SectionAppItemCard extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      isEnabled ? 'Open' : 'Add',
+                      isEnabled ? 'Open' : 'Enable',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

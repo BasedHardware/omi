@@ -2389,6 +2389,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get batteryLevel => 'Antas ng Baterya';
 
   @override
+  String get charging => 'Nagcha-charge';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -2515,12 +2518,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Subaybayan ang iyong personal na mga layunin sa homepage';
-
-  @override
-  String get dailyReflection => 'Pang-araw-araw na Pag-iisip';
-
-  @override
-  String get get9PmReminderToReflect => 'Makatanggap ng 9 PM reminder upang mag-isip sa iyong araw';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Ang paglalarawan ng action item ay hindi maaaring walang laman';
@@ -3949,10 +3946,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Subaybayan ang personal na mga layunin sa homepage';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Makatanggap ng reminder sa 9 PM upang mag-isip tungkol sa iyong araw at kunin ang iyong mga iisip.';
 
   @override
   String get endpointURL => 'Endpoint URL';
@@ -7249,12 +7242,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Panahon na para sa Daily Reflection';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Sabihin sa akin ang tungkol sa iyong araw';
-
-  @override
   String get actionItemReminderTitle => 'Omi Reminder';
 
   @override
@@ -8379,6 +8366,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Ipakita ang button ng tawag';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Ipakita ang button ng tawag sa home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Ang Iyong Na-verify na Mga Numero';
 
   @override
@@ -9224,6 +9217,117 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.';
+
+  @override
+  String get voiceResponseAudio => 'Basahin nang malakas ang sagot ng Omi';
+
+  @override
+  String get voiceResponseMode => 'Tugon sa boses';
+
+  @override
+  String get voiceResponseModeTitle => 'Kailan bibigkasin ang tugon';
+
+  @override
+  String get voiceResponseOff => 'Naka-off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones lang';
+
+  @override
+  String get voiceResponseAlways => 'Palagi';
+
+  @override
+  String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
+
+  @override
+  String get startVoiceRecording => 'Simulan ang voice recording';
+
+  @override
+  String get startCallRecording => 'Simulan ang pag-record ng tawag';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Voice Mode';
+
+  @override
+  String get quickActionAskOmi => 'Tanungin si Omi ng kahit ano';
+
+  @override
+  String get record => 'Mag-record';
+
+  @override
+  String get stop => 'Itigil';
+
+  @override
+  String get recordWithPhoneMic => 'Mag-record gamit ang mikropono ng telepono';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Kunan ang audio sa paligid mo';
+
+  @override
+  String get phoneCall => 'Tawag sa telepono';
+
+  @override
+  String get phoneCallSubtitle => 'Mag-record ng tawag na may live na transkripsyon';
+
+  @override
+  String get searchActionItems => 'Maghanap ng mga action item';
+
+  @override
+  String get selectActionItems => 'Pumili ng marami';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'I-export ang $count item sa…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Nag-e-export…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Na-export ang $count sa $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Na-export ang $success sa $total sa $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Ipakita ang tapos na';
+
+  @override
+  String get hideCompletedTasks => 'Itago ang tapos na';
+
+  @override
+  String get selectAllTasksMenu => 'Piliin lahat';
+
+  @override
+  String get connectTaskAppToExport => 'Ikonekta ang isang task app sa Settings para mag-export';
+
+  @override
+  String get connectAction => 'Ikonekta';
+
+  @override
+  String get deselectAllTasksMenu => 'I-deselect lahat';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

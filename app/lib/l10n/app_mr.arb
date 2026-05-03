@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "बॅटरी स्तर",
+    "charging": "चार्ज होत आहे",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "मुख्यपृष्ठावर आपल्या व्यक्तिगत लक्ष्यांचा मागोवा घ्या",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "दैनिक चिंतन",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "आपल्या दिवसावर विचार करण्यासाठी रात्रि ९ वाजताचा स्मरण मिळवा",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "कृती आयटमचे वर्णन रिक्त असू शकत नाही",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "कोणतीही API की नाही. सुरू करण्यासाठी एक तयार करा.",
     "autoCreateWhenDetected": "नाव शोधले जाताना स्वयंचलितपणे तयार करा",
     "trackPersonalGoals": "होमपेजवर व्यक्तिगत लक्ष्य ट्रॅक करा",
-    "dailyReflectionDescription": "आपल्या दिवसावर चिंतन करण्यासाठी आणि आपल्या विचार कॅप्चर करण्यासाठी रात्री ९ वाजता स्मरणपत्र प्राप्त करा.",
     "endpointURL": "एंडपॉइंट URL",
     "links": "लिंक्स",
     "discordMemberCount": "Discord वर ८००० + सदस्य",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "बंद",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "दैनिक प्रतिबिंबसाठी वेळ",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "मला तुमच्या दिवसाविषयी सांगा",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi स्मरणपत्र",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "स्पीकर",
     "phoneEndCall": "संपला",
     "phoneCallSettingsTitle": "फोन कॉल सेटिंग्ज",
+    "showPhoneCallButtonTitle": "फोन कॉल बटण दाखवा",
+    "showPhoneCallButtonDesc": "मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा",
     "yourVerifiedNumbers": "तुमचे सत्यापित नंबर",
     "verifiedNumbersDescription": "तू कोणाला कॉल करतोस तेव्हा त्यांना त्यांच्या फोनवर हा नंबर दिसेल",
     "noVerifiedNumbers": "कोणतेही सत्यापित नंबर नाही",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "बॅटरी",
     "day": "दिवस",
     "noBatteryDataYet": "अजून बॅटरी डेटा नाही",
-    "week": "आठवडा"
+    "week": "आठवडा",
+    "voiceResponseAudio": "Omi चे उत्तर मोठ्याने वाचा",
+    "voiceResponseMode": "व्हॉइस प्रतिसाद",
+    "voiceResponseModeTitle": "प्रतिसाद केव्हा बोलायचा",
+    "voiceResponseOff": "बंद",
+    "voiceResponseHeadphonesOnly": "फक्त हेडफोन",
+    "voiceResponseAlways": "नेहमी",
+    "agreeAndContinue": "सहमत व्हा आणि सुरू ठेवा",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "व्हॉइस मोड",
+    "quickActionAskOmi": "Omi ला काहीही विचारा",
+    "record": "रेकॉर्ड",
+    "stop": "थांबवा",
+    "recordWithPhoneMic": "फोन माइकने रेकॉर्ड करा",
+    "recordWithPhoneMicSubtitle": "तुमच्या आजूबाजूचा ऑडिओ कॅप्चर करा",
+    "phoneCall": "फोन कॉल",
+    "phoneCallSubtitle": "लाइव्ह ट्रान्स्क्रिप्शनसह कॉल रेकॉर्ड करा",
+    "bulkExportInProgress": "निर्यात होत आहे…",
+    "bulkExportPartial": "{total} पैकी {success} {platform} वर निर्यात केले",
+    "bulkExportSuccess": "{count} {platform} वर निर्यात केले",
+    "chooseExportDestination": "{count} आयटम निर्यात करा…",
+    "connectAction": "जोडा",
+    "connectTaskAppToExport": "निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा",
+    "deselectAllTasksMenu": "सर्वांची निवड रद्द करा",
+    "hideCompletedTasks": "पूर्ण झालेले लपवा",
+    "searchActionItems": "कृती आयटम शोधा",
+    "selectActionItems": "अनेक निवडा",
+    "selectAllTasksMenu": "सर्व निवडा",
+    "showCompletedTasks": "पूर्ण झालेले दाखवा",
+    "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
+    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा"
 }

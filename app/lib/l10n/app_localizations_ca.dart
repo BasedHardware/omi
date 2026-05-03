@@ -2381,6 +2381,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get batteryLevel => 'Nivell de bateria';
 
   @override
+  String get charging => 'Carregant';
+
+  @override
   String get productUpdate => 'Actualització del producte';
 
   @override
@@ -2507,12 +2510,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Segueix els teus objectius personals a la pàgina d\'inici';
-
-  @override
-  String get dailyReflection => 'Reflexió diària';
-
-  @override
-  String get get9PmReminderToReflect => 'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'La descripció de l\'element d\'acció no pot estar buida';
@@ -3936,10 +3933,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Fes el seguiment d\'objectius personals a la pàgina d\'inici';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.';
 
   @override
   String get endpointURL => 'URL del Punt Final';
@@ -7223,12 +7216,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Hora de la reflexió diària';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Explica\'m el teu dia';
-
-  @override
   String get actionItemReminderTitle => 'Recordatori d\'Omi';
 
   @override
@@ -8354,6 +8341,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracio de trucades';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostra el botó de trucada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostra el botó de trucada telefònica a la pantalla d\'inici';
+
+  @override
   String get yourVerifiedNumbers => 'Els teus numeros verificats';
 
   @override
@@ -9193,6 +9186,118 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Has assolit el teu límit mensual. Actualitza per continuar xatejant amb Omi sense restriccions.';
+
+  @override
+  String get voiceResponseAudio => 'Llegeix la resposta d\'Omi en veu alta';
+
+  @override
+  String get voiceResponseMode => 'Resposta de veu';
+
+  @override
+  String get voiceResponseModeTitle => 'Quan pronunciar les respostes';
+
+  @override
+  String get voiceResponseOff => 'Desactivat';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Només auriculars';
+
+  @override
+  String get voiceResponseAlways => 'Sempre';
+
+  @override
+  String get agreeAndContinue => 'Accepto i continuo';
+
+  @override
+  String get startVoiceRecording => 'Inicia l\'enregistrament de veu';
+
+  @override
+  String get startCallRecording => 'Inicia l\'enregistrament de trucada';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode de veu';
+
+  @override
+  String get quickActionAskOmi => 'Pregunta-li qualsevol cosa a l\'Omi';
+
+  @override
+  String get record => 'Grava';
+
+  @override
+  String get stop => 'Atura';
+
+  @override
+  String get recordWithPhoneMic => 'Grava amb el micròfon del telèfon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Captura l\'àudio que t\'envolta';
+
+  @override
+  String get phoneCall => 'Trucada';
+
+  @override
+  String get phoneCallSubtitle => 'Enregistra una trucada amb transcripció en directe';
+
+  @override
+  String get searchActionItems => 'Cerca elements d\'acció';
+
+  @override
+  String get selectActionItems => 'Selecció múltiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exporta $count element(s) a…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'S\'està exportant…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'S\'han exportat $count a $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'S\'han exportat $success de $total a $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Mostra les completades';
+
+  @override
+  String get hideCompletedTasks => 'Amaga les completades';
+
+  @override
+  String get selectAllTasksMenu => 'Selecciona tot';
+
+  @override
+  String get connectTaskAppToExport => 'Connecta una aplicació de tasques a Configuració per exportar';
+
+  @override
+  String get connectAction => 'Connecta';
+
+  @override
+  String get deselectAllTasksMenu => 'Desselecciona tot';
+
+  @override
+  String get dailyReflection => 'Reflexió diària';
+
+  @override
+  String get get9PmReminderToReflect => 'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Hora de la reflexió diària';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Explica\'m el teu dia';
 
   @override
   String get multiLanguageDetection => 'Detecció multilingüe';

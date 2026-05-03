@@ -36,7 +36,7 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
-def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None):
+def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None):
     """Create a Stripe Checkout session for a subscription."""
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
@@ -67,6 +67,10 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
                 }
             },
         }
+
+        if customer_id:
+            session_params['customer'] = customer_id
+            session_params['customer_update'] = {'name': 'auto', 'address': 'auto'}
 
         if idempotency_key:
             session_params['idempotency_key'] = idempotency_key

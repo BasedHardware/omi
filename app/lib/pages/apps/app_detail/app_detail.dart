@@ -837,7 +837,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     )
                                   : app.enabled
                                       ? AnimatedLoadingButton(
-                                          text: 'Remove',
+                                          text: 'Disable',
                                           width: 90,
                                           height: 32,
                                           onPressed: () => _toggleApp(app.id, false),
@@ -874,7 +874,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           : AnimatedLoadingButton(
                                               width: 75,
                                               height: 32,
-                                              text: 'Add',
+                                              text: 'Enable',
                                               onPressed: () async {
                                                 if (app.worksExternally()) {
                                                   showDialog(

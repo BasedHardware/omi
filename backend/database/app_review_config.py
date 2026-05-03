@@ -18,7 +18,7 @@ entry like "1.0.531" matches every build of that semantic version.
 from typing import Optional
 
 from database._client import db
-from database.announcements import _compare_versions
+from database.announcements import compare_versions
 from database.cache import get_memory_cache
 
 _CACHE_KEY_PREFIX = "app_review_config:"
@@ -52,7 +52,7 @@ def should_hide_subscription_ui(uid: str, platform: Optional[str], app_version: 
 
     if app_version:
         for hidden in cfg.get("hidden_versions") or []:
-            if _compare_versions(app_version, hidden) == 0:
+            if compare_versions(app_version, hidden) == 0:
                 return True
 
     return False

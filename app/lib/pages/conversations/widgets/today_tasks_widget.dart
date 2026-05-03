@@ -59,8 +59,8 @@ class TodayTasksWidget extends StatelessWidget {
                     GestureDetector(
                       onTap: () {
                         HapticFeedback.lightImpact();
-                        // Navigate to tasks tab
-                        context.read<HomeProvider>().setIndex(1);
+                        // Navigate to Tasks tab (index 2). Index 1 is Conversations.
+                        context.read<HomeProvider>().setIndex(2);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -90,6 +90,7 @@ class TodayTasksWidget extends StatelessWidget {
                 Transform.translate(
                   offset: const Offset(-8, 0),
                   child: Container(
+                    margin: const EdgeInsets.only(top: 12),
                     decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Column(
@@ -114,7 +115,7 @@ class _TaskItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -18,9 +18,10 @@ import {
   Megaphone,
   Truck,
   Bell,
-  BarChart3,
   ShieldAlert,
   FlaskConical,
+  Rocket,
+  Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,11 @@ export function DashboardSidebar() {
       icon: DollarSign,
     },
     {
+      title: "Affiliates",
+      href: "/dashboard/affiliates",
+      icon: Handshake,
+    },
+    {
       title: "Organizations",
       href: "/dashboard/organizations",
       icon: Building2,
@@ -98,9 +104,9 @@ export function DashboardSidebar() {
       icon: Bell,
     },
     {
-      title: "Analytics",
-      href: "/dashboard/analytics",
-      icon: BarChart3,
+      title: "Releases",
+      href: "/dashboard/releases",
+      icon: Rocket,
     },
     {
       title: "Chat Lab",

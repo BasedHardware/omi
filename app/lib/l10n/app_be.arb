@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Узровень батарэі",
+    "charging": "Зарадка",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Отстёгивайте свои личные цели на главной странице",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Ежедневное размышленне",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Атрымаць напамін ў 21:00, каб адбыцца",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Апісанне пункту дзеяння не можа быць пусты",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Адсутнічаюць API ключы. Создайте адзін для пачатку.",
     "autoCreateWhenDetected": "Аўтаматычна стварыць, калі выявлена імя",
     "trackPersonalGoals": "Сачыць персанальныя мэты на хатняй старонцы",
-    "dailyReflectionDescription": "Атрымайце нагаданне ў 9 PM для роздуму над днём і захопу вашых думак.",
     "endpointURL": "URL дакрайнай кропкі",
     "links": "Спасылкі",
     "discordMemberCount": "8000+ членаў на Discord",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "Выкл.",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Час штодзённага роздуму",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Расказыце мне пра ваш дзень",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Нагадаванне Omi",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Спікер",
     "phoneEndCall": "Завершыць",
     "phoneCallSettingsTitle": "Параметры тэлефонных вызваў",
+    "showPhoneCallButtonTitle": "Паказаць кнопку тэлефоннага выкліку",
+    "showPhoneCallButtonDesc": "Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране",
     "yourVerifiedNumbers": "Ваш параўныя нумары",
     "verifiedNumbersDescription": "Калі вы звяжэцца з кім-небудзь, яны паўідяць гэты нумар на сваім тэлефоне",
     "noVerifiedNumbers": "Няма параўныш нумараў",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "Батарэя",
     "day": "Дзень",
     "noBatteryDataYet": "Даных пра батарэю яшчэ няма",
-    "week": "Тыдзень"
+    "week": "Тыдзень",
+    "voiceResponseAudio": "Чытаць адказ Omi уголас",
+    "voiceResponseMode": "Галасавы адказ",
+    "voiceResponseModeTitle": "Калі агучваць адказы",
+    "voiceResponseOff": "Выкл",
+    "voiceResponseHeadphonesOnly": "Толькі навушнікі",
+    "voiceResponseAlways": "Заўсёды",
+    "agreeAndContinue": "Прыняць і працягнуць",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Галасавы рэжым",
+    "quickActionAskOmi": "Спытайце ў Омі што заўгодна",
+    "record": "Запісаць",
+    "stop": "Спыніць",
+    "recordWithPhoneMic": "Запіс мікрафонам тэлефона",
+    "recordWithPhoneMicSubtitle": "Запісвайце гук вакол сябе",
+    "phoneCall": "Тэлефонны званок",
+    "phoneCallSubtitle": "Запіс званка з жывой транскрыпцыяй",
+    "bulkExportInProgress": "Экспарт…",
+    "bulkExportPartial": "Экспартавана {success} з {total} у {platform}",
+    "bulkExportSuccess": "Экспартавана {count} у {platform}",
+    "chooseExportDestination": "Экспартаваць {count} элемент(аў) у…",
+    "connectAction": "Злучыць",
+    "connectTaskAppToExport": "Падключыце праграму задач у Наладах для экспарту",
+    "deselectAllTasksMenu": "Зняць выбар усіх",
+    "hideCompletedTasks": "Схаваць завершаныя",
+    "searchActionItems": "Шукаць элементы дзеянняў",
+    "selectActionItems": "Выбраць некалькі",
+    "selectAllTasksMenu": "Выбраць усе",
+    "showCompletedTasks": "Паказаць завершаныя",
+    "startCallRecording": "Пачаць запіс званка",
+    "startVoiceRecording": "Пачаць галасавы запіс"
 }

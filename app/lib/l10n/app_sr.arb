@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Ниво батерије",
+    "charging": "Пуњење",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Пратите своје личне циљеве на почетној страници",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Дневна рефлексија",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Добите подсетник у 21:00 да размислите о својем дану",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Опис ставке радног списка не може бити празан",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Нема API кључева. Направите један да почнете.",
     "autoCreateWhenDetected": "Аутоматски направи када је име открито",
     "trackPersonalGoals": "Пратите личне циљеве на почетној страни",
-    "dailyReflectionDescription": "Добијте подсетник у 21:00 да размислите о вашем дану и хватите своје мисли.",
     "endpointURL": "URL крајне тачке",
     "links": "Веза",
     "discordMemberCount": "8000+ чланова на Discord-у",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "Искључено",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Време за дневну рефлексију",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Расскажите ми о вашем дану",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi подсетник",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Звучник",
     "phoneEndCall": "Заврши",
     "phoneCallSettingsTitle": "Подешавања телефонског позива",
+    "showPhoneCallButtonTitle": "Прикажи дугме за позив",
+    "showPhoneCallButtonDesc": "Прикажи дугме за телефонски позив на почетном екрану",
     "yourVerifiedNumbers": "Твоји потврђени бројеви",
     "verifiedNumbersDescription": "Када позиваш неког, видећу овај број на телефону",
     "noVerifiedNumbers": "Нема потврђених бројева",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "Батерија",
     "day": "Дан",
     "noBatteryDataYet": "Још нема података о батерији",
-    "week": "Недеља"
+    "week": "Недеља",
+    "voiceResponseAudio": "Прочитај Omi одговор наглас",
+    "voiceResponseMode": "Гласовни одговор",
+    "voiceResponseModeTitle": "Када изговарати одговоре",
+    "voiceResponseOff": "Искључено",
+    "voiceResponseHeadphonesOnly": "Само слушалице",
+    "voiceResponseAlways": "Увек",
+    "agreeAndContinue": "Slažem se i nastavi",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Гласовни режим",
+    "quickActionAskOmi": "Питајте Omi bilo što",
+    "record": "Сними",
+    "stop": "Заустави",
+    "recordWithPhoneMic": "Снимај микрофоном телефона",
+    "recordWithPhoneMicSubtitle": "Снимите звук око вас",
+    "phoneCall": "Телефонски позив",
+    "phoneCallSubtitle": "Снимајте позив са транскрипцијом уживо",
+    "bulkExportInProgress": "Извоз…",
+    "bulkExportPartial": "Извезено {success} од {total} у {platform}",
+    "bulkExportSuccess": "Извезено {count} у {platform}",
+    "chooseExportDestination": "Извези {count} ставку/и у…",
+    "connectAction": "Повежи",
+    "connectTaskAppToExport": "Повежите апликацију за задатке у Подешавањима за извоз",
+    "deselectAllTasksMenu": "Поништи избор свих",
+    "hideCompletedTasks": "Сакриј завршене",
+    "searchActionItems": "Претражи акционе ставке",
+    "selectActionItems": "Изабери више",
+    "selectAllTasksMenu": "Изабери све",
+    "showCompletedTasks": "Прикажи завршене",
+    "startCallRecording": "Покрени снимање позива",
+    "startVoiceRecording": "Покрени гласовно снимање"
 }

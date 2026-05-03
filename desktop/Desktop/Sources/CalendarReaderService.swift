@@ -126,7 +126,7 @@ actor CalendarReaderService {
   }
 
   /// Synthesize profile memories and tasks from calendar events.
-  /// Uses local LLM (ACPBridge) to extract ~10 memories and 2-3 tasks.
+  /// Uses local LLM (AgentBridge) to extract ~10 memories and 2-3 tasks.
   func synthesizeFromEvents(events: [CalendarEvent]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
@@ -183,7 +183,7 @@ actor CalendarReaderService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true, harnessMode: "piMono")
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 

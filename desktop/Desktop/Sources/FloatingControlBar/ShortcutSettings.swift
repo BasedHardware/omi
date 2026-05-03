@@ -475,7 +475,7 @@ class ShortcutSettings: ObservableObject {
            let mode = PTTTranscriptionMode(rawValue: saved) {
             self.pttTranscriptionMode = mode
         } else {
-            self.pttTranscriptionMode = .live
+            self.pttTranscriptionMode = .batch
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
         self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? true

@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "Razina baterije",
+    "charging": "Punjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "Prati svoje osobne ciljeve na početnoj stranici",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "Dnevna refleksija",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Dobij podsjetnik u 21:00 kako bi se reflektirao na svoj dan",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "Opis stavke aktivnosti ne može biti prazan",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "Nema API ključeva. Kreirajte jedan da biste započeli.",
     "autoCreateWhenDetected": "Automatski kreiraj kada se detektuje ime",
     "trackPersonalGoals": "Pratite osobne ciljeve na početnoj stranici",
-    "dailyReflectionDescription": "Dobijte podsjetnik u 21:00 kako bi razmislili o vašem danu i zabilježili svoje misli.",
     "endpointURL": "URL krajnje točke",
     "links": "Linkovi",
     "discordMemberCount": "8000+ članova na Discordu",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "Isključeno",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "Vrijeme je za Dnevnu Refleksiju",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Recite mi o vašem danu",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi Podsjetnik",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "Zvučnik",
     "phoneEndCall": "Završi",
     "phoneCallSettingsTitle": "Postavke telefonskih poziva",
+    "showPhoneCallButtonTitle": "Prikaži gumb za poziv",
+    "showPhoneCallButtonDesc": "Prikaži gumb za telefonski poziv na početnom zaslonu",
     "yourVerifiedNumbers": "Vaši potvrđeni brojevi",
     "verifiedNumbersDescription": "Kada pozovete nekoga, on/ona će vidjeti ovaj broj na svom telefonu",
     "noVerifiedNumbers": "Nema potvrđenih brojeva",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "Baterija",
     "day": "Dan",
     "noBatteryDataYet": "Još nema podataka o bateriji",
-    "week": "Tjedan"
+    "week": "Tjedan",
+    "voiceResponseAudio": "Pročitaj Omijev odgovor naglas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kada izgovarati odgovore",
+    "voiceResponseOff": "Isključeno",
+    "voiceResponseHeadphonesOnly": "Samo slušalice",
+    "voiceResponseAlways": "Uvijek",
+    "agreeAndContinue": "Slažem se i nastavi",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Glasovni način",
+    "quickActionAskOmi": "Pitajte Omi bilo što",
+    "record": "Snimi",
+    "stop": "Zaustavi",
+    "recordWithPhoneMic": "Snimaj telefonskim mikrofonom",
+    "recordWithPhoneMicSubtitle": "Snimite zvuk oko vas",
+    "phoneCall": "Telefonski poziv",
+    "phoneCallSubtitle": "Snimajte poziv s transkripcijom uživo",
+    "bulkExportInProgress": "Izvoz u tijeku…",
+    "bulkExportPartial": "Izvezeno {success} od {total} u {platform}",
+    "bulkExportSuccess": "Izvezeno {count} u {platform}",
+    "chooseExportDestination": "Izvezi {count} stavku/i u…",
+    "connectAction": "Poveži",
+    "connectTaskAppToExport": "Povežite aplikaciju za zadatke u Postavkama za izvoz",
+    "deselectAllTasksMenu": "Poništi odabir svih",
+    "hideCompletedTasks": "Sakrij dovršene",
+    "searchActionItems": "Pretraži akcijske stavke",
+    "selectActionItems": "Odaberi više",
+    "selectAllTasksMenu": "Odaberi sve",
+    "showCompletedTasks": "Prikaži dovršene",
+    "startCallRecording": "Pokreni snimanje poziva",
+    "startVoiceRecording": "Pokreni glasovno snimanje"
 }

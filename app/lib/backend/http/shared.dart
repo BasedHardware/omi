@@ -120,6 +120,7 @@ Future<http.Response?> makeApiCall({
   required String method,
   Duration? timeout,
   int? retries,
+  bool signOutOn401 = true,
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -146,7 +147,7 @@ Future<http.Response?> makeApiCall({
           retries: 0,
         );
         Logger.log('Token refreshed and request retried');
-        if (response.statusCode == 401) {
+        if (response.statusCode == 401 && signOutOn401) {
           await AuthService.instance.signOut();
           Logger.handle(
             Exception('Authentication failed. Please sign in again.'),
@@ -154,7 +155,7 @@ Future<http.Response?> makeApiCall({
             message: 'Authentication failed. Please sign in again.',
           );
         }
-      } else {
+      } else if (signOutOn401) {
         await AuthService.instance.signOut();
         Logger.handle(
           Exception('Authentication failed. Please sign in again.'),

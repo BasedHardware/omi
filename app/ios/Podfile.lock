@@ -153,6 +153,8 @@ PODS:
   - flutter_sound_core (9.25.1)
   - flutter_timezone (0.0.1):
     - Flutter
+  - flutter_tts (0.0.1):
+    - Flutter
   - frame_sdk (0.0.2):
     - Flutter
   - geolocator_apple (1.2.0):
@@ -301,6 +303,7 @@ DEPENDENCIES:
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
+  - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
   - frame_sdk (from `.symlinks/plugins/frame_sdk/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
@@ -410,6 +413,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_sound/ios"
   flutter_timezone:
     :path: ".symlinks/plugins/flutter_timezone/ios"
+  flutter_tts:
+    :path: ".symlinks/plugins/flutter_tts/ios"
   frame_sdk:
     :path: ".symlinks/plugins/frame_sdk/ios"
   geolocator_apple:
@@ -499,6 +504,7 @@ SPEC CHECKSUMS:
   flutter_sound: 69343c1dd74d2cc5a7fe6693f20369b63ea2e249
   flutter_sound_core: 065aca7698f13a934d8cb8156a2865efd282b1e8
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
+  flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
   frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   google_sign_in_ios: 39f46834c156be9a4dfef914258e0145b7117725

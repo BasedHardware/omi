@@ -63,4 +63,61 @@ config OMI_ENABLE_MONITOR
          Disable in production to save power, RAM, and flash space."
     default n
 
+config OMI_ENABLE_VAD_GATE
+    bool "Enable voice activity gate"
+    help
+        "Only forward microphone audio to codec/transport when voice activity
+         is detected."
+    default n
+
+config OMI_VAD_ABS_THRESHOLD
+    int "VAD average absolute amplitude threshold"
+    range 1 32767
+    default 600
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Voice is considered active when average absolute amplitude of one
+         microphone frame is greater than or equal to this threshold."
+
+config OMI_VAD_DEBOUNCE_FRAMES
+    int "VAD debounce frames to start recording"
+    range 1 50
+    default 3
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Number of consecutive frames above threshold required before
+         transitioning from SLEEP to RECORDING. Each frame is ~100ms.
+         Default 3 = 300ms debounce to filter noise spikes."
+
+config OMI_VAD_HOLD_MS
+    int "VAD hold time after last voice (ms)"
+    range 500 30000
+    default 3000
+    depends on OMI_ENABLE_VAD_GATE
+    help
+        "Time in milliseconds to keep recording after the last frame with
+         voice activity. Prevents cutting off speech pauses and sentence
+         endings. Default 3000 = 3 seconds."
+
+config OMI_ENABLE_T5838_AAD
+    bool "Enable T5838 hardware AAD (ultra-low-power mic sleep)"
+    depends on OMI_ENABLE_VAD_GATE
+    default n
+    help
+        "When the software VAD gate enters SLEEP, pause the PDM clock so
+         the T5838 MEMS microphone enters its built-in Acoustic Activity
+         Detection mode (~15 µA). The mic hardware monitors sound and
+         asserts the WAKE pin when it detects acoustic activity, at which
+         point the driver resumes PDM and the software VAD takes over.
+         Requires THSEL (P1.5) and WAKE (P1.2) to be wired to the T5838."
+
+config OMI_WATCHDOG_TIMEOUT_MS
+    int "Watchdog timeout (ms)"
+    range 5000 300000
+    default 30000
+    help
+        "Watchdog reset timeout in milliseconds. Increase this when boot-time
+         operations can run longer (e.g. SD/LFS pre-warm) to avoid false
+         watchdog resets."
+
 endmenu

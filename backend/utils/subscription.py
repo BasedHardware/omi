@@ -1,12 +1,13 @@
 import os
 from datetime import datetime, timezone
 from typing import List, Optional
+
+from fastapi import HTTPException
 import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
-from database.announcements import _compare_versions
-from fastapi import HTTPException
+from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize
@@ -139,7 +140,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         if not app_version:
             return True
         try:
-            return _compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
+            return compare_versions(app_version, NEW_PLANS_MIN_DESKTOP_VERSION) >= 0
         except Exception:
             return True
 
@@ -147,7 +148,7 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
         if not app_version:
             return False
         try:
-            return _compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
+            return compare_versions(app_version, NEW_PLANS_MIN_MOBILE_VERSION) >= 0
         except Exception:
             return False
 
@@ -258,17 +259,11 @@ def get_plan_display_name(plan: PlanType) -> str:
 def get_chat_quota_snapshot(uid: str) -> dict:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
-
-    Imports are done locally to avoid the circular `utils.subscription` ↔
-    `database.users` cycle at module import time.
     """
-    from database import user_usage as _user_usage
-    from database.users import get_user_valid_subscription as _get_sub
-
-    subscription = _get_sub(uid)
+    subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
-    usage = _user_usage.get_monthly_chat_usage(uid)
+    usage = user_usage_db.get_monthly_chat_usage(uid)
 
     if limits.chat_cost_usd_per_month is not None:
         unit = 'cost_usd'
@@ -294,23 +289,20 @@ def get_chat_quota_snapshot(uid: str) -> dict:
 
 
 # Plans that enter usage-based overage billing instead of hard-blocking when
-# they exceed their included chat question count. For these plans, going over
-# is a soft event: the call is served and the excess is billed at end of cycle
-# against the card on file.
-#
-# Only Operator (desktop mid-tier) uses overage. Neo is hard-capped on mobile;
-# Architect uses a monthly cost cap.
-OVERAGE_ENABLED_PLANS = {PlanType.operator}
+# they exceed their included allowance. Paying users are never asked to
+# "upgrade past their plan" — the excess is billed at end of cycle against
+# the card on file. Free stays hard-capped (no payment method on file).
+OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
 
 
 def enforce_chat_quota(uid: str) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
     - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
-    - Free plan past its cap: blocked (no card on file). 402.
-    - Neo (unlimited) / overage-enabled plans past their cap: ALLOWED — we
-      serve the call and accrue an overage charge. See ``utils.overage``.
-    - Architect (cost-capped): still blocked when monthly cost cap is hit.
+    - Paid plans past their cap: ALLOWED — the call is served and the excess
+      accrues an overage charge. See ``utils.overage``.
+    - Free plan past its cap: blocked (no card on file) → 402, which the
+      chat endpoint converts into a canned AI reply for mobile UX.
     """
     # BYOK users pay their own LLM provider — no Omi-side cost to cap.
     # Require an LLM provider key on this request (not just any BYOK header)
@@ -325,9 +317,10 @@ def enforce_chat_quota(uid: str) -> None:
 
     plan = snapshot['plan']
 
-    # Overage-enabled plans never hard-block on chat question count — the
-    # excess becomes a billable overage at end of cycle.
-    if plan in OVERAGE_ENABLED_PLANS and snapshot['unit'] == 'questions':
+    # Every paying plan goes into overage mode past its cap, regardless of
+    # whether the cap is expressed in questions or dollars. Only Free
+    # (PlanType.basic) falls through to the 402 below.
+    if plan in OVERAGE_ENABLED_PLANS:
         return
 
     raise HTTPException(
@@ -468,6 +461,29 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
     ]
 
 
+def _has_active_stripe_subscription(uid: str) -> bool:
+    """Check Stripe directly for active subscriptions owned by this user.
+
+    This catches cases where Firestore hasn't been updated yet (e.g. webhook
+    write hasn't propagated) but Stripe already has an active subscription.
+    """
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return False
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status='active', limit=5)
+        for sub in subs.data:
+            sub_dict = sub.to_dict()
+            if sub_dict.get('cancel_at_period_end'):
+                continue
+            if sub_dict.get('metadata', {}).get('uid') == uid:
+                return True
+    except Exception as e:
+        logger.error(f"Error checking Stripe for active subscriptions: {e}")
+        return True  # fail-closed: block checkout if Stripe is unreachable
+    return False
+
+
 def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -481,8 +497,11 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
     """
     subscription = users_db.get_user_valid_subscription(uid)
 
-    # If no subscription or basic plan, user can pay
+    # If no subscription or basic plan, check Stripe as source of truth
+    # to guard against Firestore read-after-write lag
     if not subscription or subscription.plan == PlanType.basic:
+        if _has_active_stripe_subscription(uid):
+            return False, "User already has an active subscription (pending sync)"
         return True, "User can make payment"
 
     # If unlimited plan but inactive, user can pay

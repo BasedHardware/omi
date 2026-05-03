@@ -193,8 +193,15 @@ pub fn maybe_rewrite_model_path(path: &str, decision: &RateDecision, action: &st
     if action == "embedContent" || action == "batchEmbedContents" {
         return path.to_string();
     }
-    if let Some(rest) = path.strip_prefix("models/gemini-pro-latest:") {
-        return format!("models/{}:{}", crate::llm::model_qos::gemini_degrade_target(), rest);
+    // Degrade any non-flash model to the flash degrade target.
+    // Extract the model from "models/{model}:{action}" and check if it's already the target.
+    let degrade_target = crate::llm::model_qos::gemini_degrade_target();
+    if let Some(rest) = path.strip_prefix("models/") {
+        if let Some((model, action_part)) = rest.split_once(':') {
+            if model != degrade_target {
+                return format!("models/{}:{}", degrade_target, action_part);
+            }
+        }
     }
     path.to_string()
 }
@@ -394,31 +401,31 @@ mod tests {
     #[test]
     fn rewrite_pro_to_flash() {
         let r = maybe_rewrite_model_path(
-            "models/gemini-pro-latest:generateContent",
+            "models/gemini-2.5-pro:generateContent",
             &RateDecision::DegradeToFlash,
             "generateContent",
         );
-        assert_eq!(r, "models/gemini-3-flash-preview:generateContent");
+        assert_eq!(r, "models/gemini-2.5-flash:generateContent");
     }
 
     #[test]
     fn no_rewrite_on_allow() {
         let r = maybe_rewrite_model_path(
-            "models/gemini-pro-latest:generateContent",
+            "models/gemini-2.5-pro:generateContent",
             &RateDecision::Allow,
             "generateContent",
         );
-        assert_eq!(r, "models/gemini-pro-latest:generateContent");
+        assert_eq!(r, "models/gemini-2.5-pro:generateContent");
     }
 
     #[test]
     fn no_rewrite_embed() {
         let r = maybe_rewrite_model_path(
-            "models/gemini-pro-latest:embedContent",
+            "models/gemini-2.5-pro:embedContent",
             &RateDecision::DegradeToFlash,
             "embedContent",
         );
-        assert_eq!(r, "models/gemini-pro-latest:embedContent");
+        assert_eq!(r, "models/gemini-2.5-pro:embedContent");
     }
 
     #[test]
@@ -434,21 +441,21 @@ mod tests {
     #[test]
     fn no_rewrite_flash_model() {
         let r = maybe_rewrite_model_path(
-            "models/gemini-3-flash-preview:generateContent",
+            "models/gemini-2.5-flash:generateContent",
             &RateDecision::DegradeToFlash,
             "generateContent",
         );
-        assert_eq!(r, "models/gemini-3-flash-preview:generateContent");
+        assert_eq!(r, "models/gemini-2.5-flash:generateContent");
     }
 
     #[test]
     fn rewrite_pro_stream() {
         let r = maybe_rewrite_model_path(
-            "models/gemini-pro-latest:streamGenerateContent",
+            "models/gemini-2.5-pro:streamGenerateContent",
             &RateDecision::DegradeToFlash,
             "streamGenerateContent",
         );
-        assert_eq!(r, "models/gemini-3-flash-preview:streamGenerateContent");
+        assert_eq!(r, "models/gemini-2.5-flash:streamGenerateContent");
     }
 
     // --- 429 error JSON ---

@@ -1,0 +1,23 @@
+{
+  "name": "omi-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && cp src/patched-acp-entry.mjs dist/patched-acp-entry.mjs",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.67.2",
+    "@playwright/mcp": "^0.0.68",
+    "@zed-industries/claude-agent-acp": "^0.18.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.2"
+  }
+}

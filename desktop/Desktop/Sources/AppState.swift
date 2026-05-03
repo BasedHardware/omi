@@ -230,6 +230,9 @@ class AppState: ObservableObject {
     // Register as the current instance so background services can check recording state
     AppState.current = self
 
+    // Resolve beta/stable before loading backend URLs so beta releases use dev services.
+    AppBuild.prepareUpdateChannelForBackendRouting()
+
     // Load API key from environment or .env file
     loadEnvironment()
 
@@ -465,7 +468,7 @@ class AppState: ObservableObject {
             guard !key.hasPrefix("#") else { continue }
             // API keys are fetched from the backend at runtime (APIKeyService).
             // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
-            let backendServedKeys = ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
+            let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]
             if backendServedKeys.contains(key) {
               log("  Skipped \(key) (fetched from backend via APIKeyService)")
               continue
@@ -482,6 +485,8 @@ class AppState: ObservableObject {
         // Don't break - load all .env files to merge keys
       }
     }
+
+    DesktopBackendEnvironment.applyReleaseChannelDefaults()
 
     log("Environment loaded (API keys will be fetched from backend after auth)")
   }

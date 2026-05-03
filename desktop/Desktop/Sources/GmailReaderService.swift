@@ -259,7 +259,7 @@ actor GmailReaderService {
       """
 
     do {
-      let bridge = ACPBridge(passApiKey: true, harnessMode: "piMono")
+      let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
 

@@ -2375,6 +2375,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get batteryLevel => 'Level Baterai';
 
   @override
+  String get charging => 'Mengisi daya';
+
+  @override
   String get productUpdate => 'Pembaruan Produk';
 
   @override
@@ -2501,12 +2504,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Lacak tujuan pribadi Anda di beranda';
-
-  @override
-  String get dailyReflection => 'Refleksi Harian';
-
-  @override
-  String get get9PmReminderToReflect => 'Dapatkan pengingat jam 9 malam untuk merenungkan hari Anda';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Deskripsi item tindakan tidak boleh kosong';
@@ -3926,10 +3923,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Lacak tujuan pribadi di halaman utama';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Dapatkan pengingat pukul 21.00 untuk merefleksikan hari Anda dan mencatat pikiran Anda.';
 
   @override
   String get endpointURL => 'URL Endpoint';
@@ -7197,12 +7190,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Refleksi Harian';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Saatnya untuk refleksi harian Anda';
-
-  @override
   String get actionItemReminderTitle => 'Pengingat Item Tindakan';
 
   @override
@@ -8313,6 +8300,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Pengaturan panggilan';
 
   @override
+  String get showPhoneCallButtonTitle => 'Tampilkan Tombol Panggilan';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Tampilkan tombol panggilan telepon di layar utama';
+
+  @override
   String get yourVerifiedNumbers => 'Nomor terverifikasi Anda';
 
   @override
@@ -9149,6 +9142,118 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Anda telah mencapai batas bulanan. Upgrade untuk terus mengobrol dengan Omi tanpa batasan.';
+
+  @override
+  String get voiceResponseAudio => 'Bacakan respons Omi';
+
+  @override
+  String get voiceResponseMode => 'Respons suara';
+
+  @override
+  String get voiceResponseModeTitle => 'Kapan respons diucapkan';
+
+  @override
+  String get voiceResponseOff => 'Mati';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Hanya headphone';
+
+  @override
+  String get voiceResponseAlways => 'Selalu';
+
+  @override
+  String get agreeAndContinue => 'Setuju & Lanjutkan';
+
+  @override
+  String get startVoiceRecording => 'Mulai rekaman suara';
+
+  @override
+  String get startCallRecording => 'Mulai rekaman panggilan';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode Suara';
+
+  @override
+  String get quickActionAskOmi => 'Tanyakan apa saja kepada Omi';
+
+  @override
+  String get record => 'Rekam';
+
+  @override
+  String get stop => 'Hentikan';
+
+  @override
+  String get recordWithPhoneMic => 'Rekam dengan mikrofon ponsel';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tangkap audio di sekitar Anda';
+
+  @override
+  String get phoneCall => 'Panggilan telepon';
+
+  @override
+  String get phoneCallSubtitle => 'Rekam panggilan dengan transkripsi langsung';
+
+  @override
+  String get searchActionItems => 'Cari item tindakan';
+
+  @override
+  String get selectActionItems => 'Pilih beberapa';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Ekspor $count item ke…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Mengekspor…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Diekspor $count ke $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Diekspor $success dari $total ke $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Tampilkan selesai';
+
+  @override
+  String get hideCompletedTasks => 'Sembunyikan selesai';
+
+  @override
+  String get selectAllTasksMenu => 'Pilih semua';
+
+  @override
+  String get connectTaskAppToExport => 'Hubungkan aplikasi tugas di Pengaturan untuk mengekspor';
+
+  @override
+  String get connectAction => 'Hubungkan';
+
+  @override
+  String get deselectAllTasksMenu => 'Batalkan pilihan semua';
+
+  @override
+  String get dailyReflection => 'Refleksi Harian';
+
+  @override
+  String get get9PmReminderToReflect => 'Dapatkan pengingat jam 9 malam untuk merenungkan hari Anda';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Dapatkan pengingat pukul 21.00 untuk merefleksikan hari Anda dan mencatat pikiran Anda.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Refleksi Harian';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Saatnya untuk refleksi harian Anda';
 
   @override
   String get multiLanguageDetection => 'Deteksi multibahasa';

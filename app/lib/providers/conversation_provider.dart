@@ -72,6 +72,33 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
   }
 
+  void clearUserData() {
+    conversations = [];
+    searchedConversations = [];
+    groupedConversations = {};
+    processingConversations = [];
+    mergingConversationIds = {};
+    selectedConversationIds = {};
+    isSelectionModeActive = false;
+    showDailySummaries = false;
+    hasDailySummaries = false;
+    selectedDate = null;
+    selectedFolderId = null;
+    previousQuery = '';
+    totalSearchPages = 1;
+    currentSearchPage = 1;
+    isLoadingConversations = false;
+    isFetchingConversations = false;
+    memoriesToDelete = {};
+    deleteTimestamps = {};
+    _processingConversationWatchTimer?.cancel();
+    _processingConversationWatchTimer = null;
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = null;
+    _lastRefreshTime = null;
+    notifyListeners();
+  }
+
   Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
     var convo = await getConversationById(id);
     if (convo != null) {
@@ -750,8 +777,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-        (item) => item.description == actionItemDescription,
-      );
+            (item) => item.description == actionItemDescription,
+          );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -764,8 +791,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-          (item) => item.description == actionItemDescription,
-        );
+              (item) => item.description == actionItemDescription,
+            );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

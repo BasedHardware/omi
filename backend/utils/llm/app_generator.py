@@ -10,6 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 from openai import OpenAI
 
+from langchain_core.messages import SystemMessage, HumanMessage
 from utils.llm.clients import get_llm
 
 # App categories available in the system
@@ -102,8 +103,8 @@ async def generate_app_from_prompt(user_prompt: str) -> GeneratedAppData:
     system_message = SYSTEM_PROMPT.format(categories=categories_str)
 
     messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": f"Create an app based on this description:\n\n{user_prompt}"},
+        SystemMessage(content=system_message),
+        HumanMessage(content=f"Create an app based on this description:\n\n{user_prompt}"),
     ]
 
     response = await get_llm('app_generator').ainvoke(messages)
@@ -220,7 +221,7 @@ Respond ONLY with the JSON object, no other text."""
 What it does: {prompt}"""
 
     response = get_llm('app_integration').invoke(
-        [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     )
 
     content = response.content.strip()

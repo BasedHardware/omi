@@ -126,6 +126,13 @@
             ]
           },
           {
+            "group": "Folders",
+            "pages": [
+              "doc/developer/api/folders",
+              "api-reference/endpoint/folders/list"
+            ]
+          },
+          {
             "group": "Action Items",
             "pages": [
               "doc/developer/api/action-items",
@@ -231,6 +238,33 @@
             "pages": [
               "doc/developer/mcp/examples",
               "doc/developer/mcp/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI",
+        "icon": "terminal",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "doc/developer/cli/introduction",
+              "doc/developer/cli/install",
+              "doc/developer/cli/quickstart"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "doc/developer/cli/commands"
+            ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "doc/developer/cli/agents",
+              "doc/developer/cli/troubleshooting"
             ]
           }
         ]

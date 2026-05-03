@@ -2374,6 +2374,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get batteryLevel => 'Úroveň batérie';
 
   @override
+  String get charging => 'Nabíjanie';
+
+  @override
   String get productUpdate => 'Aktualizácia produktu';
 
   @override
@@ -2500,12 +2503,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sledujte svoje osobné ciele na domovskej stránke';
-
-  @override
-  String get dailyReflection => 'Denná reflexia';
-
-  @override
-  String get get9PmReminderToReflect => 'Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Popis akčnej položky nesmie byť prázdny';
@@ -3918,10 +3915,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Sledovať osobné ciele na domovskej stránke';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
 
   @override
   String get endpointURL => 'URL koncového bodu';
@@ -7180,12 +7173,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Čas na dennú reflexiu';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
-
-  @override
   String get actionItemReminderTitle => 'Pripomienka Omi';
 
   @override
@@ -8293,6 +8280,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Nastavenia hovorov';
 
   @override
+  String get showPhoneCallButtonTitle => 'Zobraziť tlačidlo hovoru';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Zobraziť tlačidlo telefonického hovoru na domovskej obrazovke';
+
+  @override
   String get yourVerifiedNumbers => 'Vase overene cisla';
 
   @override
@@ -9127,6 +9120,118 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosiahli ste svoj mesačný limit. Inovujte, aby ste mohli pokračovať v chate s Omi bez obmedzení.';
+
+  @override
+  String get voiceResponseAudio => 'Prečítať odpoveď Omi nahlas';
+
+  @override
+  String get voiceResponseMode => 'Hlasová odpoveď';
+
+  @override
+  String get voiceResponseModeTitle => 'Kedy vysloviť odpovede';
+
+  @override
+  String get voiceResponseOff => 'Vypnuté';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Len slúchadlá';
+
+  @override
+  String get voiceResponseAlways => 'Vždy';
+
+  @override
+  String get agreeAndContinue => 'Súhlasím a pokračovať';
+
+  @override
+  String get startVoiceRecording => 'Spustiť hlasový záznam';
+
+  @override
+  String get startCallRecording => 'Spustiť nahrávanie hovoru';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Hlasový režim';
+
+  @override
+  String get quickActionAskOmi => 'Spýtajte sa Omi na čokoľvek';
+
+  @override
+  String get record => 'Nahrať';
+
+  @override
+  String get stop => 'Zastaviť';
+
+  @override
+  String get recordWithPhoneMic => 'Nahrať mikrofónom telefónu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Zachyťte zvuk okolo vás';
+
+  @override
+  String get phoneCall => 'Telefonický hovor';
+
+  @override
+  String get phoneCallSubtitle => 'Nahrávajte hovor so živým prepisom';
+
+  @override
+  String get searchActionItems => 'Hľadať akčné položky';
+
+  @override
+  String get selectActionItems => 'Vybrať viacero';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportovať $count položku/iek do…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportovanie…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportovaných $count do $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportovaných $success z $total do $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Zobraziť dokončené';
+
+  @override
+  String get hideCompletedTasks => 'Skryť dokončené';
+
+  @override
+  String get selectAllTasksMenu => 'Vybrať všetko';
+
+  @override
+  String get connectTaskAppToExport => 'Pripojte aplikáciu úloh v Nastaveniach na export';
+
+  @override
+  String get connectAction => 'Pripojiť';
+
+  @override
+  String get deselectAllTasksMenu => 'Zrušiť výber všetkých';
+
+  @override
+  String get dailyReflection => 'Denná reflexia';
+
+  @override
+  String get get9PmReminderToReflect => 'Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Čas na dennú reflexiu';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
 
   @override
   String get multiLanguageDetection => 'Viacjazyčná detekcia';

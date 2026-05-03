@@ -24,6 +24,16 @@ class PeopleProvider extends BaseProvider {
     _setupAudioPlayerListeners();
   }
 
+  void clearUserData() {
+    people = [];
+    samplesUrl = {};
+    currentPlayingPersonIndex = null;
+    currentPlayingIndex = null;
+    isPlaying = false;
+    _audioPlayer.stop();
+    notifyListeners();
+  }
+
   setPeople() async {
     final value = await getAllPeople();
     loading = false;

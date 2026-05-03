@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "רמת הסוללה",
+    "charging": "טוען",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "עקוב אחר היעדים האישיים שלך בעמוד הבית",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "השתקפות יומית",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "קבל תזכורת בשעה 21:00 להשתקפות על היום שלך",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "תיאור פריט פעולה לא יכול להיות ריק",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "אין מפתחות API. צור אחד כדי להתחיל.",
     "autoCreateWhenDetected": "צור באופן אוטומטי כאשר שם מזוהה",
     "trackPersonalGoals": "עקוב אחר יעדים אישיים בדף הבית",
-    "dailyReflectionDescription": "קבל תזכורת ב-9 בערב להתבוננות על היום שלך וללכידת המחשבות שלך.",
     "endpointURL": "כתובת URL של נקודת קצה",
     "links": "קישורים",
     "discordMemberCount": "8000+ חברים ב-Discord",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "כבוי",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "זמן להתרכזות יומית",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "ספר לי על היום שלך",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "תזכורת Omi",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "רמקול",
     "phoneEndCall": "סיים",
     "phoneCallSettingsTitle": "הגדרות שיחות טלפון",
+    "showPhoneCallButtonTitle": "הצג כפתור שיחת טלפון",
+    "showPhoneCallButtonDesc": "הצג כפתור שיחת טלפון במסך הבית",
     "yourVerifiedNumbers": "המספרים המאומתים שלך",
     "verifiedNumbersDescription": "כאשר אתה מתקשר למישהו, הם יראו את המספר הזה בטלפון שלהם",
     "noVerifiedNumbers": "אין מספרים מאומתים",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "סוללה",
     "day": "יום",
     "noBatteryDataYet": "אין עדיין נתוני סוללה",
-    "week": "שבוע"
+    "week": "שבוע",
+    "voiceResponseAudio": "קרא את תגובת Omi בקול",
+    "voiceResponseMode": "תגובה קולית",
+    "voiceResponseModeTitle": "מתי לקרוא תשובות",
+    "voiceResponseOff": "כבוי",
+    "voiceResponseHeadphonesOnly": "אוזניות בלבד",
+    "voiceResponseAlways": "תמיד",
+    "agreeAndContinue": "אני מסכים והמשך",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "מצב קולי",
+    "quickActionAskOmi": "שאל את Omi כל דבר",
+    "record": "הקלט",
+    "stop": "עצור",
+    "recordWithPhoneMic": "הקלט עם מיקרופון הטלפון",
+    "recordWithPhoneMicSubtitle": "הקלט שמע סביבך",
+    "phoneCall": "שיחת טלפון",
+    "phoneCallSubtitle": "הקלט שיחה עם תמלול חי",
+    "bulkExportInProgress": "מייצא…",
+    "bulkExportPartial": "יוצאו {success} מתוך {total} אל {platform}",
+    "bulkExportSuccess": "יוצאו {count} אל {platform}",
+    "chooseExportDestination": "ייצוא {count} פריט(ים) אל…",
+    "connectAction": "חיבור",
+    "connectTaskAppToExport": "חבר אפליקציית משימות בהגדרות כדי לייצא",
+    "deselectAllTasksMenu": "בטל בחירת הכל",
+    "hideCompletedTasks": "הסתר הושלמו",
+    "searchActionItems": "חפש פריטי פעולה",
+    "selectActionItems": "בחירה מרובה",
+    "selectAllTasksMenu": "בחר הכל",
+    "showCompletedTasks": "הצג הושלמו",
+    "startCallRecording": "התחל הקלטת שיחה",
+    "startVoiceRecording": "התחל הקלטה קולית"
 }

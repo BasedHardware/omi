@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -336,6 +337,16 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearUserData() {
+    messages = [];
+    chatApps = [];
+    selectedFiles = [];
+    selectedFileTypes = [];
+    uploadedFiles = [];
+    uploadingFiles = {};
+    notifyListeners();
+  }
+
   Future<List<MessageFile>?> uploadFiles(List<File> files, String? appId) async {
     if (files.isNotEmpty) {
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), true);
@@ -462,11 +473,19 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _voiceSendInFlight = false;
+
   Future sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
+    bool playResponseAudio = false,
   }) async {
+    // Re-entry guard so a duplicated end-of-session signal from the device
+    // button can't kick off two parallel voice replies.
+    if (_voiceSendInFlight) return;
+    if (audioBytes.isEmpty) return;
+    _voiceSendInFlight = true;
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
@@ -489,6 +508,14 @@ class MessageProvider extends ChangeNotifier {
     messages.add(message);
     var aiIndex = messages.length - 1;
     notifyListeners();
+
+    // Voice response playback is triggered only from the Omi device-button
+    // path (capture_provider). The chat-screen mic input does not pass
+    // playResponseAudio=true.
+    final String playbackMessageId = message.id;
+    if (playResponseAudio) {
+      await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+    }
 
     try {
       bool firstChunkRecieved = false;
@@ -514,6 +541,13 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
+          if (playResponseAudio) {
+            OmiVoicePlaybackService.instance.updateStreamingResponse(
+              messageId: playbackMessageId,
+              fullText: message.text,
+              isFinal: false,
+            );
+          }
           notifyListeners();
           continue;
         }
@@ -521,6 +555,13 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[aiIndex] = message;
+          if (playResponseAudio) {
+            OmiVoicePlaybackService.instance.updateStreamingResponse(
+              messageId: playbackMessageId,
+              fullText: message.text,
+              isFinal: true,
+            );
+          }
           notifyListeners();
           continue;
         }
@@ -537,6 +578,9 @@ class MessageProvider extends ChangeNotifier {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            if (playResponseAudio) {
+              await OmiVoicePlaybackService.instance.interrupt();
+            }
             notifyListeners();
             setShowTypingIndicator(false);
             return;
@@ -548,7 +592,12 @@ class MessageProvider extends ChangeNotifier {
       }
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance.interrupt();
+      }
       notifyListeners();
+    } finally {
+      _voiceSendInFlight = false;
     }
 
     setShowTypingIndicator(false);
@@ -557,6 +606,11 @@ class MessageProvider extends ChangeNotifier {
   Future sendMessageStreamToServer(String text) async {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
+    // If Omi was still speaking a prior voice reply, stop it — the user's
+    // typed message takes precedence.
+    if (OmiVoicePlaybackService.instance.isSpeaking) {
+      await OmiVoicePlaybackService.instance.interrupt();
+    }
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {

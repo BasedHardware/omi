@@ -1,0 +1,135 @@
+---
+title: "Command reference"
+icon: "book"
+description: "Every verb, every flag."
+---
+
+The full command tree (run `omi --help` for the live version):
+
+```text
+omi
+├── auth          login [--browser] [--api-key KEY] | logout | status | whoami | refresh
+├── config        show | set <k> <v> | path | profile {list, use <name>, delete <name>}
+├── memory        list | get | create | update | delete
+├── conversation  list | get | create | from-segments | update | delete
+├── action-item   list | get | create | update | complete | delete
+└── goal          list | get | create | update | progress | history | delete
+```
+
+## Global flags
+
+```text
+--json                 Emit JSON to stdout (machine-readable, agent-friendly).
+--profile, -p NAME     Use a specific profile from ~/.omi/config.toml.
+--api-base URL         Override the API base URL.
+--verbose, -v          Log HTTP traffic to stderr.
+--no-color             Disable colored output (also honors $NO_COLOR).
+--version              Print the version.
+--help                 Show contextual help.
+```
+
+<Note>
+  Global flags must come **before** the subcommand
+  (`omi --json memory list`, not `omi memory list --json`). This is a Click
+  framework constraint; you'll get a friendly usage message if you put them
+  in the wrong place.
+</Note>
+
+---
+
+## `omi auth`
+
+| Command                                | Notes                                                                            |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| `omi auth login`                       | Interactive prompt: pick browser OAuth or paste an API key.                      |
+| `omi auth login --browser`             | Force the Firebase OAuth browser flow (default provider: Google).                |
+| `omi auth login --browser --provider apple` | Same flow, Apple Sign-In.                                                   |
+| `omi auth login --api-key K`           | Force the API-key path. Exposes the key in `ps`/history — prefer the prompt.    |
+| `omi auth logout`                      | Clear the active profile's credentials.                                          |
+| `omi auth status`                      | Show profile + masked credential + API base. OAuth profiles also show expiry.    |
+| `omi auth whoami`                      | Round-trip to the API to verify the credential is valid.                         |
+| `omi auth refresh`                     | Force-refresh the OAuth ID token. No-op for API-key profiles.                    |
+
+OAuth ID tokens are auto-refreshed before each request when the cached token
+is past (or near) its expiry — you should rarely need to call `refresh` by
+hand. The refresh token rotates if Firebase decides to.
+
+## `omi config`
+
+| Command                            | Notes                                                |
+| ---------------------------------- | ---------------------------------------------------- |
+| `omi config show`                  | Print all profiles + masked credentials.             |
+| `omi config path`                  | Print the on-disk config file path.                  |
+| `omi config set api_base URL`      | Override the API base for the active profile.        |
+| `omi config profile list`          | Tabular list of profiles.                            |
+| `omi config profile use NAME`      | Switch the active profile. Creates it if missing.    |
+| `omi config profile delete NAME`   | Wipe a profile (prompts unless `--yes`).             |
+
+## `omi memory`
+
+| Command                                        | Endpoint                                              |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| `omi memory list [--limit N --offset N --categories CSV]` | `GET /v1/dev/user/memories`                |
+| `omi memory get ID`                            | client-side scan (no direct GET in the dev API)       |
+| `omi memory create CONTENT [--category C --visibility V --tag T...]` | `POST /v1/dev/user/memories`                |
+| `omi memory update ID [--content ... --category ... --visibility ... --tag ...]` | `PATCH /v1/dev/user/memories/{id}` |
+| `omi memory delete ID [-y]`                    | `DELETE /v1/dev/user/memories/{id}`                   |
+
+Categories: `core`, `hobbies`, `lifestyle`, `interests`, `habits`, `work`,
+`skills`, `learnings`, `other`, `system`.
+Visibility: `public` or `private`.
+
+## `omi conversation`
+
+| Command                                       | Endpoint                                                       |
+| --------------------------------------------- | -------------------------------------------------------------- |
+| `omi conversation list [...filters]`          | `GET /v1/dev/user/conversations`                               |
+| `omi conversation get ID [--include-transcript]` | `GET /v1/dev/user/conversations/{id}`                       |
+| `omi conversation create --text ... [...]`    | `POST /v1/dev/user/conversations`                              |
+| `omi conversation from-segments FILE.json [--source ...]` | `POST /v1/dev/user/conversations/from-segments`    |
+| `omi conversation update ID [--title ... --discarded/--no-discarded]` | `PATCH /v1/dev/user/conversations/{id}` |
+| `omi conversation delete ID [-y]`             | `DELETE /v1/dev/user/conversations/{id}`                       |
+
+The `--text` flag accepts `-` to read from stdin:
+
+```bash
+cat meeting_notes.md | omi conversation create --text - --text-source message
+```
+
+## `omi action-item`
+
+| Command                                       | Endpoint                                                    |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `omi action-item list [--completed/--open ...]` | `GET /v1/dev/user/action-items`                           |
+| `omi action-item get ID`                      | client-side scan                                            |
+| `omi action-item create DESC [--due-at ISO]`  | `POST /v1/dev/user/action-items`                            |
+| `omi action-item update ID [--description ... --completed/--open --due-at ...]` | `PATCH /v1/dev/user/action-items/{id}` |
+| `omi action-item complete ID`                 | shortcut for `update --completed`                           |
+| `omi action-item delete ID [-y]`              | `DELETE /v1/dev/user/action-items/{id}`                     |
+
+## `omi goal`
+
+| Command                                                | Endpoint                                                |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| `omi goal list [--limit N --include-inactive]`         | `GET /v1/dev/user/goals`                                |
+| `omi goal get ID`                                      | `GET /v1/dev/user/goals/{id}`                           |
+| `omi goal create TITLE --target N [--type ...] [...]`  | `POST /v1/dev/user/goals`                               |
+| `omi goal update ID [...]`                             | `PATCH /v1/dev/user/goals/{id}`                         |
+| `omi goal progress ID VALUE`                           | `PATCH /v1/dev/user/goals/{id}/progress`                |
+| `omi goal history ID [--days N]`                       | `GET /v1/dev/user/goals/{id}/history`                   |
+| `omi goal delete ID [-y]`                              | `DELETE /v1/dev/user/goals/{id}`                        |
+
+Goal types: `boolean`, `scale`, `numeric`. Up to **3 active goals per user**;
+the oldest is deactivated automatically when you create a fourth.
+
+---
+
+## Environment variables
+
+| Variable          | Effect                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `OMI_API_KEY`     | Use this dev API key without persisting anything to disk. Validated against the prefix. |
+| `OMI_API_BASE`    | Override the API base URL (handy for staging or local backends).                        |
+| `OMI_PROFILE`     | Default profile name when `--profile` is not passed.                                    |
+| `OMI_CONFIG`      | Path to the config file (default `~/.omi/config.toml`).                                 |
+| `NO_COLOR`        | Disable color output (standard, see [no-color.org](https://no-color.org)).              |

@@ -29,10 +29,18 @@ mod llm;
 mod models;
 mod routes;
 mod services;
+mod vertex;
 
 use auth::{firebase_auth_extension, FirebaseAuth};
 use config::Config;
-use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_completions_routes, chat_routes, chat_sessions_routes, config_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, llm_usage_routes, memories_routes, messages_routes, people_routes, personas_routes, proxy_routes, screen_activity_routes, staged_tasks_routes, stats_routes, tts_routes, updates_routes, users_routes, webhook_routes};
+use routes::{
+    // Active (real traffic from current app)
+    agent_routes, auth_routes, chat_completions_routes, config_routes, crisp_routes,
+    health_routes, proxy_routes, screen_activity_routes, tts_routes, updates_routes,
+    webhook_routes,
+    // Deprecated stubs (return 410 Gone — current app uses Python for all data CRUD)
+    deprecated_routes,
+};
 use services::{FirestoreService, IntegrationService, RedisService};
 
 /// Application state shared across handlers
@@ -44,6 +52,8 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
     pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
+    /// Vertex AI auth provider (present when USE_VERTEX_AI=true)
+    pub vertex_auth: Option<vertex::VertexAuth>,
 }
 
 #[tokio::main]
@@ -173,6 +183,39 @@ async fn main() {
         None
     };
 
+    // Initialize Vertex AI auth (when USE_VERTEX_AI=true)
+    let vertex_auth = if config.use_vertex_ai {
+        match (config.vertex_project_id.as_ref(), &config.vertex_location) {
+            (Some(project_id), location) => {
+                match vertex::VertexAuth::new(project_id.clone(), location.clone()).await {
+                    Ok(auth) => {
+                        // Verify we can get a token at startup
+                        match auth.token().await {
+                            Ok(_) => {
+                                tracing::info!("Vertex AI auth initialized (project={}, location={})", project_id, location);
+                                Some(auth)
+                            }
+                            Err(e) => {
+                                tracing::error!("Vertex AI token fetch failed: {} — falling back to API key", e);
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Vertex AI init failed: {} — falling back to API key", e);
+                        None
+                    }
+                }
+            }
+            _ => {
+                tracing::warn!("USE_VERTEX_AI=true but no project ID — falling back to API key");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Create app state
     let gemini_rate_limiter = routes::rate_limit::GeminiRateLimiter::new();
 
@@ -194,6 +237,7 @@ async fn main() {
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
         gemini_rate_limiter,
+        vertex_auth,
     };
 
     // Build CORS layer
@@ -207,35 +251,20 @@ async fn main() {
 
     // Build main app router with AppState
     let main_router = Router::new()
+        // ── Active routes (real traffic from current desktop app) ──────────
         .merge(health_routes())
-        .merge(memories_routes())
-        .merge(messages_routes())
-        .merge(chat_routes())
-        .merge(chat_sessions_routes())
-        .merge(conversations_routes())
-        .merge(action_items_routes())
         .merge(agent_routes())
-        .merge(staged_tasks_routes())
-        .merge(focus_sessions_routes())
-        .merge(apps_routes())
-        .merge(users_routes())
-        .merge(advice_routes())
-        .merge(updates_routes())
-        .merge(folder_routes())
-        .merge(goals_routes())
-        .merge(daily_score_routes())
-        .merge(people_routes())
-        .merge(personas_routes())
-        .merge(knowledge_graph_routes())
-        .merge(llm_usage_routes())
-        .merge(stats_routes())
-        .merge(webhook_routes())
+        .merge(config_routes())
         .merge(crisp_routes())
-        .merge(screen_activity_routes())
         .merge(proxy_routes())
+        .merge(screen_activity_routes())
         .merge(tts_routes())
         .merge(chat_completions_routes())
-        .merge(config_routes())
+        .merge(updates_routes())
+        .merge(webhook_routes())
+        // ── Deprecated stubs (return 410 Gone) ───────────────────────────
+        // Current app uses Python (api.omi.me) for all data CRUD.
+        .merge(deprecated_routes())
         .with_state(state);
 
     // Merge both (now both are Router<()>), then add layers

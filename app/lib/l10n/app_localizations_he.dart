@@ -2357,6 +2357,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get batteryLevel => 'רמת הסוללה';
 
   @override
+  String get charging => 'טוען';
+
+  @override
   String get productUpdate => 'עדכון מוצר';
 
   @override
@@ -2483,12 +2486,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'עקוב אחר היעדים האישיים שלך בעמוד הבית';
-
-  @override
-  String get dailyReflection => 'השתקפות יומית';
-
-  @override
-  String get get9PmReminderToReflect => 'קבל תזכורת בשעה 21:00 להשתקפות על היום שלך';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'תיאור פריט פעולה לא יכול להיות ריק';
@@ -3891,9 +3888,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'עקוב אחר יעדים אישיים בדף הבית';
-
-  @override
-  String get dailyReflectionDescription => 'קבל תזכורת ב-9 בערב להתבוננות על היום שלך וללכידת המחשבות שלך.';
 
   @override
   String get endpointURL => 'כתובת URL של נקודת קצה';
@@ -7124,12 +7118,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'זמן להתרכזות יומית';
-
-  @override
-  String get dailyReflectionNotificationBody => 'ספר לי על היום שלך';
-
-  @override
   String get actionItemReminderTitle => 'תזכורת Omi';
 
   @override
@@ -8235,6 +8223,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'הגדרות שיחות טלפון';
 
   @override
+  String get showPhoneCallButtonTitle => 'הצג כפתור שיחת טלפון';
+
+  @override
+  String get showPhoneCallButtonDesc => 'הצג כפתור שיחת טלפון במסך הבית';
+
+  @override
   String get yourVerifiedNumbers => 'המספרים המאומתים שלך';
 
   @override
@@ -9066,6 +9060,117 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => 'הגעת למגבלה החודשית שלך. שדרג כדי להמשיך לשוחח עם Omi ללא הגבלות.';
+
+  @override
+  String get voiceResponseAudio => 'קרא את תגובת Omi בקול';
+
+  @override
+  String get voiceResponseMode => 'תגובה קולית';
+
+  @override
+  String get voiceResponseModeTitle => 'מתי לקרוא תשובות';
+
+  @override
+  String get voiceResponseOff => 'כבוי';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'אוזניות בלבד';
+
+  @override
+  String get voiceResponseAlways => 'תמיד';
+
+  @override
+  String get agreeAndContinue => 'אני מסכים והמשך';
+
+  @override
+  String get startVoiceRecording => 'התחל הקלטה קולית';
+
+  @override
+  String get startCallRecording => 'התחל הקלטת שיחה';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'מצב קולי';
+
+  @override
+  String get quickActionAskOmi => 'שאל את Omi כל דבר';
+
+  @override
+  String get record => 'הקלט';
+
+  @override
+  String get stop => 'עצור';
+
+  @override
+  String get recordWithPhoneMic => 'הקלט עם מיקרופון הטלפון';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'הקלט שמע סביבך';
+
+  @override
+  String get phoneCall => 'שיחת טלפון';
+
+  @override
+  String get phoneCallSubtitle => 'הקלט שיחה עם תמלול חי';
+
+  @override
+  String get searchActionItems => 'חפש פריטי פעולה';
+
+  @override
+  String get selectActionItems => 'בחירה מרובה';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'ייצוא $count פריט(ים) אל…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'מייצא…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'יוצאו $count אל $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'יוצאו $success מתוך $total אל $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'הצג הושלמו';
+
+  @override
+  String get hideCompletedTasks => 'הסתר הושלמו';
+
+  @override
+  String get selectAllTasksMenu => 'בחר הכל';
+
+  @override
+  String get connectTaskAppToExport => 'חבר אפליקציית משימות בהגדרות כדי לייצא';
+
+  @override
+  String get connectAction => 'חיבור';
+
+  @override
+  String get deselectAllTasksMenu => 'בטל בחירת הכל';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

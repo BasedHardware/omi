@@ -2327,6 +2327,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryLevel => 'バッテリー残量';
 
   @override
+  String get charging => '充電中';
+
+  @override
   String get productUpdate => '製品アップデート';
 
   @override
@@ -2453,12 +2456,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflection => 'デイリー振り返り';
-
-  @override
-  String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'アクションアイテムの説明を空にすることはできません';
@@ -3850,9 +3847,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
 
   @override
   String get endpointURL => 'エンドポイント URL';
@@ -7057,12 +7051,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
-
-  @override
-  String get dailyReflectionNotificationBody => '今日のことを教えてください';
-
-  @override
   String get actionItemReminderTitle => 'Omiリマインダー';
 
   @override
@@ -8163,6 +8151,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8989,6 +8983,117 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
+
+  @override
+  String get voiceResponseAudio => 'Omiの応答を音声で再生';
+
+  @override
+  String get voiceResponseMode => '音声応答';
+
+  @override
+  String get voiceResponseModeTitle => '応答を読み上げるタイミング';
+
+  @override
+  String get voiceResponseOff => 'オフ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ヘッドフォンのみ';
+
+  @override
+  String get voiceResponseAlways => '常に';
+
+  @override
+  String get agreeAndContinue => '同意して続ける';
+
+  @override
+  String get startVoiceRecording => '音声録音を開始';
+
+  @override
+  String get startCallRecording => '通話録音を開始';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '音声モード';
+
+  @override
+  String get quickActionAskOmi => 'Omiに何でも聞く';
+
+  @override
+  String get record => '録音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '電話のマイクで録音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '周囲の音声を録音';
+
+  @override
+  String get phoneCall => '電話';
+
+  @override
+  String get phoneCallSubtitle => 'ライブ文字起こしで通話を録音';
+
+  @override
+  String get searchActionItems => 'アクション項目を検索';
+
+  @override
+  String get selectActionItems => '複数選択';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count件をエクスポート先…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'エクスポート中…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count件を$platformにエクスポートしました';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total件中$success件を$platformにエクスポートしました';
+  }
+
+  @override
+  String get showCompletedTasks => '完了を表示';
+
+  @override
+  String get hideCompletedTasks => '完了を非表示';
+
+  @override
+  String get selectAllTasksMenu => 'すべて選択';
+
+  @override
+  String get connectTaskAppToExport => 'エクスポートするには設定でタスクアプリを接続してください';
+
+  @override
+  String get connectAction => '接続';
+
+  @override
+  String get deselectAllTasksMenu => 'すべて選択解除';
+
+  @override
+  String get dailyReflection => 'デイリー振り返り';
+
+  @override
+  String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
+
+  @override
+  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
+
+  @override
+  String get dailyReflectionNotificationBody => '今日のことを教えてください';
 
   @override
   String get multiLanguageDetection => '多言語検出';

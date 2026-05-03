@@ -41,7 +41,7 @@ if 'deepgram' in _mock_modules:
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
-from utils.stt.streaming import get_stt_service_for_language, STTService  # noqa: E402
+from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -1127,3 +1127,135 @@ class TestGetSttServiceForLanguage:
         assert service == STTService.deepgram
         assert lang == 'en'
         assert model == 'nova-3'
+
+
+class TestFillerWordsLanguageBehavior:
+    """Filler words should be stripped for English but preserved for all other languages (#6575).
+
+    Deepgram's filler_words=False strips "um", "uh" etc. This is desirable for English
+    but destructive for other languages where those sounds are real words (e.g. Portuguese "um" = "a/one").
+    """
+
+    def _get_filler_words_option(self, language):
+        """Call connect_to_deepgram with given language and capture the filler_words option."""
+        from types import SimpleNamespace
+        from utils.stt.streaming import connect_to_deepgram
+
+        captured = {}
+
+        def capture_live_options(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(**kwargs)
+
+        mock_dg_conn = MagicMock()
+        mock_dg_conn.on = MagicMock()
+        mock_dg_conn.start.return_value = True
+
+        mock_client = MagicMock()
+        mock_client.listen.websocket.v.return_value = mock_dg_conn
+
+        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
+            'utils.stt.streaming.LiveOptions', side_effect=capture_live_options
+        ):
+            connect_to_deepgram(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language=language,
+                sample_rate=16000,
+                channels=1,
+                model='nova-3',
+            )
+
+        return captured['filler_words']
+
+    def test_english_strips_fillers(self):
+        """English ('en') should strip filler words (filler_words=False)."""
+        assert self._get_filler_words_option('en') is False
+
+    def test_english_us_strips_fillers(self):
+        """American English ('en-US') should strip filler words."""
+        assert self._get_filler_words_option('en-US') is False
+
+    def test_english_gb_strips_fillers(self):
+        """British English ('en-GB') should strip filler words."""
+        assert self._get_filler_words_option('en-GB') is False
+
+    def test_english_au_strips_fillers(self):
+        """Australian English ('en-AU') should strip filler words."""
+        assert self._get_filler_words_option('en-AU') is False
+
+    def test_english_in_strips_fillers(self):
+        """Indian English ('en-IN') should strip filler words."""
+        assert self._get_filler_words_option('en-IN') is False
+
+    def test_multi_preserves_fillers(self):
+        """Multi-language mode should preserve filler words (#6575)."""
+        assert self._get_filler_words_option('multi') is True
+
+    def test_portuguese_preserves_fillers(self):
+        """Portuguese ('pt') should preserve fillers — 'um' means 'a/one' (#6575)."""
+        assert self._get_filler_words_option('pt') is True
+
+    def test_portuguese_br_preserves_fillers(self):
+        """Brazilian Portuguese ('pt-BR') should preserve fillers."""
+        assert self._get_filler_words_option('pt-BR') is True
+
+    def test_spanish_preserves_fillers(self):
+        """Spanish ('es') should preserve filler words."""
+        assert self._get_filler_words_option('es') is True
+
+    def test_french_preserves_fillers(self):
+        """French ('fr') should preserve filler words."""
+        assert self._get_filler_words_option('fr') is True
+
+    def test_german_preserves_fillers(self):
+        """German ('de') should preserve filler words."""
+        assert self._get_filler_words_option('de') is True
+
+    def test_japanese_preserves_fillers(self):
+        """Japanese ('ja') should preserve filler words."""
+        assert self._get_filler_words_option('ja') is True
+
+    def test_hindi_preserves_fillers(self):
+        """Hindi ('hi') should preserve filler words."""
+        assert self._get_filler_words_option('hi') is True
+
+    def test_russian_preserves_fillers(self):
+        """Russian ('ru') should preserve filler words."""
+        assert self._get_filler_words_option('ru') is True
+
+    def test_korean_preserves_fillers(self):
+        """Korean ('ko') should preserve filler words."""
+        assert self._get_filler_words_option('ko') is True
+
+    def test_chinese_preserves_fillers(self):
+        """Chinese ('zh') should preserve filler words."""
+        assert self._get_filler_words_option('zh') is True
+
+
+class TestShouldPreserveFillerWords:
+    """Direct tests for the should_preserve_filler_words helper (#6575)."""
+
+    def test_english_false(self):
+        assert should_preserve_filler_words('en') is False
+
+    def test_english_us_false(self):
+        assert should_preserve_filler_words('en-US') is False
+
+    def test_english_gb_false(self):
+        assert should_preserve_filler_words('en-GB') is False
+
+    def test_multi_true(self):
+        assert should_preserve_filler_words('multi') is True
+
+    def test_portuguese_true(self):
+        assert should_preserve_filler_words('pt') is True
+
+    def test_portuguese_br_true(self):
+        assert should_preserve_filler_words('pt-BR') is True
+
+    def test_spanish_true(self):
+        assert should_preserve_filler_words('es') is True
+
+    def test_arabic_true(self):
+        assert should_preserve_filler_words('ar') is True

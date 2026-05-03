@@ -192,14 +192,14 @@ struct ChatPage: View {
           }
           chatProvider.isClaudeAuthRequired = false
           Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
+            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.piMono)
           }
         },
         onCancel: {
           chatProvider.isClaudeAuthRequired = false
-          // Switch back to Mode A if auth cancelled
+          // Switch back to Omi AI (pi-mono) if auth cancelled
           Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
+            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.piMono)
           }
         }
       )

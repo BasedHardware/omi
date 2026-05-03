@@ -56,7 +56,8 @@ class MemoriesProvider extends ChangeNotifier {
       }
 
       return matchesSearch && categoryMatch;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setShowOnlyManual(bool showOnly) {
@@ -96,6 +97,13 @@ class MemoriesProvider extends ChangeNotifier {
     await prefs.remove('memories_filter_categories');
     // Clear old single filter key as well to be clean
     await prefs.remove('memories_filter');
+  }
+
+  void clearUserData() {
+    _memories = [];
+    _selectedCategories = {};
+    _showOnlyManual = false;
+    notifyListeners();
   }
 
   // Deprecated/Modified: kept as alias if needed but unused internally now

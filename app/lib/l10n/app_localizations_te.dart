@@ -2385,6 +2385,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get batteryLevel => 'బ్యాటరీ స్థాయి';
 
   @override
+  String get charging => 'ఛార్జ్ అవుతోంది';
+
+  @override
   String get productUpdate => 'ఉత్పత్తి అపడేట్';
 
   @override
@@ -2511,12 +2514,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'హోమ్‌పేజ్‌లో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి';
-
-  @override
-  String get dailyReflection => 'రోజువారీ ఆలోచన';
-
-  @override
-  String get get9PmReminderToReflect => 'మీ రోజుపై ఆలోచించడానికి సాయంత్రం 9 గంటలకు రిమైండర్ పొందండి';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'కార్యాచరణ అంశం వివరణ ఖాళీగా ఉండకూడదు';
@@ -3939,10 +3936,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'హోమ్‌పేజీలో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి';
-
-  @override
-  String get dailyReflectionDescription =>
-      'రాత్రి 9:00 కు మీ దిన్ను ఆలోచించుకోవటానికి మరియు మీ ఆలోచనలను కేటుకోవటానికి రిమైండర్ పొందండి.';
 
   @override
   String get endpointURL => 'ఎండ్‌పాయింట్ URL';
@@ -7228,12 +7221,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'రోజువారీ ప్రతిబింబ సమయం';
-
-  @override
-  String get dailyReflectionNotificationBody => 'మీ రోజు గురించి నాకు చెప్పండి';
-
-  @override
   String get actionItemReminderTitle => 'Omi రిమైండర్';
 
   @override
@@ -8353,6 +8340,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ఫోన్ కాల్ సెట్టింగ్‌లు';
 
   @override
+  String get showPhoneCallButtonTitle => 'ఫోన్ కాల్ బటన్ చూపించు';
+
+  @override
+  String get showPhoneCallButtonDesc => 'హోమ్ స్క్రీన్‌లో ఫోన్ కాల్ బటన్ చూపించు';
+
+  @override
   String get yourVerifiedNumbers => 'మీ ధృవీకరించిన సంఖ్యలు';
 
   @override
@@ -9190,6 +9183,117 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'మీరు మీ నెలవారీ పరిమితిని చేరుకున్నారు. పరిమితులు లేకుండా Omi తో చాట్ కొనసాగించడానికి అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get voiceResponseAudio => 'Omi ప్రతిస్పందనను బిగ్గరగా చదవండి';
+
+  @override
+  String get voiceResponseMode => 'వాయిస్ ప్రతిస్పందన';
+
+  @override
+  String get voiceResponseModeTitle => 'ప్రతిస్పందనలను ఎప్పుడు చదవాలి';
+
+  @override
+  String get voiceResponseOff => 'ఆఫ్';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'హెడ్‌ఫోన్‌లు మాత్రమే';
+
+  @override
+  String get voiceResponseAlways => 'ఎల్లప్పుడూ';
+
+  @override
+  String get agreeAndContinue => 'అంగీకరించి కొనసాగించండి';
+
+  @override
+  String get startVoiceRecording => 'వాయిస్ రికార్డింగ్ ప్రారంభించండి';
+
+  @override
+  String get startCallRecording => 'కాల్ రికార్డింగ్ ప్రారంభించండి';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'వాయిస్ మోడ్';
+
+  @override
+  String get quickActionAskOmi => 'Omi ని ఏమైనా అడగండి';
+
+  @override
+  String get record => 'రికార్డ్';
+
+  @override
+  String get stop => 'ఆపు';
+
+  @override
+  String get recordWithPhoneMic => 'ఫోన్ మైక్‌తో రికార్డ్ చేయండి';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'మీ చుట్టూ ఉన్న ఆడియోను క్యాప్చర్ చేయండి';
+
+  @override
+  String get phoneCall => 'ఫోన్ కాల్';
+
+  @override
+  String get phoneCallSubtitle => 'లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి';
+
+  @override
+  String get searchActionItems => 'చర్య అంశాలను వెతకండి';
+
+  @override
+  String get selectActionItems => 'బహుళ ఎంపిక';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count అంశం(ాలను) ఎగుమతి చేయండి…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ఎగుమతి చేస్తోంది…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count ని $platform కు ఎగుమతి చేయబడింది';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total లో $success ని $platform కు ఎగుమతి చేయబడింది';
+  }
+
+  @override
+  String get showCompletedTasks => 'పూర్తయినవి చూపించు';
+
+  @override
+  String get hideCompletedTasks => 'పూర్తయినవి దాచు';
+
+  @override
+  String get selectAllTasksMenu => 'అన్నీ ఎంచుకోండి';
+
+  @override
+  String get connectTaskAppToExport => 'ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి';
+
+  @override
+  String get connectAction => 'కనెక్ట్ చేయండి';
+
+  @override
+  String get deselectAllTasksMenu => 'అన్ని ఎంపికలు తొలగించు';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

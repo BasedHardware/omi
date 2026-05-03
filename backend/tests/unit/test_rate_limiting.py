@@ -332,6 +332,10 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "agent:execute_tool",
             "mcp:sse",
             "memories:create",
+            "memories:modify",
+            "memories:delete",
+            "memories:delete_all",
+            "memories:batch",
             "goals:suggest",
             "goals:advice",
             "goals:extract",
@@ -424,6 +428,19 @@ class TestRouterWiring(unittest.TestCase):
     def test_agent_tools_wired(self):
         matches = self._grep_file("routers/agent_tools.py", r"with_rate_limit.*agent:")
         self.assertGreaterEqual(len(matches), 1, "agent_tools.py missing rate limit wiring")
+
+    def test_memories_router_has_rate_limits(self):
+        matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
+        # create, batch, delete, delete_all, modify(review), modify(edit), modify(visibility) = 7
+        self.assertEqual(len(matches), 7, f"memories.py expected 7 rate limits, got {len(matches)}")
+
+    def test_memories_create_endpoint_rate_limited(self):
+        matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
+        self.assertEqual(len(matches), 1, "POST /v3/memories must have memories:create rate limit")
+
+    def test_memories_delete_all_endpoint_rate_limited(self):
+        matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:delete_all")
+        self.assertEqual(len(matches), 1, "DELETE /v3/memories must have memories:delete_all rate limit")
 
 
 class TestRealCheckRateLimit(unittest.TestCase):

@@ -28,8 +28,10 @@ Map<String, dynamic> _$PlanLimitsToJson(PlanLimits instance) =>
     };
 
 Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
-      plan: $enumDecode(_$PlanTypeEnumMap, json['plan']),
-      status: $enumDecode(_$SubscriptionStatusEnumMap, json['status']),
+      plan: $enumDecode(_$PlanTypeEnumMap, json['plan'],
+          unknownValue: PlanType.basic),
+      status: $enumDecode(_$SubscriptionStatusEnumMap, json['status'],
+          unknownValue: SubscriptionStatus.inactive),
       currentPeriodEnd: (json['current_period_end'] as num?)?.toInt(),
       stripeSubscriptionId: json['stripe_subscription_id'] as String?,
       currentPriceId: json['current_price_id'] as String?,
@@ -109,6 +111,33 @@ Map<String, dynamic> _$SubscriptionPlanToJson(SubscriptionPlan instance) =>
       'prices': instance.prices,
     };
 
+PhoneCallQuota _$PhoneCallQuotaFromJson(Map<String, dynamic> json) =>
+    PhoneCallQuota(
+      hasAccess: json['has_access'] as bool,
+      isPaid: json['is_paid'] as bool,
+      monthlyLimit: (json['monthly_limit'] as num?)?.toInt(),
+      monthlyUsed: (json['monthly_used'] as num?)?.toInt() ?? 0,
+      remaining: (json['remaining'] as num?)?.toInt(),
+      maxDurationSeconds: (json['max_duration_seconds'] as num?)?.toInt(),
+      allowedCountries: (json['allowed_countries'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      resetAt: (json['reset_at'] as num?)?.toInt(),
+    );
+
+Map<String, dynamic> _$PhoneCallQuotaToJson(PhoneCallQuota instance) =>
+    <String, dynamic>{
+      'has_access': instance.hasAccess,
+      'is_paid': instance.isPaid,
+      'monthly_limit': instance.monthlyLimit,
+      'monthly_used': instance.monthlyUsed,
+      'remaining': instance.remaining,
+      'max_duration_seconds': instance.maxDurationSeconds,
+      'allowed_countries': instance.allowedCountries,
+      'reset_at': instance.resetAt,
+    };
+
 UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
         Map<String, dynamic> json) =>
     UserSubscriptionResponse(
@@ -134,6 +163,10 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
       chatQuotaPercent: (json['chat_quota_percent'] as num?)?.toDouble() ?? 0.0,
       chatQuotaAllowed: json['chat_quota_allowed'] as bool? ?? true,
       chatQuotaResetAt: (json['chat_quota_reset_at'] as num?)?.toInt(),
+      phoneCallQuota: json['phone_call_quota'] == null
+          ? null
+          : PhoneCallQuota.fromJson(
+              json['phone_call_quota'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$UserSubscriptionResponseToJson(
@@ -155,4 +188,5 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'chat_quota_percent': instance.chatQuotaPercent,
       'chat_quota_allowed': instance.chatQuotaAllowed,
       'chat_quota_reset_at': instance.chatQuotaResetAt,
+      'phone_call_quota': instance.phoneCallQuota,
     };

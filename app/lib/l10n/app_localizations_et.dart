@@ -2369,6 +2369,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get batteryLevel => 'Aku tase';
 
   @override
+  String get charging => 'Laadimine';
+
+  @override
   String get productUpdate => 'Toote värskendus';
 
   @override
@@ -2495,12 +2498,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Jälgi oma isiklikke eesmärke avalehel';
-
-  @override
-  String get dailyReflection => 'Igapäevane refleksioon';
-
-  @override
-  String get get9PmReminderToReflect => 'Saa kell 21 meeldetuletus oma päeva üle mõtisklemiseks';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Toimingu kirjeldus ei tohi olla tühi';
@@ -3917,10 +3914,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Jälgi isiklikke eesmärke avalehel';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
 
   @override
   String get endpointURL => 'Lõpp-punkti URL';
@@ -7183,12 +7176,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Aeg igapäevaseks refleksiooniks';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Räägi mulle oma päevast';
-
-  @override
   String get actionItemReminderTitle => 'Omi meeldetuletus';
 
   @override
@@ -8300,6 +8287,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Kone seaded';
 
   @override
+  String get showPhoneCallButtonTitle => 'Kuva kõnenuppu';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Kuva telefonikõne nupp avakuval';
+
+  @override
   String get yourVerifiedNumbers => 'Teie kinnitatud numbrid';
 
   @override
@@ -9136,6 +9129,118 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Olete saavutanud oma igakuise limiidi. Uuendage, et jätkata Omiga piiranguteta vestlemist.';
+
+  @override
+  String get voiceResponseAudio => 'Loe Omi vastus ette';
+
+  @override
+  String get voiceResponseMode => 'Hääleline vastus';
+
+  @override
+  String get voiceResponseModeTitle => 'Millal vastuseid ette lugeda';
+
+  @override
+  String get voiceResponseOff => 'Väljas';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Ainult kõrvaklapid';
+
+  @override
+  String get voiceResponseAlways => 'Alati';
+
+  @override
+  String get agreeAndContinue => 'Nõustun ja jätka';
+
+  @override
+  String get startVoiceRecording => 'Alusta häälsalvestust';
+
+  @override
+  String get startCallRecording => 'Alusta kõne salvestamist';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Häälrežiim';
+
+  @override
+  String get quickActionAskOmi => 'Küsi Omilt midagi';
+
+  @override
+  String get record => 'Salvesta';
+
+  @override
+  String get stop => 'Peata';
+
+  @override
+  String get recordWithPhoneMic => 'Salvesta telefoni mikrofoniga';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Salvesta enda ümbruse heli';
+
+  @override
+  String get phoneCall => 'Telefonikõne';
+
+  @override
+  String get phoneCallSubtitle => 'Salvesta kõne reaalajas transkriptsiooniga';
+
+  @override
+  String get searchActionItems => 'Otsi tegevusüksusi';
+
+  @override
+  String get selectActionItems => 'Vali mitu';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Ekspordi $count üksus(t) asukohta…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportimine…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksporditi $count asukohta $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksporditi $success/$total asukohta $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Kuva lõpetatud';
+
+  @override
+  String get hideCompletedTasks => 'Peida lõpetatud';
+
+  @override
+  String get selectAllTasksMenu => 'Vali kõik';
+
+  @override
+  String get connectTaskAppToExport => 'Eksportimiseks ühendage Seadetes ülesannete rakendus';
+
+  @override
+  String get connectAction => 'Ühenda';
+
+  @override
+  String get deselectAllTasksMenu => 'Tühista kõigi valik';
+
+  @override
+  String get dailyReflection => 'Igapäevane refleksioon';
+
+  @override
+  String get get9PmReminderToReflect => 'Saa kell 21 meeldetuletus oma päeva üle mõtisklemiseks';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Aeg igapäevaseks refleksiooniks';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Räägi mulle oma päevast';
 
   @override
   String get multiLanguageDetection => 'Mitmekeelne tuvastus';

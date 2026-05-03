@@ -37,16 +37,13 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -291,13 +288,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<
-          ConversationProvider,
-          MessageProvider,
-          PeopleProvider,
-          UsageProvider,
-          CaptureProvider
-        >(
+        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            CaptureProvider>(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
@@ -323,36 +315,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
               (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
         ),
-        ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
-        ChangeNotifierProvider(create: (context) => McpProvider()),
         ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
           create: (context) => AddAppProvider(),
           update: (BuildContext context, value, AddAppProvider? previous) =>
               (previous?..setAppProvider(value)) ?? AddAppProvider(),
         ),
-        ChangeNotifierProxyProvider<AppProvider, AiAppGeneratorProvider>(
-          create: (context) => AiAppGeneratorProvider(),
-          update: (BuildContext context, value, AiAppGeneratorProvider? previous) =>
-              (previous?..setAppProvider(value)) ?? AiAppGeneratorProvider(),
-        ),
-        ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
         ChangeNotifierProxyProvider<ConnectivityProvider, MemoriesProvider>(
           create: (context) => MemoriesProvider(),
           update: (context, connectivity, previous) =>
               (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
         ),
         ChangeNotifierProvider(create: (context) => UserProvider()),
-        ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
-        ChangeNotifierProvider(create: (context) => GoalsProvider()..init()),
+        ChangeNotifierProvider(lazy: true, create: (context) => ActionItemsProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => GoalsProvider()..init()),
         ChangeNotifierProvider(create: (context) => SyncProvider()),
-        ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
-        ChangeNotifierProvider(create: (context) => IntegrationProvider()),
-        ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
-        ChangeNotifierProvider(create: (context) => FolderProvider()),
-        ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => FolderProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => McpProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),
         ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()..checkPendingRecording()),
+        ChangeNotifierProvider(create: (context) => LocaleProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
-        ChangeNotifierProvider(create: (context) => PhoneCallProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
       ],
       builder: (context, child) {
         return WithForegroundTask(

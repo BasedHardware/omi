@@ -2379,6 +2379,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get batteryLevel => 'Узровень батарэі';
 
   @override
+  String get charging => 'Зарадка';
+
+  @override
   String get productUpdate => 'Абнаўленне прадукту';
 
   @override
@@ -2505,12 +2508,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Отстёгивайте свои личные цели на главной странице';
-
-  @override
-  String get dailyReflection => 'Ежедневное размышленне';
-
-  @override
-  String get get9PmReminderToReflect => 'Атрымаць напамін ў 21:00, каб адбыцца';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Апісанне пункту дзеяння не можа быць пусты';
@@ -3926,9 +3923,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Сачыць персанальныя мэты на хатняй старонцы';
-
-  @override
-  String get dailyReflectionDescription => 'Атрымайце нагаданне ў 9 PM для роздуму над днём і захопу вашых думак.';
 
   @override
   String get endpointURL => 'URL дакрайнай кропкі';
@@ -7204,12 +7198,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Час штодзённага роздуму';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Расказыце мне пра ваш дзень';
-
-  @override
   String get actionItemReminderTitle => 'Нагадаванне Omi';
 
   @override
@@ -8328,6 +8316,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Параметры тэлефонных вызваў';
 
   @override
+  String get showPhoneCallButtonTitle => 'Паказаць кнопку тэлефоннага выкліку';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране';
+
+  @override
   String get yourVerifiedNumbers => 'Ваш параўныя нумары';
 
   @override
@@ -9164,6 +9158,117 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Вы дасягнулі свайго месячнага ліміту. Абнавіце, каб працягваць размаўляць з Omi без абмежаванняў.';
+
+  @override
+  String get voiceResponseAudio => 'Чытаць адказ Omi уголас';
+
+  @override
+  String get voiceResponseMode => 'Галасавы адказ';
+
+  @override
+  String get voiceResponseModeTitle => 'Калі агучваць адказы';
+
+  @override
+  String get voiceResponseOff => 'Выкл';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Толькі навушнікі';
+
+  @override
+  String get voiceResponseAlways => 'Заўсёды';
+
+  @override
+  String get agreeAndContinue => 'Прыняць і працягнуць';
+
+  @override
+  String get startVoiceRecording => 'Пачаць галасавы запіс';
+
+  @override
+  String get startCallRecording => 'Пачаць запіс званка';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Галасавы рэжым';
+
+  @override
+  String get quickActionAskOmi => 'Спытайце ў Омі што заўгодна';
+
+  @override
+  String get record => 'Запісаць';
+
+  @override
+  String get stop => 'Спыніць';
+
+  @override
+  String get recordWithPhoneMic => 'Запіс мікрафонам тэлефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Запісвайце гук вакол сябе';
+
+  @override
+  String get phoneCall => 'Тэлефонны званок';
+
+  @override
+  String get phoneCallSubtitle => 'Запіс званка з жывой транскрыпцыяй';
+
+  @override
+  String get searchActionItems => 'Шукаць элементы дзеянняў';
+
+  @override
+  String get selectActionItems => 'Выбраць некалькі';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Экспартаваць $count элемент(аў) у…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Экспарт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Экспартавана $count у $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Экспартавана $success з $total у $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Паказаць завершаныя';
+
+  @override
+  String get hideCompletedTasks => 'Схаваць завершаныя';
+
+  @override
+  String get selectAllTasksMenu => 'Выбраць усе';
+
+  @override
+  String get connectTaskAppToExport => 'Падключыце праграму задач у Наладах для экспарту';
+
+  @override
+  String get connectAction => 'Злучыць';
+
+  @override
+  String get deselectAllTasksMenu => 'Зняць выбар усіх';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
 
   @override
   String get multiLanguageDetection => 'Multi-language Detection';

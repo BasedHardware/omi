@@ -2323,6 +2323,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryLevel => '电池电量';
 
   @override
+  String get charging => '充电中';
+
+  @override
   String get productUpdate => '产品更新';
 
   @override
@@ -2448,12 +2451,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => '在主页上跟踪您的个人目标';
-
-  @override
-  String get dailyReflection => '每日反思';
-
-  @override
-  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => '操作项描述不能为空';
@@ -3845,9 +3842,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => '在主页上跟踪个人目标';
-
-  @override
-  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
 
   @override
   String get endpointURL => '端点 URL';
@@ -7048,12 +7042,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => '每日反思时间';
-
-  @override
-  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
-
-  @override
   String get actionItemReminderTitle => 'Omi 提醒';
 
   @override
@@ -8154,6 +8142,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSettingsTitle => '通话设置';
 
   @override
+  String get showPhoneCallButtonTitle => '显示电话按钮';
+
+  @override
+  String get showPhoneCallButtonDesc => '在主屏幕上显示电话按钮';
+
+  @override
   String get yourVerifiedNumbers => '您已验证的号码';
 
   @override
@@ -8975,6 +8969,117 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '您已达到每月限额。升级以无限制地继续与Omi聊天。';
+
+  @override
+  String get voiceResponseAudio => '朗读 Omi 的回复';
+
+  @override
+  String get voiceResponseMode => '语音回复';
+
+  @override
+  String get voiceResponseModeTitle => '何时朗读回复';
+
+  @override
+  String get voiceResponseOff => '关闭';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '仅耳机';
+
+  @override
+  String get voiceResponseAlways => '始终';
+
+  @override
+  String get agreeAndContinue => '同意并继续';
+
+  @override
+  String get startVoiceRecording => '开始语音录音';
+
+  @override
+  String get startCallRecording => '开始通话录音';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '语音模式';
+
+  @override
+  String get quickActionAskOmi => '向Omi询问任何事';
+
+  @override
+  String get record => '录音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '用手机麦克风录音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '捕捉您周围的声音';
+
+  @override
+  String get phoneCall => '电话';
+
+  @override
+  String get phoneCallSubtitle => '录制带实时转录的通话';
+
+  @override
+  String get searchActionItems => '搜索操作项';
+
+  @override
+  String get selectActionItems => '多选';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '导出 $count 个项目到…';
+  }
+
+  @override
+  String get bulkExportInProgress => '正在导出…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '已将 $count 项导出到 $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '已将 $success/$total 导出到 $platform';
+  }
+
+  @override
+  String get showCompletedTasks => '显示已完成';
+
+  @override
+  String get hideCompletedTasks => '隐藏已完成';
+
+  @override
+  String get selectAllTasksMenu => '全选';
+
+  @override
+  String get connectTaskAppToExport => '在设置中连接任务应用以导出';
+
+  @override
+  String get connectAction => '连接';
+
+  @override
+  String get deselectAllTasksMenu => '取消全选';
+
+  @override
+  String get dailyReflection => '每日反思';
+
+  @override
+  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
+
+  @override
+  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
+
+  @override
+  String get dailyReflectionNotificationTitle => '每日反思时间';
+
+  @override
+  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
 
   @override
   String get multiLanguageDetection => '多语言检测';

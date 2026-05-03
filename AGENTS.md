@@ -8,7 +8,7 @@ These rules apply to Codex when working in this repository.
 
 ## Setup
 
-- **Install pre-commit hook (required):** `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit` — formatting is enforced by CI
+- **Pre-commit hook (required — verify before first commit):** `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit` — formatting is enforced by CI
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`)
 
 ## Safety Rules
@@ -134,10 +134,12 @@ Always format code after making changes. The pre-commit hook handles this automa
 
 ## Git
 
+- **Before your first commit**, verify the pre-commit hook is installed: `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
 - Never push directly to `main`.
 - Never merge directly from a local branch. Land changes through a PR only.
 - When a change should go remote, create or use a feature branch, commit there, open/update a PR, and merge via the PR.
 - Always work in a git worktree for code changes. Use `EnterWorktree` at the start of a task to isolate your work.
+- Before creating a worktree or branch, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 
 ## Documentation Maintenance
 

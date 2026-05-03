@@ -465,8 +465,11 @@ async def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.
+    Also clears the last-known-good fallback so a fresh LKG is established
+    on the next successful fetch.
     """
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     delete_generic_cache("github_releases_desktop")
+    delete_generic_cache("github_releases_desktop:lkg")
     return {"success": True, "message": "Desktop releases cache cleared successfully"}

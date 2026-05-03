@@ -102,6 +102,7 @@ mock_llm_mini.invoke = MagicMock(return_value=MagicMock(content='test'))
 clients_mod = _stub_module("utils.llm.clients")
 clients_mod.llm_mini = mock_llm_mini
 clients_mod.generate_embedding = MagicMock(return_value=[0] * 3072)
+clients_mod.get_llm = MagicMock(return_value=mock_llm_mini)
 
 # Stub usage tracker — set __path__ to real directory so proactive_notification.py can be found
 utils_mod = _stub_module("utils")

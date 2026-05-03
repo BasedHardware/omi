@@ -9,10 +9,8 @@ Usage: ./run.sh [options]
 Build and run the Omi Desktop dev app with local backend services.
 
 Options (via environment variables):
-  OMI_SKIP_BACKEND=1      Skip starting Rust backend (use remote backend via OMI_API_URL)
-  OMI_SKIP_AUTH=1          Skip starting Python auth service (use remote auth via OMI_AUTH_URL)
-  OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_API_URL from .env directly)
-  AUTH_PORT=10200           Auth service port (default: 10200)
+  OMI_SKIP_BACKEND=1      Skip starting Rust backend (use remote backend via OMI_DESKTOP_API_URL)
+  OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
@@ -27,11 +25,11 @@ Required tools:
   cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
 
 Port allocation (avoid 8080 to prevent port conflicts):
-  Auth default: 10200    Backend default: 10201
+  Backend default: 10201
 
 Examples:
-  ./run.sh                                  # Full local dev (backend + auth + tunnel + app)
-  OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh  # App only (backend running elsewhere)
+  ./run.sh                                  # Full local dev (backend + tunnel + app)
+  OMI_SKIP_BACKEND=1 ./run.sh               # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
   ./run.sh --yolo                            # Quick start: use prod backend, no local services
 USAGE
@@ -56,11 +54,9 @@ if [ "$1" = "--yolo" ]; then
     echo ""
 
     export OMI_SKIP_BACKEND=1
-    export OMI_SKIP_AUTH=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
+    export OMI_DESKTOP_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
     export OMI_PYTHON_API_URL="https://api.omi.me"
-    export OMI_AUTH_URL="https://omi-desktop-auth-208440318997.us-central1.run.app/"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 fi
 
@@ -140,22 +136,15 @@ fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
-AUTH_DIR="$(cd "$(dirname "$0")/Auth-Python" && pwd)"
 BACKEND_PID=""
-AUTH_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
-AUTH_PORT="${AUTH_PORT:-10200}"
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
     if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
         echo "Stopping tunnel (PID: $TUNNEL_PID)..."
         kill "$TUNNEL_PID" 2>/dev/null || true
-    fi
-    if [ -n "$AUTH_PID" ] && kill -0 "$AUTH_PID" 2>/dev/null; then
-        echo "Stopping auth service (PID: $AUTH_PID)..."
-        kill "$AUTH_PID" 2>/dev/null || true
     fi
     if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID: $BACKEND_PID)..."
@@ -231,7 +220,7 @@ if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
             substep "Warning: Could not capture tunnel URL (see $TUNNEL_LOG for details)"
         fi
     else
-        substep "cloudflared not found — skipping tunnel (set OMI_API_URL in .env instead)"
+        substep "cloudflared not found — skipping tunnel (set OMI_DESKTOP_API_URL in .env instead)"
     fi
 else
     substep "Skipping tunnel (OMI_SKIP_TUNNEL=1)"
@@ -264,8 +253,8 @@ if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
     echo "  GOOGLE_APPLICATION_CREDENTIALS=./google-credentials.json"
     echo ""
     echo "Or skip the backend entirely:"
-    echo "  OMI_SKIP_BACKEND=1 OMI_SKIP_AUTH=1 ./run.sh"
-    echo "  (set OMI_API_URL and OMI_AUTH_URL in .env.app to point to a remote backend)"
+    echo "  OMI_SKIP_BACKEND=1 ./run.sh"
+    echo "  (set OMI_DESKTOP_API_URL and OMI_PYTHON_API_URL in .env.app to point to remote backends)"
     echo ""
     echo "Or just use the production backend (no setup needed):"
     echo "  ./run.sh --yolo"
@@ -317,7 +306,7 @@ fi
 if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
     substep "Auth project: tokens validated against $FIREBASE_AUTH_PROJECT_ID, Firestore on $FIREBASE_PROJECT_ID"
 fi
-substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT | Auth port: $AUTH_PORT"
+substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
 cd - > /dev/null
 
 # ─── Start Rust backend ───────────────────────────────────────────────
@@ -348,42 +337,7 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         sleep 0.5
     done
 else
-    substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_API_URL from .env"
-fi
-
-# ─── Start Python auth service ────────────────────────────────────────
-if [ "${OMI_SKIP_AUTH:-0}" != "1" ]; then
-    step "Starting Python auth service (port $AUTH_PORT)..."
-    if [ -d "$AUTH_DIR" ]; then
-        # Set up venv if needed
-        if [ ! -d "$AUTH_DIR/.venv" ]; then
-            substep "Creating virtualenv..."
-            python3 -m venv "$AUTH_DIR/.venv"
-            "$AUTH_DIR/.venv/bin/pip" install -q -r "$AUTH_DIR/requirements.txt"
-        fi
-        # Auth service shares credentials with the Rust backend
-        (
-            cd "$AUTH_DIR"
-            if [ -f "$BACKEND_DIR/.env" ]; then
-                set -a; source "$BACKEND_DIR/.env"; set +a
-            fi
-            export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
-            export BASE_API_URL="http://localhost:$AUTH_PORT"
-            .venv/bin/uvicorn main:app --host 0.0.0.0 --port "$AUTH_PORT" --log-level warning &
-            echo $!
-        ) &
-        AUTH_PID=$!
-        sleep 1
-        if curl -s "http://localhost:$AUTH_PORT/docs" > /dev/null 2>&1; then
-            substep "Auth service is ready on port $AUTH_PORT"
-        else
-            substep "Auth service starting (PID: $AUTH_PID)..."
-        fi
-    else
-        substep "Auth-Python/ not found — skipping (auth will use OMI_AUTH_URL from .env)"
-    fi
-else
-    substep "Skipping auth service (OMI_SKIP_AUTH=1) — using OMI_AUTH_URL from .env"
+    substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
 fi
 
 # Check if another SwiftPM instance is running (will block our build)
@@ -395,10 +349,10 @@ if [ -n "$SWIFTPM_PID" ]; then
     done
 fi
 
-step "Building acp-bridge (npm install + tsc)..."
-ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
-if [ -d "$ACP_BRIDGE_DIR" ]; then
-    cd "$ACP_BRIDGE_DIR"
+step "Building agent (npm install + tsc)..."
+AGENT_DIR="$(dirname "$0")/agent"
+if [ -d "$AGENT_DIR" ]; then
+    cd "$AGENT_DIR"
     if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
         substep "Installing npm dependencies"
         npm install --no-fund --no-audit 2>&1 | tail -1
@@ -407,7 +361,7 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
     npm run build --silent
     cd - > /dev/null
 else
-    echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"
+    echo "Warning: agent directory not found at $AGENT_DIR"
 fi
 
 step "Checking schema docs..."
@@ -494,12 +448,12 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
 fi
 
-substep "Copying acp-bridge"
-if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
-    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+substep "Copying agent"
+if [ -d "$AGENT_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+    cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
+    cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
+    cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
@@ -520,20 +474,20 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-# Set OMI_API_URL: tunnel URL if available, otherwise from .env or local backend
+# Set OMI_DESKTOP_API_URL: tunnel URL if available, otherwise from .env or local backend
 if [ -n "$TUNNEL_URL" ]; then
     EFFECTIVE_API_URL="$TUNNEL_URL"
-elif [ -n "$OMI_API_URL" ]; then
-    EFFECTIVE_API_URL="$OMI_API_URL"
+elif [ -n "$OMI_DESKTOP_API_URL" ]; then
+    EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
 else
     EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
 fi
-if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$EFFECTIVE_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+if grep -q "^OMI_DESKTOP_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_DESKTOP_API_URL=.*|OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
 else
-    echo "OMI_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+    echo "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
-substep "OMI_API_URL=$EFFECTIVE_API_URL"
+substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
 # Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
 if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     FIREBASE_KEY="${FIREBASE_API_KEY:-}"
@@ -545,21 +499,8 @@ if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
         substep "Bootstrapped FIREBASE_API_KEY"
     fi
 fi
-# Bootstrap OMI_AUTH_URL — check env var first (yolo mode), then backend .env, then local auth
-if ! grep -q "^OMI_AUTH_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    AUTH_URL="${OMI_AUTH_URL:-}"
-    if [ -z "$AUTH_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
-        AUTH_URL=$(grep "^OMI_AUTH_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-    fi
-    if [ -z "$AUTH_URL" ]; then
-        AUTH_URL="http://localhost:${AUTH_PORT}/"
-        substep "OMI_AUTH_URL not set — defaulting to local auth service: $AUTH_URL"
-    fi
-    echo "OMI_AUTH_URL=$AUTH_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
-    substep "Set OMI_AUTH_URL=$AUTH_URL"
-fi
-# Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
-# Do NOT fall back to OMI_API_URL — that's the Rust desktop-backend which doesn't serve these routes
+# Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription)
+# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes
 if ! grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
     PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
     if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
@@ -597,6 +538,9 @@ fi
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Removing extended attributes (xattr -cr)..."
+# SwiftPM copies some dylibs (libsharpyuv, libwebp) with read-only perms,
+# which makes `xattr -cr` fail with EACCES. Make the bundle writable first.
+chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Signing app with hardened runtime..."
@@ -690,6 +634,7 @@ else
 fi
 
 step "Removing quarantine attributes..."
+chmod -R u+w "$APP_BUNDLE"
 xattr -cr "$APP_BUNDLE"
 
 step "Installing to /Applications/..."
@@ -728,11 +673,6 @@ if [ -n "$BACKEND_PID" ]; then
 else
     echo "Backend:  skipped (OMI_SKIP_BACKEND=1)"
 fi
-if [ -n "$AUTH_PID" ]; then
-    echo "Auth:     http://localhost:$AUTH_PORT (PID: $AUTH_PID)"
-else
-    echo "Auth:     skipped"
-fi
 if [ -n "$TUNNEL_PID" ]; then
     echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 else
@@ -757,9 +697,7 @@ fi
 echo "Press Ctrl+C to stop all services..."
 if [ -n "$BACKEND_PID" ]; then
     wait "$BACKEND_PID"
-elif [ -n "$AUTH_PID" ]; then
-    wait "$AUTH_PID"
 else
-    # No backend or auth — just wait for user to Ctrl+C
+    # No backend — just wait for user to Ctrl+C
     while true; do sleep 60; done
 fi

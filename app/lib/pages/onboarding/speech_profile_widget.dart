@@ -485,9 +485,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           ),
 
                           TextButton(
-                            onPressed: () => provider.skipCurrentQuestion(),
+                            onPressed: () {
+                              provider.close();
+                              widget.onSkip();
+                            },
                             child: Text(
-                              context.l10n.skipThisQuestion,
+                              context.l10n.skipForNow,
                               style: const TextStyle(color: Colors.grey, fontSize: 14, fontFamily: 'Manrope'),
                             ),
                           ),

@@ -2367,6 +2367,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get batteryLevel => 'Batterinivå';
 
   @override
+  String get charging => 'Lader';
+
+  @override
   String get productUpdate => 'Produktoppdatering';
 
   @override
@@ -2493,12 +2496,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Spor dine personlige mål på startsiden';
-
-  @override
-  String get dailyReflection => 'Daglig refleksjon';
-
-  @override
-  String get get9PmReminderToReflect => 'Få en påminnelse kl. 21 for å reflektere over dagen din';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'Handlingselementbeskrivelse kan ikke være tom';
@@ -3916,10 +3913,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Spor personlige mål på startsiden';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.';
 
   @override
   String get endpointURL => 'Endepunkt-URL';
@@ -7180,12 +7173,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Tid for daglig refleksjon';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Fortell meg om dagen din';
-
-  @override
   String get actionItemReminderTitle => 'Omi-påminnelse';
 
   @override
@@ -8298,6 +8285,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Samtaleinnstillinger';
 
   @override
+  String get showPhoneCallButtonTitle => 'Vis anropsknapp';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Vis telefonanropsknapp på startskjermen';
+
+  @override
   String get yourVerifiedNumbers => 'Dine verifiserte numre';
 
   @override
@@ -9135,6 +9128,118 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du har nådd din månedlige grense. Oppgrader for å fortsette å chatte med Omi uten begrensninger.';
+
+  @override
+  String get voiceResponseAudio => 'Les Omis svar høyt';
+
+  @override
+  String get voiceResponseMode => 'Stemmesvar';
+
+  @override
+  String get voiceResponseModeTitle => 'Når svar skal leses';
+
+  @override
+  String get voiceResponseOff => 'Av';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Bare hodetelefoner';
+
+  @override
+  String get voiceResponseAlways => 'Alltid';
+
+  @override
+  String get agreeAndContinue => 'Godta og fortsett';
+
+  @override
+  String get startVoiceRecording => 'Start stemmeopptak';
+
+  @override
+  String get startCallRecording => 'Start samtaleopptak';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Stemmemodus';
+
+  @override
+  String get quickActionAskOmi => 'Spør Omi om hva som helst';
+
+  @override
+  String get record => 'Ta opp';
+
+  @override
+  String get stop => 'Stopp';
+
+  @override
+  String get recordWithPhoneMic => 'Ta opp med telefonmikrofon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Fang opp lyden rundt deg';
+
+  @override
+  String get phoneCall => 'Telefonsamtale';
+
+  @override
+  String get phoneCallSubtitle => 'Ta opp en samtale med direkte transkripsjon';
+
+  @override
+  String get searchActionItems => 'Søk i handlingspunkter';
+
+  @override
+  String get selectActionItems => 'Velg flere';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksporter $count element(er) til…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksporterer…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksporterte $count til $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksporterte $success av $total til $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Vis fullførte';
+
+  @override
+  String get hideCompletedTasks => 'Skjul fullførte';
+
+  @override
+  String get selectAllTasksMenu => 'Velg alle';
+
+  @override
+  String get connectTaskAppToExport => 'Koble til en oppgaveapp i Innstillinger for å eksportere';
+
+  @override
+  String get connectAction => 'Koble til';
+
+  @override
+  String get deselectAllTasksMenu => 'Fjern alle valg';
+
+  @override
+  String get dailyReflection => 'Daglig refleksjon';
+
+  @override
+  String get get9PmReminderToReflect => 'Få en påminnelse kl. 21 for å reflektere over dagen din';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Tid for daglig refleksjon';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Fortell meg om dagen din';
 
   @override
   String get multiLanguageDetection => 'Flerspråklig gjenkjenning';

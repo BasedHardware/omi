@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "బ్యాటరీ స్థాయి",
+    "charging": "ఛార్జ్ అవుతోంది",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "హోమ్‌పేజ్‌లో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "రోజువారీ ఆలోచన",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "మీ రోజుపై ఆలోచించడానికి సాయంత్రం 9 గంటలకు రిమైండర్ పొందండి",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "కార్యాచరణ అంశం వివరణ ఖాళీగా ఉండకూడదు",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "API కీలు లేనివి. ప్రారంభించడానికి ఒకటి సృష్టించండి.",
     "autoCreateWhenDetected": "పేరు గుర్తించినప్పుడు స్వయంచాలకంగా సృష్టించండి",
     "trackPersonalGoals": "హోమ్‌పేజీలో వ్యక్తిగత లక్ష్యాలను ట్రాక్ చేయండి",
-    "dailyReflectionDescription": "రాత్రి 9:00 కు మీ దిన్ను ఆలోచించుకోవటానికి మరియు మీ ఆలోచనలను కేటుకోవటానికి రిమైండర్ పొందండి.",
     "endpointURL": "ఎండ్‌పాయింట్ URL",
     "links": "లింకులు",
     "discordMemberCount": "Discord లో 8000+ సభ్యులు",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "ఆఫ్",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "రోజువారీ ప్రతిబింబ సమయం",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "మీ రోజు గురించి నాకు చెప్పండి",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi రిమైండర్",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "స్పీకర్",
     "phoneEndCall": "ముగించు",
     "phoneCallSettingsTitle": "ఫోన్ కాల్ సెట్టింగ్‌లు",
+    "showPhoneCallButtonTitle": "ఫోన్ కాల్ బటన్ చూపించు",
+    "showPhoneCallButtonDesc": "హోమ్ స్క్రీన్‌లో ఫోన్ కాల్ బటన్ చూపించు",
     "yourVerifiedNumbers": "మీ ధృవీకరించిన సంఖ్యలు",
     "verifiedNumbersDescription": "మీరు ఎవరికైనా కాల్ చేసినప్పుడు, వారు తమ ఫోన్‌లో ఈ నంబర్‌ను చూస్తారు",
     "noVerifiedNumbers": "ధృవీకరించిన సంఖ్యలు లేవు",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "బ్యాటరీ",
     "day": "రోజు",
     "noBatteryDataYet": "ఇంకా బ్యాటరీ డేటా లేదు",
-    "week": "వారం"
+    "week": "వారం",
+    "voiceResponseAudio": "Omi ప్రతిస్పందనను బిగ్గరగా చదవండి",
+    "voiceResponseMode": "వాయిస్ ప్రతిస్పందన",
+    "voiceResponseModeTitle": "ప్రతిస్పందనలను ఎప్పుడు చదవాలి",
+    "voiceResponseOff": "ఆఫ్",
+    "voiceResponseHeadphonesOnly": "హెడ్‌ఫోన్‌లు మాత్రమే",
+    "voiceResponseAlways": "ఎల్లప్పుడూ",
+    "agreeAndContinue": "అంగీకరించి కొనసాగించండి",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "వాయిస్ మోడ్",
+    "quickActionAskOmi": "Omi ని ఏమైనా అడగండి",
+    "record": "రికార్డ్",
+    "stop": "ఆపు",
+    "recordWithPhoneMic": "ఫోన్ మైక్‌తో రికార్డ్ చేయండి",
+    "recordWithPhoneMicSubtitle": "మీ చుట్టూ ఉన్న ఆడియోను క్యాప్చర్ చేయండి",
+    "phoneCall": "ఫోన్ కాల్",
+    "phoneCallSubtitle": "లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి",
+    "bulkExportInProgress": "ఎగుమతి చేస్తోంది…",
+    "bulkExportPartial": "{total} లో {success} ని {platform} కు ఎగుమతి చేయబడింది",
+    "bulkExportSuccess": "{count} ని {platform} కు ఎగుమతి చేయబడింది",
+    "chooseExportDestination": "{count} అంశం(ాలను) ఎగుమతి చేయండి…",
+    "connectAction": "కనెక్ట్ చేయండి",
+    "connectTaskAppToExport": "ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి",
+    "deselectAllTasksMenu": "అన్ని ఎంపికలు తొలగించు",
+    "hideCompletedTasks": "పూర్తయినవి దాచు",
+    "searchActionItems": "చర్య అంశాలను వెతకండి",
+    "selectActionItems": "బహుళ ఎంపిక",
+    "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
+    "showCompletedTasks": "పూర్తయినవి చూపించు",
+    "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
+    "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి"
 }

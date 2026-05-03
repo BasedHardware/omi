@@ -272,7 +272,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.sdCard,
-            title: context.l10n.sdCardSync,
+            title: 'Offline Sync',
             onTap: () {
               if (!provider.isDeviceStorageSupport) {
                 showDialog(
@@ -727,51 +727,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // Charging Help
-          GestureDetector(
-            onTap: () async {
-              if (PlatformService.isIntercomSupported) {
-                await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
-              } else {
-                // Fallback to web URL for desktop platforms
-                final deviceName = provider.pairedDevice?.name ?? 'DevKit1';
-                String url;
-                if (deviceName == 'Omi DevKit 2') {
-                  url = 'https://www.omi.me/pages/charging-devkit2';
-                } else if (deviceName == 'Omi') {
-                  url = 'https://www.omi.me/pages/charging-omi';
-                } else {
-                  url = 'https://www.omi.me/pages/charging';
-                }
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: FaIcon(FontAwesomeIcons.circleQuestion, color: Color(0xFF8E8E93), size: 20),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      context.l10n.chargingIssues,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-                ],
-              ),
-            ),
-          ),
           if (provider.isConnected) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
             // Disconnect
             GestureDetector(
               onTap: () async {

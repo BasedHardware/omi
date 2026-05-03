@@ -2356,6 +2356,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryLevel => 'ระดับแบตเตอรี่';
 
   @override
+  String get charging => 'กำลังชาร์จ';
+
+  @override
   String get productUpdate => 'การอัปเดตผลิตภัณฑ์';
 
   @override
@@ -2482,12 +2485,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
-
-  @override
-  String get dailyReflection => 'การทบทวนรายวัน';
-
-  @override
-  String get get9PmReminderToReflect => 'รับการแจ้งเตือนเวลา 21:00 น. เพื่อทบทวนวันของคุณ';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'คำอธิบายรายการการดำเนินการต้องไม่ว่างเปล่า';
@@ -3895,9 +3892,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ติดตามเป้าหมายส่วนตัวบนหน้าแรก';
-
-  @override
-  String get dailyReflectionDescription => 'รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด';
 
   @override
   String get endpointURL => 'URL ปลายทาง';
@@ -7147,12 +7141,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'ถึงเวลาทบทวนรายวัน';
-
-  @override
-  String get dailyReflectionNotificationBody => 'เล่าให้ฟังเกี่ยวกับวันของคุณ';
-
-  @override
   String get actionItemReminderTitle => 'การแจ้งเตือน Omi';
 
   @override
@@ -8260,6 +8248,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ตั้งค่าการโทร';
 
   @override
+  String get showPhoneCallButtonTitle => 'แสดงปุ่มโทรศัพท์';
+
+  @override
+  String get showPhoneCallButtonDesc => 'แสดงปุ่มโทรศัพท์บนหน้าจอหลัก';
+
+  @override
   String get yourVerifiedNumbers => 'หมายเลขที่ยืนยันแล้วของคุณ';
 
   @override
@@ -9092,6 +9086,117 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => 'คุณถึงขีดจำกัดรายเดือนแล้ว อัปเกรดเพื่อแชทกับ Omi ต่อโดยไม่มีข้อจำกัด';
+
+  @override
+  String get voiceResponseAudio => 'อ่านคำตอบของ Omi ออกเสียง';
+
+  @override
+  String get voiceResponseMode => 'ตอบกลับด้วยเสียง';
+
+  @override
+  String get voiceResponseModeTitle => 'เมื่อใดจึงจะอ่านคำตอบ';
+
+  @override
+  String get voiceResponseOff => 'ปิด';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'หูฟังเท่านั้น';
+
+  @override
+  String get voiceResponseAlways => 'เสมอ';
+
+  @override
+  String get agreeAndContinue => 'ยอมรับและดำเนินการต่อ';
+
+  @override
+  String get startVoiceRecording => 'เริ่มบันทึกเสียง';
+
+  @override
+  String get startCallRecording => 'เริ่มบันทึกการโทร';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'โหมดเสียง';
+
+  @override
+  String get quickActionAskOmi => 'ถาม Omi สิ่งใดก็ได้';
+
+  @override
+  String get record => 'บันทึก';
+
+  @override
+  String get stop => 'หยุด';
+
+  @override
+  String get recordWithPhoneMic => 'บันทึกด้วยไมค์โทรศัพท์';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'บันทึกเสียงรอบตัวคุณ';
+
+  @override
+  String get phoneCall => 'การโทรศัพท์';
+
+  @override
+  String get phoneCallSubtitle => 'บันทึกการโทรพร้อมถอดเสียงสด';
+
+  @override
+  String get searchActionItems => 'ค้นหารายการดำเนินการ';
+
+  @override
+  String get selectActionItems => 'เลือกหลายรายการ';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'ส่งออก $count รายการไปยัง…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'กำลังส่งออก…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'ส่งออกแล้ว $count ไปยัง $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'ส่งออกแล้ว $success จาก $total ไปยัง $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'แสดงที่เสร็จแล้ว';
+
+  @override
+  String get hideCompletedTasks => 'ซ่อนที่เสร็จแล้ว';
+
+  @override
+  String get selectAllTasksMenu => 'เลือกทั้งหมด';
+
+  @override
+  String get connectTaskAppToExport => 'เชื่อมต่อแอปงานในการตั้งค่าเพื่อส่งออก';
+
+  @override
+  String get connectAction => 'เชื่อมต่อ';
+
+  @override
+  String get deselectAllTasksMenu => 'ยกเลิกเลือกทั้งหมด';
+
+  @override
+  String get dailyReflection => 'การทบทวนรายวัน';
+
+  @override
+  String get get9PmReminderToReflect => 'รับการแจ้งเตือนเวลา 21:00 น. เพื่อทบทวนวันของคุณ';
+
+  @override
+  String get dailyReflectionDescription => 'รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'ถึงเวลาทบทวนรายวัน';
+
+  @override
+  String get dailyReflectionNotificationBody => 'เล่าให้ฟังเกี่ยวกับวันของคุณ';
 
   @override
   String get multiLanguageDetection => 'การตรวจจับหลายภาษา';

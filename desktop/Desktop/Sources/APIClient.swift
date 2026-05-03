@@ -2,34 +2,21 @@ import Foundation
 
 actor APIClient {
   static let shared = APIClient()
-  // Primary data backend URL — Python backend (api.omi.me) is the single source of truth for all data CRUD.
-  // Override via OMI_PYTHON_API_URL for local dev.
+  // Primary data backend URL — Python backend is the single source of truth for all data CRUD.
+  // Beta release channel uses the dev service; stable uses production or explicit local env.
   var baseURL: String {
-    if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString),
-      !url.isEmpty
-    {
-      return url.hasSuffix("/") ? url : url + "/"
-    }
-    return "https://api.omi.me/"
+    DesktopBackendEnvironment.pythonBaseURL()
   }
 
   // Rust desktop backend URL — used only for: agent VM provisioning/status,
   // config/api-keys, Crisp, and local test subscription. All data CRUD,
   // chat AI, and title generation are on Python.
-  // Set via OMI_API_URL env var (in .env).
+  // Set via OMI_DESKTOP_API_URL env var (in .env).
   var rustBackendURL: String {
-    // First check getenv() for values set by setenv() in loadEnvironment()
-    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty
-    {
-      let normalized = url.hasSuffix("/") ? url : url + "/"
-      return normalized
-    }
-    // Fallback to ProcessInfo (launch-time snapshot)
-    if let envURL = ProcessInfo.processInfo.environment["OMI_API_URL"], !envURL.isEmpty {
-      let normalized = envURL.hasSuffix("/") ? envURL : envURL + "/"
-      return normalized
-    }
-    NSLog("OMI API: OMI_API_URL not set — Rust backend calls will fail")
+    let resolved = DesktopBackendEnvironment.rustBackendURL()
+    if !resolved.isEmpty { return resolved }
+
+    NSLog("OMI API: OMI_DESKTOP_API_URL not set — Rust backend calls will fail")
     return ""
   }
 
@@ -4620,14 +4607,12 @@ extension APIClient {
   struct ApiKeysResponse: Decodable {
     let deepgramApiKey: String?
     let geminiApiKey: String?
-    let anthropicApiKey: String?
     let firebaseApiKey: String?
     let googleCalendarApiKey: String?
 
     enum CodingKeys: String, CodingKey {
       case deepgramApiKey = "deepgram_api_key"
       case geminiApiKey = "gemini_api_key"
-      case anthropicApiKey = "anthropic_api_key"
       case firebaseApiKey = "firebase_api_key"
       case googleCalendarApiKey = "google_calendar_api_key"
     }

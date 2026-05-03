@@ -60,13 +60,18 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
+      - name: Compute short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ env.SHORT_SHA }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -93,9 +98,11 @@ jobs:
           sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
           gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen \
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.tag=${{ env.SHORT_SHA }}
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration

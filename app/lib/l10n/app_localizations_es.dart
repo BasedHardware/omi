@@ -2351,6 +2351,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get batteryLevel => 'Nivel de batería';
 
   @override
+  String get charging => 'Cargando';
+
+  @override
   String get productUpdate => 'Actualización del producto';
 
   @override
@@ -2477,12 +2480,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'Sigue tus metas personales en la página de inicio';
-
-  @override
-  String get dailyReflection => 'Reflexión diaria';
-
-  @override
-  String get get9PmReminderToReflect => 'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'La descripción del elemento de acción no puede estar vacía';
@@ -3907,10 +3904,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'Seguir objetivos personales en la página de inicio';
-
-  @override
-  String get dailyReflectionDescription =>
-      'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día y capturar tus pensamientos.';
 
   @override
   String get endpointURL => 'URL del Punto Final';
@@ -7191,12 +7184,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get dailyReflectionNotificationTitle => 'Hora de la reflexión diaria';
-
-  @override
-  String get dailyReflectionNotificationBody => 'Cuéntame sobre tu día';
-
-  @override
   String get actionItemReminderTitle => 'Recordatorio de Omi';
 
   @override
@@ -8320,6 +8307,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Configuracion de llamadas';
 
   @override
+  String get showPhoneCallButtonTitle => 'Mostrar botón de llamada';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Mostrar el botón de llamada telefónica en la pantalla de inicio';
+
+  @override
   String get yourVerifiedNumbers => 'Tus numeros verificados';
 
   @override
@@ -9160,6 +9153,118 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Has alcanzado tu límite mensual. Mejora tu plan para seguir chateando con Omi sin restricciones.';
+
+  @override
+  String get voiceResponseAudio => 'Leer la respuesta de Omi en voz alta';
+
+  @override
+  String get voiceResponseMode => 'Respuesta de voz';
+
+  @override
+  String get voiceResponseModeTitle => 'Cuándo leer las respuestas';
+
+  @override
+  String get voiceResponseOff => 'Desactivado';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Solo auriculares';
+
+  @override
+  String get voiceResponseAlways => 'Siempre';
+
+  @override
+  String get agreeAndContinue => 'Acepto y continuar';
+
+  @override
+  String get startVoiceRecording => 'Iniciar grabación de voz';
+
+  @override
+  String get startCallRecording => 'Iniciar grabación de llamada';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Modo de voz';
+
+  @override
+  String get quickActionAskOmi => 'Pregúntale cualquier cosa a Omi';
+
+  @override
+  String get record => 'Grabar';
+
+  @override
+  String get stop => 'Detener';
+
+  @override
+  String get recordWithPhoneMic => 'Grabar con el micrófono del teléfono';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Captura el audio a tu alrededor';
+
+  @override
+  String get phoneCall => 'Llamada telefónica';
+
+  @override
+  String get phoneCallSubtitle => 'Graba una llamada con transcripción en vivo';
+
+  @override
+  String get searchActionItems => 'Buscar elementos de acción';
+
+  @override
+  String get selectActionItems => 'Seleccionar varios';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportar $count elemento(s) a…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportando…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Se exportaron $count a $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Se exportaron $success de $total a $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Mostrar completadas';
+
+  @override
+  String get hideCompletedTasks => 'Ocultar completadas';
+
+  @override
+  String get selectAllTasksMenu => 'Seleccionar todo';
+
+  @override
+  String get connectTaskAppToExport => 'Conecta una app de tareas en Ajustes para exportar';
+
+  @override
+  String get connectAction => 'Conectar';
+
+  @override
+  String get deselectAllTasksMenu => 'Deseleccionar todo';
+
+  @override
+  String get dailyReflection => 'Reflexión diaria';
+
+  @override
+  String get get9PmReminderToReflect => 'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día y capturar tus pensamientos.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Hora de la reflexión diaria';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Cuéntame sobre tu día';
 
   @override
   String get multiLanguageDetection => 'Detección multilingüe';

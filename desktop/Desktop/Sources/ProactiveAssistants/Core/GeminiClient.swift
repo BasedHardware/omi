@@ -162,12 +162,12 @@ struct GeminiResponse: Decodable {
 actor GeminiClient {
   private let model: String
 
-  /// Backend proxy base URL (from OMI_API_URL env var)
+  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
       return url.hasSuffix("/") ? url : url + "/"
     }
-    return ""
+    return "https://api.omi.me/"
   }
 
   enum GeminiClientError: LocalizedError {
@@ -229,7 +229,8 @@ actor GeminiClient {
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
-    // the key server-side. Requires OMI_API_URL to be set (standard dev flow via run.sh).
+    // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
+    // so installed test bundles launched from Finder still have AI features.
     guard !Self.proxyBaseURL.isEmpty else {
       throw GeminiClientError.missingAPIKey
     }
@@ -414,9 +415,10 @@ actor GeminiClient {
   /// - Returns: The text response from the model
   func sendTextRequest(
     prompt: String,
-    systemPrompt: String
+    systemPrompt: String,
+    maxRetries: Int = 2,
+    timeout: TimeInterval = 300
   ) async throws -> String {
-    let maxRetries = 2
     var lastError: Error?
 
     for attempt in 0...maxRetries {
@@ -438,7 +440,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
+        urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
         let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)

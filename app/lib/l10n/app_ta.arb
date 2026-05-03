@@ -2512,6 +2512,7 @@
         }
     },
     "batteryLevel": "பேட்டரி நிலை",
+    "charging": "சார்ஜ் ஆகிறது",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -2778,14 +2779,6 @@
     "trackPersonalGoalsOnHomepage": "முதற்பக்கத்தில் உங்கள் ব்যক்திগত இலக்குகளை ট்র்যாக் செய்",
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
-    },
-    "dailyReflection": "தினசரி பிரதிபலனை",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "உங்கள் நாளைப் பிரதிபலிக்க 9 PM நினைவூட்டல் பெறவும்",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
     },
     "actionItemDescriptionCannotBeEmpty": "செயல் உருப்படி விளக்கம் காலியாக இருக்க முடியாது",
     "@actionItemDescriptionCannotBeEmpty": {
@@ -4421,7 +4414,6 @@
     "noAPIKeys": "API விசைகள் இல்லை. தொடங்க ஒன்றை உருவாக்கவும்.",
     "autoCreateWhenDetected": "பெயர் கண்டறியப்பட்டபோது தானாக உருவாக்கவும்",
     "trackPersonalGoals": "முகப்பில் ব்যக்তிगத இலக்குகளைக் கண்காணிக்கவும்",
-    "dailyReflectionDescription": "உங்கள் நாளைக் பிரதிபலிக்கவும் மற்றும் உங்கள் எண்ணங்களைப் பிடிக்க இரவு 9 மணிக்கு நினைவூட்டல் பান்.",
     "endpointURL": "இறுதிப்புள்ளி URL",
     "links": "இணைப்புகள்",
     "discordMemberCount": "Discord இல் 8000+ உறுப்பினர்கள்",
@@ -6841,9 +6833,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "முடக்கவும்",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -8899,14 +8888,6 @@
             }
         }
     },
-    "dailyReflectionNotificationTitle": "தினசரி சிந்தனைக்கான நேரம்",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "உங்கள் நாளைப் பற்றி சொல்லுங்கள்",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
-    },
     "actionItemReminderTitle": "Omi நினைவூட்டல்",
     "@actionItemReminderTitle": {
         "description": "Title for action item reminder notifications"
@@ -10015,6 +9996,8 @@
     "phoneSpeaker": "ஸ்பீக்கர்",
     "phoneEndCall": "முடி",
     "phoneCallSettingsTitle": "தொலைபேசி அழைப்பு அமைப்பாடுகள்",
+    "showPhoneCallButtonTitle": "ஃபோன் அழைப்பு பொத்தானை காட்டு",
+    "showPhoneCallButtonDesc": "முகப்பு திரையில் ஃபோன் அழைப்பு பொத்தானை காட்டு",
     "yourVerifiedNumbers": "உங்கள் சரிபார்க்கப்பட்ட எண்கள்",
     "verifiedNumbersDescription": "நீங்கள் யாரையாவது அழைக்கும்போது, அவர்கள் தங்கள் தொலைபேசிகளில் இந்த எண்ணைக் காண்பார்கள்",
     "noVerifiedNumbers": "சரிபார்க்கப்பட்ட எண்கள் இல்லை",
@@ -10705,5 +10688,38 @@
     "batteryHistory": "பேட்டரி",
     "day": "நாள்",
     "noBatteryDataYet": "இன்னும் பேட்டரி தரவு இல்லை",
-    "week": "வாரம்"
+    "week": "வாரம்",
+    "voiceResponseAudio": "Omi பதிலை சத்தமாக படிக்கவும்",
+    "voiceResponseMode": "குரல் பதில்",
+    "voiceResponseModeTitle": "பதில்களை எப்போது பேசுவது",
+    "voiceResponseOff": "முடக்கம்",
+    "voiceResponseHeadphonesOnly": "ஹெட்ஃபோன் மட்டும்",
+    "voiceResponseAlways": "எப்போதும்",
+    "agreeAndContinue": "ஒப்புக்கொள் & தொடரவும்",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "குரல் பயன்முறை",
+    "quickActionAskOmi": "Omi ஐ எதையும் கேளுங்கள்",
+    "record": "பதிவு",
+    "stop": "நிறுத்து",
+    "recordWithPhoneMic": "போன் மைக்கில் பதிவு செய்யவும்",
+    "recordWithPhoneMicSubtitle": "உங்களைச் சுற்றியுள்ள ஒலியைப் பதிவு செய்யவும்",
+    "phoneCall": "தொலைபேசி அழைப்பு",
+    "phoneCallSubtitle": "நேரடி படியெடுத்தலுடன் அழைப்பைப் பதிவு செய்யவும்",
+    "bulkExportInProgress": "ஏற்றுமதி செய்கிறது…",
+    "bulkExportPartial": "{total} இல் {success} ஐ {platform} க்கு ஏற்றுமதி செய்யப்பட்டது",
+    "bulkExportSuccess": "{count} ஐ {platform} க்கு ஏற்றுமதி செய்யப்பட்டது",
+    "chooseExportDestination": "{count} உருப்படி(களை) ஏற்றுமதி செய்…",
+    "connectAction": "இணைக்கவும்",
+    "connectTaskAppToExport": "ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்",
+    "deselectAllTasksMenu": "அனைத்தையும் தேர்வு நீக்கு",
+    "hideCompletedTasks": "முடிந்தவற்றை மறை",
+    "searchActionItems": "செயல் உருப்படிகளைத் தேடு",
+    "selectActionItems": "பலவற்றைத் தேர்ந்தெடு",
+    "selectAllTasksMenu": "அனைத்தையும் தேர்ந்தெடு",
+    "showCompletedTasks": "முடிந்தவற்றைக் காட்டு",
+    "startCallRecording": "அழைப்பு பதிவைத் தொடங்கு",
+    "startVoiceRecording": "குரல் பதிவைத் தொடங்கு"
 }
