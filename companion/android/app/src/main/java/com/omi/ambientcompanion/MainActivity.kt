@@ -2,11 +2,16 @@ package com.omi.ambientcompanion
 
 import android.Manifest
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
+import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +33,7 @@ class MainActivity : Activity() {
     private lateinit var audit: TextView
     private lateinit var storage: TextView
     private lateinit var diagnostics: TextView
+    private lateinit var preflight: TextView
     private lateinit var pluginUrl: EditText
     private lateinit var userId: EditText
 
@@ -98,7 +104,9 @@ class MainActivity : Activity() {
             button("App Info") { openAppInfo() },
         ))
         root.addView(row(
+            button("Refresh Preflight") { refreshPreflight() },
             button("Refresh Diagnostics") { refreshDiagnostics() },
+            button("Share Diagnostics") { shareDiagnostics() },
         ))
         root.addView(row(
             button("Delete Synced") { deleteSpool("synced") },
@@ -107,6 +115,9 @@ class MainActivity : Activity() {
         ))
         status = text("Status: ${AmbientForegroundMicService.lastHealthState().name}", 16, bold = true)
         root.addView(status)
+        preflight = text("", 12)
+        root.addView(text("Preflight", 18, bold = true))
+        root.addView(preflight)
         storage = text("", 12)
         root.addView(storage)
         audit = text("", 12)
@@ -115,6 +126,7 @@ class MainActivity : Activity() {
         root.addView(diagnostics)
         root.addView(text("Audit log", 18, bold = true))
         root.addView(audit)
+        refreshPreflight()
         refreshStorage()
         refreshDiagnostics()
         return ScrollView(this).apply { addView(root) }
@@ -135,6 +147,7 @@ class MainActivity : Activity() {
             val ok = PluginClient(this).registerDevice(prefs.pluginBaseUrl, prefs.omiUserId)
             runOnUiThread {
                 status.text = if (ok) "Registered controller: ${prefs.controllerKeyId}" else "Registration failed"
+                refreshPreflight()
                 refreshAudit()
             }
         }
@@ -150,6 +163,11 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 33) permissions += Manifest.permission.POST_NOTIFICATIONS
         if (Build.VERSION.SDK_INT >= 31) permissions += Manifest.permission.BLUETOOTH_CONNECT
         requestPermissions(permissions.toTypedArray(), 42)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        refreshPreflight()
     }
 
     private fun openBatterySettings() {
@@ -179,11 +197,58 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun refreshPreflight() {
+        if (!::preflight.isInitialized) return
+        val secure = SecureStore(this)
+        val checks = listOf(
+            "Plugin URL" to prefs.pluginBaseUrl.isNotBlank(),
+            "Omi user id" to prefs.omiUserId.isNotBlank(),
+            "Device token" to secure.getSecret("device_token").isNotBlank(),
+            "Pinned key" to (prefs.controllerKeyId.isNotBlank() && prefs.controllerPublicKey.isNotBlank()),
+            "Microphone permission" to hasPermission(Manifest.permission.RECORD_AUDIO),
+            "Notifications permission" to (Build.VERSION.SDK_INT < 33 || hasPermission(Manifest.permission.POST_NOTIFICATIONS)),
+            "Bluetooth route permission" to (Build.VERSION.SDK_INT < 31 || hasPermission(Manifest.permission.BLUETOOTH_CONNECT)),
+            "Accessibility enabled" to isAccessibilityEnabled(),
+            "Notification listener enabled" to isNotificationListenerEnabled(),
+            "Battery unrestricted/exempt" to isBatteryExempt(),
+        )
+        preflight.text = checks.joinToString("\n") { (label, ok) -> "${if (ok) "OK" else "MISSING"} - $label" }
+    }
+
     private fun refreshDiagnostics() {
         if (::diagnostics.isInitialized) {
             DiagnosticsStore(this).write("ui_refresh")
             diagnostics.text = DiagnosticsStore(this).read()
         }
+    }
+
+    private fun shareDiagnostics() {
+        DiagnosticsStore(this).write("share")
+        val text = DiagnosticsStore(this).read()
+        (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Omi Ambient diagnostics", text))
+        val intent = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Omi Ambient Companion diagnostics")
+            .putExtra(Intent.EXTRA_TEXT, text)
+        startActivity(Intent.createChooser(intent, "Share diagnostics"))
+    }
+
+    private fun hasPermission(permission: String): Boolean = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun isAccessibilityEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        val component = ComponentName(this, AccessibilityContextService::class.java).flattenToString()
+        return enabled.split(':').any { it.equals(component, ignoreCase = true) || it.contains(packageName, ignoreCase = true) }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty()
+        return enabled.split(':').any { it.contains(packageName, ignoreCase = true) }
+    }
+
+    private fun isBatteryExempt(): Boolean {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun deleteSpool(status: String?) {

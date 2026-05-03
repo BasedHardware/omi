@@ -47,6 +47,8 @@ companion/android/app/build/outputs/apk/debug/app-debug.apk
 8. Tap `Battery`, allow unrestricted/background operation.
 9. Tap `Start`.
 
+For the full field-test checklist, see `companion/TESTING.md`.
+
 The app does not auto-record after reboot. Boot handling only resets stale recovery state.
 
 ## Safety
