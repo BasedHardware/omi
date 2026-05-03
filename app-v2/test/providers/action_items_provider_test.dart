@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -461,6 +462,124 @@ void main() {
 
       expect(await p.transition('does-not-exist', toStatus: 'Done'), isFalse);
       expect(await p.transition('transcript-1', toStatus: 'Done'), isFalse);
+    });
+
+    // optimisticallyComplete is the flag the Plan checkbox path uses to make
+    // the row disappear instantly (matching today's local-only complete()
+    // UX) while still firing a real Jira transition. Default `false` is the
+    // swipe-right path's behavior — intermediate statuses must NOT flip
+    // completed locally.
+    test('optimisticallyComplete:true flips completed before server response', () async {
+      final transitionCompleter = Completer<http.Response>();
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/v1/integrations/jira/transition') {
+          // Hold the response so we can observe local state mid-call.
+          return transitionCompleter.future;
+        }
+        return http.Response('not found', 404);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+      expect(p.items.first.completed, isFalse, reason: 'precondition');
+
+      // Kick off the call but don't await — we want to observe pre-server
+      // state.
+      final inFlight = p.transition('a', toStatus: 'Done', optimisticallyComplete: true);
+      // Pump the event loop so the optimistic mutation runs.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(p.items.first.completed, isTrue, reason: 'optimistic flip should be instant');
+
+      // Now let the server respond.
+      transitionCompleter.complete(
+        http.Response(
+          jsonEncode({
+            'id': 'a',
+            'description': 'jira thing',
+            'completed': true,
+            'created_at': '2026-04-30T12:00:00Z',
+            'external_source': {
+              'source': 'jira',
+              'external_id': 'PROJ-1',
+              'url': 'https://x/PROJ-1',
+              'metadata': {'status': 'Done', 'status_type': 'done', 'project_key': 'PROJ'},
+            },
+          }),
+          200,
+        ),
+      );
+
+      final ok = await inFlight;
+      expect(ok, isTrue);
+      expect(p.items.first.completed, isTrue);
+      expect(p.items.first.externalSource!.jiraStatusType, 'done');
+    });
+
+    test('optimisticallyComplete:true rolls back completed on server error', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'detail': 'two_way_sync_disabled'}), 403);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      final ok = await p.transition('a', toStatus: 'Done', optimisticallyComplete: true);
+
+      expect(ok, isFalse);
+      // Both metadata AND completed must roll back, otherwise the row stays
+      // hidden in Plan's `where((i) => !i.completed)` filter despite the
+      // Jira transition having failed.
+      expect(p.items.first.completed, isFalse);
+      expect(p.items.first.externalSource!.jiraStatus, 'To Do');
+      expect(p.lastActionError, 'two_way_sync_disabled');
+    });
+
+    test('optimisticallyComplete defaults to false (swipe-right path preserved)', () async {
+      final mock = MockClient((req) async {
+        if (req.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'action_items': [jiraItemJson('a')],
+              'has_more': false,
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/v1/integrations/jira/transition') {
+          return http.Response(
+            jsonEncode(jiraItemJson('a', status: 'In Progress', statusType: 'indeterminate')),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final p = ActionItemsProvider(client: _client(mock));
+      await p.fetchAll();
+
+      // Default call (swipe-right path: pick "In Progress" — NOT done).
+      final ok = await p.transition('a', toStatus: 'In Progress');
+
+      expect(ok, isTrue);
+      // completed must NOT flip optimistically — the row should remain
+      // visible in Plan because the user just moved it to In Progress.
+      expect(p.items.first.completed, isFalse);
     });
   });
 
