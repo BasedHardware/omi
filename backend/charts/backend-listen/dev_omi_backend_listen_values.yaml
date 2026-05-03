@@ -91,6 +91,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
