@@ -2619,6 +2619,18 @@ async def _stream_handler(
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
+            # Modulate EOS drain: send EOS and wait for final transcripts while
+            # stream_transcript_process is still running (before websocket_active=False)
+            if stt_service == STTService.modulate:
+                try:
+                    if is_multi_channel:
+                        for mc_stt_socket in stt_sockets_multi:
+                            if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
+                                await mc_stt_socket.drain_and_close()
+                    elif dg_socket and hasattr(dg_socket, 'drain_and_close'):
+                        await dg_socket.drain_and_close()
+                except Exception as e:
+                    logger.error(f"Error draining Modulate EOS: {e} {uid} {session_id}")
             websocket_active = False
 
     # Start
@@ -2769,19 +2781,6 @@ async def _stream_handler(
             await flush_pending_translations()
         except Exception as e:
             logger.error(f"Error flushing pending translations: {e} {uid} {session_id}")
-
-        # Modulate EOS drain: send EOS and wait for final transcripts while
-        # stream_transcript_process is still running (websocket_active=True)
-        if stt_service == STTService.modulate:
-            try:
-                if is_multi_channel:
-                    for mc_stt_socket in stt_sockets_multi:
-                        if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
-                            await mc_stt_socket.drain_and_close()
-                elif stt_socket and hasattr(stt_socket, 'drain_and_close'):
-                    await stt_socket.drain_and_close()
-            except Exception as e:
-                logger.error(f"Error draining Modulate EOS: {e} {uid} {session_id}")
 
         websocket_active = False
 
