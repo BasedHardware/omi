@@ -425,13 +425,33 @@ class AppsProvider extends ChangeNotifier {
     }
   }
 
-  NooApp? _findApp(String appId) {
+  NooApp? _findApp(String appId) => appById(appId);
+
+  /// Public lookup — returns the catalog [NooApp] matching [appId], or null
+  /// if the catalog hasn't loaded yet or the id isn't part of any group.
+  /// Used by the conversation-detail picker sheet and the AppResultMarkdown
+  /// attribution row to resolve `apps_results[0].appId` into a name + icon.
+  NooApp? appById(String appId) {
     for (final group in _groups) {
       for (final app in group.apps) {
         if (app.id == appId) return app;
       }
     }
     return null;
+  }
+
+  /// Flat list of every catalog app the current user has installed.
+  /// Source of truth: `_enabledIds` (set populated by `/v1/apps/enabled`)
+  /// intersected with the catalog. Used by SummarizedAppsBottomSheet to
+  /// list the apps the user can re-summarize with.
+  List<NooApp> get enabledApps {
+    final out = <NooApp>[];
+    for (final group in _groups) {
+      for (final app in group.apps) {
+        if (_enabledIds.contains(app.id)) out.add(app);
+      }
+    }
+    return out;
   }
 
   void _hydrateTwoWaySync() {
