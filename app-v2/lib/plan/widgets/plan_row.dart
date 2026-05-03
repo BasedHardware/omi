@@ -29,21 +29,53 @@ import 'package:nooto_v2/widgets/jira_chip.dart';
 ///     "<Project Name>: [<KEY>-…] ", that prefix is stripped — the chip
 ///     already carries the project + id.
 ///
-/// Tap on the checkbox marks complete (optimistic, rolls back on server
-/// error). The full row's tap target stays ≥44pt by virtue of vertical
-/// padding + checkbox height + metadata strip when present.
+/// Gesture model:
+///
+///   * **Checkbox** is the only completion gesture. Tapping the visible
+///     checkbox (or the 32×44 hit region around it) routes through
+///     `_PlanScreenState._onCheckboxTap`, which fires
+///     `provider.transition(toStatus:'Done', optimisticallyComplete:true)`
+///     on Jira items and `provider.complete()` on transcript items. This
+///     closes the silent-desync bug where row-tap used to call the local
+///     `complete()` PATCH on Jira-sourced rows without firing a Jira
+///     transition.
+///
+///   * **Row body** tap (anywhere outside the checkbox hit region) fires
+///     `onRowBodyTap`. The parent screen routes this to push an in-app
+///     detail screen ([PlanDetailScreen]) where the user can see the
+///     task's metadata and tap a primary "Mark complete" button. The
+///     callback is non-null for both Jira and transcript items — the
+///     detail screen renders only the fields each kind actually carries.
+///
+/// Hit-target priority: the checkbox `GestureDetector` uses
+/// `HitTestBehavior.opaque` so taps inside its 32×44 region fire ONLY the
+/// checkbox callback — they don't fall through to the row InkWell. Taps
+/// anywhere else on the row body fire `onRowBodyTap`. Long-press parity
+/// (action sheet for VoiceOver) is wired one level up in
+/// [PlanRowSwipeWrapper].
 class PlanRow extends StatelessWidget {
   const PlanRow({
     super.key,
     required this.item,
-    required this.onToggle,
+    required this.onCheckboxTap,
+    this.onRowBodyTap,
     this.onProjectTap,
     this.sectionHasMixedSources = true,
     this.pivot = PlanPivot.byDate,
   });
 
   final ActionItem item;
-  final Future<void> Function() onToggle;
+
+  /// Fired when the checkbox (and only the checkbox) is tapped. The parent
+  /// branches on `item.externalSource?.source` to call
+  /// `provider.transition(toStatus:'Done', optimisticallyComplete:true)` for
+  /// Jira items or `provider.complete(id)` for transcript items.
+  final Future<void> Function() onCheckboxTap;
+
+  /// Fired when the row body (anywhere outside the checkbox hit region) is
+  /// tapped. Null disables the InkWell (no ripple) — used for transcript
+  /// rows that have no useful "details" destination today.
+  final VoidCallback? onRowBodyTap;
 
   /// Tapped when the project-key portion of an inline Jira chip is tapped.
   /// Plumbed through to [JiraChip.onProjectTap]. When null, project taps
@@ -74,7 +106,7 @@ class PlanRow extends StatelessWidget {
     // project. The id pill stays — it's the tap-to-open hook.
     final chipShowsProject = pivot != PlanPivot.byProject;
     return InkWell(
-      onTap: onToggle,
+      onTap: onRowBodyTap,
       borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS, vertical: AppStyles.spacingM),
@@ -84,15 +116,37 @@ class PlanRow extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: _Checkbox(checked: item.completed),
+                // Checkbox: visual stays at (0, 2) — 20×20 — exactly where it
+                // was before the gesture refactor. The GestureDetector
+                // expands the hit target to 32×44 (height = HIG min, width =
+                // checkbox + the original spacingM gap so the description
+                // still lands at 32pt). HitTestBehavior.opaque means taps
+                // inside the 32×44 region fire ONLY this callback — they do
+                // not fall through to the row InkWell behind it.
+                Semantics(
+                  button: true,
+                  checked: item.completed,
+                  label: item.completed ? 'Mark incomplete' : 'Mark complete',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onCheckboxTap,
+                    child: SizedBox(
+                      width: 20 + AppStyles.spacingM,
+                      height: AppStyles.touchTargetMinimum,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: _Checkbox(checked: item.completed),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: AppStyles.spacingM),
-                // Wrap so a long description + chip on a narrow viewport flows
-                // the chip below the text rather than clipping the description.
-                // Single-line description rows still render exactly as before
-                // because Wrap collapses to one line when content fits.
+                // Wrap so a long description + chip on a narrow viewport
+                // flows the chip below the text rather than clipping. The
+                // single-line case is unchanged because Wrap collapses to
+                // one line when content fits.
                 Expanded(
                   child: hasChip
                       ? Wrap(
@@ -126,7 +180,11 @@ class PlanRow extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       trailing,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textTertiary, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textTertiary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -135,8 +193,8 @@ class PlanRow extends StatelessWidget {
             if (metaSegments.isNotEmpty) ...[
               const SizedBox(height: AppStyles.spacingXS),
               Padding(
-                // Align under the description, not the checkbox: 20 (checkbox
-                // width) + spacingM (gap) keeps the strip flush with the title.
+                // Align under the description: 20 (checkbox) + spacingM
+                // (gap) matches the description's left edge.
                 padding: const EdgeInsets.only(left: 20 + AppStyles.spacingM),
                 child: _MetaStrip(segments: metaSegments),
               ),
