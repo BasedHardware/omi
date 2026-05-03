@@ -4,6 +4,7 @@ import json
 import os
 import random
 import threading
+import urllib.parse
 import wave as _wave
 from enum import Enum
 from typing import Callable, List, Optional
@@ -579,22 +580,32 @@ class SafeModulateSocket:
 
     async def drain_and_close(self):
         try:
-            await self._ws.send('')
+            # Drain queued audio through send loop, then send EOS via queue
+            # to avoid racing EOS ahead of buffered audio
+            _EOS_SENTINEL = b'__EOS__'
+            await self._send_queue.put(_EOS_SENTINEL)
+            # Wait for send loop to finish (it exits on EOS sentinel)
+            try:
+                await asyncio.wait_for(self._send_task, timeout=10)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
             await asyncio.sleep(5)
         except Exception:
             pass
         self._recv_task.cancel()
-        self._send_task.cancel()
         try:
             await self._ws.close()
         except Exception:
             pass
 
     async def _send_loop(self):
+        _EOS_SENTINEL = b'__EOS__'
         try:
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
-                if data == b'':
+                if data == b'' or data == _EOS_SENTINEL:
+                    if data == _EOS_SENTINEL:
+                        await self._ws.send('')
                     break
                 await self._ws.send(data)
         except websockets.exceptions.ConnectionClosed as e:
@@ -671,12 +682,14 @@ async def process_audio_modulate(
     if not api_key:
         raise ValueError('MODULATE_API_KEY environment variable is not set')
 
-    uri = (
-        f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming'
-        f'?api_key={api_key}&speaker_diarization=true&sample_rate={sample_rate}'
-    )
+    params = {
+        'api_key': api_key,
+        'speaker_diarization': 'true',
+        'sample_rate': str(sample_rate),
+    }
     if language and language != 'multi':
-        uri += f'&language={language}'
+        params['language'] = language
+    uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
