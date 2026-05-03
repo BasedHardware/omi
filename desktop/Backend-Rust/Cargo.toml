@@ -25,7 +25,6 @@ jsonwebtoken = "9"
 # Utilities
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.10"
 uuid = { version = "1", features = ["v4"] }
 ulid = "1.1"
 sha2 = "0.10"
