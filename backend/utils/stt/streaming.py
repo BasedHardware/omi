@@ -631,15 +631,16 @@ class SafeModulateSocket:
 
                 msg_type = msg.get('type', '')
                 if msg_type == 'error':
-                    err = msg.get('message', 'unknown error')
+                    err = msg.get('error', msg.get('message', 'unknown error'))
                     logger.error(f'Modulate streaming error: {err}')
                     self._mark_dead(f'modulate error: {err}')
                     break
                 elif msg_type == 'done':
-                    logger.info('Modulate streaming done: duration=%s', msg.get('audio_duration_s'))
+                    logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
                     continue
                 elif msg_type == 'utterance':
-                    self._handle_utterance(msg)
+                    utt = msg.get('utterance', msg)
+                    self._handle_utterance(utt)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws recv closed: {e}')
         except Exception as e:
@@ -689,17 +690,19 @@ async def process_audio_modulate(
         raise ValueError('MODULATE_API_KEY environment variable is not set')
 
     params = {
+        'api_key': api_key,
         'speaker_diarization': 'true',
         'sample_rate': str(sample_rate),
+        'audio_format': 's16le',
+        'num_channels': '1',
     }
     if language and language != 'multi':
         params['language'] = language
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10, extra_headers={'X-API-Key': api_key})
+    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
-    sock.set_wav_header(_build_wav_header(sample_rate))
     logger.info('Modulate Velma-2 streaming connection established')
     return sock
