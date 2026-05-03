@@ -58,6 +58,52 @@
   "onboardingSpeechRecording": "Listening…",
   "onboardingSpeechCaptured": "Voice captured ✓",
   "onboardingSpeechSkip": "Skip for now",
+  "decisionsSection": "DECISIONS",
+  "@decisionsSection": {
+    "description": "Eyebrow header for the Decisions section in conversation detail."
+  },
+  "decisionsEmptyForMeeting": "No decisions extracted from this meeting",
+  "@decisionsEmptyForMeeting": {
+    "description": "Caption shown when Decisions extraction ran but found no decisions for this meeting."
+  },
+  "decisionsViewRelatedActionsOne": "View 1 related action",
+  "@decisionsViewRelatedActionsOne": {
+    "description": "Link label when a decision has exactly 1 related action item."
+  },
+  "decisionsViewRelatedActionsMany": "View {count} related actions",
+  "@decisionsViewRelatedActionsMany": {
+    "description": "Link label when a decision has multiple related action items.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "decisionsOwnerDueFormat": "{owner} · due {date}",
+  "@decisionsOwnerDueFormat": {
+    "description": "Caption format for decision owner and due date.",
+    "placeholders": {
+      "owner": {
+        "type": "String",
+        "example": "Sarah"
+      },
+      "date": {
+        "type": "String",
+        "example": "Fri Jun 13"
+      }
+    }
+  },
+  "decisionsOpenQuestionsMore": "+{count} more",
+  "@decisionsOpenQuestionsMore": {
+    "description": "Overflow pill shown when a decision has more than 3 open questions.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "shellTabHome": "Home",
   "shellTabChat": "Chat",
   "shellTabLibrary": "Library",
