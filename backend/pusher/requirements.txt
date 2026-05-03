@@ -49,6 +49,7 @@ groq==0.9.0
 langchain==0.3.27
 langchain-community==0.3.31
 langchain-core==0.3.79
+langchain-google-genai==2.1.12
 langchain-openai==0.3.35
 langchain-pinecone==0.2.12
 langchain-text-splitters==0.3.11
