@@ -45,6 +45,11 @@ dependencies:
   flutter_svg: ^2.0.16
   flutter_markdown: ^0.7.4+1
 
+  # Generative UI rendering (apps_results / brief content)
+  markdown: ^7.2.2
+  fl_chart: ^0.68.0
+  cached_network_image: 3.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
