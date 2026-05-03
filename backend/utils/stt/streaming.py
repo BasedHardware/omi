@@ -1,6 +1,10 @@
 import asyncio
+import io
+import json
 import os
 import random
+import threading
+import wave as _wave
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -22,11 +26,14 @@ headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-T
 
 class STTService(str, Enum):
     deepgram = "deepgram"
+    modulate = "modulate"
 
     @staticmethod
     def get_model_name(value):
         if value == STTService.deepgram:
             return 'deepgram_streaming'
+        if value == STTService.modulate:
+            return 'modulate_streaming'
 
 
 deepgram_nova3_multi_languages = {
@@ -140,11 +147,86 @@ deepgram_nova3_languages = {
 }
 
 
+modulate_languages = {
+    'multi',
+    'en',
+    'af',
+    'sq',
+    'ar',
+    'az',
+    'eu',
+    'be',
+    'bn',
+    'bs',
+    'bg',
+    'ca',
+    'zh',
+    'hr',
+    'cs',
+    'da',
+    'nl',
+    'et',
+    'fi',
+    'fr',
+    'gl',
+    'de',
+    'el',
+    'gu',
+    'he',
+    'hi',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'kk',
+    'ko',
+    'lv',
+    'lt',
+    'mk',
+    'ms',
+    'ml',
+    'mr',
+    'no',
+    'fa',
+    'pl',
+    'pt',
+    'pa',
+    'ro',
+    'ru',
+    'sr',
+    'sk',
+    'sl',
+    'es',
+    'sw',
+    'sv',
+    'tl',
+    'ta',
+    'te',
+    'th',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'cy',
+}
+
+stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+
+
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
-    if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-        return STTService.deepgram, 'multi', 'nova-3'
-    if language in deepgram_nova3_languages:
-        return STTService.deepgram, language, 'nova-3'
+    for m in stt_service_models:
+        m = m.strip()
+        if m.startswith('dg-'):
+            dg_model = m.replace('dg-', '', 1)
+            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
+                return STTService.deepgram, 'multi', dg_model
+            if language in deepgram_nova3_languages:
+                return STTService.deepgram, language, dg_model
+            break
+        if m == 'modulate-velma-2':
+            if language in modulate_languages:
+                return STTService.modulate, language, 'velma-2'
 
     # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
@@ -416,3 +498,190 @@ def connect_to_deepgram(
         raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
+
+
+# ---------------------------------------------------------------------------
+# Modulate (Velma-2) streaming
+# ---------------------------------------------------------------------------
+
+
+def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int = 1) -> bytes:
+    buf = io.BytesIO()
+    with _wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(bits_per_sample // 8)
+        wf.setframerate(sample_rate)
+        wf.writeframes(b'')
+    return buf.getvalue()
+
+
+class SafeModulateSocket:
+    _is_safe_dg_socket = True
+
+    def __init__(self, ws, stream_transcript, loop, preseconds: int = 0):
+        self._ws = ws
+        self._stream_transcript = stream_transcript
+        self._loop = loop
+        self._preseconds = preseconds
+        self._dead = False
+        self._closed = False
+        self._death_reason: Optional[str] = None
+        self._lock = threading.Lock()
+        self._header_sent = False
+        self._wav_header: Optional[bytes] = None
+        self._send_queue: asyncio.Queue = asyncio.Queue(maxsize=2000)
+        self._recv_task = asyncio.ensure_future(self._recv_loop(), loop=loop)
+        self._send_task = asyncio.ensure_future(self._send_loop(), loop=loop)
+
+    def set_wav_header(self, header: bytes):
+        self._wav_header = header
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        return self._death_reason
+
+    def _mark_dead(self, reason: str):
+        with self._lock:
+            if not self._dead:
+                self._dead = True
+                self._death_reason = reason
+
+    def send(self, data: bytes) -> None:
+        with self._lock:
+            if self._dead or self._closed:
+                return
+        if not self._header_sent and self._wav_header:
+            data = self._wav_header + data
+            self._header_sent = True
+        try:
+            self._loop.call_soon_threadsafe(self._send_queue.put_nowait, data)
+        except asyncio.QueueFull:
+            self._mark_dead('send queue full')
+        except Exception as e:
+            self._mark_dead(f'send enqueue error: {e}')
+
+    def finalize(self) -> None:
+        pass
+
+    def finish(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        try:
+            self._loop.call_soon_threadsafe(self._send_queue.put_nowait, b'')
+        except Exception:
+            pass
+
+    async def drain_and_close(self):
+        try:
+            await self._ws.send('')
+            await asyncio.sleep(5)
+        except Exception:
+            pass
+        self._recv_task.cancel()
+        self._send_task.cancel()
+        try:
+            await self._ws.close()
+        except Exception:
+            pass
+
+    async def _send_loop(self):
+        try:
+            while not self._closed and not self._dead:
+                data = await self._send_queue.get()
+                if data == b'':
+                    break
+                await self._ws.send(data)
+        except websockets.exceptions.ConnectionClosed as e:
+            self._mark_dead(f'ws send closed: {e}')
+        except Exception as e:
+            self._mark_dead(f'ws send error: {e}')
+
+    async def _recv_loop(self):
+        try:
+            async for raw_msg in self._ws:
+                if self._closed:
+                    break
+                try:
+                    msg = json.loads(raw_msg)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                msg_type = msg.get('type', '')
+                if msg_type == 'error':
+                    err = msg.get('message', 'unknown error')
+                    logger.error(f'Modulate streaming error: {err}')
+                    self._mark_dead(f'modulate error: {err}')
+                    break
+                elif msg_type == 'done':
+                    logger.info('Modulate streaming done: duration=%s', msg.get('audio_duration_s'))
+                    continue
+                elif msg_type == 'utterance':
+                    self._handle_utterance(msg)
+        except websockets.exceptions.ConnectionClosed as e:
+            self._mark_dead(f'ws recv closed: {e}')
+        except Exception as e:
+            self._mark_dead(f'ws recv error: {e}')
+
+    def _handle_utterance(self, msg: dict):
+        text = msg.get('text', '').strip()
+        if not text:
+            return
+
+        start_ms = msg.get('start_ms', 0)
+        duration_ms = msg.get('duration_ms', 0)
+        start = start_ms / 1000.0
+        end = (start_ms + duration_ms) / 1000.0
+
+        if self._preseconds and start < self._preseconds:
+            return
+
+        raw_speaker = msg.get('speaker')
+        if isinstance(raw_speaker, int) and raw_speaker >= 1:
+            speaker_idx = raw_speaker - 1
+        else:
+            speaker_idx = 0
+        speaker = f'SPEAKER_{speaker_idx:02d}'
+
+        segments = [
+            {
+                'speaker': speaker,
+                'start': start,
+                'end': end,
+                'text': text,
+                'is_user': False,
+                'person_id': None,
+            }
+        ]
+        self._stream_transcript(segments)
+
+
+async def process_audio_modulate(
+    stream_transcript,
+    sample_rate: int,
+    language: str,
+    preseconds: int = 0,
+):
+    api_key = os.getenv('MODULATE_API_KEY')
+    if not api_key:
+        raise ValueError('MODULATE_API_KEY environment variable is not set')
+
+    uri = (
+        f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming'
+        f'?api_key={api_key}&speaker_diarization=true&sample_rate={sample_rate}'
+    )
+    if language and language != 'multi':
+        uri += f'&language={language}'
+
+    logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
+    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    loop = asyncio.get_running_loop()
+    sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
+    sock.set_wav_header(_build_wav_header(sample_rate))
+    logger.info('Modulate Velma-2 streaming connection established')
+    return sock
