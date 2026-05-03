@@ -28,8 +28,10 @@ sys.modules['database.redis_db'].r = _mock_redis
 for mod_name in [
     'google',
     'google.cloud',
-    'google.cloud.translate_v3',
+    'google.cloud.firestore',
     'google.cloud.firestore_v1',
+    'google.cloud.firestore_v1.gapic_version',
+    'google.cloud.translate_v3',
     'google.auth',
     'google.auth.transport',
     'google.auth.transport.requests',
@@ -38,32 +40,35 @@ for mod_name in [
     'firebase_admin.firestore',
 ]:
     if mod_name not in sys.modules:
-        sys.modules[mod_name] = MagicMock()
+        _m = MagicMock()
+        if mod_name == 'google.cloud.firestore_v1.gapic_version':
+            _m.__version__ = '0.0.0-mock'
+        sys.modules[mod_name] = _m
 
 import database.users as users_module
 
 
 class TestAutoTranslateEnabledDefaults:
-    """Verify auto_translate_enabled defaults to False for new/missing users."""
+    """Verify auto_translate_enabled defaults to True for new/missing users (changed per feedback #4)."""
 
-    def test_missing_user_returns_false(self):
-        """A user that doesn't exist in Firestore should get auto_translate_enabled=False."""
+    def test_missing_user_returns_true(self):
+        """A user that doesn't exist in Firestore should get auto_translate_enabled=True (default on)."""
         mock_doc = MagicMock()
         mock_doc.exists = False
         with patch.object(users_module, 'db') as mock_db:
             mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
             result = users_module.get_user_transcription_preferences('nonexistent_uid')
-        assert result['auto_translate_enabled'] is False
+        assert result['auto_translate_enabled'] is True
 
-    def test_user_without_prefs_returns_false(self):
-        """A user doc that exists but has no transcription_preferences should default to False."""
+    def test_user_without_prefs_returns_true(self):
+        """A user doc that exists but has no transcription_preferences should default to True."""
         mock_doc = MagicMock()
         mock_doc.exists = True
         mock_doc.to_dict.return_value = {}
         with patch.object(users_module, 'db') as mock_db:
             mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
             result = users_module.get_user_transcription_preferences('uid_no_prefs')
-        assert result['auto_translate_enabled'] is False
+        assert result['auto_translate_enabled'] is True
 
     def test_user_with_explicit_true_returns_true(self):
         """A user with explicit auto_translate_enabled=True should keep it."""
@@ -96,7 +101,7 @@ class TestAutoTranslateEnabledDefaults:
 
 
 class TestBatchTranslation24hFilter:
-    """Verify the 24h time filter logic for batch translation on toggle-on."""
+    """Verify the batch translation filter logic on toggle-on."""
 
     @staticmethod
     def _read_transcribe_source():
@@ -104,15 +109,14 @@ class TestBatchTranslation24hFilter:
         with open(os.path.join(root, 'routers', 'transcribe.py'), 'r') as f:
             return f.read()
 
-    def test_24h_cutoff_code_exists(self):
-        """Batch translation block must contain 24h time filter."""
+    def test_batch_translation_block_exists(self):
+        """Batch translation block must exist in translate_toggle handler."""
         source = self._read_transcribe_source()
         toggle_start = source.find("json_data.get('type') == 'translate_toggle'")
         assert toggle_start != -1
         next_handler = source.find("json_data.get('type') == 'screen_state'", toggle_start)
         toggle_block = source[toggle_start:next_handler]
-        assert 'cutoff_secs' in toggle_block, "24h cutoff variable must exist"
-        assert '24 * 3600' in toggle_block, "24h cutoff must be 24*3600 seconds"
+        assert 'translate_units_batch' in toggle_block, "Batch translation call must exist"
 
     def test_filter_skips_already_translated(self):
         """Batch translation must skip segments that already have translations."""
