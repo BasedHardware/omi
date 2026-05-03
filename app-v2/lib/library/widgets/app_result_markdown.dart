@@ -69,17 +69,66 @@ class AppResultMarkdown extends StatelessWidget {
     }
 
     if (fallback.isEmpty) {
-      return const SizedBox.shrink();
+      // No overview AND no apps_results — surface a tappable empty state
+      // so the user can pick an app to summarize this conversation.
+      return _EmptyResult(label: l.summarizeWithApp, onTap: onPickApp);
     }
 
-    // Plain Structured.overview fallback — no attribution row, since this
-    // text wasn't produced by an app.
-    return MarkdownBody(
-      data: fallback,
-      selectable: true,
-      styleSheet: MarkdownStyleSheet(
-        p: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
-        pPadding: const EdgeInsets.only(bottom: AppStyles.spacingM),
+    // Plain Structured.overview fallback. No attribution row (text wasn't
+    // produced by an app), but expose a tappable caption so the user can
+    // upgrade this to an app-produced summary on demand.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MarkdownBody(
+          data: fallback,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            p: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
+            pPadding: const EdgeInsets.only(bottom: AppStyles.spacingM),
+          ),
+        ),
+        const SizedBox(height: AppStyles.spacingM),
+        _PickAppCaption(label: l.summarizeWithApp, onTap: onPickApp),
+      ],
+    );
+  }
+}
+
+/// Tappable caption shown at the bottom of the OVERVIEW slot when no app
+/// has summarized this conversation yet. Opens the summarized-apps picker.
+class _PickAppCaption extends StatelessWidget {
+  const _PickAppCaption({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: AppStyles.touchTargetMinimum,
+          padding: const EdgeInsets.symmetric(horizontal: AppStyles.spacingS, vertical: AppStyles.spacingS),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome_outlined, size: 18, color: AppColors.brandPrimary),
+              const SizedBox(width: AppStyles.spacingS),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.brandPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

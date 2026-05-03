@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'package:nooto_v2/l10n/gen/app_localizations.dart';
 import 'package:nooto_v2/library/conversation_model.dart';
 import 'package:nooto_v2/library/conversations_provider.dart';
 import 'package:nooto_v2/library/widgets/app_result_markdown.dart';
@@ -72,6 +73,21 @@ class ConversationDetailScreen extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
+        actions: [
+          // Always-visible picker entry point. Same destination as the
+          // attribution row on AppResultMarkdown — but reachable even when
+          // apps_results is empty (or the user wants to swap apps without
+          // tapping the attribution row).
+          IconButton(
+            icon: const Icon(Icons.auto_awesome_outlined, size: 20),
+            tooltip: AppLocalizations.of(context).chooseSummarizationApp,
+            onPressed: () => SummarizedAppsBottomSheet.show(
+              context,
+              conversationId: item.id,
+              currentAppId: item.summarizedApp?.appId,
+            ),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
