@@ -61,9 +61,8 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor: isCurrentResult
-              ? Colors.orange.withValues(alpha: 0.9)
-              : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor:
+              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -711,12 +710,16 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-class AppResultDetailWidget extends StatelessWidget {
+class AppResultDetailWidget extends StatefulWidget {
   final AppResponse appResponse;
   final App? app;
   final ServerConversation conversation;
   final String searchQuery;
   final int currentResultIndex;
+  final Function(String newContent)? onSaveSummary;
+  final VoidCallback? onEditStarted;
+  final VoidCallback? onEditCancelled;
+  final bool Function()? canStartEditing;
 
   const AppResultDetailWidget({
     super.key,
@@ -725,11 +728,68 @@ class AppResultDetailWidget extends StatelessWidget {
     required this.conversation,
     this.searchQuery = '',
     this.currentResultIndex = -1,
+    this.onSaveSummary,
+    this.onEditStarted,
+    this.onEditCancelled,
+    this.canStartEditing,
   });
 
   @override
+  State<AppResultDetailWidget> createState() => _AppResultDetailWidgetState();
+}
+
+class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
+  bool _isEditing = false;
+  TextEditingController? _controller;
+  FocusNode? _focusNode;
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _focusNode?.dispose();
+    super.dispose();
+  }
+
+  void _startEditing(String currentContent) {
+    if (widget.canStartEditing != null && !widget.canStartEditing!()) return;
+    HapticFeedback.mediumImpact();
+    final controller = TextEditingController(text: currentContent);
+    final focusNode = FocusNode();
+    setState(() {
+      _controller = controller;
+      _focusNode = focusNode;
+      _isEditing = true;
+    });
+    widget.onEditStarted?.call();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      focusNode.requestFocus();
+    });
+  }
+
+  void _exitEditing({bool cancelled = false}) {
+    final controller = _controller;
+    final focusNode = _focusNode;
+    setState(() {
+      _isEditing = false;
+      _controller = null;
+      _focusNode = null;
+    });
+    controller?.dispose();
+    focusNode?.dispose();
+    if (cancelled) widget.onEditCancelled?.call();
+  }
+
+  void _save(String original) {
+    final newContent = _controller?.text.trim() ?? '';
+    if (newContent.isNotEmpty && newContent != original.trim()) {
+      widget.onSaveSummary?.call(newContent);
+    }
+    _exitEditing();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final String content = appResponse.content.trim().decodeString;
+    final String content = widget.appResponse.content.trim().decodeString;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -763,20 +823,25 @@ class AppResultDetailWidget extends StatelessWidget {
                       ),
                     ],
                   )
-                : ConversationMarkdownWidget(
-                    content: content,
-                    searchQuery: searchQuery,
-                    currentResultIndex: currentResultIndex,
-                  ),
+                : _isEditing
+                    ? _buildEditor(context, content)
+                    : GestureDetector(
+                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                        child: ConversationMarkdownWidget(
+                          content: content,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                        ),
+                      ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty)
+          if (content.isNotEmpty && !_isEditing)
             GestureDetector(
               onTap: () async {
-                if (app != null) {
+                if (widget.app != null) {
                   MixpanelManager().pageOpened('App Detail');
-                  await routeToPage(context, AppDetailPage(app: app!));
+                  await routeToPage(context, AppDetailPage(app: widget.app!));
                 }
               },
               child: Padding(
@@ -784,9 +849,9 @@ class AppResultDetailWidget extends StatelessWidget {
                 child: Row(
                   children: [
                     // App icon
-                    app != null
+                    widget.app != null
                         ? CachedNetworkImage(
-                            imageUrl: app!.getImageUrl(),
+                            imageUrl: widget.app!.getImageUrl(),
                             imageBuilder: (context, imageProvider) {
                               return CircleAvatar(
                                 backgroundColor: Colors.white,
@@ -838,7 +903,7 @@ class AppResultDetailWidget extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  app != null ? app!.name.decodeString : context.l10n.unknownApp,
+                                  widget.app != null ? widget.app!.name.decodeString : context.l10n.unknownApp,
                                   maxLines: 1,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -846,9 +911,9 @@ class AppResultDetailWidget extends StatelessWidget {
                                     fontSize: 14,
                                   ),
                                 ),
-                                if (app != null)
+                                if (widget.app != null)
                                   Text(
-                                    app!.description.decodeString,
+                                    widget.app!.description.decodeString,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -871,12 +936,71 @@ class AppResultDetailWidget extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildEditor(BuildContext context, String original) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          minLines: 6,
+          maxLines: 12,
+          maxLength: 10000,
+          style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.grey.shade900,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            contentPadding: const EdgeInsets.all(14),
+            counterStyle: TextStyle(color: Colors.grey.shade500),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => _exitEditing(cancelled: true),
+              child: Text(
+                context.l10n.cancel,
+                style: TextStyle(color: Colors.grey.shade300, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => _save(original),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text(context.l10n.save, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 class GetAppsWidgets extends StatelessWidget {
   final String searchQuery;
   final int currentResultIndex;
-  const GetAppsWidgets({super.key, this.searchQuery = '', this.currentResultIndex = -1});
+  final Function(String? appId, String newContent)? onSaveSummary;
+  final void Function(String? appId)? onEditStarted;
+  final void Function(String? appId)? onEditCancelled;
+  final bool Function()? canStartEditing;
+  const GetAppsWidgets({
+    super.key,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.onSaveSummary,
+    this.onEditStarted,
+    this.onEditCancelled,
+    this.canStartEditing,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -898,6 +1022,12 @@ class GetAppsWidgets extends StatelessWidget {
                       conversation: provider.conversation,
                       searchQuery: searchQuery,
                       currentResultIndex: currentResultIndex,
+                      canStartEditing: canStartEditing,
+                      onEditStarted: onEditStarted == null ? null : () => onEditStarted!(summarizedApp.appId),
+                      onEditCancelled: onEditCancelled == null ? null : () => onEditCancelled!(summarizedApp.appId),
+                      onSaveSummary: onSaveSummary == null
+                          ? null
+                          : (newContent) => onSaveSummary!(summarizedApp.appId, newContent),
                     ),
                   ],
                   const SizedBox(height: 8),

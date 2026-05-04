@@ -25,6 +25,7 @@ from models.conversation import (
     TestPromptRequest,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
+    UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import redact_conversations_for_list
@@ -177,6 +178,18 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
+    return {'status': 'Ok'}
+
+
+@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+def patch_conversation_summary(
+    conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
+    if result == 'not_found':
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if result == 'app_result_not_found':
+        raise HTTPException(status_code=404, detail="App summary not found for this conversation")
     return {'status': 'Ok'}
 
 

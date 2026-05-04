@@ -122,6 +122,40 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  Future<void> saveEditingSummary(String? appId, String newContent) async {
+    final trimmed = newContent.trim();
+    if (trimmed.isEmpty) return;
+
+    if (appId == null) {
+      final oldOverview = conversation.structured.overview;
+      if (trimmed == oldOverview) return;
+
+      conversation.structured.overview = trimmed;
+      notifyListeners();
+
+      final success = await updateConversationSummary(conversation.id, null, trimmed);
+      if (!success && !_isDisposed) {
+        conversation.structured.overview = oldOverview;
+        notifyListeners();
+      }
+      return;
+    }
+
+    final index = conversation.appResults.indexWhere((r) => r.appId == appId);
+    if (index < 0) return;
+    final oldContent = conversation.appResults[index].content;
+    if (trimmed == oldContent) return;
+
+    conversation.appResults[index].content = trimmed;
+    notifyListeners();
+
+    final success = await updateConversationSummary(conversation.id, appId, trimmed);
+    if (!success && !_isDisposed) {
+      conversation.appResults[index].content = oldContent;
+      notifyListeners();
+    }
+  }
+
   void toggleIsTranscriptExpanded() {
     isTranscriptExpanded = !isTranscriptExpanded;
     notifyListeners();

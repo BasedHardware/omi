@@ -550,6 +550,12 @@ class MixpanelManager {
 
   void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
 
+  void editSummaryStarted() => track('Edit Summary Started');
+
+  void editSummarySaved() => track('Edit Summary Saved');
+
+  void editSummaryCancelled() => track('Edit Summary Cancelled');
+
   void deleteAccountClicked() => track('Delete Account Clicked');
 
   void deleteAccountConfirmed() => track('Delete Account Confirmed');
