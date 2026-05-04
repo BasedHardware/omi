@@ -188,6 +188,30 @@ class TestSafeModulateSocket(unittest.TestCase):
         sock.finish()
         sock.send(b'\x00' * 10)  # Should not raise
 
+    def test_send_raw_pcm_without_wav_header(self):
+        """Production path: process_audio_modulate never sets wav_header, so raw PCM goes through."""
+        sent_data = []
+        ws = AsyncMock()
+        ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
+        ws.close = AsyncMock()
+
+        loop = asyncio.new_event_loop()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
+            sock._recv_task.cancel()
+            audio = b'\x01\x02\x03\x04'
+            sock.send(audio)
+            await sock.drain_and_close()
+            return sent_data
+
+        try:
+            result = loop.run_until_complete(run())
+            self.assertEqual(result[0], b'\x01\x02\x03\x04')
+            self.assertFalse(result[0].startswith(b'RIFF'))
+        finally:
+            loop.close()
+
     def test_send_then_drain_ordering(self):
         """Audio sent via send() must arrive at ws.send() before EOS from drain_and_close()."""
         sent_data = []
@@ -547,6 +571,8 @@ class TestProcessAudioModulate(unittest.TestCase):
             from utils.stt.socket import STTSocket
 
             self.assertIsInstance(sock, STTSocket)
+            self.assertIsNone(sock._wav_header)
+            self.assertFalse(sock._header_sent)
             call_args = mock_ws_module.connect.call_args
             uri = call_args[0][0]
             self.assertIn('api_key=test-key', uri)
@@ -555,7 +581,10 @@ class TestProcessAudioModulate(unittest.TestCase):
             self.assertIn('language=en', uri)
             self.assertIn('audio_format=s16le', uri)
             self.assertIn('num_channels=1', uri)
+            self.assertIn('partial_results=true', uri)
         finally:
+            sock._recv_task.cancel()
+            sock._send_task.cancel()
             loop.close()
 
     @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
@@ -575,10 +604,12 @@ class TestProcessAudioModulate(unittest.TestCase):
             async def run():
                 return await process_audio_modulate(lambda s: None, 16000, 'multi')
 
-            loop.run_until_complete(run())
+            sock = loop.run_until_complete(run())
             uri = mock_ws_module.connect.call_args[0][0]
             self.assertNotIn('language=', uri)
         finally:
+            sock._recv_task.cancel()
+            sock._send_task.cancel()
             loop.close()
 
 
@@ -598,13 +629,20 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         mock_client.post.return_value = mock_response
         mock_client_cls.return_value = mock_client
 
-        modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+        audio_bytes = b'\x00' * 100
+        modulate_prerecorded_from_bytes(audio_bytes, 16000)
 
         call_kwargs = mock_client.post.call_args
         self.assertEqual(call_kwargs[1]['headers'], {'X-API-Key': 'test-key'})
         self.assertIn('velma-2-stt-batch', call_kwargs[0][0])
         self.assertEqual(call_kwargs[1]['data'], {'speaker_diarization': 'true'})
         mock_client_cls.assert_called_once_with(timeout=300)
+
+        files = call_kwargs[1]['files']
+        file_tuple = files['upload_file']
+        self.assertEqual(file_tuple[0], 'audio.wav')
+        self.assertEqual(file_tuple[2], 'audio/wav')
+        self.assertEqual(file_tuple[1].read(), audio_bytes)
 
     @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
     @patch('utils.stt.pre_recorded.httpx.Client')
