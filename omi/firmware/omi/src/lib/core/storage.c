@@ -37,6 +37,8 @@ static uint32_t current_read_offset = 0;
 #define INVALID_COMMAND 6
 #define FILE_NOT_FOUND 7
 #define FILE_INDEX_OUT_OF_RANGE 8
+#define STORAGE_LIST_MAX_FILES_PER_RESPONSE 50
+#define STORAGE_FILE_LIST_ENTRY_SIZE 8
 
 #define MAX_HEARTBEAT_FRAMES 100
 #define HEARTBEAT 50
@@ -270,14 +272,30 @@ static int send_file_list_response(struct bt_conn *conn)
         storage_notify(conn, error_resp, 1);
         return -1;
     }
+
+    uint16_t att_payload = 20;
+    if (conn) {
+        uint16_t mtu = bt_gatt_get_mtu(conn);
+        if (mtu > 3U) {
+            att_payload = mtu - 3U;
+        }
+    }
+
+    int max_files_by_payload = (att_payload > 1U) ? ((att_payload - 1U) / STORAGE_FILE_LIST_ENTRY_SIZE) : 0;
+    int response_file_count = MIN(sync_file_count, STORAGE_LIST_MAX_FILES_PER_RESPONSE);
+    response_file_count = MIN(response_file_count, max_files_by_payload);
+
+    if (response_file_count < 0) {
+        response_file_count = 0;
+    }
     
     /* Use storage_buffer to build response (max 4440 bytes) */
     /* Each file: ts(4) + size(4) = 8 bytes, max ~550 files */
     int resp_len = 0;
     
-    storage_buffer[resp_len++] = (uint8_t)sync_file_count;
+    storage_buffer[resp_len++] = (uint8_t)response_file_count;
     
-    for (int i = 0; i < sync_file_count && resp_len + 8 <= STORAGE_BUFFER_SIZE; i++) {
+    for (int i = 0; i < response_file_count && resp_len + STORAGE_FILE_LIST_ENTRY_SIZE <= STORAGE_BUFFER_SIZE; i++) {
         uint32_t timestamp = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
         uint32_t size = sync_file_sizes[i];
         
@@ -292,7 +310,11 @@ static int send_file_list_response(struct bt_conn *conn)
         storage_buffer[resp_len++] = size & 0xFF;
     }
     
-    LOG_INF("Sending file list: %d files, %d bytes", sync_file_count, resp_len);
+    LOG_INF("Sending file list: %d/%d files, %d bytes (att_payload=%u)",
+            response_file_count,
+            sync_file_count,
+            resp_len,
+            att_payload);
     return storage_notify(conn, storage_buffer, resp_len);
 }
 
