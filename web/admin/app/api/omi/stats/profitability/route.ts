@@ -15,8 +15,7 @@ export const dynamic = "force-dynamic";
 //      notifications.
 //   2. PostHog events where `properties.$os_name = 'macOS'` — desktop users.
 //      Already proven by crash-rate / macos-versions / dau-trends routes.
-//   3. Mixpanel `$os` in ['iOS','Android'] — mobile users. Already proven by
-//      retention/mixpanel route.
+//   3. Mixpanel `$os` in ['iOS','Android'] — mobile users.
 //
 // Each source provides distinct_id/uid → platform pairs. We merge them so a
 // user appears desktop if ANY source tags them as desktop, and mobile if any

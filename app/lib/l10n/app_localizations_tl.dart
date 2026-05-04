@@ -9240,11 +9240,77 @@ class AppLocalizationsTl extends AppLocalizations {
   String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Simulan ang voice recording';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Simulan ang pag-record ng tawag';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Voice Mode';
+
+  @override
+  String get quickActionAskOmi => 'Tanungin si Omi ng kahit ano';
+
+  @override
+  String get record => 'Mag-record';
+
+  @override
+  String get stop => 'Itigil';
+
+  @override
+  String get recordWithPhoneMic => 'Mag-record gamit ang mikropono ng telepono';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Kunan ang audio sa paligid mo';
+
+  @override
+  String get phoneCall => 'Tawag sa telepono';
+
+  @override
+  String get phoneCallSubtitle => 'Mag-record ng tawag na may live na transkripsyon';
+
+  @override
+  String get searchActionItems => 'Maghanap ng mga action item';
+
+  @override
+  String get selectActionItems => 'Pumili ng marami';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'I-export ang $count item sa…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Nag-e-export…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Na-export ang $count sa $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Na-export ang $success sa $total sa $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Ipakita ang tapos na';
+
+  @override
+  String get hideCompletedTasks => 'Itago ang tapos na';
+
+  @override
+  String get selectAllTasksMenu => 'Piliin lahat';
+
+  @override
+  String get connectTaskAppToExport => 'Ikonekta ang isang task app sa Settings para mag-export';
+
+  @override
+  String get connectAction => 'Ikonekta';
+
+  @override
+  String get deselectAllTasksMenu => 'I-deselect lahat';
 }

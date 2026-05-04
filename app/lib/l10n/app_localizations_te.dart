@@ -9206,11 +9206,77 @@ class AppLocalizationsTe extends AppLocalizations {
   String get agreeAndContinue => 'అంగీకరించి కొనసాగించండి';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'వాయిస్ రికార్డింగ్ ప్రారంభించండి';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'కాల్ రికార్డింగ్ ప్రారంభించండి';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'వాయిస్ మోడ్';
+
+  @override
+  String get quickActionAskOmi => 'Omi ని ఏమైనా అడగండి';
+
+  @override
+  String get record => 'రికార్డ్';
+
+  @override
+  String get stop => 'ఆపు';
+
+  @override
+  String get recordWithPhoneMic => 'ఫోన్ మైక్‌తో రికార్డ్ చేయండి';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'మీ చుట్టూ ఉన్న ఆడియోను క్యాప్చర్ చేయండి';
+
+  @override
+  String get phoneCall => 'ఫోన్ కాల్';
+
+  @override
+  String get phoneCallSubtitle => 'లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి';
+
+  @override
+  String get searchActionItems => 'చర్య అంశాలను వెతకండి';
+
+  @override
+  String get selectActionItems => 'బహుళ ఎంపిక';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count అంశం(ాలను) ఎగుమతి చేయండి…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ఎగుమతి చేస్తోంది…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count ని $platform కు ఎగుమతి చేయబడింది';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total లో $success ని $platform కు ఎగుమతి చేయబడింది';
+  }
+
+  @override
+  String get showCompletedTasks => 'పూర్తయినవి చూపించు';
+
+  @override
+  String get hideCompletedTasks => 'పూర్తయినవి దాచు';
+
+  @override
+  String get selectAllTasksMenu => 'అన్నీ ఎంచుకోండి';
+
+  @override
+  String get connectTaskAppToExport => 'ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి';
+
+  @override
+  String get connectAction => 'కనెక్ట్ చేయండి';
+
+  @override
+  String get deselectAllTasksMenu => 'అన్ని ఎంపికలు తొలగించు';
 }

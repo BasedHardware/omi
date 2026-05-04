@@ -23,13 +23,6 @@ fn default_daily_summary_hour() -> i32 {
     22 // 10 PM
 }
 
-/// Request to update daily summary settings
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateDailySummaryRequest {
-    pub enabled: Option<bool>,
-    pub hour: Option<i32>,
-}
-
 /// Transcription preferences
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TranscriptionPreferences {
@@ -39,45 +32,6 @@ pub struct TranscriptionPreferences {
     /// Custom vocabulary words for better transcription accuracy
     #[serde(default)]
     pub vocabulary: Vec<String>,
-}
-
-/// Request to update transcription preferences
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateTranscriptionPreferencesRequest {
-    pub single_language_mode: Option<bool>,
-    pub vocabulary: Option<Vec<String>>,
-}
-
-/// User language preference
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserLanguage {
-    /// Language code (e.g., "en", "es", "vi")
-    pub language: String,
-}
-
-/// Request to update language
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateLanguageRequest {
-    pub language: String,
-}
-
-/// Recording permission status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecordingPermission {
-    /// Whether the user has granted permission to store recordings
-    pub enabled: bool,
-}
-
-/// Private cloud sync settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrivateCloudSync {
-    /// Whether private cloud sync is enabled
-    #[serde(default = "default_private_cloud_sync")]
-    pub enabled: bool,
-}
-
-fn default_private_cloud_sync() -> bool {
-    true
 }
 
 /// Notification settings
@@ -97,13 +51,6 @@ fn default_notifications_enabled() -> bool {
 
 fn default_notification_frequency() -> i32 {
     3 // Balanced
-}
-
-/// Request to update notification settings
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateNotificationSettingsRequest {
-    pub enabled: Option<bool>,
-    pub frequency: Option<i32>,
 }
 
 /// User profile from Firestore
@@ -137,47 +84,12 @@ pub struct UserProfile {
     pub company: Option<String>,
 }
 
-/// Complete user settings response (aggregated)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserSettingsResponse {
-    pub daily_summary: DailySummarySettings,
-    pub transcription: TranscriptionPreferences,
-    pub language: String,
-    pub recording_permission: bool,
-    pub private_cloud_sync: bool,
-    pub notifications: NotificationSettings,
-}
-
-/// Generic status response
-#[derive(Debug, Clone, Serialize)]
-pub struct UserSettingsStatusResponse {
-    pub status: String,
-}
-
 /// AI-generated profile of the user (distinct from PersonaDB which is user-created AI characters)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIUserProfile {
     pub profile_text: String,
     pub generated_at: DateTime<Utc>,
     pub data_sources_used: i32,
-}
-
-/// Request to update AI-generated user profile
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateAIUserProfileRequest {
-    pub profile_text: String,
-    pub generated_at: String,
-    pub data_sources_used: i32,
-}
-
-/// Request to update user profile (onboarding data)
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateUserProfileRequest {
-    pub name: Option<String>,
-    pub motivation: Option<String>,
-    pub use_case: Option<String>,
-    pub job: Option<String>,
-    pub company: Option<String>,
 }
 
 // MARK: - Assistant Settings (synced to Firestore)

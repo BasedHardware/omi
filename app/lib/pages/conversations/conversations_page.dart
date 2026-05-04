@@ -306,7 +306,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Hidden entirely when the user has fewer than 3 non-discarded
               // conversations (and isn't on the Daily Recaps view) — those
               // users get the empty-state hero below instead.
-              if (convoProvider.showDailySummaries || _nonDiscardedConversationCount(convoProvider) >= 3)
+              if (convoProvider.showDailySummaries ||
+                  _nonDiscardedConversationCount(convoProvider) >= 3 ||
+                  convoProvider.isLoadingConversations ||
+                  convoProvider.isFetchingConversations)
                 SliverToBoxAdapter(
                   child: Builder(
                     builder: (context) => Padding(
@@ -327,7 +330,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
               // Folder tabs - hide when showing daily recaps OR when the user
               // hasn't built up enough conversations yet (matches the title).
-              if (!convoProvider.showDailySummaries && _nonDiscardedConversationCount(convoProvider) >= 3)
+              if (!convoProvider.showDailySummaries &&
+                  (_nonDiscardedConversationCount(convoProvider) >= 3 ||
+                      convoProvider.isLoadingConversations ||
+                      convoProvider.isFetchingConversations))
                 Consumer2<FolderProvider, ConversationProvider>(
                   builder: (context, folderProvider, convoProvider, _) {
                     return SliverToBoxAdapter(

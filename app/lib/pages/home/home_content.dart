@@ -142,7 +142,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
                 // Bottom padding so content isn't hidden behind chat bar + nav
                 const SliverToBoxAdapter(child: SizedBox(height: 160)),
-              ] else
+              ] else if (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations)
+                // Hide both the recent-convos preview AND the get-started tiles
+                // while we're still fetching — otherwise users with conversations
+                // briefly see the new-user triangle UI while the network call
+                // is in flight, which looks broken.
+                const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink())
+              else
                 // For new users (< 3 non-discarded convos): hide the conversations
                 // preview AND the mind map. The 3 "get started" tiles fill the
                 // remaining vertical space and sit centered between Today/Daily

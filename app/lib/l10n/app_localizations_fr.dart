@@ -9238,11 +9238,77 @@ class AppLocalizationsFr extends AppLocalizations {
   String get agreeAndContinue => 'Accepter et continuer';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Démarrer l\'enregistrement vocal';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Démarrer l\'enregistrement d\'appel';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode vocal';
+
+  @override
+  String get quickActionAskOmi => 'Demandez n\'importe quoi à Omi';
+
+  @override
+  String get record => 'Enregistrer';
+
+  @override
+  String get stop => 'Arrêter';
+
+  @override
+  String get recordWithPhoneMic => 'Enregistrer avec le micro du téléphone';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capturez l\'audio autour de vous';
+
+  @override
+  String get phoneCall => 'Appel téléphonique';
+
+  @override
+  String get phoneCallSubtitle => 'Enregistrez un appel avec transcription en direct';
+
+  @override
+  String get searchActionItems => 'Rechercher des actions';
+
+  @override
+  String get selectActionItems => 'Sélection multiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exporter $count élément(s) vers…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportation…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count exportés vers $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success sur $total exportés vers $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Afficher les terminées';
+
+  @override
+  String get hideCompletedTasks => 'Masquer les terminées';
+
+  @override
+  String get selectAllTasksMenu => 'Tout sélectionner';
+
+  @override
+  String get connectTaskAppToExport => 'Connectez une application de tâches dans les Paramètres pour exporter';
+
+  @override
+  String get connectAction => 'Connecter';
+
+  @override
+  String get deselectAllTasksMenu => 'Tout désélectionner';
 }

@@ -264,6 +264,14 @@ async fn get_agent_status(
                             last_query_at: vm.last_query_at,
                         })));
                     }
+                    Ok(gce_status) if gce_status == "NOT_FOUND" => {
+                        tracing::warn!(
+                            "VM {} no longer exists in GCP — clearing Firestore record",
+                            vm.vm_name
+                        );
+                        let _ = state.firestore.delete_agent_vm(&user.uid).await;
+                        return Ok(Json(None));
+                    }
                     Ok(gce_status) if gce_status == "RUNNING"
                         && (vm.status == AgentVmStatus::Error
                             || vm.status == AgentVmStatus::Stopped) =>
@@ -372,6 +380,10 @@ async fn check_gce_instance_status(
         .await?
         .send()
         .await?;
+
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok("NOT_FOUND".to_string());
+    }
 
     let instance: serde_json::Value = resp.json().await?;
     let status = instance["status"]
@@ -487,7 +499,7 @@ async fn create_gce_vm(
             "autoDelete": true,
             "initializeParams": {
                 "sourceImage": source_image,
-                "diskSizeGb": "30",
+                "diskSizeGb": "50",
                 "diskType": format!("zones/{}/diskTypes/pd-balanced", zone)
             }
         }],

@@ -1,12 +1,14 @@
 import hashlib
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
 import httpx
 from cachetools import TTLCache
+from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
@@ -19,45 +21,17 @@ logger = logging.getLogger(__name__)
 _usage_callback = get_usage_callback()
 
 # ---------------------------------------------------------------------------
-# BYOK routing proxies
+# BYOK (Bring Your Own Key)
 #
-# The backend has ~50 call sites that use module-level `llm_medium`, `llm_mini`,
-# etc. directly (e.g. `llm_medium.invoke(prompt)` or `llm_medium.bind_tools(...).ainvoke(...)`).
-# Rewriting every site to go through a factory would be a massive sweep.
-#
-# Instead we wrap each default client in a transparent proxy: every attribute
-# access resolves to either the default client or a BYOK-keyed client built
-# on the fly, keyed by (model, api_key) so we build each BYOK client once.
-# `__getattr__` forwards `bind_tools`, `with_structured_output`, `|` chaining,
-# etc. to the resolved client so tool-use/structured-output still route right.
+# Per-request feature that substitutes the user's own API key.
+# For get_llm() callers: resolved inline — no wrapper class needed.
+# For module-level singletons (anthropic_client, embeddings): proxy classes
+# provide lazy resolution since there's no request context at import time.
 # ---------------------------------------------------------------------------
 
-
-class _OpenAIChatProxy:
-    """Forwards every attribute and call to the appropriate ChatOpenAI for the request."""
-
-    __slots__ = ('_model', '_default', '_ctor_kwargs')
-
-    def __init__(self, model: str, default: ChatOpenAI, ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_model', model)
-        object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
-
-    def _resolve(self) -> ChatOpenAI:
-        byok = get_byok_key('openai')
-        if byok:
-            return _cached_openai_chat(self._model, byok, self._ctor_kwargs)
-        return self._default
-
-    def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
-
-    # Needed for `prompt | model | parser`-style chain composition.
-    def __or__(self, other):
-        return self._resolve() | other
-
-    def __ror__(self, other):
-        return other | self._resolve()
+# Google's OpenAI-compatible endpoint — used only for BYOK users who bring their
+# own AI Studio API key. Platform calls use ChatGoogleGenerativeAI (native SDK).
+_GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 class _AnthropicClientProxy:
@@ -76,45 +50,6 @@ class _AnthropicClientProxy:
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
-
-
-# Google's OpenAI-compatible endpoint lets us keep langchain_openai.ChatOpenAI
-# as the client class while routing to Gemini directly — no new langchain dep.
-_GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-
-
-class _OpenRouterGeminiProxy:
-    """For models served via OpenRouter that we want to route direct when BYOK Gemini is set.
-
-    Falls back to the OpenRouter-backed default client when no BYOK gemini key
-    is present — so non-BYOK users are unaffected.
-    """
-
-    __slots__ = ('_default', '_direct_model', '_ctor_kwargs')
-
-    def __init__(self, default: ChatOpenAI, direct_model: str, ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_direct_model', direct_model)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
-
-    def _resolve(self) -> ChatOpenAI:
-        byok = get_byok_key('gemini')
-        if byok:
-            return _cached_openai_chat(
-                self._direct_model,
-                byok,
-                {**self._ctor_kwargs, 'base_url': _GEMINI_OPENAI_BASE_URL},
-            )
-        return self._default
-
-    def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
-
-    def __or__(self, other):
-        return self._resolve() | other
-
-    def __ror__(self, other):
-        return other | self._resolve()
 
 
 class _OpenAIEmbeddingsProxy:
@@ -172,10 +107,33 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     return inst
 
 
-def _byok_openai(model: str, **ctor_kwargs) -> _OpenAIChatProxy:
-    """Build a module-level ChatOpenAI that transparently routes to BYOK if set."""
-    default = ChatOpenAI(model=model, **ctor_kwargs)
-    return _OpenAIChatProxy(model=model, default=default, ctor_kwargs=ctor_kwargs)
+def _create_byok_client(
+    model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
+) -> Optional[ChatOpenAI]:
+    """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
+    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+    if model == 'gpt-5.1':
+        kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
+    if streaming:
+        kwargs['streaming'] = True
+        kwargs['stream_options'] = {"include_usage": True}
+
+    if provider == 'openai':
+        return _cached_openai_chat(model, byok_key, kwargs)
+
+    if provider == 'gemini':
+        return _cached_openai_chat(model, byok_key, {**kwargs, 'base_url': _GEMINI_OPENAI_BASE_URL})
+
+    if provider == 'openrouter':
+        # Gemini-based OpenRouter models reroute to Gemini direct via BYOK
+        if model.startswith('gemini'):
+            temp = _OPENROUTER_TEMPERATURES.get(feature)
+            if temp is not None:
+                kwargs['temperature'] = temp
+            return _cached_openai_chat(model, byok_key, {**kwargs, 'base_url': _GEMINI_OPENAI_BASE_URL})
+        return None  # Non-Gemini OpenRouter: no BYOK support
+
+    return None
 
 
 # Anthropic client for chat agent (module-level, BYOK-aware)
@@ -199,136 +157,195 @@ def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
 #
-# Each profile maps every feature to a specific model. Features span multiple
-# providers (OpenAI, Anthropic, OpenRouter, Perplexity). Within a profile,
-# each feature gets the model appropriate for that cost/quality level.
+# Each profile maps every feature to a (model, provider) tuple.
+# The profile is the SINGLE SOURCE OF TRUTH for both model and provider.
+# Provider is never inferred from model name — it is declared explicitly.
+#
+# This means the same model can be hosted by different providers:
+#   feature_a: ('gemini-2.5-flash', 'gemini')      → Google direct
+#   feature_b: ('gemini-2.5-flash', 'openrouter')   → OpenRouter
 #
 # Global switch:     MODEL_QOS=premium        (selects entire profile)
-# Per-feature:       MODEL_QOS_CHAT_AGENT=claude-haiku-3.5  (overrides one feature)
 #
-# Two profiles:
-#   premium — cost-effective default (80% of max quality)
-#   max     — maximum quality, latest flagship models
+# Profiles:
+#   premium  — maximize cost savings while preserving 80% of max quality
+#   max      — 100% quality, best models available, no cost optimization
+#   byok     — same models as max (BYOK users pay their own API costs)
 # ---------------------------------------------------------------------------
 
-MODEL_QOS_PROFILES: Dict[str, Dict[str, str]] = {
+MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
+    # -----------------------------------------------------------------------
+    # premium — maximize cost savings while preserving 80% of max quality.
+    # Uses gpt-5.4-mini (not gpt-5.4) for core features, gpt-4.1-mini (not gpt-4.1)
+    # for quality-sensitive tasks, gpt-4.1-nano for simple routing/classification,
+    # and Gemini flash-lite for low-complexity free-text (titles, followups, onboarding).
+    # -----------------------------------------------------------------------
     'premium': {
         # OpenAI — conversation processing
-        'conv_action_items': 'gpt-5.4-mini',
-        'conv_structure': 'gpt-5.4-mini',
-        'conv_app_result': 'gpt-5.4-mini',
-        'conv_app_select': 'gpt-4.1-nano',
-        'conv_folder': 'gpt-4.1-nano',
-        'conv_discard': 'gpt-4.1-nano',
-        'daily_summary': 'gpt-5.4-mini',
-        'daily_summary_simple': 'gpt-4.1-nano',
-        'external_structure': 'gpt-4.1-mini',  # quality-sensitive: structuring external data
+        'conv_action_items': ('gpt-5.4-mini', 'openai'),
+        'conv_structure': ('gpt-5.4-mini', 'openai'),
+        'conv_app_result': ('gpt-5.4-mini', 'openai'),
+        'conv_app_select': ('gpt-4.1-nano', 'openai'),
+        'conv_folder': ('gpt-4.1-nano', 'openai'),
+        'conv_discard': ('gpt-4.1-nano', 'openai'),
+        'daily_summary': ('gpt-5.4-mini', 'openai'),
+        'daily_summary_simple': ('gpt-4.1-nano', 'openai'),
+        'external_structure': ('gpt-4.1-mini', 'openai'),
         # OpenAI — memories & knowledge
-        'memories': 'gpt-4.1-mini',  # quality-sensitive: memory extraction
-        'learnings': 'gpt-5.4-mini',
-        'memory_conflict': 'gpt-4.1-mini',  # quality-sensitive: conflict detection
-        'memory_category': 'gpt-4.1-nano',
-        'knowledge_graph': 'gpt-4.1-mini',  # quality-sensitive: entity/relationship extraction
+        'memories': ('gpt-4.1-mini', 'openai'),
+        'learnings': ('gpt-5.4-mini', 'openai'),
+        'memory_conflict': ('gpt-4.1-mini', 'openai'),
+        'memory_category': ('gpt-4.1-nano', 'openai'),
+        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
-        'chat_responses': 'gpt-5.4-mini',
-        'chat_extraction': 'gpt-4.1-mini',  # quality-sensitive: structured data extraction
-        'chat_graph': 'gpt-4.1-mini',  # quality-sensitive: graph queries
-        'session_titles': 'gpt-4.1-nano',
-        # OpenAI — features
-        'goals': 'gpt-4.1-mini',  # quality-sensitive: goal analysis
-        'goals_advice': 'gpt-5.4-mini',
-        'notifications': 'gpt-5.4-mini',
-        'proactive_notification': 'gpt-4.1-mini',  # quality-sensitive: notification decisions
-        'followup': 'gpt-4.1-nano',
-        'smart_glasses': 'gpt-4.1-nano',
-        'onboarding': 'gpt-4.1-nano',
-        'app_generator': 'gpt-5.4-mini',
-        'app_integration': 'gpt-4.1-nano',
-        'persona_clone': 'gpt-5.4-mini',
-        'trends': 'gpt-4.1-nano',
-        # Anthropic (chat_agent — used via get_model() + anthropic_client)
-        'chat_agent': 'claude-sonnet-4-6',
-        # OpenAI — persona (moved from deprecated OpenRouter models to direct API)
-        'persona_chat': 'gpt-4.1-nano',
-        'persona_chat_premium': 'gpt-5.4-mini',
-        # OpenRouter — wrapped_analysis only (gemini-3-flash-preview still active)
-        'wrapped_analysis': 'google/gemini-3-flash-preview',
+        'chat_responses': ('gpt-5.4-mini', 'openai'),
+        'chat_extraction': ('gpt-4.1-mini', 'openai'),
+        'chat_graph': ('gpt-4.1-mini', 'openai'),
+        'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
+        # Features
+        'goals': ('gpt-4.1-mini', 'openai'),
+        'goals_advice': ('gpt-5.4-mini', 'openai'),
+        'notifications': ('gpt-5.4-mini', 'openai'),
+        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'followup': ('gemini-2.5-flash-lite', 'gemini'),
+        'smart_glasses': ('gpt-4.1-nano', 'openai'),
+        'openglass': ('gpt-4.1-mini', 'openai'),
+        'onboarding': ('gemini-2.5-flash-lite', 'gemini'),
+        'app_generator': ('gpt-5.4-mini', 'openai'),
+        'app_integration': ('gemini-2.5-flash-lite', 'gemini'),
+        'persona_clone': ('gpt-5.4-mini', 'openai'),
+        'trends': ('gemini-2.5-flash-lite', 'gemini'),
+        # Anthropic (used via get_model() + anthropic_client)
+        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
+        # Persona
+        'persona_chat': ('gpt-4.1-nano', 'openai'),
+        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
+        # OpenRouter
+        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
         # Perplexity
-        'web_search': 'sonar-pro',
+        'web_search': ('sonar-pro', 'perplexity'),
     },
+    # -----------------------------------------------------------------------
+    # max — 100% quality, best models available, no cost optimization.
+    # Uses gpt-5.4 for all core features, o4-mini for reasoning (learnings),
+    # gpt-4.1 for chat graph. Pure OpenAI for highest accuracy.
+    # -----------------------------------------------------------------------
     'max': {
-        # OpenAI — conversation processing (gpt-5.4 replaces gpt-5.1/5.2, rest unchanged)
-        'conv_action_items': 'gpt-5.4',
-        'conv_structure': 'gpt-5.4',
-        'conv_app_result': 'gpt-5.4',
-        'conv_app_select': 'gpt-4.1-mini',
-        'conv_folder': 'gpt-4.1-mini',
-        'conv_discard': 'gpt-4.1-mini',
-        'daily_summary': 'gpt-5.4',
-        'daily_summary_simple': 'gpt-4.1-mini',
-        'external_structure': 'gpt-4.1-mini',
-        # OpenAI — memories & knowledge (unchanged from production)
-        'memories': 'gpt-4.1-mini',
-        'learnings': 'o4-mini',
-        'memory_conflict': 'gpt-4.1-mini',
-        'memory_category': 'gpt-4.1-mini',
-        'knowledge_graph': 'gpt-4.1-mini',
-        # OpenAI — chat (gpt-5.4 replaces gpt-5.2, rest unchanged)
-        'chat_responses': 'gpt-5.4',
-        'chat_extraction': 'gpt-4.1-mini',
-        'chat_graph': 'gpt-4.1',
-        'session_titles': 'gpt-4.1-mini',
-        # OpenAI — features (gpt-5.4 replaces gpt-5.2/5.1, rest unchanged)
-        'goals': 'gpt-4.1-mini',
-        'goals_advice': 'gpt-5.4',
-        'notifications': 'gpt-5.4',
-        'proactive_notification': 'gpt-4.1-mini',
-        'followup': 'gpt-4.1-mini',
-        'smart_glasses': 'gpt-4.1-mini',
-        'onboarding': 'gpt-4.1-mini',
-        'app_generator': 'gpt-5.4',
-        'app_integration': 'gpt-4.1-mini',
-        'persona_clone': 'gpt-5.4',
-        'trends': 'gpt-4.1-mini',
-        # Anthropic (unchanged)
-        'chat_agent': 'claude-sonnet-4-6',
-        # OpenAI — persona (moved from deprecated OpenRouter models to direct API)
-        'persona_chat': 'gpt-4.1-nano',
-        'persona_chat_premium': 'gpt-5.4-mini',
-        # OpenRouter — wrapped_analysis only (gemini-3-flash-preview still active)
-        'wrapped_analysis': 'google/gemini-3-flash-preview',
-        # Perplexity (unchanged)
-        'web_search': 'sonar-pro',
+        # OpenAI — conversation processing
+        'conv_action_items': ('gpt-5.4', 'openai'),
+        'conv_structure': ('gpt-5.4', 'openai'),
+        'conv_app_result': ('gpt-5.4', 'openai'),
+        'conv_app_select': ('gpt-4.1-mini', 'openai'),
+        'conv_folder': ('gpt-4.1-mini', 'openai'),
+        'conv_discard': ('gpt-4.1-mini', 'openai'),
+        'daily_summary': ('gpt-5.4', 'openai'),
+        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
+        'external_structure': ('gpt-4.1-mini', 'openai'),
+        # OpenAI — memories & knowledge
+        'memories': ('gpt-4.1-mini', 'openai'),
+        'learnings': ('o4-mini', 'openai'),
+        'memory_conflict': ('gpt-4.1-mini', 'openai'),
+        'memory_category': ('gpt-4.1-mini', 'openai'),
+        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        # OpenAI — chat
+        'chat_responses': ('gpt-5.4', 'openai'),
+        'chat_extraction': ('gpt-4.1-mini', 'openai'),
+        'chat_graph': ('gpt-4.1', 'openai'),
+        'session_titles': ('gpt-4.1-mini', 'openai'),
+        # Features
+        'goals': ('gpt-4.1-mini', 'openai'),
+        'goals_advice': ('gpt-5.4', 'openai'),
+        'notifications': ('gpt-5.4', 'openai'),
+        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'followup': ('gpt-4.1-mini', 'openai'),
+        'smart_glasses': ('gpt-4.1-mini', 'openai'),
+        'openglass': ('gpt-4.1-mini', 'openai'),
+        'onboarding': ('gpt-4.1-mini', 'openai'),
+        'app_generator': ('gpt-5.4', 'openai'),
+        'app_integration': ('gpt-4.1-mini', 'openai'),
+        'persona_clone': ('gpt-5.4', 'openai'),
+        'trends': ('gpt-4.1-mini', 'openai'),
+        # Anthropic
+        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
+        # Persona
+        'persona_chat': ('gpt-4.1-nano', 'openai'),
+        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
+        # OpenRouter
+        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+        # Perplexity
+        'web_search': ('sonar-pro', 'perplexity'),
+    },
+    # -----------------------------------------------------------------------
+    # byok — same models as max. BYOK users pay their own API costs so they
+    # get the same best-quality routing as max subscribers.
+    # -----------------------------------------------------------------------
+    'byok': {
+        # OpenAI — conversation processing
+        'conv_action_items': ('gpt-5.4', 'openai'),
+        'conv_structure': ('gpt-5.4', 'openai'),
+        'conv_app_result': ('gpt-5.4', 'openai'),
+        'conv_app_select': ('gpt-4.1-mini', 'openai'),
+        'conv_folder': ('gpt-4.1-mini', 'openai'),
+        'conv_discard': ('gpt-4.1-mini', 'openai'),
+        'daily_summary': ('gpt-5.4', 'openai'),
+        'daily_summary_simple': ('gpt-4.1-mini', 'openai'),
+        'external_structure': ('gpt-4.1-mini', 'openai'),
+        # OpenAI — memories & knowledge
+        'memories': ('gpt-4.1-mini', 'openai'),
+        'learnings': ('o4-mini', 'openai'),
+        'memory_conflict': ('gpt-4.1-mini', 'openai'),
+        'memory_category': ('gpt-4.1-mini', 'openai'),
+        'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        # OpenAI — chat
+        'chat_responses': ('gpt-5.4', 'openai'),
+        'chat_extraction': ('gpt-4.1-mini', 'openai'),
+        'chat_graph': ('gpt-4.1', 'openai'),
+        'session_titles': ('gpt-4.1-mini', 'openai'),
+        # Features
+        'goals': ('gpt-4.1-mini', 'openai'),
+        'goals_advice': ('gpt-5.4', 'openai'),
+        'notifications': ('gpt-5.4', 'openai'),
+        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'followup': ('gpt-4.1-mini', 'openai'),
+        'smart_glasses': ('gpt-4.1-mini', 'openai'),
+        'openglass': ('gpt-4.1-mini', 'openai'),
+        'onboarding': ('gpt-4.1-mini', 'openai'),
+        'app_generator': ('gpt-5.4', 'openai'),
+        'app_integration': ('gpt-4.1-mini', 'openai'),
+        'persona_clone': ('gpt-5.4', 'openai'),
+        'trends': ('gpt-4.1-mini', 'openai'),
+        # Anthropic
+        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
+        # Persona
+        'persona_chat': ('gpt-4.1-nano', 'openai'),
+        'persona_chat_premium': ('gpt-5.4-mini', 'openai'),
+        # OpenRouter
+        'wrapped_analysis': ('gemini-3-flash-preview', 'openrouter'),
+        # Perplexity
+        'web_search': ('sonar-pro', 'perplexity'),
     },
 }
 
-# Pinned features — model is fixed regardless of profile or env override.
-_PINNED_FEATURES: Dict[str, str] = {
-    'fair_use': 'gpt-5.1',
+# Pinned features — (model, provider) fixed regardless of profile or env override.
+_PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
+    'fair_use': ('gpt-5.1', 'openai'),
 }
 
-# Resolve active profile once at startup (kai: OnceLock/singleton pattern).
+# Resolve active profile once at startup.
 _active_profile_name = os.environ.get('MODEL_QOS', 'premium').strip().lower()
 if _active_profile_name not in MODEL_QOS_PROFILES:
     logger.warning('MODEL_QOS=%s is not a valid profile, falling back to premium', _active_profile_name)
     _active_profile_name = 'premium'
 _active_profile = MODEL_QOS_PROFILES[_active_profile_name]
 
-# Provider detection from model name — provider depends on profile, not feature.
-# A feature like persona_chat may be OpenRouter in premium but OpenAI in max.
-_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}  # always Anthropic, used via get_model() + anthropic_client
-_PERPLEXITY_ONLY_FEATURES = {'web_search'}  # always Perplexity, used via get_model() + HTTP client
+# BYOK QoS — all BYOK users get routed to 'byok' profile (top-tier all-OpenAI).
+# BYOK users pay their own API costs, so we give them maximum quality models.
+_byok_profile_name = 'byok'
+_byok_profile = MODEL_QOS_PROFILES[_byok_profile_name]
 
-
-def _classify_provider(model: str) -> str:
-    """Classify provider from model name. Provider follows the model, not the feature."""
-    if '/' in model:
-        return 'openrouter'
-    if model.startswith('claude'):
-        return 'anthropic'
-    if model.startswith('sonar'):
-        return 'perplexity'
-    return 'openai'
+# Features that can't go through get_llm() (non-ChatOpenAI providers).
+_ANTHROPIC_ONLY_FEATURES = {'chat_agent'}
+_PERPLEXITY_ONLY_FEATURES = {'web_search'}
 
 
 # Feature-specific client config (temperature, headers — orthogonal to model choice).
@@ -342,54 +359,62 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 # Models that support OpenAI prompt caching (prompt_cache_key routing).
 _CACHE_KEY_MODELS = {'gpt-5.4', 'gpt-5.4-mini'}
 
+# Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
+_STRUCTURED_OUTPUT_FEATURES = {
+    'chat_extraction',
+    'proactive_notification',
+    'conv_app_select',
+    'external_structure',
+    'trends',
+}
+
+_DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
+
+
+def _get_model_config(feature: str) -> Tuple[str, str]:
+    """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
+
+    Resolution order: pinned > active profile > fallback.
+    """
+    if feature in _PINNED_FEATURES:
+        return _PINNED_FEATURES[feature]
+    return _active_profile.get(feature, _DEFAULT_CONFIG)
+
 
 def get_model(feature: str) -> str:
     """Get the model name for a feature from the active Model QoS profile.
 
-    Resolution order: pinned > per-feature env override > active profile > fallback.
+    Resolution order: pinned > active profile > fallback.
 
     Args:
         feature: Feature name (e.g. 'conv_action_items', 'chat_agent').
 
     Returns:
         Model name string (e.g. 'gpt-4.1-mini', 'claude-sonnet-4-6').
-
-    Override via env var:
-        MODEL_QOS_CHAT_AGENT=claude-haiku-3.5
-        MODEL_QOS_CONV_STRUCTURE=gpt-5.1
     """
-    if feature in _PINNED_FEATURES:
-        return _PINNED_FEATURES[feature]
-    env_key = f'MODEL_QOS_{feature.upper()}'
-    override = os.environ.get(env_key, '').strip()
-    if override:
-        # Warn if override model doesn't match the feature's expected provider
-        profile_model = _active_profile.get(feature, 'gpt-4.1-mini')
-        expected_provider = _classify_provider(profile_model)
-        override_provider = _classify_provider(override)
-        if expected_provider != override_provider:
-            logger.warning(
-                'QoS override %s=%s (provider: %s) may be invalid — feature %s expects %s',
-                env_key,
-                override,
-                override_provider,
-                feature,
-                expected_provider,
-            )
-        return override
-    return _active_profile.get(feature, 'gpt-4.1-mini')
+    return _get_model_config(feature)[0]
+
+
+def get_provider(feature: str) -> str:
+    """Get the provider for a feature from the active Model QoS profile.
+
+    Returns:
+        Provider string: 'openai', 'gemini', 'openrouter', 'anthropic', 'perplexity'.
+    """
+    return _get_model_config(feature)[1]
 
 
 # ---------------------------------------------------------------------------
 # Client factories — provider-specific, cached per (model, streaming, provider)
-# QoS clients are BYOK-aware via _byok_openai / _OpenRouterGeminiProxy.
+# Each factory creates and caches a plain ChatOpenAI using Omi's default keys.
+# BYOK resolution happens inline in get_llm() at request time.
 # ---------------------------------------------------------------------------
 
 _llm_cache: Dict[tuple, Any] = {}
 
 
-def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> _OpenAIChatProxy:
-    """Get or create a BYOK-aware ChatOpenAI proxy for an OpenAI model."""
+def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> ChatOpenAI:
+    """Get or create a cached ChatOpenAI for an OpenAI model."""
     key = (model_name, streaming, 'openai')
     if key not in _llm_cache:
         kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
@@ -398,14 +423,20 @@ def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> _Open
         if streaming:
             kwargs['streaming'] = True
             kwargs['stream_options'] = {"include_usage": True}
-        _llm_cache[key] = _byok_openai(model_name, **kwargs)
+        _llm_cache[key] = ChatOpenAI(model=model_name, **kwargs)
     return _llm_cache[key]
 
 
 def _get_or_create_openrouter_llm(
     model_name: str, streaming: bool = False, temperature: Optional[float] = None
 ) -> ChatOpenAI:
-    """Get or create a ChatOpenAI instance for an OpenRouter model."""
+    """Get or create a cached ChatOpenAI for an OpenRouter model.
+
+    Model names in the profile are bare (e.g. 'gemini-3-flash-preview').
+    OpenRouter API requires vendor prefix (e.g. 'google/gemini-3-flash-preview').
+    """
+    # OpenRouter requires vendor-prefixed model names for Google models.
+    api_model = f'google/{model_name}' if model_name.startswith('gemini') else model_name
     key = (model_name, streaming, 'openrouter', temperature)
     if key not in _llm_cache:
         kwargs: Dict[str, Any] = {
@@ -419,26 +450,80 @@ def _get_or_create_openrouter_llm(
         if streaming:
             kwargs['streaming'] = True
             kwargs['stream_options'] = {"include_usage": True}
-        # For Gemini models on OpenRouter, use proxy for BYOK Gemini routing
-        if model_name.startswith('google/gemini'):
-            direct_model = model_name.split('/', 1)[1]
-            default = ChatOpenAI(model=model_name, **kwargs)
-            _llm_cache[key] = _OpenRouterGeminiProxy(default=default, direct_model=direct_model, ctor_kwargs=kwargs)
-        else:
-            _llm_cache[key] = ChatOpenAI(model=model_name, **kwargs)
+        _llm_cache[key] = ChatOpenAI(model=api_model, **kwargs)
     return _llm_cache[key]
 
 
-def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = None) -> ChatOpenAI:
+def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseChatModel:
+    """Get or create a cached ChatGoogleGenerativeAI for a Gemini model via native SDK.
+
+    Routing priority:
+      1. USE_VERTEX_AI=true + GOOGLE_CLOUD_PROJECT → Vertex AI (ADC, paid quota, ~34% savings with EDP)
+      2. GEMINI_API_KEY set → AI Studio (paid-tier key, no OpenAI-compat rate limits)
+      3. Neither → placeholder that fails at invoke time (unit tests)
+
+    Vertex AI requires explicit opt-in via USE_VERTEX_AI=true because GOOGLE_CLOUD_PROJECT
+    is already set for Firestore and the service account may lack Vertex AI permissions.
+
+    BYOK users still go through the OpenAI-compat endpoint via _create_byok_client().
+    """
+    key = (model_name, streaming, 'gemini')
+    if key not in _llm_cache:
+        use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
+        gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
+        gemini_key = os.environ.get('GEMINI_API_KEY', '')
+        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+        if streaming:
+            kwargs['streaming'] = True
+
+        if gcp_project:
+            # Vertex AI — explicit opt-in, uses ADC (GOOGLE_APPLICATION_CREDENTIALS)
+            gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
+            _llm_cache[key] = ChatGoogleGenerativeAI(
+                model=model_name, project=gcp_project, location=gcp_location, **kwargs
+            )
+        elif gemini_key:
+            # AI Studio — uses API key, paid-tier quota
+            kwargs['google_api_key'] = gemini_key
+            _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
+        else:
+            # No credentials — constructable placeholder, fails at invoke time
+            logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
+            _llm_cache[key] = ChatOpenAI(
+                model=model_name, api_key='not-set', base_url=_GEMINI_OPENAI_BASE_URL, **kwargs
+            )
+    return _llm_cache[key]
+
+
+def _get_default_client(model: str, provider: str, streaming: bool, feature: str) -> BaseChatModel:
+    """Get the cached default client for a model/provider combo."""
+    if provider == 'openrouter':
+        temp = _OPENROUTER_TEMPERATURES.get(feature)
+        return _get_or_create_openrouter_llm(model, streaming, temp)
+    if provider == 'gemini':
+        return _get_or_create_gemini_llm(model, streaming)
+    return _get_or_create_openai_llm(model, streaming)
+
+
+def _effective_byok_provider(model: str, provider: str) -> str:
+    """Map provider to the actual BYOK key type needed (Gemini-based OpenRouter → Gemini key)."""
+    if provider == 'openrouter' and model.startswith('gemini'):
+        return 'gemini'
+    return provider
+
+
+def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = None) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
-    Works for OpenAI and OpenRouter features (returns ChatOpenAI or BYOK proxy).
+    Works for OpenAI, Gemini, and OpenRouter features. Returns a BaseChatModel
+    (ChatOpenAI for OpenAI/OpenRouter, ChatGoogleGenerativeAI for Gemini).
+    All share the same interface: .invoke(), .ainvoke(), .stream(), .with_structured_output().
     For Anthropic/Perplexity, use get_model(feature) to get the model string.
 
     Args:
         feature: Feature name (e.g. 'conv_action_items', 'persona_chat').
         streaming: Whether to return a streaming-enabled client.
-        cache_key: Optional prompt cache routing key (OpenAI gpt-5.1 only).
+        cache_key: Optional prompt cache routing key (OpenAI gpt-5.4/5.4-mini only).
 
     Usage:
         llm = get_llm('conv_action_items', cache_key='omi-extract-actions')
@@ -456,10 +541,8 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
-    model = get_model(feature)
-    provider = _classify_provider(model)
+    model, provider = _get_model_config(feature)
 
-    # Reject models that can't be served via ChatOpenAI (Anthropic direct, Perplexity)
     if provider == 'anthropic':
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
@@ -469,38 +552,62 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
 
-    if provider == 'openrouter':
-        temp = _OPENROUTER_TEMPERATURES.get(feature)
-        return _get_or_create_openrouter_llm(model, streaming, temp)
+    # Log structured output compatibility when feature resolves to Gemini
+    if feature in _STRUCTURED_OUTPUT_FEATURES and provider == 'gemini':
+        logger.debug(
+            'QoS structured_output on gemini: feature=%s model=%s profile=%s', feature, model, _active_profile_name
+        )
 
-    llm = _get_or_create_openai_llm(model, streaming)
+    # BYOK resolution — if the user provided their own key, create a per-request client.
+    # When a BYOK QoS profile is configured, upgrade model selection for BYOK users.
+    byok_provider = _effective_byok_provider(model, provider)
+    byok_key = get_byok_key(byok_provider)
+
+    if byok_key and _byok_profile:
+        # Try upgrading to BYOK profile's model selection
+        byok_model, byok_prov = _byok_profile.get(feature, (model, provider))
+        byok_prov_eff = _effective_byok_provider(byok_model, byok_prov)
+        byok_key_for_profile = get_byok_key(byok_prov_eff)
+        if byok_key_for_profile:
+            logger.debug('BYOK QoS upgrade: feature=%s %s/%s→%s/%s', feature, model, provider, byok_model, byok_prov)
+            model, provider = byok_model, byok_prov
+            byok_key = byok_key_for_profile
+
+    if byok_key:
+        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        result = byok_client if byok_client is not None else _get_default_client(model, provider, streaming, feature)
+    else:
+        result = _get_default_client(model, provider, streaming, feature)
+
     if cache_key and model in _CACHE_KEY_MODELS:
-        return llm.bind(prompt_cache_key=cache_key)
-    return llm
+        return result.bind(prompt_cache_key=cache_key)
+    return result
 
 
 def get_qos_info() -> Dict[str, Dict[str, str]]:
-    """Return full feature→model mapping for the active profile (debugging/monitoring)."""
+    """Return full feature→(model, provider) mapping for the active profile (debugging/monitoring)."""
     info: Dict[str, Dict[str, str]] = {}
     all_features = set(_active_profile.keys()) | set(_PINNED_FEATURES.keys())
     for feature in sorted(all_features):
-        model = get_model(feature)
+        model, provider = _get_model_config(feature)
         info[feature] = {
             'model': model,
             'profile': _active_profile_name,
-            'provider': _classify_provider(model),
+            'provider': provider,
         }
     return info
 
 
-# Startup logging (kai: log active profile so cost issues are traceable).
+# Startup logging — log active profile so cost issues are traceable.
 logger.info('Model QoS profile=%s (%d features)', _active_profile_name, len(_active_profile))
-for _feat, _model in sorted(_active_profile.items()):
-    _resolved = get_model(_feat)
-    if _resolved != _model:
-        logger.info('  QoS %s: %s (override, profile default: %s)', _feat, _resolved, _model)
-    else:
-        logger.info('  QoS %s: %s', _feat, _resolved)
+for _feat, (_model, _provider) in sorted(_active_profile.items()):
+    logger.info('  QoS %s: %s [%s]', _feat, _model, _provider)
+logger.info('BYOK QoS profile=%s', _byok_profile_name)
+
+# Log structured output features on Gemini for compatibility monitoring
+_so_gemini = {f for f in _STRUCTURED_OUTPUT_FEATURES if _active_profile.get(f, _DEFAULT_CONFIG)[1] == 'gemini'}
+if _so_gemini:
+    logger.info('Structured output features on Gemini: %s', ', '.join(sorted(_so_gemini)))
 
 
 # ---------------------------------------------------------------------------
@@ -511,156 +618,10 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
 
 
 # ---------------------------------------------------------------------------
-# Legacy model instances (for callsites not yet wired through get_llm)
-#
-# These are kept for backward compatibility with BYOK routing.
-# New code should use get_llm(feature) or get_model(feature) instead.
+# Legacy module-level alias (kept for test compatibility).
+# Production code should use get_llm(feature) exclusively.
 # ---------------------------------------------------------------------------
-llm_mini = _byok_openai('gpt-4.1-mini', callbacks=[_usage_callback])
-llm_mini_stream = _byok_openai(
-    'gpt-4.1-mini',
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
-llm_large = _byok_openai('o1-preview', callbacks=[_usage_callback])
-llm_large_stream = _byok_openai(
-    'o1-preview',
-    streaming=True,
-    stream_options={"include_usage": True},
-    temperature=1,
-    callbacks=[_usage_callback],
-)
-llm_high = _byok_openai('o4-mini', callbacks=[_usage_callback])
-llm_high_stream = _byok_openai(
-    'o4-mini',
-    streaming=True,
-    stream_options={"include_usage": True},
-    temperature=1,
-    callbacks=[_usage_callback],
-)
-llm_medium = _byok_openai('gpt-5.2', callbacks=[_usage_callback])
-llm_medium_stream = _byok_openai(
-    'gpt-5.2',
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
-llm_medium_experiment = _byok_openai(
-    'gpt-5.1',
-    extra_body={"prompt_cache_retention": "24h"},
-    callbacks=[_usage_callback],
-)
-
-# Specialized models for agentic workflows
-# prompt_cache_key ensures consistent routing to the same cache machine
-# for better prompt prefix cache hit rates.
-_agent_cache_kwargs = {
-    "prompt_cache_key": "omi-agent-v1",
-}
-llm_agent = _byok_openai(
-    'gpt-5.1',
-    extra_body={"prompt_cache_retention": "24h"},
-    callbacks=[_usage_callback],
-    model_kwargs=_agent_cache_kwargs,
-)
-llm_agent_stream = _byok_openai(
-    'gpt-5.1',
-    streaming=True,
-    stream_options={"include_usage": True},
-    extra_body={"prompt_cache_retention": "24h"},
-    callbacks=[_usage_callback],
-    model_kwargs=_agent_cache_kwargs,
-)
-_persona_mini_kwargs = dict(
-    temperature=0.8,
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
-_persona_mini_default = ChatOpenAI(
-    model="google/gemini-flash-1.5-8b",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Chat"},
-    **_persona_mini_kwargs,
-)
-# BYOK Gemini → route direct to Google's OpenAI-compat endpoint.
-# Model name drops the `google/` prefix: gemini-flash-1.5-8b on Google direct.
-llm_persona_mini_stream = _OpenRouterGeminiProxy(
-    default=_persona_mini_default,
-    direct_model="gemini-flash-1.5-8b",
-    ctor_kwargs=_persona_mini_kwargs,
-)
-# Anthropic-via-OpenRouter. BYOK Anthropic users route to Anthropic's
-# OpenAI-compat endpoint directly, avoiding Omi's OpenRouter bill.
-_ANTHROPIC_OPENAI_BASE_URL = "https://api.anthropic.com/v1/"
-_persona_medium_kwargs = dict(
-    temperature=0.8,
-    streaming=True,
-    stream_options={"include_usage": True},
-    callbacks=[_usage_callback],
-)
-_persona_medium_default = ChatOpenAI(
-    model="anthropic/claude-3.5-sonnet",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Chat"},
-    **_persona_medium_kwargs,
-)
-
-
-class _AnthropicViaOpenAIProxy:
-    """Route to Anthropic's OpenAI-compat endpoint when BYOK Anthropic key is set."""
-
-    __slots__ = ('_default', '_ctor_kwargs')
-
-    def __init__(self, default: ChatOpenAI, ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
-
-    def _resolve(self) -> ChatOpenAI:
-        byok = get_byok_key('anthropic')
-        if byok:
-            return _cached_openai_chat(
-                'claude-sonnet-4-20250514',
-                byok,
-                {**self._ctor_kwargs, 'base_url': _ANTHROPIC_OPENAI_BASE_URL},
-            )
-        return self._default
-
-    def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
-
-    def __or__(self, other):
-        return self._resolve() | other
-
-    def __ror__(self, other):
-        return other | self._resolve()
-
-
-llm_persona_medium_stream = _AnthropicViaOpenAIProxy(
-    default=_persona_medium_default,
-    ctor_kwargs=_persona_medium_kwargs,
-)
-
-# Gemini models for large context analysis
-_gemini_flash_kwargs = dict(
-    temperature=0.7,
-    callbacks=[_usage_callback],
-)
-_gemini_flash_default = ChatOpenAI(
-    model="google/gemini-3-flash-preview",
-    api_key=os.environ.get('OPENROUTER_API_KEY'),
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"X-Title": "Omi Wrapped"},
-    **_gemini_flash_kwargs,
-)
-llm_gemini_flash = _OpenRouterGeminiProxy(
-    default=_gemini_flash_default,
-    direct_model="gemini-3-flash-preview",
-    ctor_kwargs=_gemini_flash_kwargs,
-)
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
 
 # ---------------------------------------------------------------------------
 # Embeddings, parser, utilities

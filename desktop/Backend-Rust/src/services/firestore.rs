@@ -9658,6 +9658,17 @@ impl FirestoreService {
         self.update_user_fields(uid, fields, &["agentVm"]).await
     }
 
+    /// Delete the agentVm field from a user's document.
+    /// Used when the GCE VM no longer exists in GCP.
+    pub async fn delete_agent_vm(
+        &self,
+        uid: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Omitting agentVm from the body while including it in the update mask
+        // causes Firestore to delete the field.
+        self.update_user_fields(uid, json!({}), &["agentVm"]).await
+    }
+
     // =========================================================================
     // SCREEN ACTIVITY
     // =========================================================================

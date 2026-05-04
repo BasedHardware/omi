@@ -25,7 +25,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -84,7 +84,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -116,21 +115,66 @@ workflows:
         script: |
           cd ios && pod install --repo-update
 
+      - name: Resolve next version from TestFlight + App Store
+        script: |
+          set -e
+
+          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
+          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
+          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
+          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
+          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
+
+          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
+          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
+          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
+          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
+
+          echo "TestFlight latest: ${TF_V}+${TF_B}"
+          echo "App Store latest:  ${AS_V}+${AS_B}"
+
+          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
+            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
+            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
+          else
+            semver_gt() {
+              IFS='.' read -r a1 a2 a3 <<< "$1"
+              IFS='.' read -r b1 b2 b3 <<< "$2"
+              [ "$a1" -gt "$b1" ] && return 0
+              [ "$a1" -lt "$b1" ] && return 1
+              [ "$a2" -gt "$b2" ] && return 0
+              [ "$a2" -lt "$b2" ] && return 1
+              [ "$a3" -gt "$b3" ] && return 0
+              return 1
+            }
+
+            if semver_gt "$TF_V" "$AS_V"; then
+              BUILD_NAME="$TF_V"
+              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
+            else
+              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
+              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
+              if [ "$TF_V" = "0.0.0" ]; then
+                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
+              else
+                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
+              fi
+            fi
+
+            MAX_B=$TF_B
+            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
+            BUILD_NUMBER=$((MAX_B + 1))
+          fi
+
+          echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+
       - name: Flutter build ipa
         script: |
           xcode-project use-profiles
-
-          # Extract version from pubspec.yaml (source of truth for both name and build number)
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
-          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
-
-          # Skip if this build number is already on TestFlight
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number $APP_ID || echo "0")
-          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
-            echo "Build $BUILD_NUMBER already on TestFlight (latest: $LATEST_BUILD). Skipping."
-            exit 0
-          fi
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -188,6 +232,8 @@ workflows:
     name: Auto Deploy Android to Internal Play Store
     instance_type: mac_mini_m2
     max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
     environment:
       android_signing:
         - prod_android_upload_keystore
@@ -198,6 +244,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
+        APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
@@ -291,13 +338,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
@@ -310,20 +357,70 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Build AAB with Flutter
+      - name: Resolve next version from TestFlight + App Store + Play Store
         script: |
-          # Extract version from pubspec.yaml (source of truth for both name and build number)
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
-          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
+          set -e
 
-          # Skip if this build number is already on Google Play
-          LATEST_BUILD=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal || echo "0")
-          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
-            echo "Build $BUILD_NUMBER already on Google Play (latest: $LATEST_BUILD). Skipping."
-            exit 0
+          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
+          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
+          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
+          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
+          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
+
+          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
+          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
+          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
+          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
+          PLAY_B=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null || echo "0")
+          PLAY_B="${PLAY_B:-0}"
+
+          echo "TestFlight latest: ${TF_V}+${TF_B}"
+          echo "App Store latest:  ${AS_V}+${AS_B}"
+          echo "Play Store latest: ${PLAY_B}"
+
+          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
+            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
+            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
+            [ "$PLAY_B" -ge "$BUILD_NUMBER" ] && BUILD_NUMBER=$((PLAY_B + 1))
+          else
+            semver_gt() {
+              IFS='.' read -r a1 a2 a3 <<< "$1"
+              IFS='.' read -r b1 b2 b3 <<< "$2"
+              [ "$a1" -gt "$b1" ] && return 0
+              [ "$a1" -lt "$b1" ] && return 1
+              [ "$a2" -gt "$b2" ] && return 0
+              [ "$a2" -lt "$b2" ] && return 1
+              [ "$a3" -gt "$b3" ] && return 0
+              return 1
+            }
+
+            if semver_gt "$TF_V" "$AS_V"; then
+              BUILD_NAME="$TF_V"
+              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
+            else
+              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
+              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
+              if [ "$TF_V" = "0.0.0" ]; then
+                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
+              else
+                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
+              fi
+            fi
+
+            MAX_B=$TF_B
+            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
+            [ "$PLAY_B" -gt "$MAX_B" ] && MAX_B=$PLAY_B
+            BUILD_NUMBER=$((MAX_B + 1))
           fi
 
+          echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+
+      - name: Build AAB with Flutter
+        script: |
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
           flutter build appbundle \
@@ -377,7 +474,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -435,7 +532,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -615,7 +711,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -855,13 +950,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
@@ -931,7 +1026,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -996,7 +1091,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -1109,7 +1203,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -1777,13 +1870,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env

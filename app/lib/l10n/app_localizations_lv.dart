@@ -9173,11 +9173,77 @@ class AppLocalizationsLv extends AppLocalizations {
   String get agreeAndContinue => 'Piekrītu un turpināt';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Sākt balss ierakstīšanu';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Sākt zvana ierakstīšanu';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Balss režīms';
+
+  @override
+  String get quickActionAskOmi => 'Jautājiet Omi jebko';
+
+  @override
+  String get record => 'Ierakstīt';
+
+  @override
+  String get stop => 'Apturēt';
+
+  @override
+  String get recordWithPhoneMic => 'Ierakstīt ar tālruņa mikrofonu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tveriet skaņu sev apkārt';
+
+  @override
+  String get phoneCall => 'Telefona zvans';
+
+  @override
+  String get phoneCallSubtitle => 'Ierakstiet zvanu ar tiešraides transkripciju';
+
+  @override
+  String get searchActionItems => 'Meklēt darbības vienumus';
+
+  @override
+  String get selectActionItems => 'Atlasīt vairākus';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksportēt $count vienību(-as) uz…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportē…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksportēti $count uz $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksportēti $success no $total uz $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Rādīt pabeigtās';
+
+  @override
+  String get hideCompletedTasks => 'Slēpt pabeigtās';
+
+  @override
+  String get selectAllTasksMenu => 'Atlasīt visus';
+
+  @override
+  String get connectTaskAppToExport => 'Savienojiet uzdevumu lietotni Iestatījumos, lai eksportētu';
+
+  @override
+  String get connectAction => 'Savienot';
+
+  @override
+  String get deselectAllTasksMenu => 'Noņemt visu atlasi';
 }

@@ -65,7 +65,13 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
     releases whose tag_name matches the filter. Without tag_filter, returns
     the first page of releases unfiltered (sufficient for desktop releases
     which are always recent).
+
+    Resilience: if GitHub returns errors or an empty list during an upstream
+    outage, we fall back to a longer-lived "last known good" cache so the
+    macos.omi.me download endpoint keeps serving the previous DMG link.
     """
+
+    lkg_key = f"{cache_key}:lkg"
 
     # Check cache first (use `is not None` so cached empty list is a hit)
     cached_releases = get_generic_cache(cache_key)
@@ -78,43 +84,74 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
         "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
     }
 
-    collected = []
-    page = 1
+    collected: List[Dict] = []
+    fetch_failed = False
 
-    async with httpx.AsyncClient() as client:
-        while page <= MAX_PAGES:
-            url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
-            response = await client.get(url, headers=headers)
-            if response.status_code != 200:
-                logger.error(
-                    "Error fetching GitHub releases page %d: %d %s", page, response.status_code, sanitize(response.text)
-                )
-                raise HTTPException(status_code=500, detail="Failed to fetch release information")
+    try:
+        page = 1
+        async with httpx.AsyncClient() as client:
+            while page <= MAX_PAGES:
+                url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
+                response = await client.get(url, headers=headers)
+                if response.status_code != 200:
+                    logger.error(
+                        "Error fetching GitHub releases page %d: %d %s",
+                        page,
+                        response.status_code,
+                        sanitize(response.text),
+                    )
+                    fetch_failed = True
+                    break
 
-            page_releases = response.json()
-            if not page_releases:
-                break
+                page_releases = response.json()
+                if not page_releases:
+                    break
 
-            if tag_filter:
-                for release in page_releases:
-                    tag_name = release.get("tag_name", "")
-                    if tag_filter.match(tag_name):
-                        collected.append(release)
-            else:
-                collected.extend(page_releases)
+                if tag_filter:
+                    for release in page_releases:
+                        tag_name = release.get("tag_name", "")
+                        if tag_filter.match(tag_name):
+                            collected.append(release)
+                else:
+                    collected.extend(page_releases)
 
-            # Without filter, single page is enough (desktop releases are recent)
-            if not tag_filter:
-                break
+                # Without filter, single page is enough (desktop releases are recent)
+                if not tag_filter:
+                    break
 
-            # Stop if this was the last page
-            if len(page_releases) < 100:
-                break
+                # Stop if this was the last page
+                if len(page_releases) < 100:
+                    break
 
-            page += 1
+                page += 1
+    except Exception as exc:
+        logger.exception("Exception fetching GitHub releases: %s", sanitize(str(exc)))
+        fetch_failed = True
 
-    # Cache for 5 minutes (even if empty, to avoid hammering GitHub)
+    # If the live fetch failed or returned nothing, prefer the last-known-good
+    # cache over an empty response. Re-cache LKG under the short key with a
+    # short TTL (60s) so we retry GitHub soon without hammering it.
+    if fetch_failed or not collected:
+        last_known_good = get_generic_cache(lkg_key)
+        if last_known_good:
+            logger.warning(
+                "GitHub releases fetch %s; serving last-known-good cache for %s",
+                "failed" if fetch_failed else "returned empty",
+                cache_key,
+            )
+            set_generic_cache(cache_key, last_known_good, ttl=60)
+            return last_known_good
+
+        # No fallback — short-cache the empty result so we don't hammer
+        # GitHub, but use a shorter TTL than the success path (5min) so
+        # recovery is faster once GitHub is back.
+        set_generic_cache(cache_key, collected, ttl=60)
+        return collected
+
+    # Live fetch succeeded with data: refresh both caches. The LKG TTL is
+    # 24h so it survives multi-hour GitHub outages.
     set_generic_cache(cache_key, collected, ttl=300)
+    set_generic_cache(lkg_key, collected, ttl=86400)
     return collected
 
 

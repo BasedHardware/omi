@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import React, { useEffect, useState } from 'react';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAuth } from '@/components/auth-provider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import {
   Card,
   CardContent,
@@ -13,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Chrome } from 'lucide-react'; // Using Chrome icon for Google
+import { Chrome } from 'lucide-react';
 
 // Simple spinner placeholder
 const Spinner = () => (
@@ -33,15 +36,30 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams?.get('error');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const handleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(getFirebaseAuth(), provider);
-      // AuthProvider will handle redirection and admin check
     } catch (error) {
       console.error('Error signing in with Google:', error);
-      // You could potentially show error messages here too
+    }
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailLoading(true);
+    setEmailError('');
+    try {
+      await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : 'Sign in failed');
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -87,6 +105,39 @@ export default function LoginPage() {
               <Button onClick={handleSignIn} className="w-full">
                  <Chrome className="mr-2 h-4 w-4" /> Sign in with Google
               </Button>
+              <div className="flex items-center gap-3">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground uppercase">or</span>
+                <Separator className="flex-1" />
+              </div>
+              {emailError && (
+                <p className="text-sm text-center text-destructive">{emailError}</p>
+              )}
+              <form onSubmit={handleEmailSignIn} className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit" variant="outline" className="w-full" disabled={emailLoading}>
+                  {emailLoading ? 'Signing in...' : 'Sign in with Email'}
+                </Button>
+              </form>
             </div>
           </CardContent>
         </Card>

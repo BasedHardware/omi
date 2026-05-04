@@ -9151,11 +9151,77 @@ class AppLocalizationsCs extends AppLocalizations {
   String get agreeAndContinue => 'Souhlasím a pokračovat';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Zahájit hlasový záznam';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Zahájit nahrávání hovoru';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Hlasový režim';
+
+  @override
+  String get quickActionAskOmi => 'Zeptejte se Omi na cokoliv';
+
+  @override
+  String get record => 'Nahrát';
+
+  @override
+  String get stop => 'Zastavit';
+
+  @override
+  String get recordWithPhoneMic => 'Nahrát mikrofonem telefonu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Zaznamenávejte zvuk kolem vás';
+
+  @override
+  String get phoneCall => 'Telefonní hovor';
+
+  @override
+  String get phoneCallSubtitle => 'Nahrávejte hovor s živým přepisem';
+
+  @override
+  String get searchActionItems => 'Hledat akční položky';
+
+  @override
+  String get selectActionItems => 'Vybrat více';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportovat $count položek do…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportování…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportováno $count do $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportováno $success z $total do $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Zobrazit dokončené';
+
+  @override
+  String get hideCompletedTasks => 'Skrýt dokončené';
+
+  @override
+  String get selectAllTasksMenu => 'Vybrat vše';
+
+  @override
+  String get connectTaskAppToExport => 'Pro export připojte aplikaci úkolů v Nastavení';
+
+  @override
+  String get connectAction => 'Připojit';
+
+  @override
+  String get deselectAllTasksMenu => 'Zrušit výběr všech';
 }

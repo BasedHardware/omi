@@ -9183,11 +9183,77 @@ class AppLocalizationsNl extends AppLocalizations {
   String get agreeAndContinue => 'Akkoord en doorgaan';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Spraakopname starten';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Gespreksopname starten';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Spraakmodus';
+
+  @override
+  String get quickActionAskOmi => 'Vraag Omi van alles';
+
+  @override
+  String get record => 'Opnemen';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get recordWithPhoneMic => 'Opnemen met telefoonmicrofoon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Leg het geluid om je heen vast';
+
+  @override
+  String get phoneCall => 'Telefoongesprek';
+
+  @override
+  String get phoneCallSubtitle => 'Neem een gesprek op met live transcriptie';
+
+  @override
+  String get searchActionItems => 'Actiepunten zoeken';
+
+  @override
+  String get selectActionItems => 'Meerdere selecteren';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count item(s) exporteren naar…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exporteren…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count geëxporteerd naar $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success van $total geëxporteerd naar $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Voltooide tonen';
+
+  @override
+  String get hideCompletedTasks => 'Voltooide verbergen';
+
+  @override
+  String get selectAllTasksMenu => 'Alles selecteren';
+
+  @override
+  String get connectTaskAppToExport => 'Verbind een taken-app in Instellingen om te exporteren';
+
+  @override
+  String get connectAction => 'Verbinden';
+
+  @override
+  String get deselectAllTasksMenu => 'Alles deselecteren';
 }

@@ -38,6 +38,7 @@ from models.conversation_enums import ConversationSource
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
+from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
@@ -76,6 +77,8 @@ logger = logging.getLogger(__name__)
 
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
+
+_V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter()
 
@@ -469,7 +472,8 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                     frame_count += 1
                 except Exception as e:
                     logger.error(f"Error decoding frame {frame_count}: {e}")
-                    break
+                    # Skip this frame instead of breaking the entire decode loop
+                    continue
 
         if frame_count > 0:
             logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
@@ -1084,17 +1088,29 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
-@router.post("/v1/sync-local-files")
+@router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
+    request: Request,
+    response: Response,
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
 ):
+    logger.warning(
+        f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
+        f'user_agent={request.headers.get("user-agent", "")}'
+    )
+    response.headers.update(_V1_DEPRECATION_HEADERS)
+
     # Pre-check gates (#5854)
     if is_hard_restricted(uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=_V1_DEPRECATION_HEADERS,
+        )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
     should_lock = not has_transcription_credits(uid)
@@ -1111,8 +1127,11 @@ async def sync_local_files(
     segmented_paths = set()
 
     try:
-        paths = retrieve_file_paths(files, uid)
-        wav_paths = decode_files_to_wav(paths)
+        try:
+            paths = retrieve_file_paths(files, uid)
+            wav_paths = decode_files_to_wav(paths)
+        except HTTPException as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
         vad_errors = []
 
@@ -1131,7 +1150,7 @@ async def sync_local_files(
             error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
             if len(vad_errors) > 3:
                 error_detail += f" (and {len(vad_errors) - 3} more)"
-            raise HTTPException(status_code=500, detail=error_detail)
+            raise HTTPException(status_code=500, detail=error_detail, headers=_V1_DEPRECATION_HEADERS)
 
         # Fair-use speech tracking from raw VAD segments (#5854)
         # Compute duration from raw segments BEFORE merging (silence gaps not counted)
@@ -1174,6 +1193,7 @@ async def sync_local_files(
             _cleanup_files(list(segmented_paths))
             return JSONResponse(
                 status_code=429,
+                headers=_V1_DEPRECATION_HEADERS,
                 content={
                     'new_memories': [],
                     'updated_memories': [],
@@ -1247,11 +1267,24 @@ async def sync_local_files(
             raise HTTPException(
                 status_code=500,
                 detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
+                headers=_V1_DEPRECATION_HEADERS,
             )
+
+        # Record subscription usage only when at least one segment succeeded
+        try:
+            usage_seconds = int(total_speech_seconds)
+            if usage_seconds > 0:
+                record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+        except Exception as e:
+            logger.error(f'sync: usage record error for {uid}: {e}')
 
         if failed_segments > 0:
             # Partial failure — return 207 Multi-Status so old clients retry the batch
-            return JSONResponse(status_code=207, content=result)
+            return JSONResponse(
+                status_code=207,
+                headers=_V1_DEPRECATION_HEADERS,
+                content=result,
+            )
 
         return result
     finally:
@@ -1367,6 +1400,7 @@ def _process_segments_background(
 
         # Build result matching v1 response shape
         failed_segments = len(segment_errors)
+        successful_segments = total_segments - failed_segments
         result = {
             'new_memories': sorted(response['new_memories']),
             'updated_memories': sorted(response['updated_memories']),
@@ -1375,6 +1409,15 @@ def _process_segments_background(
             result['failed_segments'] = failed_segments
             result['total_segments'] = total_segments
             result['errors'] = segment_errors[:10]
+
+        # Record subscription usage only when at least one segment succeeded
+        if successful_segments > 0:
+            try:
+                usage_seconds = int(total_speech_seconds)
+                if usage_seconds > 0:
+                    record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
+            except Exception as e:
+                logger.error(f'sync_v2: usage record error for {uid}: {e}')
 
         mark_job_completed(
             job_id,

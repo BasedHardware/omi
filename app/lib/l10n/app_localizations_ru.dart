@@ -9184,11 +9184,77 @@ class AppLocalizationsRu extends AppLocalizations {
   String get agreeAndContinue => 'Принять и продолжить';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Начать голосовую запись';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Начать запись звонка';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Голосовой режим';
+
+  @override
+  String get quickActionAskOmi => 'Спросите Omi что угодно';
+
+  @override
+  String get record => 'Запись';
+
+  @override
+  String get stop => 'Стоп';
+
+  @override
+  String get recordWithPhoneMic => 'Запись микрофоном телефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Запишите звук вокруг вас';
+
+  @override
+  String get phoneCall => 'Телефонный звонок';
+
+  @override
+  String get phoneCallSubtitle => 'Запись звонка с транскрипцией в реальном времени';
+
+  @override
+  String get searchActionItems => 'Поиск действий';
+
+  @override
+  String get selectActionItems => 'Выбрать несколько';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Экспортировать $count элемент(ов) в…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Экспорт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Экспортировано $count в $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Экспортировано $success из $total в $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Показать завершённые';
+
+  @override
+  String get hideCompletedTasks => 'Скрыть завершённые';
+
+  @override
+  String get selectAllTasksMenu => 'Выбрать все';
+
+  @override
+  String get connectTaskAppToExport => 'Подключите приложение задач в Настройках для экспорта';
+
+  @override
+  String get connectAction => 'Подключить';
+
+  @override
+  String get deselectAllTasksMenu => 'Снять выделение со всех';
 }

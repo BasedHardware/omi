@@ -2,6 +2,55 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.375",
+      "date": "2026-05-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.374",
+      "date": "2026-05-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.373",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.372",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.371",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.370",
+      "date": "2026-04-29",
+      "changes": [
+        "Improved Ask Omi routing: questions now stay in the floating bar chat instead of incorrectly spawning background agents \u2014 Claude Haiku decides whether each message is a quick answer or a real task"
+      ]
+    },
+    {
+      "version": "0.11.369",
+      "date": "2026-04-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.368",
       "date": "2026-04-27",
       "changes": [

@@ -9154,11 +9154,77 @@ class AppLocalizationsFi extends AppLocalizations {
   String get agreeAndContinue => 'Hyväksy ja jatka';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Aloita ääninauhoitus';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Aloita puhelun nauhoitus';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Äänitila';
+
+  @override
+  String get quickActionAskOmi => 'Kysy Omilta mitä tahansa';
+
+  @override
+  String get record => 'Tallenna';
+
+  @override
+  String get stop => 'Pysäytä';
+
+  @override
+  String get recordWithPhoneMic => 'Tallenna puhelimen mikrofonilla';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tallenna ympärilläsi olevaa ääntä';
+
+  @override
+  String get phoneCall => 'Puhelu';
+
+  @override
+  String get phoneCallSubtitle => 'Tallenna puhelu reaaliaikaisella tekstityksellä';
+
+  @override
+  String get searchActionItems => 'Hae toimintakohteita';
+
+  @override
+  String get selectActionItems => 'Valitse useita';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Vie $count kohde(tta) kohteeseen…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Viedään…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Viety $count kohteeseen $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Viety $success/$total kohteeseen $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Näytä valmiit';
+
+  @override
+  String get hideCompletedTasks => 'Piilota valmiit';
+
+  @override
+  String get selectAllTasksMenu => 'Valitse kaikki';
+
+  @override
+  String get connectTaskAppToExport => 'Yhdistä tehtäväsovellus Asetuksissa vientiä varten';
+
+  @override
+  String get connectAction => 'Yhdistä';
+
+  @override
+  String get deselectAllTasksMenu => 'Poista kaikkien valinta';
 }

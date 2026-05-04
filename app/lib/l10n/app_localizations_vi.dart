@@ -9155,11 +9155,77 @@ class AppLocalizationsVi extends AppLocalizations {
   String get agreeAndContinue => 'Đồng ý và tiếp tục';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Bắt đầu ghi âm giọng nói';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Bắt đầu ghi âm cuộc gọi';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Chế độ giọng nói';
+
+  @override
+  String get quickActionAskOmi => 'Hỏi Omi bất cứ điều gì';
+
+  @override
+  String get record => 'Ghi âm';
+
+  @override
+  String get stop => 'Dừng';
+
+  @override
+  String get recordWithPhoneMic => 'Ghi âm bằng micro điện thoại';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Ghi lại âm thanh xung quanh bạn';
+
+  @override
+  String get phoneCall => 'Cuộc gọi điện thoại';
+
+  @override
+  String get phoneCallSubtitle => 'Ghi âm cuộc gọi với phiên âm trực tiếp';
+
+  @override
+  String get searchActionItems => 'Tìm kiếm mục hành động';
+
+  @override
+  String get selectActionItems => 'Chọn nhiều';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Xuất $count mục sang…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Đang xuất…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Đã xuất $count sang $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Đã xuất $success trong $total sang $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Hiện đã hoàn thành';
+
+  @override
+  String get hideCompletedTasks => 'Ẩn đã hoàn thành';
+
+  @override
+  String get selectAllTasksMenu => 'Chọn tất cả';
+
+  @override
+  String get connectTaskAppToExport => 'Kết nối ứng dụng tác vụ trong Cài đặt để xuất';
+
+  @override
+  String get connectAction => 'Kết nối';
+
+  @override
+  String get deselectAllTasksMenu => 'Bỏ chọn tất cả';
 }

@@ -1,4 +1,4 @@
-// API proxy routes — forward Gemini and Deepgram requests to upstream APIs.
+// API proxy routes — forward Gemini requests to upstream APIs.
 // Keys stay server-side; desktop client authenticates via Firebase token only.
 //
 // Issue #5861: Remove client-side API key exposure risk.
@@ -10,7 +10,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{any, post},
+    routing::post,
     Router,
 };
 
@@ -28,7 +28,8 @@ const GEMINI_ALLOWED_ACTIONS: &[&str] = &[
 ];
 
 // Allowed Gemini models — driven by model_qos (issue #6834).
-// Desktop app uses: gemini-3-flash-preview (all features), gemini-embedding-001 (embeddings).
+// Desktop app uses: gemini-2.5-flash or gemini-2.5-pro (tier-dependent), gemini-embedding-001.
+// Provider routing: stable models → Vertex AI, embeddings/preview → AI Studio.
 // Rate limiting may degrade requests above soft limit.
 
 /// Maximum request body size for Gemini proxy routes (5 MB).
@@ -67,8 +68,8 @@ impl IntoResponse for ProxyError {
 }
 
 /// POST /v1/proxy/gemini/*path
-/// Proxies requests to https://generativelanguage.googleapis.com/v1beta/...
-/// Appends the server-side Gemini API key. Client sends Bearer Firebase token.
+/// Proxies requests to Gemini (AI Studio or Vertex AI depending on config).
+/// Keys stay server-side; desktop client authenticates via Firebase token only.
 /// Rate-limited per user: Tier 1 (allow), Tier 2 (degrade Pro→Flash), Tier 3 (reject 429).
 async fn gemini_proxy(
     State(state): State<AppState>,
@@ -76,11 +77,8 @@ async fn gemini_proxy(
     Path(path): Path<String>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
-    let gemini_key = state
-        .config
-        .gemini_api_key
-        .as_ref()
-        .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+    // Rewrite preview models to stable equivalents (old app compat)
+    let path = crate::llm::model_qos::rewrite_preview_model(&path);
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
@@ -121,18 +119,93 @@ async fn gemini_proxy(
         );
     }
 
-    let url = build_gemini_url(&effective_path, gemini_key);
+    // Resolve provider route: single dispatch point for all provider-specific behavior.
+    // Returns provider, action override, and body transforms needed.
+    use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
+    let route = resolve_route(model, action);
 
-    let upstream = reqwest::Client::new()
-        .post(&url)
-        .header("content-type", "application/json")
-        .body(sanitized_body)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("gemini_proxy: upstream request failed: {}", e);
-            ProxyError::Status(StatusCode::BAD_GATEWAY)
-        })?;
+    // Apply request body transform if needed (e.g., embedContent → predict format)
+    let request_body = match route.request_transform {
+        BodyTransform::EmbedToPredict => transform_embed_request_to_vertex(&sanitized_body)
+            .map_err(|e| {
+                tracing::warn!("gemini_proxy: embed body transform failed: {}", e);
+                ProxyError::Status(StatusCode::BAD_REQUEST)
+            })?,
+        BodyTransform::None => sanitized_body.clone(),
+    };
+
+    // Apply Vertex action override (e.g., :embedContent → :predict)
+    let vertex_path = if let Some(override_action) = route.vertex_action {
+        effective_path.replace(&format!(":{}", action), &format!(":{}", override_action))
+    } else {
+        effective_path.to_string()
+    };
+
+    // Build and send request: Vertex AI (Bearer token) or AI Studio (API key).
+    // Falls back to AI Studio if Vertex token fetch fails.
+    let mut used_vertex = false;
+    let upstream = if route.provider == Provider::VertexAi {
+        if let Some(ref vertex) = state.vertex_auth {
+            let url = vertex.build_url_from_path(&vertex_path).ok_or_else(|| {
+                tracing::error!("gemini_proxy: failed to parse path for Vertex AI: {}", vertex_path);
+                ProxyError::Status(StatusCode::BAD_REQUEST)
+            })?;
+            match vertex.token().await {
+                Ok(token) => {
+                    used_vertex = true;
+                    reqwest::Client::new()
+                        .post(&url)
+                        .header("content-type", "application/json")
+                        .header("authorization", format!("Bearer {}", token))
+                        .body(request_body)
+                        .send()
+                        .await
+                }
+                Err(e) => {
+                    if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
+                        tracing::warn!("gemini_proxy: Vertex AI token failed, falling back to API key: {}", e);
+                        let url = build_gemini_url(&effective_path, gemini_key);
+                        reqwest::Client::new()
+                            .post(&url)
+                            .header("content-type", "application/json")
+                            .body(sanitized_body.clone())
+                            .send()
+                            .await
+                    } else {
+                        tracing::error!("gemini_proxy: Vertex AI token error and no fallback: {}", e);
+                        return Err(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE));
+                    }
+                }
+            }
+        } else {
+            // Vertex AI requested but not configured → AI Studio
+            let gemini_key = state.config.gemini_api_key.as_ref()
+                .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+            let url = build_gemini_url(&effective_path, gemini_key);
+            reqwest::Client::new()
+                .post(&url)
+                .header("content-type", "application/json")
+                .body(sanitized_body.clone())
+                .send()
+                .await
+        }
+    } else {
+        // AI Studio route
+        let gemini_key = state.config.gemini_api_key.as_ref()
+            .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+        let url = build_gemini_url(&effective_path, gemini_key);
+        reqwest::Client::new()
+            .post(&url)
+            .header("content-type", "application/json")
+            .body(sanitized_body.clone())
+            .send()
+            .await
+    };
+
+    let upstream = upstream.map_err(|e| {
+        tracing::error!("gemini_proxy: upstream request failed: {}", e);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -140,6 +213,21 @@ async fn gemini_proxy(
         tracing::error!("gemini_proxy: failed to read upstream body: {}", e);
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     })?;
+
+    // Apply response transform if needed (e.g., Vertex predict → AI Studio embed format)
+    if used_vertex && status.is_success() && route.response_transform != ResponseTransform::None {
+        let transformed = match route.response_transform {
+            ResponseTransform::PredictToEmbed => transform_vertex_embed_response(&bytes),
+            ResponseTransform::None => unreachable!(),
+        };
+        match transformed {
+            Ok(body) => return Ok((status, body).into_response()),
+            Err(e) => {
+                tracing::warn!("gemini_proxy: response transform failed: {}", e);
+                // Fall through to return raw response
+            }
+        }
+    }
 
     Ok((status, bytes).into_response())
 }
@@ -154,11 +242,8 @@ async fn gemini_stream_proxy(
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
-    let gemini_key = state
-        .config
-        .gemini_api_key
-        .as_ref()
-        .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+    // Rewrite preview models to stable equivalents (old app compat)
+    let path = crate::llm::model_qos::rewrite_preview_model(&path);
 
     // Validate the action
     let action = extract_gemini_action(&path);
@@ -198,19 +283,79 @@ async fn gemini_stream_proxy(
         );
     }
 
-    // Build upstream URL with query params (e.g., alt=sse)
-    let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+    // Resolve provider route (same dispatch as non-streaming proxy)
+    use crate::llm::model_qos::{resolve_route, Provider};
+    let route = resolve_route(model, action);
 
-    let upstream = reqwest::Client::new()
-        .post(&upstream_url)
-        .header("content-type", "application/json")
-        .body(sanitized_body)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("gemini_stream_proxy: upstream request failed: {}", e);
-            ProxyError::Status(StatusCode::BAD_GATEWAY)
-        })?;
+    // Build and send request: Vertex AI or AI Studio
+    let upstream = if route.provider == Provider::VertexAi {
+        if let Some(ref vertex) = state.vertex_auth {
+            let mut url = vertex.build_url_from_path(&effective_path).ok_or_else(|| {
+                tracing::error!("gemini_stream_proxy: failed to parse path for Vertex AI: {}", effective_path);
+                ProxyError::Status(StatusCode::BAD_REQUEST)
+            })?;
+            // Append extra query params (e.g., alt=sse) for streaming
+            for (k, v) in &query {
+                url.push(if url.contains('?') { '&' } else { '?' });
+                url.push_str(&urlencoding::encode(k));
+                url.push('=');
+                url.push_str(&urlencoding::encode(v));
+            }
+            match vertex.token().await {
+                Ok(token) => {
+                    reqwest::Client::new()
+                        .post(&url)
+                        .header("content-type", "application/json")
+                        .header("authorization", format!("Bearer {}", token))
+                        .body(sanitized_body)
+                        .send()
+                        .await
+                }
+                Err(e) => {
+                    if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
+                        tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
+                        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+                        reqwest::Client::new()
+                            .post(&upstream_url)
+                            .header("content-type", "application/json")
+                            .body(sanitized_body)
+                            .send()
+                            .await
+                    } else {
+                        tracing::error!("gemini_stream_proxy: Vertex AI token error and no fallback: {}", e);
+                        return Err(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE));
+                    }
+                }
+            }
+        } else {
+            // Vertex AI requested but not configured → AI Studio
+            let gemini_key = state.config.gemini_api_key.as_ref()
+                .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+            let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+            reqwest::Client::new()
+                .post(&upstream_url)
+                .header("content-type", "application/json")
+                .body(sanitized_body)
+                .send()
+                .await
+        }
+    } else {
+        // AI Studio route
+        let gemini_key = state.config.gemini_api_key.as_ref()
+            .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+        reqwest::Client::new()
+            .post(&upstream_url)
+            .header("content-type", "application/json")
+            .body(sanitized_body)
+            .send()
+            .await
+    };
+
+    let upstream = upstream.map_err(|e| {
+        tracing::error!("gemini_stream_proxy: upstream request failed: {}", e);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -226,222 +371,12 @@ async fn gemini_stream_proxy(
         .unwrap())
 }
 
-/// Epoch seconds for Deepgram proxy deprecation: 2026-04-05 05:00:00 UTC.
-const DEEPGRAM_DEPRECATION_EPOCH: u64 = 1_775_365_200;
-
-/// Check if the Deepgram proxy deprecation period has passed.
-/// Returns true after 2026-04-05 05:00:00 UTC (~26h after PR #6287 merge, rounded up).
-fn is_deepgram_proxy_deprecated() -> bool {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() >= DEEPGRAM_DEPRECATION_EPOCH)
-        .unwrap_or(false)
-}
-
-/// Testable: returns true when `now_epoch` is at or after the deprecation cutoff.
-#[cfg(test)]
-fn is_deprecated_at(now_epoch: u64) -> bool {
-    now_epoch >= DEEPGRAM_DEPRECATION_EPOCH
-}
-
-/// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
-/// STT moved to Python backend endpoints: POST /v2/voice-message/transcribe
-/// and WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_listen_proxy(
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-    body: Bytes,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_listen_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram proxy is deprecated. Use POST /v2/voice-message/transcribe instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-
-    let query = original_uri.query().unwrap_or("");
-    let url = build_deepgram_rest_url(query);
-
-    let upstream = reqwest::Client::new()
-        .post(&url)
-        .header("authorization", build_deepgram_auth_header(dg_key))
-        .header("content-type", "application/octet-stream")
-        .body(body)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("deepgram_listen_proxy: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
-
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("deepgram_listen_proxy: failed to read upstream body: {}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
-
-    Ok((status, bytes).into_response())
-}
-
-/// WS /v1/proxy/deepgram/ws/v1/listen — DEPRECATED.
-/// STT moved to Python backend: WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_ws_proxy(
-    ws: axum::extract::WebSocketUpgrade,
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_ws_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram WS proxy is deprecated. Use WS /v2/voice-message/transcribe-stream instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
-        .clone();
-
-    let query = original_uri.query().unwrap_or("").to_string();
-    let upstream_url = build_deepgram_ws_url(&query);
-
-    Ok(ws.on_upgrade(move |client_socket| async move {
-        if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
-            tracing::error!("deepgram_ws_proxy: proxy error: {}", e);
-        }
-    })
-    .into_response())
-}
-
-/// Which side of the proxy terminated first
-#[derive(Debug)]
-enum ProxyCloseOrigin {
-    ClientClosed,
-    UpstreamClosed,
-    ClientError,
-    UpstreamError,
-}
-
-/// Bidirectional WebSocket proxy between client (axum) and upstream (tokio-tungstenite).
-/// When one side closes or errors, a close frame is forwarded to the other side before teardown.
-async fn proxy_ws_bidirectional(
-    client_socket: axum::extract::ws::WebSocket,
-    upstream_url: &str,
-    api_key: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::extract::ws::Message as AxumMsg;
-    use futures::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::{
-        client::IntoClientRequest, http::HeaderValue, Message as TungMsg,
-    };
-
-    // Connect to upstream Deepgram with auth header
-    let mut request = upstream_url.into_client_request()?;
-    request.headers_mut().insert(
-        "Authorization",
-        HeaderValue::from_str(&format!("Token {}", api_key))?,
-    );
-
-    let (upstream_ws, _) = tokio_tungstenite::connect_async(request).await?;
-    let (mut upstream_sink, mut upstream_stream) = upstream_ws.split();
-    let (mut client_sink, mut client_stream) = client_socket.split();
-
-    // Client → Upstream
-    let client_to_upstream = async {
-        while let Some(result) = client_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let tung_msg = match msg {
-                        AxumMsg::Text(t) => TungMsg::Text(t),
-                        AxumMsg::Binary(b) => TungMsg::Binary(b),
-                        AxumMsg::Ping(p) => TungMsg::Ping(p),
-                        AxumMsg::Pong(p) => TungMsg::Pong(p),
-                        AxumMsg::Close(_) => {
-                            let _ = upstream_sink.close().await;
-                            return ProxyCloseOrigin::ClientClosed;
-                        }
-                    };
-                    if upstream_sink.send(tung_msg).await.is_err() {
-                        return ProxyCloseOrigin::UpstreamError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::ClientError,
-            }
-        }
-        ProxyCloseOrigin::ClientClosed
-    };
-
-    // Upstream → Client
-    let upstream_to_client = async {
-        while let Some(result) = upstream_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let axum_msg = match msg {
-                        TungMsg::Text(t) => AxumMsg::Text(t),
-                        TungMsg::Binary(b) => AxumMsg::Binary(b),
-                        TungMsg::Ping(p) => AxumMsg::Ping(p),
-                        TungMsg::Pong(p) => AxumMsg::Pong(p),
-                        TungMsg::Close(_) => {
-                            let _ = client_sink.close().await;
-                            return ProxyCloseOrigin::UpstreamClosed;
-                        }
-                        TungMsg::Frame(_) => continue,
-                    };
-                    if client_sink.send(axum_msg).await.is_err() {
-                        return ProxyCloseOrigin::ClientError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::UpstreamError,
-            }
-        }
-        ProxyCloseOrigin::UpstreamClosed
-    };
-
-    // Run both directions concurrently; when either ends, gracefully close the other side
-    let origin = tokio::select! {
-        origin = client_to_upstream => origin,
-        origin = upstream_to_client => origin,
-    };
-
-    // Forward close frame to the surviving side with a timeout to prevent hanging
-    let close_timeout = std::time::Duration::from_secs(5);
-    tracing::debug!("deepgram_ws_proxy: proxy ended ({:?})", origin);
-    match origin {
-        ProxyCloseOrigin::UpstreamClosed | ProxyCloseOrigin::UpstreamError => {
-            let _ = tokio::time::timeout(close_timeout, client_sink.close()).await;
-        }
-        ProxyCloseOrigin::ClientClosed | ProxyCloseOrigin::ClientError => {
-            let _ = tokio::time::timeout(close_timeout, upstream_sink.close()).await;
-        }
-    }
-
-    Ok(())
-}
-
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")
 fn extract_gemini_action(path: &str) -> &str {
     path.rsplit(':').next().unwrap_or("")
 }
 
-/// Extract the model from a Gemini API path (e.g., "models/gemini-3-flash-preview:generateContent" → "gemini-3-flash-preview")
+/// Extract the model from a Gemini API path (e.g., "models/gemini-2.5-flash:generateContent" → "gemini-2.5-flash")
 fn extract_gemini_model(path: &str) -> &str {
     path.strip_prefix("models/")
         .and_then(|rest| rest.split(':').next())
@@ -481,6 +416,58 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     obj.remove("safetySettings");
     obj.remove("cached_content");
     obj.remove("cachedContent");
+
+    // Sanitize role fields in contents array:
+    // 1. Inject missing "role" → default to "user" (Vertex AI requires it)
+    // 2. Move "role":"system" contents → systemInstruction (Vertex AI rejects "system" role)
+    //
+    // Vertex AI only accepts "user" or "model" in contents[].role.
+    // AI Studio silently handles missing roles and "system", but Vertex does not.
+    if let Some(contents) = obj.get_mut("contents").and_then(|v| v.as_array_mut()) {
+        // First pass: inject missing roles
+        for content in contents.iter_mut() {
+            if let Some(content_obj) = content.as_object_mut() {
+                if !content_obj.contains_key("role") {
+                    content_obj.insert("role".to_string(), serde_json::Value::String("user".to_string()));
+                }
+            }
+        }
+
+        // Second pass: extract "system" role contents → systemInstruction
+        let mut system_parts: Vec<serde_json::Value> = Vec::new();
+        contents.retain(|content| {
+            if let Some(role) = content.get("role").and_then(|r| r.as_str()) {
+                if role == "system" {
+                    if let Some(parts) = content.get("parts") {
+                        if let Some(arr) = parts.as_array() {
+                            system_parts.extend(arr.iter().cloned());
+                        }
+                    }
+                    return false; // remove from contents
+                }
+            }
+            true
+        });
+
+        if !system_parts.is_empty() {
+            // Merge into existing systemInstruction or create new one
+            let si_key = if obj.contains_key("system_instruction") {
+                "system_instruction"
+            } else {
+                "systemInstruction"
+            };
+            if let Some(existing) = obj.get_mut(si_key).and_then(|v| v.as_object_mut()) {
+                if let Some(existing_parts) = existing.get_mut("parts").and_then(|v| v.as_array_mut()) {
+                    existing_parts.extend(system_parts);
+                }
+            } else {
+                obj.insert(
+                    "systemInstruction".to_string(),
+                    serde_json::json!({"parts": system_parts}),
+                );
+            }
+        }
+    }
 
     // Generation-specific validation (not for embed actions)
     let is_embed = action == "embedContent" || action == "batchEmbedContents";
@@ -545,6 +532,67 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
     serde_json::to_vec(&json).map_err(|e| format!("failed to re-serialize: {}", e))
 }
 
+/// Transform an AI Studio embedContent request body to Vertex AI predict format.
+///
+/// AI Studio: `{"content": {"parts": [{"text": "TEXT"}]}, "taskType": "X", "title": "T"}`
+/// Vertex AI: `{"instances": [{"content": "TEXT", "taskType": "X", "title": "T"}]}`
+fn transform_embed_request_to_vertex(body: &[u8]) -> Result<Vec<u8>, String> {
+    let json: serde_json::Value =
+        serde_json::from_slice(body).map_err(|e| format!("invalid JSON: {}", e))?;
+    let obj = json
+        .as_object()
+        .ok_or_else(|| "request body must be a JSON object".to_string())?;
+
+    // Extract text from content.parts[0].text
+    let text = obj
+        .get("content")
+        .and_then(|c| c.get("parts"))
+        .and_then(|p| p.as_array())
+        .and_then(|a| a.first())
+        .and_then(|p| p.get("text"))
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| "missing content.parts[0].text in embed request".to_string())?;
+
+    let mut instance = serde_json::Map::new();
+    instance.insert(
+        "content".to_string(),
+        serde_json::Value::String(text.to_string()),
+    );
+
+    // Forward optional fields
+    if let Some(task_type) = obj.get("taskType") {
+        instance.insert("task_type".to_string(), task_type.clone());
+    }
+    if let Some(title) = obj.get("title") {
+        instance.insert("title".to_string(), title.clone());
+    }
+
+    let vertex_body = serde_json::json!({ "instances": [instance] });
+    serde_json::to_vec(&vertex_body).map_err(|e| format!("failed to serialize: {}", e))
+}
+
+/// Transform a Vertex AI predict response back to AI Studio embedContent format.
+///
+/// Vertex AI: `{"predictions": [{"embeddings": {"values": [...], "statistics": {...}}}]}`
+/// AI Studio: `{"embedding": {"values": [...]}}`
+fn transform_vertex_embed_response(body: &[u8]) -> Result<Vec<u8>, String> {
+    let json: serde_json::Value =
+        serde_json::from_slice(body).map_err(|e| format!("invalid JSON: {}", e))?;
+
+    let values = json
+        .get("predictions")
+        .and_then(|p| p.as_array())
+        .and_then(|a| a.first())
+        .and_then(|pred| pred.get("embeddings"))
+        .and_then(|emb| emb.get("values"))
+        .ok_or_else(|| "missing predictions[0].embeddings.values in Vertex response".to_string())?;
+
+    let ai_studio_response = serde_json::json!({
+        "embedding": { "values": values }
+    });
+    serde_json::to_vec(&ai_studio_response).map_err(|e| format!("failed to serialize: {}", e))
+}
+
 /// Build upstream Gemini URL for non-streaming requests
 fn build_gemini_url(path: &str, api_key: &str) -> String {
     format!(
@@ -572,34 +620,12 @@ fn build_gemini_stream_url(
     url
 }
 
-/// Build upstream Deepgram REST URL preserving query params
-fn build_deepgram_rest_url(query: &str) -> String {
-    format!("https://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build upstream Deepgram WS URL preserving query params
-fn build_deepgram_ws_url(query: &str) -> String {
-    format!("wss://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build Deepgram auth header
-fn build_deepgram_auth_header(api_key: &str) -> String {
-    format!("Token {}", api_key)
-}
-
 pub fn proxy_routes() -> Router<AppState> {
     Router::new()
         // Gemini HTTP proxy (non-streaming)
         .route("/v1/proxy/gemini/*path", post(gemini_proxy))
         // Gemini streaming proxy (SSE)
         .route("/v1/proxy/gemini-stream/*path", post(gemini_stream_proxy))
-        // Deepgram batch (pre-recorded) transcription proxy
-        .route("/v1/proxy/deepgram/v1/listen", post(deepgram_listen_proxy))
-        // Deepgram streaming WebSocket proxy
-        .route(
-            "/v1/proxy/deepgram/ws/v1/listen",
-            any(deepgram_ws_proxy),
-        )
         // Issue #6624: 5 MB body size limit for proxy routes only (not global).
         // Normal app payloads are 300-600 KB; 5 MB gives ~8x headroom.
         .layer(DefaultBodyLimit::max(GEMINI_MAX_BODY_SIZE))
@@ -681,16 +707,16 @@ mod tests {
     #[test]
     fn extract_model_flash() {
         assert_eq!(
-            extract_gemini_model("models/gemini-3-flash-preview:generateContent"),
-            "gemini-3-flash-preview"
+            extract_gemini_model("models/gemini-2.5-flash:generateContent"),
+            "gemini-2.5-flash"
         );
     }
 
     #[test]
     fn extract_model_pro() {
         assert_eq!(
-            extract_gemini_model("models/gemini-pro-latest:streamGenerateContent"),
-            "gemini-pro-latest"
+            extract_gemini_model("models/gemini-2.5-pro:streamGenerateContent"),
+            "gemini-2.5-pro"
         );
     }
 
@@ -716,14 +742,15 @@ mod tests {
 
     #[test]
     fn model_allowlist_permits_valid_models() {
-        assert!(is_gemini_model_allowed("gemini-3-flash-preview"));
+        assert!(is_gemini_model_allowed("gemini-2.5-flash"));
+        assert!(is_gemini_model_allowed("gemini-2.5-pro"));
+        assert!(is_gemini_model_allowed("gemini-3-flash-preview"), "kept for old app compat");
         assert!(is_gemini_model_allowed("gemini-embedding-001"));
     }
 
     #[test]
     fn model_allowlist_blocks_unknown() {
-        assert!(!is_gemini_model_allowed("gemini-pro-latest"), "pro removed from allowlist");
-        assert!(!is_gemini_model_allowed("gemini-2.5-pro"));
+        assert!(!is_gemini_model_allowed("gemini-pro-latest"), "legacy pro not in allowlist");
         assert!(!is_gemini_model_allowed("gemini-1.5-pro"));
         assert!(!is_gemini_model_allowed("gemini-ultra"));
         assert!(!is_gemini_model_allowed(""));
@@ -731,8 +758,8 @@ mod tests {
 
     #[test]
     fn model_allowlist_blocks_prefix_bypass() {
-        assert!(!is_gemini_model_allowed("gemini-3-flash-preview-exp"));
-        assert!(!is_gemini_model_allowed("gemini-pro-latest-2"));
+        assert!(!is_gemini_model_allowed("gemini-2.5-flash-exp"));
+        assert!(!is_gemini_model_allowed("gemini-2.5-pro-latest"));
     }
 
     // --- Body sanitization ---
@@ -1023,6 +1050,206 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_injects_role_when_missing() {
+        // Old Swift app versions send contents without role field.
+        // Vertex AI requires role ("user"/"model"), AI Studio defaults to "user".
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+    }
+
+    #[test]
+    fn sanitize_preserves_existing_role() {
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "user", "parts": [{"text": "hello"}]},
+                {"role": "model", "parts": [{"text": "hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        assert_eq!(parsed["contents"][1]["role"], "model");
+    }
+
+    #[test]
+    fn sanitize_injects_role_for_multiple_contents() {
+        let body = serde_json::json!({
+            "contents": [
+                {"parts": [{"text": "hello"}]},
+                {"role": "model", "parts": [{"text": "hi"}]},
+                {"parts": [{"text": "thanks"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        assert_eq!(parsed["contents"][1]["role"], "model");
+        assert_eq!(parsed["contents"][2]["role"], "user");
+    }
+
+    #[test]
+    fn sanitize_allows_empty_contents_without_role_injection() {
+        let body = serde_json::json!({
+            "contents": []
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert!(parsed["contents"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn sanitize_preserves_null_role() {
+        // role key exists but is null — preserves it (no override of explicit values)
+        let body = serde_json::json!({
+            "contents": [{"role": null, "parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // key exists so we don't inject — preserves explicit null
+        assert!(parsed["contents"][0]["role"].is_null());
+    }
+
+    #[test]
+    fn sanitize_preserves_empty_string_role() {
+        // role key exists but is "" — preserves it (no override of explicit values)
+        let body = serde_json::json!({
+            "contents": [{"role": "", "parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"][0]["role"], "");
+    }
+
+    #[test]
+    fn sanitize_moves_system_role_to_system_instruction() {
+        // role:"system" in contents should be moved to systemInstruction
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "system", "parts": [{"text": "You are a helpful assistant."}]},
+                {"role": "user", "parts": [{"text": "Hello"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // System content removed from contents
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        // Moved to systemInstruction
+        assert_eq!(
+            parsed["systemInstruction"]["parts"][0]["text"],
+            "You are a helpful assistant."
+        );
+    }
+
+    #[test]
+    fn sanitize_merges_system_role_into_existing_system_instruction() {
+        // When systemInstruction already exists, system-role parts are appended
+        let body = serde_json::json!({
+            "systemInstruction": {"parts": [{"text": "Be concise."}]},
+            "contents": [
+                {"role": "system", "parts": [{"text": "Always respond in English."}]},
+                {"role": "user", "parts": [{"text": "Hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        let si_parts = parsed["systemInstruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Be concise.");
+        assert_eq!(si_parts[1]["text"], "Always respond in English.");
+    }
+
+    #[test]
+    fn sanitize_merges_system_role_into_snake_case_system_instruction() {
+        // system_instruction (snake_case) should also work
+        let body = serde_json::json!({
+            "system_instruction": {"parts": [{"text": "Be concise."}]},
+            "contents": [
+                {"role": "system", "parts": [{"text": "Extra instruction."}]},
+                {"role": "user", "parts": [{"text": "Hi"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let si_parts = parsed["system_instruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Be concise.");
+        assert_eq!(si_parts[1]["text"], "Extra instruction.");
+    }
+
+    #[test]
+    fn sanitize_handles_multiple_system_role_contents() {
+        // Multiple system-role contents should all be collected
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "system", "parts": [{"text": "Instruction 1"}]},
+                {"role": "user", "parts": [{"text": "Hello"}]},
+                {"role": "system", "parts": [{"text": "Instruction 2"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["contents"][0]["role"], "user");
+        let si_parts = parsed["systemInstruction"]["parts"].as_array().unwrap();
+        assert_eq!(si_parts.len(), 2);
+        assert_eq!(si_parts[0]["text"], "Instruction 1");
+        assert_eq!(si_parts[1]["text"], "Instruction 2");
+    }
+
+    #[test]
+    fn sanitize_no_system_role_no_system_instruction_added() {
+        // When no system role exists, systemInstruction should not be created
+        let body = serde_json::json!({
+            "contents": [
+                {"role": "user", "parts": [{"text": "Hello"}]}
+            ]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert!(parsed.get("systemInstruction").is_none());
+        assert!(parsed.get("system_instruction").is_none());
+    }
+
+    #[test]
     fn sanitize_preserves_tools_field() {
         let body = serde_json::json!({
             "contents": [{"parts": [{"text": "hello"}]}],
@@ -1118,36 +1345,6 @@ mod tests {
         );
     }
 
-    // --- Deepgram URL construction ---
-
-    #[test]
-    fn deepgram_rest_url_preserves_query() {
-        let url = build_deepgram_rest_url("model=nova-3&language=en&encoding=linear16");
-        assert_eq!(
-            url,
-            "https://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16"
-        );
-    }
-
-    #[test]
-    fn deepgram_ws_url_preserves_query() {
-        let url = build_deepgram_ws_url("model=nova-3&channels=2");
-        assert_eq!(
-            url,
-            "wss://api.deepgram.com/v1/listen?model=nova-3&channels=2"
-        );
-    }
-
-    // --- Deepgram auth header ---
-
-    #[test]
-    fn deepgram_auth_header_format() {
-        assert_eq!(
-            build_deepgram_auth_header("dg-test-key"),
-            "Token dg-test-key"
-        );
-    }
-
     // --- ProxyError::RateLimited response ---
 
     #[tokio::test]
@@ -1174,51 +1371,181 @@ mod tests {
         assert!(msg.contains("resource exhausted"));
     }
 
-    // --- ProxyCloseOrigin ---
-
-    // --- Deepgram deprecation boundary ---
+    // --- Embedding body transform (AI Studio → Vertex AI predict) ---
 
     #[test]
-    fn deepgram_deprecation_timestamp_matches_target_date() {
-        // 2026-04-05 05:00:00 UTC
-        assert_eq!(DEEPGRAM_DEPRECATION_EPOCH, 1_775_365_200);
+    fn embed_request_transform_basic() {
+        let body = serde_json::json!({
+            "content": {"parts": [{"text": "hello world"}]},
+            "taskType": "RETRIEVAL_DOCUMENT"
+        });
+        let result = transform_embed_request_to_vertex(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["instances"][0]["content"], "hello world");
+        assert_eq!(parsed["instances"][0]["task_type"], "RETRIEVAL_DOCUMENT");
     }
 
     #[test]
-    fn deepgram_deprecation_before_cutoff() {
-        assert!(!is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH - 1));
+    fn embed_request_transform_with_title() {
+        let body = serde_json::json!({
+            "content": {"parts": [{"text": "doc text"}]},
+            "taskType": "RETRIEVAL_DOCUMENT",
+            "title": "My Document"
+        });
+        let result = transform_embed_request_to_vertex(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["instances"][0]["title"], "My Document");
     }
 
     #[test]
-    fn deepgram_deprecation_at_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH));
+    fn embed_request_transform_no_task_type() {
+        let body = serde_json::json!({
+            "content": {"parts": [{"text": "simple text"}]}
+        });
+        let result = transform_embed_request_to_vertex(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(parsed["instances"][0]["content"], "simple text");
+        assert!(parsed["instances"][0].get("task_type").is_none());
     }
 
     #[test]
-    fn deepgram_deprecation_after_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH + 1));
+    fn embed_request_transform_rejects_missing_content() {
+        let body = serde_json::json!({"taskType": "RETRIEVAL_QUERY"});
+        let result = transform_embed_request_to_vertex(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+        );
+        assert!(result.is_err());
     }
 
-    // --- ProxyCloseOrigin ---
+    // --- Vertex AI predict response → AI Studio embed response ---
 
     #[test]
-    fn proxy_close_origin_debug_variants() {
-        // Verify all variants exist and produce distinct debug output
-        let variants = [
-            ProxyCloseOrigin::ClientClosed,
-            ProxyCloseOrigin::UpstreamClosed,
-            ProxyCloseOrigin::ClientError,
-            ProxyCloseOrigin::UpstreamError,
-        ];
-        let debug_strs: Vec<String> = variants.iter().map(|v| format!("{:?}", v)).collect();
-        assert_eq!(debug_strs.len(), 4);
-        // All distinct
-        let unique: std::collections::HashSet<&String> = debug_strs.iter().collect();
-        assert_eq!(unique.len(), 4, "All ProxyCloseOrigin variants should have distinct Debug output");
-        // Verify expected names
-        assert!(debug_strs.contains(&"ClientClosed".to_string()));
-        assert!(debug_strs.contains(&"UpstreamClosed".to_string()));
-        assert!(debug_strs.contains(&"ClientError".to_string()));
-        assert!(debug_strs.contains(&"UpstreamError".to_string()));
+    fn embed_response_transform_basic() {
+        let vertex_resp = serde_json::json!({
+            "predictions": [{
+                "embeddings": {
+                    "values": [0.1, 0.2, 0.3],
+                    "statistics": {"truncated": false, "token_count": 2}
+                }
+            }]
+        });
+        let result = transform_vertex_embed_response(
+            serde_json::to_vec(&vertex_resp).unwrap().as_slice(),
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let values = parsed["embedding"]["values"].as_array().unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], 0.1);
+    }
+
+    #[test]
+    fn embed_response_transform_rejects_missing_predictions() {
+        let resp = serde_json::json!({"error": "bad request"});
+        let result = transform_vertex_embed_response(
+            serde_json::to_vec(&resp).unwrap().as_slice(),
+        );
+        assert!(result.is_err());
+    }
+
+    // --- Integration: embed route composition (preview rewrite + resolve + transform) ---
+
+    /// Verifies the full embed pipeline: resolve_route returns correct action override
+    /// and transforms, and the request/response transforms produce correct shapes.
+    #[test]
+    fn embed_vertex_route_end_to_end_composition() {
+        use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
+
+        // 1. resolve_route returns Vertex AI with :predict action and transforms
+        let route = resolve_route("gemini-embedding-001", "embedContent");
+        assert_eq!(route.provider, Provider::VertexAi);
+        assert_eq!(route.vertex_action, Some("predict"));
+        assert_eq!(route.request_transform, BodyTransform::EmbedToPredict);
+        assert_eq!(route.response_transform, ResponseTransform::PredictToEmbed);
+
+        // 2. Action override: :embedContent → :predict in path
+        let path = "models/gemini-embedding-001:embedContent";
+        let overridden = path.replace(
+            &format!(":{}", "embedContent"),
+            &format!(":{}", route.vertex_action.unwrap()),
+        );
+        assert_eq!(overridden, "models/gemini-embedding-001:predict");
+
+        // 3. Request transform: AI Studio body → Vertex predict body
+        let ai_studio_body = serde_json::json!({
+            "content": {"parts": [{"text": "test embedding"}]},
+            "taskType": "RETRIEVAL_DOCUMENT"
+        });
+        let vertex_body = transform_embed_request_to_vertex(
+            serde_json::to_vec(&ai_studio_body).unwrap().as_slice(),
+        ).unwrap();
+        let parsed_req: serde_json::Value = serde_json::from_slice(&vertex_body).unwrap();
+        assert_eq!(parsed_req["instances"][0]["content"], "test embedding");
+        assert_eq!(parsed_req["instances"][0]["task_type"], "RETRIEVAL_DOCUMENT");
+
+        // 4. Response transform: Vertex predict response → AI Studio embed response
+        let vertex_response = serde_json::json!({
+            "predictions": [{
+                "embeddings": {
+                    "values": [0.1, 0.2, 0.3, 0.4],
+                    "statistics": {"truncated": false, "token_count": 3}
+                }
+            }]
+        });
+        let ai_studio_resp = transform_vertex_embed_response(
+            serde_json::to_vec(&vertex_response).unwrap().as_slice(),
+        ).unwrap();
+        let parsed_resp: serde_json::Value = serde_json::from_slice(&ai_studio_resp).unwrap();
+        let values = parsed_resp["embedding"]["values"].as_array().unwrap();
+        assert_eq!(values.len(), 4);
+        // statistics are NOT forwarded — AI Studio format only has values
+        assert!(parsed_resp["embedding"].get("statistics").is_none());
+    }
+
+    /// Verifies that preview model rewrite + resolve_route produces a Vertex AI route
+    /// (old apps requesting preview get rewritten to flash → routed to Vertex).
+    #[test]
+    fn preview_rewrite_then_resolve_routes_to_vertex() {
+        use crate::llm::model_qos::{rewrite_preview_model, resolve_route, Provider};
+
+        let original_path = "models/gemini-3-flash-preview:generateContent";
+        let rewritten = rewrite_preview_model(original_path);
+        assert_eq!(rewritten, "models/gemini-2.5-flash:generateContent");
+
+        let model = extract_gemini_model(&rewritten);
+        let action = extract_gemini_action(&rewritten);
+        assert_eq!(model, "gemini-2.5-flash");
+        assert_eq!(action, "generateContent");
+
+        let route = resolve_route(model, action);
+        assert_eq!(route.provider, Provider::VertexAi);
+    }
+
+    /// Verifies Vertex streaming URL preserves query params (e.g., alt=sse).
+    /// This covers the streaming proxy's URL construction logic.
+    #[test]
+    fn vertex_stream_url_preserves_query_params() {
+        // Simulate what gemini_stream_proxy does: build Vertex URL then append query params
+        let vertex_base = "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google/models/gemini-2.5-flash:streamGenerateContent";
+        let mut url = vertex_base.to_string();
+        let query: std::collections::HashMap<String, String> = [
+            ("alt".to_string(), "sse".to_string()),
+            ("key".to_string(), "should-not-appear".to_string()),
+        ].into();
+        for (k, v) in &query {
+            url.push(if url.contains('?') { '&' } else { '?' });
+            url.push_str(&urlencoding::encode(k));
+            url.push('=');
+            url.push_str(&urlencoding::encode(v));
+        }
+        assert!(url.contains("?") || url.contains("&"));
+        assert!(url.contains("alt=sse"));
+        // Vertex AI uses Bearer auth, not API key in URL — but query params are forwarded as-is
+        assert!(url.starts_with("https://us-central1-aiplatform.googleapis.com"));
     }
 }

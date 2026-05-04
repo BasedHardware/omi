@@ -12,16 +12,3 @@ pub struct Person {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Request to create a new person
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreatePersonRequest {
-    pub name: String,
-}
-
-/// Request body for bulk segment assignment
-#[derive(Debug, Clone, Deserialize)]
-pub struct BulkAssignSegmentsRequest {
-    pub segment_ids: Vec<String>,
-    pub assign_type: String,
-    pub value: Option<String>,
-}

@@ -10,6 +10,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -27,6 +28,29 @@ class BatteryInfoWidget extends StatefulWidget {
 }
 
 class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
+  void _showRecordOptions(BuildContext context) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _RecordOptionsSheet(
+        onPickPhoneMic: () {
+          Navigator.pop(sheetContext);
+          _startRecording(context);
+        },
+        onPickPhoneCall: () {
+          Navigator.pop(sheetContext);
+          if (!context.mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _startRecording(BuildContext context) async {
     HapticFeedback.mediumImpact();
     final captureProvider = context.read<CaptureProvider>();
@@ -68,7 +92,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
           builder: (context, data, child) {
             final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
             if (connectedDevice != null) {
-              return GestureDetector(
+              final batteryPill = GestureDetector(
                 onTap: () {
                   routeToPage(context, const ConnectedDevice());
                   MixpanelManager().batteryIndicatorClicked();
@@ -121,6 +145,36 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     ],
                   ),
                 ),
+              );
+              if (!isMemoriesPage) return batteryPill;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  batteryPill,
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
+                      );
+                    },
+                    child: Container(
+                      height: 36,
+                      width: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1F1F25),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.phone_in_talk_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
               );
             } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
               // Device is paired but disconnected
@@ -195,9 +249,9 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                       .copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : isMemoriesPage
-                                  ? const Text(
-                                      'Connect',
-                                      style: TextStyle(color: Colors.white, fontSize: 12),
+                                  ? Text(
+                                      context.l10n.connect,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12),
                                     )
                                   : const SizedBox.shrink(),
                         ],
@@ -209,44 +263,77 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       builder: (context, captureProvider, _) {
                         final isRecording = captureProvider.recordingState == RecordingState.record;
                         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
+                        final showChevron = !isRecording && !isInitialising;
                         return Padding(
                           padding: const EdgeInsets.only(left: 8),
-                          child: GestureDetector(
-                            onTap: () => _startRecording(context),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              height: 36,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  if (isRecording)
-                                    const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
-                                  else if (isInitialising)
-                                    const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  else
-                                    const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    isRecording
-                                        ? 'Stop'
-                                        : isInitialising
-                                            ? '...'
-                                            : 'Record',
-                                    style:
-                                        const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => _startRecording(context),
+                                  child: Container(
+                                    height: 36,
+                                    alignment: Alignment.center,
+                                    padding: EdgeInsets.fromLTRB(12, 0, showChevron ? 10 : 12, 0),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        if (isRecording)
+                                          const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
+                                        else if (isInitialising)
+                                          const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          )
+                                        else
+                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isRecording
+                                              ? context.l10n.stop
+                                              : isInitialising
+                                                  ? '...'
+                                                  : context.l10n.record,
+                                          style: const TextStyle(
+                                              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (showChevron) ...[
+                                  Container(
+                                    width: 1,
+                                    height: 18,
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                  ),
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _showRecordOptions(context),
+                                    child: Container(
+                                      height: 36,
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      child: const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        size: 18,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
                         );
@@ -293,4 +380,129 @@ class SlashLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _RecordOptionsSheet extends StatelessWidget {
+  final VoidCallback onPickPhoneMic;
+  final VoidCallback onPickPhoneCall;
+
+  const _RecordOptionsSheet({
+    required this.onPickPhoneMic,
+    required this.onPickPhoneCall,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1F1F25),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _RecordOption(
+            icon: FontAwesomeIcons.microphone,
+            title: context.l10n.recordWithPhoneMic,
+            subtitle: context.l10n.recordWithPhoneMicSubtitle,
+            onTap: onPickPhoneMic,
+          ),
+          const SizedBox(height: 10),
+          _RecordOption(
+            icon: Icons.phone_in_talk_rounded,
+            title: context.l10n.phoneCall,
+            subtitle: context.l10n.phoneCallSubtitle,
+            onTap: onPickPhoneCall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecordOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _RecordOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A33),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.deepPurple.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(icon, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.grey[500], size: 22),
+          ],
+        ),
+      ),
+    );
+  }
 }

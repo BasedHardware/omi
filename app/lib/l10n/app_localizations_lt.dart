@@ -9164,11 +9164,77 @@ class AppLocalizationsLt extends AppLocalizations {
   String get agreeAndContinue => 'Sutinku ir tęsti';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Pradėti balso įrašymą';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Pradėti skambučio įrašymą';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Balso režimas';
+
+  @override
+  String get quickActionAskOmi => 'Paklauskite Omi bet ko';
+
+  @override
+  String get record => 'Įrašyti';
+
+  @override
+  String get stop => 'Sustabdyti';
+
+  @override
+  String get recordWithPhoneMic => 'Įrašyti telefono mikrofonu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Užfiksuokite garsą aplink jus';
+
+  @override
+  String get phoneCall => 'Telefono skambutis';
+
+  @override
+  String get phoneCallSubtitle => 'Įrašykite skambutį su tiesiogine transkripcija';
+
+  @override
+  String get searchActionItems => 'Ieškoti veiksmų elementų';
+
+  @override
+  String get selectActionItems => 'Pasirinkti kelis';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksportuoti $count elementą(-us) į…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportuojama…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksportuota $count į $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksportuota $success iš $total į $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Rodyti užbaigtas';
+
+  @override
+  String get hideCompletedTasks => 'Slėpti užbaigtas';
+
+  @override
+  String get selectAllTasksMenu => 'Pasirinkti viską';
+
+  @override
+  String get connectTaskAppToExport => 'Prijunkite užduočių programą Nustatymuose, kad galėtumėte eksportuoti';
+
+  @override
+  String get connectAction => 'Prijungti';
+
+  @override
+  String get deselectAllTasksMenu => 'Atžymėti viską';
 }

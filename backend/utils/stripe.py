@@ -36,7 +36,7 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
-def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None):
+def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None):
     """Create a Stripe Checkout session for a subscription."""
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
@@ -67,6 +67,10 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
                 }
             },
         }
+
+        if customer_id:
+            session_params['customer'] = customer_id
+            session_params['customer_update'] = {'name': 'auto', 'address': 'auto'}
 
         if idempotency_key:
             session_params['idempotency_key'] = idempotency_key
@@ -215,16 +219,22 @@ def is_onboarding_complete(account_id: str):
 def get_supported_countries():
     if countries := redis_db.get_generic_cache('stripe_supported_countries'):
         return countries
-    data = stripe.CountrySpec.list(limit=100)
-    country_codes = [country['id'] for country in data.data]
+    country_codes: list[str] = []
+    starting_after: str | None = None
+    while True:
+        kwargs = {"limit": 100}
+        if starting_after:
+            kwargs["starting_after"] = starting_after
+        page = stripe.CountrySpec.list(**kwargs)
+        country_codes.extend(c['id'] for c in page.data)
+        if not page.has_more or not page.data:
+            break
+        starting_after = page.data[-1]['id']
     # Gibraltar is not supported by us since it does not allow transfers
-    if "GI" in country_codes:
-        country_codes.remove("GI")
+    country_codes = [c for c in country_codes if c != "GI"]
     if "US" not in country_codes:
         country_codes.append("US")
-    if "TR" not in country_codes:
-        country_codes.append("TR")
-    country_codes.sort()
+    country_codes = sorted(set(country_codes))
     countries = [
         {"id": code, "name": pycountry.countries.get(alpha_2=code).name}
         for code in country_codes

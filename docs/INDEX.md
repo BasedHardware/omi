@@ -31,6 +31,7 @@ Complete index of all documentation in the Omi codebase.
 - [API Overview](doc/developer/api/overview.mdx) - Developer API introduction
 - [Memories API](doc/developer/api/memories.mdx) - Memory operations
 - [Conversations API](doc/developer/api/conversations.mdx) - Conversation operations
+- [Folders API](doc/developer/api/folders.mdx) - Folder operations
 - [Action Items API](doc/developer/api/action-items.mdx) - Action item operations
 - [Keys API](doc/developer/api/keys.mdx) - API key management
 
@@ -72,9 +73,3 @@ Complete index of all documentation in the Omi codebase.
 
 - [docs.omi.me](https://docs.omi.me/) - Complete online documentation
 - [API Reference](api-reference/introduction.mdx) - API endpoint reference
-
-## Related Files
-
-- Architecture: `.cursor/ARCHITECTURE.md`
-- API Reference: `.cursor/API_REFERENCE.md`
-- Data Flow: `.cursor/DATA_FLOW.md`

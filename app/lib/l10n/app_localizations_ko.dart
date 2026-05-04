@@ -9007,11 +9007,77 @@ class AppLocalizationsKo extends AppLocalizations {
   String get agreeAndContinue => '동의하고 계속';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => '음성 녹음 시작';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => '통화 녹음 시작';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '음성 모드';
+
+  @override
+  String get quickActionAskOmi => 'Omi에게 무엇이든 물어보세요';
+
+  @override
+  String get record => '녹음';
+
+  @override
+  String get stop => '중지';
+
+  @override
+  String get recordWithPhoneMic => '휴대폰 마이크로 녹음';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '주변 오디오를 캡처하세요';
+
+  @override
+  String get phoneCall => '전화 통화';
+
+  @override
+  String get phoneCallSubtitle => '실시간 전사로 통화 녹음';
+
+  @override
+  String get searchActionItems => '실행 항목 검색';
+
+  @override
+  String get selectActionItems => '여러 개 선택';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count개 항목 내보내기…';
+  }
+
+  @override
+  String get bulkExportInProgress => '내보내는 중…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count개를 $platform에 내보냈습니다';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total개 중 $success개를 $platform에 내보냈습니다';
+  }
+
+  @override
+  String get showCompletedTasks => '완료 보기';
+
+  @override
+  String get hideCompletedTasks => '완료 숨기기';
+
+  @override
+  String get selectAllTasksMenu => '모두 선택';
+
+  @override
+  String get connectTaskAppToExport => '내보내려면 설정에서 작업 앱을 연결하세요';
+
+  @override
+  String get connectAction => '연결';
+
+  @override
+  String get deselectAllTasksMenu => '모두 선택 해제';
 }

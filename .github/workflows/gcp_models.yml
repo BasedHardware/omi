@@ -1,4 +1,4 @@
-name: Deploy Speech Models to Cloud RUN
+name: Deploy Speech Models to GKE
 
 # TODO: determine if changes to backend folder before pushing
 

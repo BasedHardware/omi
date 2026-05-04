@@ -604,7 +604,7 @@ class StorageSyncImpl implements StorageSync {
   }
 
   /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// This format is compatible with /v1/sync-local-files backend endpoint.
+  /// This format is compatible with /v2/sync-local-files backend endpoint.
   /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
   Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();

@@ -9181,11 +9181,77 @@ class AppLocalizationsBe extends AppLocalizations {
   String get agreeAndContinue => 'Прыняць і працягнуць';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Пачаць галасавы запіс';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Пачаць запіс званка';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Галасавы рэжым';
+
+  @override
+  String get quickActionAskOmi => 'Спытайце ў Омі што заўгодна';
+
+  @override
+  String get record => 'Запісаць';
+
+  @override
+  String get stop => 'Спыніць';
+
+  @override
+  String get recordWithPhoneMic => 'Запіс мікрафонам тэлефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Запісвайце гук вакол сябе';
+
+  @override
+  String get phoneCall => 'Тэлефонны званок';
+
+  @override
+  String get phoneCallSubtitle => 'Запіс званка з жывой транскрыпцыяй';
+
+  @override
+  String get searchActionItems => 'Шукаць элементы дзеянняў';
+
+  @override
+  String get selectActionItems => 'Выбраць некалькі';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Экспартаваць $count элемент(аў) у…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Экспарт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Экспартавана $count у $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Экспартавана $success з $total у $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Паказаць завершаныя';
+
+  @override
+  String get hideCompletedTasks => 'Схаваць завершаныя';
+
+  @override
+  String get selectAllTasksMenu => 'Выбраць усе';
+
+  @override
+  String get connectTaskAppToExport => 'Падключыце праграму задач у Наладах для экспарту';
+
+  @override
+  String get connectAction => 'Злучыць';
+
+  @override
+  String get deselectAllTasksMenu => 'Зняць выбар усіх';
 }

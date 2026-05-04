@@ -71,14 +71,25 @@ final class ModelQoSTests: XCTestCase {
         }
     }
 
-    // MARK: - Gemini models are tier-independent
+    // MARK: - Gemini models are tier-dependent (except embedding)
 
-    func testGeminiModelsIdenticalAcrossTiers() {
+    func testGeminiPremiumUsesFlash() {
+        ModelQoS.activeTier = .premium
+        XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-2.5-flash")
+        XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-2.5-flash")
+        XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-flash")
+    }
+
+    func testGeminiMaxUsesPro() {
+        ModelQoS.activeTier = .max
+        XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-2.5-pro")
+        XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-2.5-pro")
+        XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-pro")
+    }
+
+    func testGeminiEmbeddingTierIndependent() {
         for tier in ModelTier.allCases {
             ModelQoS.activeTier = tier
-            XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-3-flash-preview")
-            XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-3-flash-preview")
-            XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-3-flash-preview")
             XCTAssertEqual(ModelQoS.Gemini.embedding, "gemini-embedding-001")
         }
     }
@@ -119,21 +130,28 @@ final class ModelQoSTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
 
-    // MARK: - Model count (5 unique model IDs)
+    // MARK: - Model count (6 unique model IDs across both tiers)
 
-    func testOnlyFiveUniqueModelIDs() {
-        let allModels: Set<String> = [
-            ModelQoS.Claude.chat,
-            ModelQoS.Claude.floatingBar,
-            ModelQoS.Claude.synthesis,
-            ModelQoS.Claude.chatLabQuery,
-            ModelQoS.Claude.chatLabGrade,
-            ModelQoS.Claude.defaultSelection,
-            ModelQoS.Gemini.proactive,
-            ModelQoS.Gemini.taskExtraction,
-            ModelQoS.Gemini.insight,
-            ModelQoS.Gemini.embedding,
-        ]
-        XCTAssertEqual(allModels.count, 5, "Expected exactly 5 unique model IDs: \(allModels)")
+    func testSixUniqueModelIDs() {
+        // Premium: flash for Gemini → 5 unique
+        // Max: pro for Gemini → 5 unique
+        // Combined across tiers: 6 unique (flash, pro, embedding + 3 Claude)
+        var allModels: Set<String> = []
+        for tier in ModelTier.allCases {
+            ModelQoS.activeTier = tier
+            allModels.formUnion([
+                ModelQoS.Claude.chat,
+                ModelQoS.Claude.floatingBar,
+                ModelQoS.Claude.synthesis,
+                ModelQoS.Claude.chatLabQuery,
+                ModelQoS.Claude.chatLabGrade,
+                ModelQoS.Claude.defaultSelection,
+                ModelQoS.Gemini.proactive,
+                ModelQoS.Gemini.taskExtraction,
+                ModelQoS.Gemini.insight,
+                ModelQoS.Gemini.embedding,
+            ])
+        }
+        XCTAssertEqual(allModels.count, 6, "Expected 6 unique model IDs across tiers: \(allModels)")
     }
 }

@@ -4,17 +4,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// App capability types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AppCapability {
-    Chat,
-    Memories,
-    Persona,
-    ExternalIntegration,
-    ProactiveNotification,
-}
-
 /// Trigger events for external integrations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -245,21 +234,6 @@ impl From<App> for AppSummary {
     }
 }
 
-/// App category definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppCategory {
-    pub id: String,
-    pub title: String,
-}
-
-/// App capability definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppCapabilityDef {
-    pub id: String,
-    pub title: String,
-    pub description: String,
-}
-
 /// App review
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppReview {
@@ -277,180 +251,9 @@ pub struct AppReview {
     pub edited_at: Option<DateTime<Utc>>,
 }
 
-/// User's enabled app record
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserEnabledApp {
-    pub app_id: String,
-    pub enabled_at: DateTime<Utc>,
-}
-
-// ============================================================================
-// Request/Response types
-// ============================================================================
-
-/// Request to enable/disable an app
-#[derive(Debug, Deserialize)]
-pub struct ToggleAppRequest {
-    pub app_id: String,
-}
-
-/// Response for enable/disable
-#[derive(Debug, Serialize)]
-pub struct ToggleAppResponse {
-    pub success: bool,
-    pub message: String,
-}
-
-/// Request to submit a review
-#[derive(Debug, Deserialize)]
-pub struct SubmitReviewRequest {
-    pub app_id: String,
-    pub score: i32,
-    pub review: String,
-}
-
-/// Query parameters for listing apps
-#[derive(Debug, Deserialize)]
-pub struct ListAppsQuery {
-    #[serde(default)]
-    pub capability: Option<String>,
-    #[serde(default)]
-    pub category: Option<String>,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default)]
-    pub offset: usize,
-}
-
-fn default_limit() -> usize {
-    50
-}
-
-/// Query parameters for searching apps
-#[derive(Debug, Deserialize)]
-pub struct SearchAppsQuery {
-    pub query: Option<String>,
-    pub category: Option<String>,
-    pub capability: Option<String>,
-    pub rating: Option<i32>,
-    #[serde(default)]
-    pub my_apps: bool,
-    #[serde(default)]
-    pub installed_apps: bool,
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default)]
-    pub offset: usize,
-}
-
-/// Static app categories (matching Python backend / production API)
-pub fn get_app_categories() -> Vec<AppCategory> {
-    vec![
-        AppCategory { id: "conversation-analysis".to_string(), title: "Conversation Analysis".to_string() },
-        AppCategory { id: "personality-emulation".to_string(), title: "Personality Clone".to_string() },
-        AppCategory { id: "health-and-wellness".to_string(), title: "Health".to_string() },
-        AppCategory { id: "education-and-learning".to_string(), title: "Education".to_string() },
-        AppCategory { id: "communication-improvement".to_string(), title: "Communication".to_string() },
-        AppCategory { id: "emotional-and-mental-support".to_string(), title: "Emotional Support".to_string() },
-        AppCategory { id: "productivity-and-organization".to_string(), title: "Productivity".to_string() },
-        AppCategory { id: "entertainment-and-fun".to_string(), title: "Entertainment".to_string() },
-        AppCategory { id: "financial".to_string(), title: "Financial".to_string() },
-        AppCategory { id: "travel-and-exploration".to_string(), title: "Travel".to_string() },
-        AppCategory { id: "safety-and-security".to_string(), title: "Safety".to_string() },
-        AppCategory { id: "shopping-and-commerce".to_string(), title: "Shopping".to_string() },
-        AppCategory { id: "social-and-relationships".to_string(), title: "Social".to_string() },
-        AppCategory { id: "news-and-information".to_string(), title: "News".to_string() },
-        AppCategory { id: "utilities-and-tools".to_string(), title: "Utilities".to_string() },
-        AppCategory { id: "other".to_string(), title: "Other".to_string() },
-    ]
-}
-
-/// Static app capabilities
-pub fn get_app_capabilities() -> Vec<AppCapabilityDef> {
-    vec![
-        AppCapabilityDef {
-            id: "chat".to_string(),
-            title: "Chat".to_string(),
-            description: "Interactive chat assistant with custom personality".to_string(),
-        },
-        AppCapabilityDef {
-            id: "memories".to_string(),
-            title: "Memories".to_string(),
-            description: "Analyze and summarize conversations".to_string(),
-        },
-        AppCapabilityDef {
-            id: "persona".to_string(),
-            title: "Persona".to_string(),
-            description: "AI personality clone for conversations".to_string(),
-        },
-        AppCapabilityDef {
-            id: "external_integration".to_string(),
-            title: "External Integration".to_string(),
-            description: "Webhook-based integrations triggered by events".to_string(),
-        },
-        AppCapabilityDef {
-            id: "proactive_notification".to_string(),
-            title: "Proactive Notification".to_string(),
-            description: "Send notifications to users proactively".to_string(),
-        },
-    ]
-}
-
-/// Get capabilities list for v2/apps grouping (matching Python backend order)
-pub fn get_v2_capabilities() -> Vec<CapabilityInfo> {
-    vec![
-        CapabilityInfo { id: "popular".to_string(), title: "Featured".to_string() },
-        CapabilityInfo { id: "external_integration".to_string(), title: "Integrations".to_string() },
-        CapabilityInfo { id: "chat".to_string(), title: "Chat Assistants".to_string() },
-        CapabilityInfo { id: "memories".to_string(), title: "Summary Apps".to_string() },
-        CapabilityInfo { id: "proactive_notification".to_string(), title: "Realtime Notifications".to_string() },
-    ]
-}
-
 // ============================================================================
 // V2 Apps Response Types
 // ============================================================================
-
-/// Capability info for v2/apps response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CapabilityInfo {
-    pub id: String,
-    pub title: String,
-}
-
-/// Pagination metadata for v2/apps response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaginationMeta {
-    pub total: usize,
-    pub count: usize,
-    pub offset: usize,
-    pub limit: usize,
-}
-
-/// A single group in the v2/apps response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppGroup {
-    pub capability: CapabilityInfo,
-    pub data: Vec<AppSummary>,
-    pub pagination: PaginationMeta,
-}
-
-/// Response metadata for v2/apps
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AppsV2Meta {
-    pub capabilities: Vec<CapabilityInfo>,
-    pub group_count: usize,
-    pub limit: usize,
-    pub offset: usize,
-}
-
-/// Full v2/apps grouped response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppsV2Response {
-    pub groups: Vec<AppGroup>,
-    pub meta: AppsV2Meta,
-}
 
 /// Query parameters for v2/apps
 #[derive(Debug, Deserialize)]

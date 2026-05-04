@@ -9,6 +9,11 @@ class OmiSearchInput extends AdaptiveWidget {
   final ValueChanged<String>? onChanged;
   final VoidCallback? onClear;
   final String hint;
+
+  /// Whether to swap the border to the brand purple when the field is
+  /// focused. Defaults to true to preserve existing call sites; pages that
+  /// want a quieter focus state (e.g. action items) can pass false.
+  final bool highlightOnFocus;
   const OmiSearchInput({
     super.key,
     required this.controller,
@@ -16,6 +21,7 @@ class OmiSearchInput extends AdaptiveWidget {
     this.onChanged,
     this.onClear,
     this.hint = 'Search...',
+    this.highlightOnFocus = true,
   });
 
   @override
@@ -35,6 +41,7 @@ class OmiSearchInput extends AdaptiveWidget {
       hint: hint,
       onChanged: onChanged,
       onClear: onClear,
+      highlightOnFocus: highlightOnFocus,
     );
   }
 }
@@ -45,6 +52,7 @@ class _AdaptiveSearchInner extends StatefulWidget {
   final String hint;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onClear;
+  final bool highlightOnFocus;
 
   const _AdaptiveSearchInner({
     required this.controller,
@@ -52,6 +60,7 @@ class _AdaptiveSearchInner extends StatefulWidget {
     required this.hint,
     this.onChanged,
     this.onClear,
+    required this.highlightOnFocus,
   });
 
   @override
@@ -87,7 +96,7 @@ class _AdaptiveSearchInnerState extends State<_AdaptiveSearchInner> {
         color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isFocused
+          color: (isFocused && widget.highlightOnFocus)
               ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
               : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
           width: 1,
