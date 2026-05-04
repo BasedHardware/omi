@@ -123,6 +123,17 @@ extension FlutterError: Error {}
             } catch {
                 result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
             }
+        } else if call.method == "reactivate" {
+            // Reactivate the shared AVAudioSession after an interruption. Called
+            // from Dart when the stall heartbeat triggers a restart and the iOS
+            // .ended notification was never delivered (e.g. iOS 26 declined-call
+            // path), so AudioInterruptionManager never ran setActive(true).
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+                result(true)
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
         } else {
             result(FlutterMethodNotImplemented)
         }
