@@ -565,6 +565,13 @@ class TestProcessAudioModulate(unittest.TestCase):
 
             async def run():
                 sock = await process_audio_modulate(lambda s: None, 16000, 'en')
+                sock._recv_task.cancel()
+                sock._send_task.cancel()
+                for t in [sock._recv_task, sock._send_task]:
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
                 return sock
 
             sock = loop.run_until_complete(run())
@@ -583,8 +590,6 @@ class TestProcessAudioModulate(unittest.TestCase):
             self.assertIn('num_channels=1', uri)
             self.assertIn('partial_results=true', uri)
         finally:
-            sock._recv_task.cancel()
-            sock._send_task.cancel()
             loop.close()
 
     @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
@@ -602,14 +607,20 @@ class TestProcessAudioModulate(unittest.TestCase):
         try:
 
             async def run():
-                return await process_audio_modulate(lambda s: None, 16000, 'multi')
+                sock = await process_audio_modulate(lambda s: None, 16000, 'multi')
+                sock._recv_task.cancel()
+                sock._send_task.cancel()
+                for t in [sock._recv_task, sock._send_task]:
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                return sock
 
             sock = loop.run_until_complete(run())
             uri = mock_ws_module.connect.call_args[0][0]
             self.assertNotIn('language=', uri)
         finally:
-            sock._recv_task.cancel()
-            sock._send_task.cancel()
             loop.close()
 
 
