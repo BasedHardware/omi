@@ -433,7 +433,7 @@ extension AppDelegate: WCSessionDelegate {
         }
     }
 
-    func session(_ session: WCSession, didFinishUserInfoTransfer userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
         if let error = error {
             let method = userInfoTransfer.userInfo["method"] as? String ?? "unknown"
             NSLog("[Watch] phone-side transferUserInfo failed (method=\(method)): \(error.localizedDescription)")
