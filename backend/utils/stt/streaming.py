@@ -215,7 +215,14 @@ modulate_languages = {
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
+def _normalize_language(language: str) -> str:
+    if not language:
+        return ''
+    return language.split('-')[0].split('_')[0].lower()
+
+
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
+    base_lang = _normalize_language(language)
     for m in stt_service_models:
         m = m.strip()
         if m.startswith('dg-'):
@@ -226,8 +233,8 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
                 return STTService.deepgram, language, dg_model
             continue
         if m == 'modulate-velma-2':
-            if language in modulate_languages:
-                return STTService.modulate, language, 'velma-2'
+            if base_lang in modulate_languages:
+                return STTService.modulate, base_lang, 'velma-2'
 
     # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
