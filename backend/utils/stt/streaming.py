@@ -16,7 +16,7 @@ from deepgram.clients.live.v1 import LiveOptions
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
-from utils.stt.vad_gate import GatedDeepgramSocket
+from utils.stt.socket import STTSocket
 import logging
 
 logger = logging.getLogger(__name__)
@@ -271,25 +271,9 @@ async def process_audio_dg(
     channels: int,
     model: str = 'nova-3',
     keywords: List[str] = [],
-    vad_gate=None,
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """Create a Deepgram streaming connection.
-
-    Args:
-        vad_gate: Optional VADStreamingGate. If provided, returns a
-            GatedDeepgramSocket that handles VAD gating internally and
-            remaps timestamps in the stream_transcript callback.
-    """
     logger.info(f'process_audio_dg {language} {sample_rate} {channels}')
-
-    # If gate provided, wrap stream_transcript to remap DG timestamps
-    if vad_gate is not None:
-        _original_stream_transcript = stream_transcript
-
-        def stream_transcript(segments):
-            vad_gate.remap_segments(segments)
-            _original_stream_transcript(segments)
 
     def on_message(self, result, **kwargs):
         sentence = result.channel.alternatives[0].transcript
@@ -355,9 +339,6 @@ async def process_audio_dg(
     dg_connection.on(LiveTranscriptionEvents.Close, on_dg_close)
     dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
-    # Wrap with VAD gate if provided
-    if vad_gate is not None:
-        return GatedDeepgramSocket(safe_conn, gate=vad_gate)
     return safe_conn
 
 
@@ -516,8 +497,7 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
     return buf.getvalue()
 
 
-class SafeModulateSocket:
-    _is_safe_dg_socket = True
+class SafeModulateSocket(STTSocket):
 
     def __init__(self, ws, stream_transcript, loop, preseconds: int = 0):
         self._ws = ws
