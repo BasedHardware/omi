@@ -1057,7 +1057,7 @@ class TestActivateMode:
         assert gate._pre_roll_total_ms == 0.0
 
     def test_activate_syncs_mapper_cursor(self):
-        """activate() should advance DgWallMapper cursor to match shadow phase audio."""
+        """activate() should advance WallTimeMapper cursor to match shadow phase audio."""
         gate = self._make_gate(mode='shadow')
         t = 1000.0
 
@@ -1070,8 +1070,8 @@ class TestActivateMode:
 
         gate.activate()
 
-        # Mapper DG cursor should be 0.3s (not 0.0)
-        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(0.3, abs=0.01)
+        # Mapper provider cursor should be 0.3s (not 0.0)
+        assert gate.dg_wall_mapper._provider_cursor_sec == pytest.approx(0.3, abs=0.01)
 
     def test_shadow_active_remap_continuous(self):
         """After shadow→active, remapped timestamps should be continuous, not over-shifted."""

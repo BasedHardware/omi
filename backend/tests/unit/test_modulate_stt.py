@@ -544,7 +544,9 @@ class TestProcessAudioModulate(unittest.TestCase):
                 return sock
 
             sock = loop.run_until_complete(run())
-            self.assertTrue(hasattr(sock, '_is_safe_dg_socket'))
+            from utils.stt.socket import STTSocket
+
+            self.assertIsInstance(sock, STTSocket)
             call_args = mock_ws_module.connect.call_args
             uri = call_args[0][0]
             self.assertIn('api_key=test-key', uri)
