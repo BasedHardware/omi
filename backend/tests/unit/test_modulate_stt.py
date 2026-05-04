@@ -647,6 +647,157 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         self.assertEqual(call_kwargs[1]['data'], {'speaker_diarization': 'false'})
 
 
+class TestPartialResults(unittest.TestCase):
+    def setUp(self):
+        self.loop = asyncio.new_event_loop()
+        self.segments = []
+
+    def tearDown(self):
+        self.loop.close()
+
+    def _run_recv(self, messages):
+        ws = AsyncMock()
+        ws.close = AsyncMock()
+
+        async def aiter_messages():
+            for m in messages:
+                yield m
+
+        ws.__aiter__ = lambda s: aiter_messages()
+
+        async def create():
+            sock = SafeModulateSocket(ws, lambda s: self.segments.extend(s), self.loop, preseconds=0)
+            sock._send_task.cancel()
+            sock._recv_task.cancel()
+            sock.set_wav_header(b'')
+            self.segments.clear()
+            await sock._recv_loop()
+            return sock
+
+        return self.loop.run_until_complete(create())
+
+    def test_partial_cumulative_delta(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world foo', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world foo bar baz', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 2)
+        self.assertEqual(self.segments[0]['text'], 'hello world')
+        self.assertEqual(self.segments[1]['text'], 'foo bar')
+
+    def test_partial_then_final_utterance_emits_remainder(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'utterance',
+                    'utterance': {'text': 'hello world end', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 2)
+        self.assertEqual(self.segments[0]['text'], 'hello world')
+        self.assertEqual(self.segments[1]['text'], 'end')
+
+    def test_partial_resets_on_final(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'alpha beta gamma', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'utterance',
+                    'utterance': {'text': 'alpha beta gamma', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'new words here', 'start_ms': 600, 'speaker': 1},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(self.segments[0]['text'], 'alpha beta')
+        self.assertEqual(self.segments[1]['text'], 'gamma')
+        self.assertEqual(self.segments[2]['text'], 'new words')
+
+    def test_partial_no_new_words_skipped(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'hello world')
+
+    def test_partial_speaker_mapping(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'word1 word2 word3', 'start_ms': 0, 'speaker': 2},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(self.segments[0]['speaker'], 'SPEAKER_01')
+
+    def test_partial_empty_text_skipped(self):
+        msgs = [
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': '', 'start_ms': 0, 'speaker': 1}}),
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': '  ', 'start_ms': 0, 'speaker': 1}}),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(self.segments, [])
+
+    def test_final_utterance_all_covered_by_partial(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'partial_utterance',
+                    'partial_utterance': {'text': 'hello world extra', 'start_ms': 0, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {'type': 'utterance', 'utterance': {'text': 'hello', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1}}
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'hello world')
+
+
 class TestLanguageRoutingExtended(unittest.TestCase):
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
     def test_multi_lang_disabled(self):
@@ -664,6 +815,37 @@ class TestLanguageRoutingExtended(unittest.TestCase):
     def test_empty_language_fallback(self):
         service, lang, model = get_stt_service_for_language('')
         self.assertEqual(service, STTService.deepgram)
+        self.assertEqual(lang, 'en')
+
+    @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+    def test_locale_code_en_us_routes_to_modulate(self):
+        service, lang, model = get_stt_service_for_language('en-US')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'en')
+        self.assertEqual(model, 'velma-2')
+
+    @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+    def test_locale_code_fr_ca_routes_to_modulate(self):
+        service, lang, model = get_stt_service_for_language('fr-CA')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'fr')
+
+    @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+    def test_locale_code_pt_br_routes_to_modulate(self):
+        service, lang, model = get_stt_service_for_language('pt-BR')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'pt')
+
+    @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+    def test_locale_code_zh_cn_routes_to_modulate(self):
+        service, lang, model = get_stt_service_for_language('zh-CN')
+        self.assertEqual(service, STTService.modulate)
+        self.assertEqual(lang, 'zh')
+
+    @patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+    def test_locale_underscore_en_us(self):
+        service, lang, model = get_stt_service_for_language('en_US')
+        self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'en')
 
 
