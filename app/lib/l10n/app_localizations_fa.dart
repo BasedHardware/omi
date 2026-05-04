@@ -9164,11 +9164,77 @@ class AppLocalizationsFa extends AppLocalizations {
   String get agreeAndContinue => 'موافقم و ادامه';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'شروع ضبط صدا';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'شروع ضبط تماس';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'حالت صوتی';
+
+  @override
+  String get quickActionAskOmi => 'از Omi هر چیزی بپرسید';
+
+  @override
+  String get record => 'ضبط';
+
+  @override
+  String get stop => 'توقف';
+
+  @override
+  String get recordWithPhoneMic => 'ضبط با میکروفون تلفن';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'صدای اطراف خود را ضبط کنید';
+
+  @override
+  String get phoneCall => 'تماس تلفنی';
+
+  @override
+  String get phoneCallSubtitle => 'یک تماس را با رونویسی زنده ضبط کنید';
+
+  @override
+  String get searchActionItems => 'جستجوی موارد اقدام';
+
+  @override
+  String get selectActionItems => 'انتخاب چندگانه';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'صادرات $count مورد به…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'در حال صادرات…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count به $platform صادر شد';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success از $total به $platform صادر شد';
+  }
+
+  @override
+  String get showCompletedTasks => 'نمایش انجام‌شده‌ها';
+
+  @override
+  String get hideCompletedTasks => 'پنهان کردن انجام‌شده‌ها';
+
+  @override
+  String get selectAllTasksMenu => 'انتخاب همه';
+
+  @override
+  String get connectTaskAppToExport => 'برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید';
+
+  @override
+  String get connectAction => 'اتصال';
+
+  @override
+  String get deselectAllTasksMenu => 'لغو انتخاب همه';
 }

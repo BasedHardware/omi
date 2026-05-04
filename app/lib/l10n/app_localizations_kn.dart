@@ -9193,11 +9193,77 @@ class AppLocalizationsKn extends AppLocalizations {
   String get agreeAndContinue => 'ಒಪ್ಪಿಗೆ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'ಧ್ವನಿ ಮೋಡ್';
+
+  @override
+  String get quickActionAskOmi => 'Omi ಗೆ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ';
+
+  @override
+  String get record => 'ರೆಕಾರ್ಡ್';
+
+  @override
+  String get stop => 'ನಿಲ್ಲಿಸಿ';
+
+  @override
+  String get recordWithPhoneMic => 'ಫೋನ್ ಮೈಕ್‌ನೊಂದಿಗೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'ನಿಮ್ಮ ಸುತ್ತಲಿನ ಆಡಿಯೋ ಸೆರೆಹಿಡಿಯಿರಿ';
+
+  @override
+  String get phoneCall => 'ಫೋನ್ ಕರೆ';
+
+  @override
+  String get phoneCallSubtitle => 'ಲೈವ್ ಪ್ರತಿಲೇಖನದೊಂದಿಗೆ ಕರೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get searchActionItems => 'ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String get selectActionItems => 'ಬಹು ಆಯ್ಕೆ';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count ಐಟಂ(ಗಳನ್ನು) ರಫ್ತು ಮಾಡಿ…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count ಅನ್ನು $platform ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total ರಲ್ಲಿ $success ಅನ್ನು $platform ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String get showCompletedTasks => 'ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ';
+
+  @override
+  String get hideCompletedTasks => 'ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ';
+
+  @override
+  String get selectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ';
+
+  @override
+  String get connectTaskAppToExport => 'ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get connectAction => 'ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get deselectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ';
 }

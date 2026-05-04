@@ -9165,4 +9165,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Voice Mode';
+
+  @override
+  String get quickActionAskOmi => 'Ask Omi Anything';
+
+  @override
+  String get record => 'Record';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get recordWithPhoneMic => 'Record with Phone Mic';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capture audio around you';
+
+  @override
+  String get phoneCall => 'Phone Call';
+
+  @override
+  String get phoneCallSubtitle => 'Record a call with live transcription';
+
+  @override
+  String get searchActionItems => 'Search action items';
+
+  @override
+  String get selectActionItems => 'Select multiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Export $count item(s) to…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exporting…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exported $count to $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exported $success of $total to $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Show completed';
+
+  @override
+  String get hideCompletedTasks => 'Hide completed';
+
+  @override
+  String get selectAllTasksMenu => 'Select all';
+
+  @override
+  String get connectTaskAppToExport => 'Connect a task app in Settings to export';
+
+  @override
+  String get connectAction => 'Connect';
+
+  @override
+  String get deselectAllTasksMenu => 'Deselect all';
 }

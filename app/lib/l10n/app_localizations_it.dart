@@ -9216,11 +9216,77 @@ class AppLocalizationsIt extends AppLocalizations {
   String get agreeAndContinue => 'Accetta e continua';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Avvia registrazione vocale';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Avvia registrazione chiamata';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Modalità vocale';
+
+  @override
+  String get quickActionAskOmi => 'Chiedi qualsiasi cosa a Omi';
+
+  @override
+  String get record => 'Registra';
+
+  @override
+  String get stop => 'Ferma';
+
+  @override
+  String get recordWithPhoneMic => 'Registra con il microfono del telefono';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Cattura l\'audio intorno a te';
+
+  @override
+  String get phoneCall => 'Chiamata';
+
+  @override
+  String get phoneCallSubtitle => 'Registra una chiamata con trascrizione live';
+
+  @override
+  String get searchActionItems => 'Cerca azioni';
+
+  @override
+  String get selectActionItems => 'Selezione multipla';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Esporta $count elemento/i su…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Esportazione…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Esportati $count su $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Esportati $success di $total su $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Mostra completate';
+
+  @override
+  String get hideCompletedTasks => 'Nascondi completate';
+
+  @override
+  String get selectAllTasksMenu => 'Seleziona tutto';
+
+  @override
+  String get connectTaskAppToExport => 'Collega un\'app attività nelle Impostazioni per esportare';
+
+  @override
+  String get connectAction => 'Connetti';
+
+  @override
+  String get deselectAllTasksMenu => 'Deseleziona tutto';
 }

@@ -3,6 +3,6 @@
 torch==2.3.1
 torchaudio==2.3.1
 pyannote.audio==3.3.1
-speechbrain==0.5.16
+speechbrain>=1.0.0,<2.0.0
 pandas==2.2.2
 matplotlib==3.9.1

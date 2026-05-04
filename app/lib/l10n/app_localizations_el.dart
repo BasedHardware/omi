@@ -9226,11 +9226,77 @@ class AppLocalizationsEl extends AppLocalizations {
   String get agreeAndContinue => 'Συμφωνώ και Συνέχεια';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Έναρξη ηχογράφησης';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Έναρξη εγγραφής κλήσης';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Λειτουργία φωνής';
+
+  @override
+  String get quickActionAskOmi => 'Ρωτήστε τον Omi οτιδήποτε';
+
+  @override
+  String get record => 'Εγγραφή';
+
+  @override
+  String get stop => 'Διακοπή';
+
+  @override
+  String get recordWithPhoneMic => 'Εγγραφή με μικρόφωνο τηλεφώνου';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Καταγράψτε ήχο γύρω σας';
+
+  @override
+  String get phoneCall => 'Τηλεφωνική κλήση';
+
+  @override
+  String get phoneCallSubtitle => 'Καταγράψτε κλήση με ζωντανή μεταγραφή';
+
+  @override
+  String get searchActionItems => 'Αναζήτηση ενεργειών';
+
+  @override
+  String get selectActionItems => 'Πολλαπλή επιλογή';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Εξαγωγή $count στοιχείου/ων σε…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Εξαγωγή…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Εξήχθησαν $count στο $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Εξήχθησαν $success από $total στο $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Εμφάνιση ολοκληρωμένων';
+
+  @override
+  String get hideCompletedTasks => 'Απόκρυψη ολοκληρωμένων';
+
+  @override
+  String get selectAllTasksMenu => 'Επιλογή όλων';
+
+  @override
+  String get connectTaskAppToExport => 'Συνδέστε μια εφαρμογή εργασιών στις Ρυθμίσεις για εξαγωγή';
+
+  @override
+  String get connectAction => 'Σύνδεση';
+
+  @override
+  String get deselectAllTasksMenu => 'Αποεπιλογή όλων';
 }

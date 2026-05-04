@@ -272,40 +272,6 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   return response.statusCode == 204;
 }
 
-Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
-  try {
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v1/sync-local-files',
-      files: files,
-      onUploadProgress: onUploadProgress,
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 207) {
-      var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
-      if (response.statusCode == 207) {
-        Logger.debug(
-          'syncLocalFiles partial failure: ${result.failedSegments}/${result.totalSegments} segments failed, '
-          'errors: ${result.errors}',
-        );
-      } else {
-        Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
-      }
-      return result;
-    } else if (response.statusCode == 400) {
-      throw Exception('Audio file could not be processed by server');
-    } else if (response.statusCode == 413) {
-      throw Exception('Audio file is too large to upload');
-    } else if (response.statusCode >= 500) {
-      throw Exception('Server is temporarily unavailable');
-    } else {
-      throw Exception('Upload failed unexpectedly');
-    }
-  } catch (e) {
-    Logger.debug('syncLocalFiles error: $e');
-    rethrow;
-  }
-}
-
 /// v2 async sync: POST files → 202 with job_id, then poll until terminal.
 /// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
 typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);

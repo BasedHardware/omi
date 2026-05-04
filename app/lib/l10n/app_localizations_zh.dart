@@ -8998,11 +8998,77 @@ class AppLocalizationsZh extends AppLocalizations {
   String get agreeAndContinue => '同意并继续';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => '开始语音录音';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => '开始通话录音';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '语音模式';
+
+  @override
+  String get quickActionAskOmi => '向Omi询问任何事';
+
+  @override
+  String get record => '录音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '用手机麦克风录音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '捕捉您周围的声音';
+
+  @override
+  String get phoneCall => '电话';
+
+  @override
+  String get phoneCallSubtitle => '录制带实时转录的通话';
+
+  @override
+  String get searchActionItems => '搜索操作项';
+
+  @override
+  String get selectActionItems => '多选';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '导出 $count 个项目到…';
+  }
+
+  @override
+  String get bulkExportInProgress => '正在导出…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '已将 $count 项导出到 $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '已将 $success/$total 导出到 $platform';
+  }
+
+  @override
+  String get showCompletedTasks => '显示已完成';
+
+  @override
+  String get hideCompletedTasks => '隐藏已完成';
+
+  @override
+  String get selectAllTasksMenu => '全选';
+
+  @override
+  String get connectTaskAppToExport => '在设置中连接任务应用以导出';
+
+  @override
+  String get connectAction => '连接';
+
+  @override
+  String get deselectAllTasksMenu => '取消全选';
 }

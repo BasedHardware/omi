@@ -10,6 +10,7 @@ from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 
+from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
 from utils.executors import storage_executor
 from utils.http_client import get_webhook_client
@@ -466,6 +467,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
+    data['uid'] = uid
     if not data.get('author') and not data.get('email'):
         user = get_user_from_uid(uid)
         data['author'] = user.get('display_name', '')
@@ -1175,8 +1177,8 @@ Be creative, fun, and varied. No generic ideas."""
         with track_usage(uid, Features.APP_GENERATOR):
             response = await get_llm('app_integration').ainvoke(
                 [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Generate 5 creative app ideas now"},
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content="Generate 5 creative app ideas now"),
                 ]
             )
 

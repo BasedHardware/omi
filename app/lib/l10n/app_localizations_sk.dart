@@ -9149,11 +9149,77 @@ class AppLocalizationsSk extends AppLocalizations {
   String get agreeAndContinue => 'Súhlasím a pokračovať';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Spustiť hlasový záznam';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Spustiť nahrávanie hovoru';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Hlasový režim';
+
+  @override
+  String get quickActionAskOmi => 'Spýtajte sa Omi na čokoľvek';
+
+  @override
+  String get record => 'Nahrať';
+
+  @override
+  String get stop => 'Zastaviť';
+
+  @override
+  String get recordWithPhoneMic => 'Nahrať mikrofónom telefónu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Zachyťte zvuk okolo vás';
+
+  @override
+  String get phoneCall => 'Telefonický hovor';
+
+  @override
+  String get phoneCallSubtitle => 'Nahrávajte hovor so živým prepisom';
+
+  @override
+  String get searchActionItems => 'Hľadať akčné položky';
+
+  @override
+  String get selectActionItems => 'Vybrať viacero';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportovať $count položku/iek do…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportovanie…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportovaných $count do $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportovaných $success z $total do $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Zobraziť dokončené';
+
+  @override
+  String get hideCompletedTasks => 'Skryť dokončené';
+
+  @override
+  String get selectAllTasksMenu => 'Vybrať všetko';
+
+  @override
+  String get connectTaskAppToExport => 'Pripojte aplikáciu úloh v Nastaveniach na export';
+
+  @override
+  String get connectAction => 'Pripojiť';
+
+  @override
+  String get deselectAllTasksMenu => 'Zrušiť výber všetkých';
 }

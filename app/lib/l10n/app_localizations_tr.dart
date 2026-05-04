@@ -9174,11 +9174,77 @@ class AppLocalizationsTr extends AppLocalizations {
   String get agreeAndContinue => 'Kabul Et ve Devam Et';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Ses kaydını başlat';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Arama kaydını başlat';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Ses Modu';
+
+  @override
+  String get quickActionAskOmi => 'Omi\'ye her şeyi sorun';
+
+  @override
+  String get record => 'Kaydet';
+
+  @override
+  String get stop => 'Durdur';
+
+  @override
+  String get recordWithPhoneMic => 'Telefon mikrofonuyla kaydet';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Etrafınızdaki sesi yakalayın';
+
+  @override
+  String get phoneCall => 'Telefon araması';
+
+  @override
+  String get phoneCallSubtitle => 'Canlı transkripsiyonla bir aramayı kaydedin';
+
+  @override
+  String get searchActionItems => 'Eylem öğelerini ara';
+
+  @override
+  String get selectActionItems => 'Birden fazla seç';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count öğeyi dışa aktar…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Dışa aktarılıyor…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count öğe $platform uygulamasına aktarıldı';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total öğeden $success tanesi $platform uygulamasına aktarıldı';
+  }
+
+  @override
+  String get showCompletedTasks => 'Tamamlananları göster';
+
+  @override
+  String get hideCompletedTasks => 'Tamamlananları gizle';
+
+  @override
+  String get selectAllTasksMenu => 'Tümünü seç';
+
+  @override
+  String get connectTaskAppToExport => 'Dışa aktarmak için Ayarlar\'da bir görev uygulaması bağlayın';
+
+  @override
+  String get connectAction => 'Bağla';
+
+  @override
+  String get deselectAllTasksMenu => 'Tümünün seçimini kaldır';
 }

@@ -9171,11 +9171,77 @@ class AppLocalizationsId extends AppLocalizations {
   String get agreeAndContinue => 'Setuju & Lanjutkan';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Mulai rekaman suara';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Mulai rekaman panggilan';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode Suara';
+
+  @override
+  String get quickActionAskOmi => 'Tanyakan apa saja kepada Omi';
+
+  @override
+  String get record => 'Rekam';
+
+  @override
+  String get stop => 'Hentikan';
+
+  @override
+  String get recordWithPhoneMic => 'Rekam dengan mikrofon ponsel';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tangkap audio di sekitar Anda';
+
+  @override
+  String get phoneCall => 'Panggilan telepon';
+
+  @override
+  String get phoneCallSubtitle => 'Rekam panggilan dengan transkripsi langsung';
+
+  @override
+  String get searchActionItems => 'Cari item tindakan';
+
+  @override
+  String get selectActionItems => 'Pilih beberapa';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Ekspor $count item ke…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Mengekspor…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Diekspor $count ke $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Diekspor $success dari $total ke $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Tampilkan selesai';
+
+  @override
+  String get hideCompletedTasks => 'Sembunyikan selesai';
+
+  @override
+  String get selectAllTasksMenu => 'Pilih semua';
+
+  @override
+  String get connectTaskAppToExport => 'Hubungkan aplikasi tugas di Pengaturan untuk mengekspor';
+
+  @override
+  String get connectAction => 'Hubungkan';
+
+  @override
+  String get deselectAllTasksMenu => 'Batalkan pilihan semua';
 }

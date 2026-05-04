@@ -9157,11 +9157,77 @@ class AppLocalizationsNo extends AppLocalizations {
   String get agreeAndContinue => 'Godta og fortsett';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Start stemmeopptak';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Start samtaleopptak';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Stemmemodus';
+
+  @override
+  String get quickActionAskOmi => 'Spør Omi om hva som helst';
+
+  @override
+  String get record => 'Ta opp';
+
+  @override
+  String get stop => 'Stopp';
+
+  @override
+  String get recordWithPhoneMic => 'Ta opp med telefonmikrofon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Fang opp lyden rundt deg';
+
+  @override
+  String get phoneCall => 'Telefonsamtale';
+
+  @override
+  String get phoneCallSubtitle => 'Ta opp en samtale med direkte transkripsjon';
+
+  @override
+  String get searchActionItems => 'Søk i handlingspunkter';
+
+  @override
+  String get selectActionItems => 'Velg flere';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksporter $count element(er) til…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksporterer…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksporterte $count til $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksporterte $success av $total til $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Vis fullførte';
+
+  @override
+  String get hideCompletedTasks => 'Skjul fullførte';
+
+  @override
+  String get selectAllTasksMenu => 'Velg alle';
+
+  @override
+  String get connectTaskAppToExport => 'Koble til en oppgaveapp i Innstillinger for å eksportere';
+
+  @override
+  String get connectAction => 'Koble til';
+
+  @override
+  String get deselectAllTasksMenu => 'Fjern alle valg';
 }

@@ -9175,11 +9175,77 @@ class AppLocalizationsUk extends AppLocalizations {
   String get agreeAndContinue => 'Прийняти та продовжити';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Почати голосовий запис';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Почати запис дзвінка';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Голосовий режим';
+
+  @override
+  String get quickActionAskOmi => 'Запитайте Omi що завгодно';
+
+  @override
+  String get record => 'Запис';
+
+  @override
+  String get stop => 'Стоп';
+
+  @override
+  String get recordWithPhoneMic => 'Запис мікрофоном телефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Записуйте звук навколо вас';
+
+  @override
+  String get phoneCall => 'Телефонний дзвінок';
+
+  @override
+  String get phoneCallSubtitle => 'Запис дзвінка з живою транскрипцією';
+
+  @override
+  String get searchActionItems => 'Шукати дії';
+
+  @override
+  String get selectActionItems => 'Вибрати кілька';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Експортувати $count елемент(ів) до…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Експорт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Експортовано $count до $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Експортовано $success з $total до $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Показати завершені';
+
+  @override
+  String get hideCompletedTasks => 'Приховати завершені';
+
+  @override
+  String get selectAllTasksMenu => 'Вибрати все';
+
+  @override
+  String get connectTaskAppToExport => 'Підключіть додаток завдань у Налаштуваннях для експорту';
+
+  @override
+  String get connectAction => 'Підключити';
+
+  @override
+  String get deselectAllTasksMenu => 'Зняти виділення з усіх';
 }

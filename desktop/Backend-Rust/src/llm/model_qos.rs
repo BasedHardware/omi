@@ -46,31 +46,7 @@ pub fn active_tier() -> ModelTier {
     *ACTIVE_TIER.get_or_init(ModelTier::from_env)
 }
 
-// MARK: - Gemini Models (feature → model, tier-aware)
-
-/// Default model for LlmClient (used by chat, conversations, personas, knowledge graph).
-pub fn gemini_default() -> &'static str {
-    gemini_default_for(active_tier())
-}
-
-fn gemini_default_for(tier: ModelTier) -> &'static str {
-    match tier {
-        ModelTier::Premium => "gemini-2.5-flash",
-        ModelTier::Max => "gemini-2.5-pro",
-    }
-}
-
-/// Model for structured extraction tasks (conversations, knowledge graph).
-pub fn gemini_extraction() -> &'static str {
-    gemini_extraction_for(active_tier())
-}
-
-fn gemini_extraction_for(tier: ModelTier) -> &'static str {
-    match tier {
-        ModelTier::Premium => "gemini-2.5-flash",
-        ModelTier::Max => "gemini-2.5-pro",
-    }
-}
+// MARK: - Gemini Models
 
 /// Allowed models for the Gemini proxy (passthrough from Swift app).
 /// These are the models the desktop app is allowed to request.
@@ -106,16 +82,6 @@ const VERTEX_AI_MODELS: &[&str] = &[
 /// Used by the proxy to decide routing: Vertex AI vs AI Studio.
 pub fn is_vertex_available(model: &str) -> bool {
     VERTEX_AI_MODELS.contains(&model)
-}
-
-/// Preferred provider for a model (when Vertex AI is enabled).
-/// Embedding models and preview models go to AI Studio; stable models go to Vertex.
-pub fn preferred_provider(model: &str) -> Provider {
-    if is_vertex_available(model) {
-        Provider::VertexAi
-    } else {
-        Provider::AiStudio
-    }
 }
 
 // MARK: - Provider Route (model + action → routing decision)
@@ -277,30 +243,6 @@ mod tests {
         std::env::remove_var("OMI_MODEL_TIER");
     }
 
-    // --- gemini_default_for (tier-dependent) ---
-
-    #[test]
-    fn gemini_default_premium_is_flash() {
-        assert_eq!(gemini_default_for(ModelTier::Premium), "gemini-2.5-flash");
-    }
-
-    #[test]
-    fn gemini_default_max_is_pro() {
-        assert_eq!(gemini_default_for(ModelTier::Max), "gemini-2.5-pro");
-    }
-
-    // --- gemini_extraction_for (tier-dependent) ---
-
-    #[test]
-    fn gemini_extraction_premium_is_flash() {
-        assert_eq!(gemini_extraction_for(ModelTier::Premium), "gemini-2.5-flash");
-    }
-
-    #[test]
-    fn gemini_extraction_max_is_pro() {
-        assert_eq!(gemini_extraction_for(ModelTier::Max), "gemini-2.5-pro");
-    }
-
     // --- tier_description_for ---
 
     #[test]
@@ -343,14 +285,6 @@ mod tests {
     #[test]
     fn vertex_not_available_for_preview() {
         assert!(!is_vertex_available("gemini-3-flash-preview"));
-    }
-
-    #[test]
-    fn preferred_provider_routes_correctly() {
-        assert_eq!(preferred_provider("gemini-2.5-flash"), Provider::VertexAi);
-        assert_eq!(preferred_provider("gemini-2.5-pro"), Provider::VertexAi);
-        assert_eq!(preferred_provider("gemini-embedding-001"), Provider::VertexAi);
-        assert_eq!(preferred_provider("gemini-3-flash-preview"), Provider::AiStudio);
     }
 
     // --- Rate limit thresholds ---

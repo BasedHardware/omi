@@ -3,7 +3,6 @@ import PostHog
 import FirebaseAuth
 
 /// Singleton manager for PostHog analytics with Session Replay
-/// Complements MixpanelManager - both track the same events
 @MainActor
 class PostHogManager {
     static let shared = PostHogManager()

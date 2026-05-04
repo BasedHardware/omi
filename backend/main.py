@@ -74,6 +74,13 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 else:
     firebase_admin.initialize_app()
 
+# starlette 0.40 added a default 1 MB cap per multipart form part. Voice
+# messages, audio uploads, and persona/app images legitimately exceed that.
+# Match the existing per-request PCM ceiling.
+from starlette.formparsers import MultiPartParser
+
+MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
+
 app = FastAPI()
 
 app.include_router(transcribe.router)

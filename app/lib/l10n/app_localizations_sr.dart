@@ -9174,11 +9174,77 @@ class AppLocalizationsSr extends AppLocalizations {
   String get agreeAndContinue => 'Slažem se i nastavi';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Покрени гласовно снимање';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Покрени снимање позива';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Гласовни режим';
+
+  @override
+  String get quickActionAskOmi => 'Питајте Omi bilo što';
+
+  @override
+  String get record => 'Сними';
+
+  @override
+  String get stop => 'Заустави';
+
+  @override
+  String get recordWithPhoneMic => 'Снимај микрофоном телефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Снимите звук око вас';
+
+  @override
+  String get phoneCall => 'Телефонски позив';
+
+  @override
+  String get phoneCallSubtitle => 'Снимајте позив са транскрипцијом уживо';
+
+  @override
+  String get searchActionItems => 'Претражи акционе ставке';
+
+  @override
+  String get selectActionItems => 'Изабери више';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Извези $count ставку/и у…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Извоз…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Извезено $count у $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Извезено $success од $total у $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Прикажи завршене';
+
+  @override
+  String get hideCompletedTasks => 'Сакриј завршене';
+
+  @override
+  String get selectAllTasksMenu => 'Изабери све';
+
+  @override
+  String get connectTaskAppToExport => 'Повежите апликацију за задатке у Подешавањима за извоз';
+
+  @override
+  String get connectAction => 'Повежи';
+
+  @override
+  String get deselectAllTasksMenu => 'Поништи избор свих';
 }

@@ -9012,11 +9012,77 @@ class AppLocalizationsJa extends AppLocalizations {
   String get agreeAndContinue => '同意して続ける';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => '音声録音を開始';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => '通話録音を開始';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '音声モード';
+
+  @override
+  String get quickActionAskOmi => 'Omiに何でも聞く';
+
+  @override
+  String get record => '録音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '電話のマイクで録音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '周囲の音声を録音';
+
+  @override
+  String get phoneCall => '電話';
+
+  @override
+  String get phoneCallSubtitle => 'ライブ文字起こしで通話を録音';
+
+  @override
+  String get searchActionItems => 'アクション項目を検索';
+
+  @override
+  String get selectActionItems => '複数選択';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count件をエクスポート先…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'エクスポート中…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count件を$platformにエクスポートしました';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total件中$success件を$platformにエクスポートしました';
+  }
+
+  @override
+  String get showCompletedTasks => '完了を表示';
+
+  @override
+  String get hideCompletedTasks => '完了を非表示';
+
+  @override
+  String get selectAllTasksMenu => 'すべて選択';
+
+  @override
+  String get connectTaskAppToExport => 'エクスポートするには設定でタスクアプリを接続してください';
+
+  @override
+  String get connectAction => '接続';
+
+  @override
+  String get deselectAllTasksMenu => 'すべて選択解除';
 }

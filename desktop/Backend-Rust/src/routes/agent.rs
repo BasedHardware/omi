@@ -499,7 +499,7 @@ async fn create_gce_vm(
             "autoDelete": true,
             "initializeParams": {
                 "sourceImage": source_image,
-                "diskSizeGb": "30",
+                "diskSizeGb": "50",
                 "diskType": format!("zones/{}/diskTypes/pd-balanced", zone)
             }
         }],

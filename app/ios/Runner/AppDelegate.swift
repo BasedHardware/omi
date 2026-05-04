@@ -9,6 +9,76 @@ import WidgetKit
 
 extension FlutterError: Error {}
 
+// MARK: - Quick Actions Icon Patcher
+
+/// Observes UIApplication.shortcutItems via KVO and replaces template-image icons
+/// (set by the quick_actions Flutter plugin) with native SF Symbol icons.
+final class QuickActionsIconPatcher: NSObject {
+
+    static let shared = QuickActionsIconPatcher()
+    private var isObserving = false
+
+    private let symbolMap: [String: String] = [
+        "add_task":        "checkmark.circle.fill",
+        "ask_omi":         "message.fill",
+        "voice_mode":      "waveform",
+        "mute":            "mic.slash.fill",
+        "unmute":          "mic.fill",
+        "connect_device":  "cable.connector.horizontal",
+        "device_settings": "slider.horizontal.3",
+    ]
+
+    func startObserving() {
+        guard !isObserving else { return }
+        UIApplication.shared.addObserver(
+            self,
+            forKeyPath: #keyPath(UIApplication.shortcutItems),
+            options: [.new],
+            context: nil
+        )
+        isObserving = true
+    }
+
+    func stopObserving() {
+        guard isObserving else { return }
+        UIApplication.shared.removeObserver(self, forKeyPath: #keyPath(UIApplication.shortcutItems))
+        isObserving = false
+    }
+
+    override func observeValue(
+        forKeyPath keyPath: String?,
+        of object: Any?,
+        change: [NSKeyValueChangeKey: Any]?,
+        context: UnsafeMutableRawPointer?
+    ) {
+        guard keyPath == #keyPath(UIApplication.shortcutItems) else { return }
+        DispatchQueue.main.async { self.patchIcons() }
+    }
+
+    private func patchIcons() {
+        guard let items = UIApplication.shared.shortcutItems, !items.isEmpty else { return }
+
+        let patched = items.map { item -> UIApplicationShortcutItem in
+            guard let symbol = symbolMap[item.type] else { return item }
+            let icon = UIApplicationShortcutIcon(systemImageName: symbol)
+            return UIApplicationShortcutItem(
+                type: item.type,
+                localizedTitle: item.localizedTitle,
+                localizedSubtitle: item.localizedSubtitle,
+                icon: icon,
+                userInfo: item.userInfo
+            )
+        }
+
+        // Stop observing before setting to avoid infinite KVO loop.
+        stopObserving()
+        UIApplication.shared.shortcutItems = patched
+        startObserving()
+    }
+
+    deinit { stopObserving() }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
@@ -30,6 +100,7 @@ extension FlutterError: Error {}
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    QuickActionsIconPatcher.shared.startObserving()
       
       
       if WCSession.isSupported() {
@@ -248,6 +319,7 @@ extension FlutterError: Error {}
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
+    QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
 
     // If title and body are nil, then we don't need to show notification.

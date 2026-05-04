@@ -9089,11 +9089,77 @@ class AppLocalizationsHe extends AppLocalizations {
   String get agreeAndContinue => 'אני מסכים והמשך';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'התחל הקלטה קולית';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'התחל הקלטת שיחה';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'מצב קולי';
+
+  @override
+  String get quickActionAskOmi => 'שאל את Omi כל דבר';
+
+  @override
+  String get record => 'הקלט';
+
+  @override
+  String get stop => 'עצור';
+
+  @override
+  String get recordWithPhoneMic => 'הקלט עם מיקרופון הטלפון';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'הקלט שמע סביבך';
+
+  @override
+  String get phoneCall => 'שיחת טלפון';
+
+  @override
+  String get phoneCallSubtitle => 'הקלט שיחה עם תמלול חי';
+
+  @override
+  String get searchActionItems => 'חפש פריטי פעולה';
+
+  @override
+  String get selectActionItems => 'בחירה מרובה';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'ייצוא $count פריט(ים) אל…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'מייצא…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'יוצאו $count אל $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'יוצאו $success מתוך $total אל $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'הצג הושלמו';
+
+  @override
+  String get hideCompletedTasks => 'הסתר הושלמו';
+
+  @override
+  String get selectAllTasksMenu => 'בחר הכל';
+
+  @override
+  String get connectTaskAppToExport => 'חבר אפליקציית משימות בהגדרות כדי לייצא';
+
+  @override
+  String get connectAction => 'חיבור';
+
+  @override
+  String get deselectAllTasksMenu => 'בטל בחירת הכל';
 }

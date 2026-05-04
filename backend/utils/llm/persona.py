@@ -2,7 +2,7 @@ from typing import Optional, List
 
 from models.app import App
 from models.chat import Message, MessageSender
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from .clients import get_llm
 from .usage_tracker import track_usage, Features
 import logging

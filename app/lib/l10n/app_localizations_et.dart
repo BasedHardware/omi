@@ -9158,11 +9158,77 @@ class AppLocalizationsEt extends AppLocalizations {
   String get agreeAndContinue => 'Nõustun ja jätka';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Alusta häälsalvestust';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Alusta kõne salvestamist';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Häälrežiim';
+
+  @override
+  String get quickActionAskOmi => 'Küsi Omilt midagi';
+
+  @override
+  String get record => 'Salvesta';
+
+  @override
+  String get stop => 'Peata';
+
+  @override
+  String get recordWithPhoneMic => 'Salvesta telefoni mikrofoniga';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Salvesta enda ümbruse heli';
+
+  @override
+  String get phoneCall => 'Telefonikõne';
+
+  @override
+  String get phoneCallSubtitle => 'Salvesta kõne reaalajas transkriptsiooniga';
+
+  @override
+  String get searchActionItems => 'Otsi tegevusüksusi';
+
+  @override
+  String get selectActionItems => 'Vali mitu';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Ekspordi $count üksus(t) asukohta…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportimine…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksporditi $count asukohta $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksporditi $success/$total asukohta $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Kuva lõpetatud';
+
+  @override
+  String get hideCompletedTasks => 'Peida lõpetatud';
+
+  @override
+  String get selectAllTasksMenu => 'Vali kõik';
+
+  @override
+  String get connectTaskAppToExport => 'Eksportimiseks ühendage Seadetes ülesannete rakendus';
+
+  @override
+  String get connectAction => 'Ühenda';
+
+  @override
+  String get deselectAllTasksMenu => 'Tühista kõigi valik';
 }

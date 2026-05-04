@@ -9210,11 +9210,77 @@ class AppLocalizationsMk extends AppLocalizations {
   String get agreeAndContinue => 'Се согласувам и продолжи';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Започни гласовно снимање';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Започни снимање повик';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Гласовен режим';
+
+  @override
+  String get quickActionAskOmi => 'Прашајте го Omi за сè';
+
+  @override
+  String get record => 'Сними';
+
+  @override
+  String get stop => 'Стоп';
+
+  @override
+  String get recordWithPhoneMic => 'Снимај со микрофон на телефонот';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Снимајте звук околу вас';
+
+  @override
+  String get phoneCall => 'Телефонски повик';
+
+  @override
+  String get phoneCallSubtitle => 'Снимајте повик со транскрипција во живо';
+
+  @override
+  String get searchActionItems => 'Пребарај акциски ставки';
+
+  @override
+  String get selectActionItems => 'Избери повеќе';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Извези $count ставка/и во…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Извезување…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Извезени $count во $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Извезени $success од $total во $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Прикажи завршени';
+
+  @override
+  String get hideCompletedTasks => 'Сокриј завршени';
+
+  @override
+  String get selectAllTasksMenu => 'Избери ги сите';
+
+  @override
+  String get connectTaskAppToExport => 'Поврзете апликација за задачи во Поставки за извоз';
+
+  @override
+  String get connectAction => 'Поврзи';
+
+  @override
+  String get deselectAllTasksMenu => 'Одселектирај ги сите';
 }

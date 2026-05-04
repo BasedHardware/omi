@@ -462,9 +462,9 @@ export default function AnalyticsPage() {
 
   const retentionPlatformParam = retentionPlatform ? `&platform=${retentionPlatform}` : '';
 
-  const { data: mixpanelRetention, isLoading: mixpanelRetLoading } =
+  const { data: retention, isLoading: retLoading } =
     useSWR<RetentionData>(
-      token ? [`/api/omi/stats/retention/mixpanel?days=${retentionDays}${retentionPlatformParam}`, token] : null,
+      token ? [`/api/omi/stats/retention/posthog?days=${retentionDays}&intervals=${retentionDays}${retentionPlatformParam}`, token] : null,
       authFetcher, swrOpts
     );
 
@@ -496,7 +496,7 @@ export default function AnalyticsPage() {
     }
   }
 
-  const cohorts = mixpanelRetention?.cohorts ?? [];
+  const cohorts = retention?.cohorts ?? [];
   let cohortMaxDays = 0;
   for (const c of cohorts) {
     if (c.data.length > cohortMaxDays) cohortMaxDays = c.data.length;
@@ -584,8 +584,8 @@ export default function AnalyticsPage() {
   }, [allDailyData]);
 
   // Retention values for summary cards
-  const retentionD1 = mixpanelRetention?.data?.find((p) => p.day === 1)?.retention ?? null;
-  const retentionD7 = mixpanelRetention?.data?.find((p) => p.day === 7)?.retention ?? null;
+  const retentionD1 = retention?.data?.find((p) => p.day === 1)?.retention ?? null;
+  const retentionD7 = retention?.data?.find((p) => p.day === 7)?.retention ?? null;
 
   // Viral metrics
   const vm = viralMetrics;
@@ -1635,15 +1635,15 @@ export default function AnalyticsPage() {
       {
         id: "retention-avg-curve",
         title: "Average Retention Curve",
-        subtitle: mixpanelRetention?.totalUsers != null
-          ? `${mixpanelRetention.totalCohorts} cohorts · ${mixpanelRetention.totalUsers.toLocaleString()} users`
+        subtitle: retention?.totalUsers != null
+          ? `${retention.totalCohorts} cohorts · ${retention.totalUsers.toLocaleString()} users`
           : "Weighted average retention across all cohorts",
         icon: <TrendingUp className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
-          mixpanelRetention?.data && mixpanelRetention.data.length > 0 ? (
+          retention?.data && retention.data.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mixpanelRetention.data}>
+              <LineChart data={retention.data}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="day" className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `D${v}`} />
                 <YAxis className="text-xs" tick={{ fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
@@ -1657,7 +1657,7 @@ export default function AnalyticsPage() {
         ),
       },
     ];
-  }, [retentionView, mixpanelRetention]);
+  }, [retentionView, retention]);
 
   // ─────────────────────────────────────────────────────────────────────
   //  Unified single-grid items
@@ -2164,11 +2164,11 @@ export default function AnalyticsPage() {
             </tr>
           </thead>
           <tbody>
-            {mixpanelRetention?.data && mixpanelRetention.data.length > 0 && (
+            {retention?.data && retention.data.length > 0 && (
               <tr className="border-b font-semibold">
                 <td className="sticky left-0 z-10 bg-card px-4 py-2.5 whitespace-nowrap">Weighted Avg</td>
-                <td className="px-3 py-2.5 text-right text-muted-foreground">{mixpanelRetention.totalUsers.toLocaleString()}</td>
-                {mixpanelRetention.data.map((p) => (
+                <td className="px-3 py-2.5 text-right text-muted-foreground">{retention.totalUsers.toLocaleString()}</td>
+                {retention.data.map((p) => (
                   <td key={p.day} className="px-3 py-2.5 text-center" style={{ backgroundColor: retentionHeatColor(p.retention) }}>
                     <span className={p.retention > 50 ? "text-white" : ""}>{p.retention.toFixed(1)}%</span>
                   </td>

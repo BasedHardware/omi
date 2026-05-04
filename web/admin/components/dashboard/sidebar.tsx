@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   FlaskConical,
   Rocket,
+  Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,11 @@ export function DashboardSidebar() {
       title: "App Payouts",
       href: "/dashboard/payouts",
       icon: DollarSign,
+    },
+    {
+      title: "Affiliates",
+      href: "/dashboard/affiliates",
+      icon: Handshake,
     },
     {
       title: "Organizations",

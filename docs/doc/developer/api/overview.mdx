@@ -15,6 +15,9 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
   <Card title="Conversations" icon="comments" color="#3b82f6" href="/doc/developer/api/conversations">
     Access full transcripts
   </Card>
+  <Card title="Folders" icon="folder" color="#10b981" href="/doc/developer/api/folders">
+    List conversation folders
+  </Card>
   <Card title="Action Items" icon="list-check" color="#22c55e" href="/doc/developer/api/action-items">
     Manage tasks & to-dos
   </Card>
@@ -107,6 +110,11 @@ For self-hosted instances, replace with your backend URL.
     | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/user/conversations` | Retrieve conversations |
     | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/conversations` | Create from text |
     | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/conversations/from-segments` | Create from transcript segments |
+  </Accordion>
+  <Accordion title="Folders" icon="folder">
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/user/folders` | List all folders |
   </Accordion>
   <Accordion title="API Keys" icon="key">
     | Method | Endpoint | Description |

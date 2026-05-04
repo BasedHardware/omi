@@ -19,27 +19,6 @@ pub mod webhooks;
 // deprecated.rs returns 410 for all non-active paths.
 pub mod deprecated;
 
-// ── Deprecated modules (source files retained for reference) ─────────────────
-pub mod action_items;
-pub mod advice;
-pub mod apps;
-pub mod chat;
-pub mod chat_sessions;
-pub mod conversations;
-pub mod daily_score;
-pub mod focus_sessions;
-pub mod folders;
-pub mod goals;
-pub mod knowledge_graph;
-pub mod llm_usage;
-pub mod memories;
-pub mod messages;
-pub mod people;
-pub mod personas;
-pub mod staged_tasks;
-pub mod stats;
-pub mod users;
-
 // ── Active re-exports ─────────────────────────────────────────────────────────
 pub use agent::agent_routes;
 pub use auth::auth_routes;

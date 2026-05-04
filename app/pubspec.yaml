@@ -50,14 +50,7 @@ dependencies:
 
   # Analytics and Support
   intercom_flutter: 9.4.22
-  mixpanel_flutter:
-    git:
-      url: https://github.com/beastoin/mixpanel-flutter.git
-      ref: f9234e9
-  mixpanel_analytics:
-    git:
-      url: https://github.com/mdmohsin7/mixpanel_analytics.git
-      ref: master
+  posthog_flutter: ^5.24.0
 
   # Logging
   talker_flutter: 5.0.0
@@ -145,6 +138,7 @@ dependencies:
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
+  quick_actions: ^1.0.0
 
 dependency_overrides:
   js: ^0.7.1

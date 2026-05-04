@@ -9178,11 +9178,77 @@ class AppLocalizationsUr extends AppLocalizations {
   String get agreeAndContinue => 'اتفاق اور جاری رکھیں';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'وائس ریکارڈنگ شروع کریں';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'کال ریکارڈنگ شروع کریں';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'آواز موڈ';
+
+  @override
+  String get quickActionAskOmi => 'Omi سے کچھ بھی پوچھیں';
+
+  @override
+  String get record => 'ریکارڈ کریں';
+
+  @override
+  String get stop => 'روکیں';
+
+  @override
+  String get recordWithPhoneMic => 'فون مائیک سے ریکارڈ کریں';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'اپنے ارد گرد کی آواز ریکارڈ کریں';
+
+  @override
+  String get phoneCall => 'فون کال';
+
+  @override
+  String get phoneCallSubtitle => 'لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں';
+
+  @override
+  String get searchActionItems => 'ایکشن آئٹمز تلاش کریں';
+
+  @override
+  String get selectActionItems => 'متعدد منتخب کریں';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count آئٹم ایکسپورٹ کریں…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ایکسپورٹ ہو رہا ہے…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count کو $platform میں ایکسپورٹ کیا گیا';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total میں سے $success کو $platform میں ایکسپورٹ کیا گیا';
+  }
+
+  @override
+  String get showCompletedTasks => 'مکمل شدہ دکھائیں';
+
+  @override
+  String get hideCompletedTasks => 'مکمل شدہ چھپائیں';
+
+  @override
+  String get selectAllTasksMenu => 'سب منتخب کریں';
+
+  @override
+  String get connectTaskAppToExport => 'ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں';
+
+  @override
+  String get connectAction => 'جوڑیں';
+
+  @override
+  String get deselectAllTasksMenu => 'تمام کا انتخاب ختم کریں';
 }

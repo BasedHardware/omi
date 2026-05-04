@@ -9170,11 +9170,77 @@ class AppLocalizationsBn extends AppLocalizations {
   String get agreeAndContinue => 'সম্মত হই এবং চালিয়ে যান';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'ভয়েস রেকর্ডিং শুরু করুন';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'কল রেকর্ডিং শুরু করুন';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'ভয়েস মোড';
+
+  @override
+  String get quickActionAskOmi => 'Omi কে যেকোনো কিছু জিজ্ঞেস করুন';
+
+  @override
+  String get record => 'রেকর্ড';
+
+  @override
+  String get stop => 'থামান';
+
+  @override
+  String get recordWithPhoneMic => 'ফোনের মাইক্রোফোন দিয়ে রেকর্ড করুন';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'আপনার চারপাশের অডিও ক্যাপচার করুন';
+
+  @override
+  String get phoneCall => 'ফোন কল';
+
+  @override
+  String get phoneCallSubtitle => 'লাইভ ট্রান্সক্রিপশন সহ কল রেকর্ড করুন';
+
+  @override
+  String get searchActionItems => 'অ্যাকশন আইটেম অনুসন্ধান';
+
+  @override
+  String get selectActionItems => 'একাধিক নির্বাচন';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$countটি আইটেম রপ্তানি করুন…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'রপ্তানি হচ্ছে…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$countটি $platform-এ রপ্তানি হয়েছে';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total-এর মধ্যে $successটি $platform-এ রপ্তানি হয়েছে';
+  }
+
+  @override
+  String get showCompletedTasks => 'সম্পন্ন দেখান';
+
+  @override
+  String get hideCompletedTasks => 'সম্পন্ন লুকান';
+
+  @override
+  String get selectAllTasksMenu => 'সমস্ত নির্বাচন';
+
+  @override
+  String get connectTaskAppToExport => 'রপ্তানি করতে সেটিংসে একটি টাস্ক অ্যাপ সংযুক্ত করুন';
+
+  @override
+  String get connectAction => 'সংযুক্ত করুন';
+
+  @override
+  String get deselectAllTasksMenu => 'সমস্ত নির্বাচন বাতিল';
 }

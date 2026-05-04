@@ -42,44 +42,6 @@ pub struct FocusSessionDB {
     pub duration_seconds: Option<i64>,
 }
 
-/// Request body for creating a new focus session
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreateFocusSessionRequest {
-    /// Focus status: "focused" or "distracted"
-    pub status: FocusStatus,
-    /// The app or website visible
-    pub app_or_site: String,
-    /// Brief description of what's on screen
-    pub description: String,
-    /// Optional coaching message
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-}
-
-/// Query params for getting focus sessions
-#[derive(Debug, Clone, Deserialize)]
-pub struct GetFocusSessionsQuery {
-    /// Maximum number of sessions to return
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    /// Offset for pagination
-    #[serde(default)]
-    pub offset: usize,
-    /// Filter by date (YYYY-MM-DD format)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub date: Option<String>,
-}
-
-fn default_limit() -> usize {
-    100
-}
-
-/// Response for focus session status operations
-#[derive(Debug, Clone, Serialize)]
-pub struct FocusSessionStatusResponse {
-    pub status: String,
-}
-
 /// Entry for a distraction app/site with time spent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistractionEntry {
@@ -110,10 +72,3 @@ pub struct FocusStats {
     pub top_distractions: Vec<DistractionEntry>,
 }
 
-/// Query params for getting focus stats
-#[derive(Debug, Clone, Deserialize)]
-pub struct GetFocusStatsQuery {
-    /// Date to get stats for (YYYY-MM-DD format), defaults to today
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub date: Option<String>,
-}

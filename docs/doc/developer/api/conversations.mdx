@@ -44,6 +44,9 @@ description: "Create and retrieve conversations via the Developer API"
     | `start_date` | datetime | - | Filter by start date (inclusive) |
     | `end_date` | datetime | - | Filter by end date (inclusive) |
     | `include_transcript` | boolean | false | Include full transcript segments |
+    | `categories` | string | - | Comma-separated list of categories to filter by (e.g. `work,personal`). Matches conversations whose category is **any** of the listed values (OR semantics). |
+    | `folder_id` | string | - | Filter by folder ID. Each conversation belongs to at most one folder, so this is a single-value filter. Must be a non-empty string if provided. Use `GET /v1/dev/user/folders` to retrieve folder IDs. |
+    | `starred` | boolean | - | Filter by starred status. `true` for starred only, `false` for non-starred only. Omit to return all. |
   </Accordion>
 </AccordionGroup>
 

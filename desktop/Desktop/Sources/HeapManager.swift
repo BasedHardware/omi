@@ -3,7 +3,7 @@ import HeapSwiftCore
 import FirebaseAuth
 
 /// Singleton manager for Heap analytics — tracks signup/k-factor events only.
-/// Complements MixpanelManager and PostHogManager via AnalyticsManager dispatch.
+/// Complements PostHogManager via AnalyticsManager dispatch.
 @MainActor
 class HeapManager {
     static let shared = HeapManager()

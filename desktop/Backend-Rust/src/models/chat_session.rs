@@ -8,58 +8,9 @@ use serde::{Deserialize, Serialize};
 // REQUEST TYPES
 // =========================================================================
 
-/// Request to create a new chat session
-#[derive(Debug, Clone, Deserialize)]
-pub struct CreateChatSessionRequest {
-    /// Optional title (will be auto-generated from first message if not provided)
-    #[serde(default)]
-    pub title: Option<String>,
-    /// Optional app ID for app-specific sessions
-    #[serde(default)]
-    pub app_id: Option<String>,
-}
-
-/// Request to update a chat session
-#[derive(Debug, Clone, Deserialize)]
-pub struct UpdateChatSessionRequest {
-    /// New title for the session
-    #[serde(default)]
-    pub title: Option<String>,
-    /// Star/unstar the session
-    #[serde(default)]
-    pub starred: Option<bool>,
-}
-
-/// Query params for getting chat sessions
-#[derive(Debug, Clone, Deserialize)]
-pub struct GetChatSessionsQuery {
-    /// Filter by app ID (null = main Omi chat sessions)
-    #[serde(default)]
-    pub app_id: Option<String>,
-    /// Maximum number of sessions to return
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    /// Offset for pagination
-    #[serde(default)]
-    pub offset: usize,
-    /// Filter by starred status
-    #[serde(default)]
-    pub starred: Option<bool>,
-}
-
-fn default_limit() -> usize {
-    50
-}
-
 // =========================================================================
 // RESPONSE TYPES
 // =========================================================================
-
-/// Simple status response
-#[derive(Debug, Clone, Serialize)]
-pub struct ChatSessionStatusResponse {
-    pub status: String,
-}
 
 // =========================================================================
 // DATABASE MODEL
