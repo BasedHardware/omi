@@ -37,6 +37,7 @@ static uint32_t current_read_offset = 0;
 #define INVALID_COMMAND 6
 #define FILE_NOT_FOUND 7
 #define FILE_INDEX_OUT_OF_RANGE 8
+#define STORAGE_NOT_READY 9
 #define STORAGE_LIST_MAX_FILES_PER_RESPONSE 50
 #define STORAGE_FILE_LIST_ENTRY_SIZE 8
 
@@ -50,6 +51,7 @@ static int sync_file_count = 0;
 static int current_sync_file_index = -1;
 static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
 static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
+static uint8_t transfer_end_status = 0;
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
@@ -216,6 +218,19 @@ static void sync_speed_add_bytes(uint32_t bytes)
     }
 }
 
+static uint8_t storage_status_from_error(int err, uint8_t fallback_status)
+{
+    switch (err) {
+    case -ETIMEDOUT:
+    case -EBUSY:
+    case -ECANCELED:
+    case -EAGAIN:
+        return STORAGE_NOT_READY;
+    default:
+        return fallback_status;
+    }
+}
+
 static uint16_t get_ble_chunk_size(struct bt_conn *conn, uint8_t include_timestamp)
 {
     if (!conn) {
@@ -267,10 +282,19 @@ static int refresh_file_list_cache(void)
  */
 static int send_file_list_response(struct bt_conn *conn)
 {
-    if (sync_file_count == 0 && refresh_file_list_cache() < 0) {
-        uint8_t error_resp[1] = {0xFF};
-        storage_notify(conn, error_resp, 1);
-        return -1;
+    if (sync_file_count == 0) {
+        int ret = refresh_file_list_cache();
+        if (ret < 0) {
+            uint8_t error_resp[1] = {storage_status_from_error(ret, STORAGE_NOT_READY)};
+            storage_notify(conn, error_resp, 1);
+            return ret;
+        }
+    }
+
+    if (sync_file_count == 0) {
+        uint8_t empty_resp[1] = {0};
+        storage_notify(conn, empty_resp, 1);
+        return 0;
     }
 
     uint16_t att_payload = 20;
@@ -331,6 +355,7 @@ static int setup_file_transfer(int file_index, uint32_t start_offset)
     strncpy(current_read_filename, sync_file_list[file_index], MAX_FILENAME_LEN - 1);
     current_read_offset = start_offset;
     current_sync_file_index = file_index;
+    transfer_end_status = 0;
     
     if (current_read_offset < sync_file_sizes[file_index]) {
         remaining_length = sync_file_sizes[file_index] - current_read_offset;
@@ -394,7 +419,12 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
                             ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
         }
         
-        if (sync_file_count == 0) refresh_file_list_cache();
+        if (sync_file_count == 0) {
+            int ret = refresh_file_list_cache();
+            if (ret < 0) {
+                return storage_status_from_error(ret, STORAGE_NOT_READY);
+            }
+        }
         
         if (file_index >= sync_file_count) {
             return FILE_INDEX_OUT_OF_RANGE;
@@ -520,6 +550,7 @@ static void write_to_gatt(struct bt_conn *conn)
             int r = read_audio_data(current_read_filename, storage_buffer, batch_audio_size, current_read_offset);
             if (r <= 0) {
                 LOG_ERR("Failed to read audio data: %d", r);
+                transfer_end_status = storage_status_from_error(r, FILE_NOT_FOUND);
                 remaining_length = 0;
                 return;
             }
@@ -594,25 +625,36 @@ void storage_write(void)
             list_files_requested = 0;
             /* Always refresh cache so the response is up-to-date, then send.
              * send_file_list_response() will not re-refresh if count > 0. */
-            refresh_file_list_cache();
             if (conn) {
-                send_file_list_response(conn);
+                int ret = refresh_file_list_cache();
+                if (ret < 0) {
+                    uint8_t result = storage_status_from_error(ret, STORAGE_NOT_READY);
+                    storage_notify(conn, &result, 1);
+                } else {
+                    send_file_list_response(conn);
+                }
             }
         }
         if (delete_file_index >= 0) {
             int8_t idx = delete_file_index;
             delete_file_index = -1;
+            uint8_t result = 0;
             
             /* Ensure file list is cached */
             if (sync_file_count == 0) {
-                refresh_file_list_cache();
+                int ret = refresh_file_list_cache();
+                if (ret < 0) {
+                    result = storage_status_from_error(ret, STORAGE_NOT_READY);
+                }
             }
             
-            uint8_t result = 0;
-            if (idx >= sync_file_count) {
+            if (result == 0 && idx >= sync_file_count) {
                 result = FILE_INDEX_OUT_OF_RANGE;
-            } else if (delete_file_by_index(idx) < 0) {
-                result = FILE_NOT_FOUND;
+            } else if (result == 0) {
+                int delete_ret = delete_file_by_index(idx);
+                if (delete_ret < 0) {
+                    result = storage_status_from_error(delete_ret, FILE_NOT_FOUND);
+                }
             }
             
             if (conn) {
@@ -649,6 +691,17 @@ void storage_write(void)
             if (remaining_length == 0) {
                 if (stop_started) {
                     stop_started = 0;
+                    transfer_end_status = 0;
+                    current_sync_file_index = -1;
+                } else if (transfer_end_status != 0) {
+                    uint8_t result = transfer_end_status;
+                    save_offset(current_read_filename, current_read_offset);
+                    LOG_WRN("Transfer aborted for %s with status %u", current_read_filename, result);
+                    transfer_end_status = 0;
+                    current_sync_file_index = -1;
+                    if (conn) {
+                        (void)storage_notify(conn, &result, 1);
+                    }
                 } else {
                     save_offset(current_read_filename, current_read_offset);
                     LOG_INF("File done: %s", current_read_filename);
@@ -677,6 +730,7 @@ void storage_write(void)
                     LOG_PRINTK("done. attempting to download more files\n");
                     uint8_t stop_result[1] = {100};
                     (void)storage_notify(get_current_connection(), &stop_result, 1);
+                    current_sync_file_index = -1;
                     k_msleep(10);
                 }
             }
