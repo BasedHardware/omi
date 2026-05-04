@@ -161,13 +161,10 @@ class CaptureProvider extends ChangeNotifier
     _startAudioInterruptionListener();
   }
 
-  // iOS-only: subscribe to AVAudioSession interruption events surfaced by the
-  // native side (see app/ios/Runner/AudioInterruptionManager.swift). We use
-  // these to (a) reflect the interruption immediately in recordingState, and
-  // (b) proactively restart the phone mic once iOS signals .ended, since
-  // flutter_sound does not auto-resume on its own.
+  // iOS phone-call interruption events from AudioInterruptionManager.swift.
   StreamSubscription? _audioInterruptionSubscription;
   static const EventChannel _audioInterruptionChannel = EventChannel('com.omi.ios/audioInterruption');
+  static const MethodChannel _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   void _startAudioInterruptionListener() {
     if (!Platform.isIOS) return;
@@ -188,31 +185,19 @@ class CaptureProvider extends ChangeNotifier
     );
   }
 
+  // True while a phone call is active; suppresses mic restarts until .ended fires.
+  bool _callActive = false;
+
   void _onAudioInterruptionBegan() {
-    Logger.debug('[CaptureProvider] iOS audio session interruption began');
     if (_activeSource is! PhoneMicSource) return;
-    // Also handle `stop`: flutter_sound fires its own _onStop callback when the
-    // AVAudioEngine is paused by iOS, which changes state to stop before this
-    // handler arrives (it is dispatched async via DispatchQueue.main.async).
-    // _activeSource still being PhoneMicSource means the user hasn't tapped stop.
-    if (recordingState == RecordingState.record ||
-        recordingState == RecordingState.initialising ||
-        recordingState == RecordingState.stop) {
-      updateRecordingState(RecordingState.interrupted);
-    }
+    _callActive = true;
+    ServiceManager.instance().mic.stop();
+    updateRecordingState(RecordingState.interrupted);
   }
 
   void _onAudioInterruptionEnded() {
-    Logger.debug('[CaptureProvider] iOS audio session interruption ended');
     if (_activeSource is! PhoneMicSource) return;
-    // Accept `stop` for the same reason as _onAudioInterruptionBegan: flutter_sound
-    // may have fired onStop before our .began handler ran, leaving state at stop.
-    if (recordingState != RecordingState.interrupted &&
-        recordingState != RecordingState.record &&
-        recordingState != RecordingState.initialising &&
-        recordingState != RecordingState.stop) {
-      return;
-    }
+    _callActive = false;
     _restartPhoneMicRecording();
   }
 
@@ -223,38 +208,68 @@ class CaptureProvider extends ChangeNotifier
     _phoneMicRestartInFlight = true;
     try {
       ServiceManager.instance().mic.stop();
-      // Unconditionally re-assert interrupted: mic.stop() may fire _onStop →
-      // state = stop (if not already stopped), and we need the guard below to
-      // be able to tell an internal restart stop from a user-tapped stop.
-      // _activeSource is still PhoneMicSource here, so this is safe.
+      // Re-assert interrupted so the IPC 'stopped' response doesn't overwrite it.
       updateRecordingState(RecordingState.interrupted);
-      // Let iOS fully release the session before we re-activate it.
       await Future.delayed(const Duration(milliseconds: 250));
-      // Re-check state after the await: user tapping stop flips _activeSource
-      // to null via _cleanupCurrentState, which changes state to stop. If that
-      // happened during the delay, bail to respect the user's intent.
-      if (recordingState != RecordingState.interrupted &&
-          recordingState != RecordingState.record &&
-          recordingState != RecordingState.initialising) {
-        return;
+      // _activeSource is cleared if the user manually stopped — bail in that case.
+      if (_activeSource is! PhoneMicSource) return;
+      if (Platform.isIOS) {
+        try {
+          await _audioSessionChannel.invokeMethod<bool>('reactivate');
+        } catch (e) {
+          Logger.error('[CaptureProvider] reactivate audio session failed: $e');
+        }
       }
-      await streamRecording();
+      // Use _resumeMicRecording (not streamRecording) to preserve existing socket/segments.
+      await _resumeMicRecording();
     } catch (e, st) {
-      Logger.error('[CaptureProvider] failed to restart phone mic: $e\n$st');
+      Logger.error('[CaptureProvider] _restartPhoneMicRecording failed: $e\n$st');
     } finally {
       _phoneMicRestartInFlight = false;
     }
   }
 
+  // Restarts mic only — preserves existing socket and conversation segments.
+  Future<void> _resumeMicRecording() async {
+    updateRecordingState(RecordingState.initialising);
+    _activeSource = PhoneMicSource();
+    _phoneMicWalActive = true;
+    await ServiceManager.instance().mic.start(
+          onByteReceived: (bytes) {
+            final frames = _activeSource?.processBytes(bytes) ?? [];
+            for (final frame in frames) {
+              _wal.getSyncs().phone.onFrameCaptured(frame);
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(frame.payload);
+                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              }
+            }
+          },
+          onRecording: () {
+            updateRecordingState(RecordingState.record);
+          },
+          onStop: () {
+            if (!_callActive) {
+              updateRecordingState(RecordingState.stop);
+            }
+          },
+          onInitializing: () {
+            updateRecordingState(RecordingState.initialising);
+          },
+          onStalled: _onMicStalled,
+        );
+  }
+
   void _onMicStalled() {
-    Logger.debug('[CaptureProvider] phone mic byte stream stalled');
     if (_activeSource is! PhoneMicSource) return;
-    // Also handle `stop`: flutter_sound may have fired onStop before the stall
-    // timer fired, or the interruption notification beat the stall check.
+    if (_callActive) return; // silence during a call is expected
     if (recordingState == RecordingState.record ||
         recordingState == RecordingState.initialising ||
         recordingState == RecordingState.stop) {
       updateRecordingState(RecordingState.interrupted);
+    }
+    if (recordingState == RecordingState.interrupted) {
+      _restartPhoneMicRecording();
     }
   }
 
@@ -370,6 +385,7 @@ class CaptureProvider extends ChangeNotifier
 
   bool _isPaused = false;
   bool get isPaused => _isPaused;
+  bool get isCallActive => _callActive;
 
   // Flag to star the conversation when it ends
   bool _starOngoingConversation = false;
@@ -1087,7 +1103,9 @@ class CaptureProvider extends ChangeNotifier
             updateRecordingState(RecordingState.record);
           },
           onStop: () {
-            updateRecordingState(RecordingState.stop);
+            if (!_callActive) {
+              updateRecordingState(RecordingState.stop);
+            }
           },
           onInitializing: () {
             updateRecordingState(RecordingState.initialising);
@@ -1218,12 +1236,8 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
-    // Socket is back up. If we had flipped to `interrupted` because of a mic
-    // stall or audio session interruption, restart the phone mic so the
-    // MicRecorderService gets a fresh instance with _stallReported = false.
-    // Flipping state directly (without restart) leaves _stallReported = true on
-    // the live service, permanently blinding the stall heartbeat.
-    if (recordingState == RecordingState.interrupted) {
+    // Restart mic on reconnect if interrupted (skip during active call).
+    if (recordingState == RecordingState.interrupted && !_callActive) {
       if (_activeSource is PhoneMicSource) {
         _restartPhoneMicRecording();
       } else {
