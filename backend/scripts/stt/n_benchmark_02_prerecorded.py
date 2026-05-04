@@ -17,6 +17,7 @@ Usage:
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -33,6 +34,18 @@ from tabulate import tabulate
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes, modulate_prerecorded_from_bytes
+
+PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
+
+
+def normalize_for_wer(text: str) -> str:
+    return PUNCT_RE.sub('', text).lower().strip()
+
+
+def count_punctuation(text: str) -> dict:
+    marks = re.findall(r'[^\w\s]', text)
+    return {'total': len(marks), 'detail': dict(sorted(((m, marks.count(m)) for m in set(marks)), key=lambda x: -x[1]))}
+
 
 AUDIO_DIR = Path('/tmp/stt_benchmark_audio_02')
 RESULTS_DIR = Path('/tmp/stt_benchmark_results')
@@ -170,7 +183,7 @@ def main():
     for case in manifest:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_bytes = wav_path.read_bytes()
-        ref_text = case['text'].lower()
+        ref_norm = normalize_for_wer(case['text'])
 
         row = {
             'id': case['id'],
@@ -187,7 +200,8 @@ def main():
 
         try:
             dg_text, dg_time, dg_segments = run_deepgram(audio_bytes)
-            dg_wer = compute_wer(ref_text, dg_text.lower()) if dg_text else 1.0
+            dg_wer = compute_wer(ref_norm, normalize_for_wer(dg_text)) if dg_text else 1.0
+            dg_punct = count_punctuation(dg_text) if dg_text else {'total': 0, 'detail': {}}
             row.update(
                 {
                     'dg_time': dg_time,
@@ -195,16 +209,31 @@ def main():
                     'dg_wer': dg_wer,
                     'dg_text': dg_text,
                     'dg_segments': dg_segments,
+                    'dg_punct': dg_punct['total'],
+                    'dg_punct_detail': dg_punct['detail'],
                 }
             )
-            print(f"    Deepgram:  {dg_time:.2f}s  WER={dg_wer:.2%}  words={len(dg_text.split())}")
+            print(
+                f"    Deepgram:  {dg_time:.2f}s  WER={dg_wer:.2%}  words={len(dg_text.split())}  punct={dg_punct['total']}"
+            )
         except Exception as e:
             print(f"    Deepgram:  ERROR - {e}")
-            row.update({'dg_time': -1, 'dg_words': 0, 'dg_wer': 1.0, 'dg_text': f'ERROR: {e}', 'dg_segments': 0})
+            row.update(
+                {
+                    'dg_time': -1,
+                    'dg_words': 0,
+                    'dg_wer': 1.0,
+                    'dg_text': f'ERROR: {e}',
+                    'dg_segments': 0,
+                    'dg_punct': 0,
+                    'dg_punct_detail': {},
+                }
+            )
 
         try:
             mod_text, mod_time, mod_segments = run_modulate(audio_bytes)
-            mod_wer = compute_wer(ref_text, mod_text.lower()) if mod_text else 1.0
+            mod_wer = compute_wer(ref_norm, normalize_for_wer(mod_text)) if mod_text else 1.0
+            mod_punct = count_punctuation(mod_text) if mod_text else {'total': 0, 'detail': {}}
             row.update(
                 {
                     'mod_time': mod_time,
@@ -212,12 +241,26 @@ def main():
                     'mod_wer': mod_wer,
                     'mod_text': mod_text,
                     'mod_segments': mod_segments,
+                    'mod_punct': mod_punct['total'],
+                    'mod_punct_detail': mod_punct['detail'],
                 }
             )
-            print(f"    Modulate:  {mod_time:.2f}s  WER={mod_wer:.2%}  words={len(mod_text.split())}")
+            print(
+                f"    Modulate:  {mod_time:.2f}s  WER={mod_wer:.2%}  words={len(mod_text.split())}  punct={mod_punct['total']}"
+            )
         except Exception as e:
             print(f"    Modulate:  ERROR - {e}")
-            row.update({'mod_time': -1, 'mod_words': 0, 'mod_wer': 1.0, 'mod_text': f'ERROR: {e}', 'mod_segments': 0})
+            row.update(
+                {
+                    'mod_time': -1,
+                    'mod_words': 0,
+                    'mod_wer': 1.0,
+                    'mod_text': f'ERROR: {e}',
+                    'mod_segments': 0,
+                    'mod_punct': 0,
+                    'mod_punct_detail': {},
+                }
+            )
 
         results.append(row)
 
@@ -235,9 +278,11 @@ def main():
                 f"{r.get('dg_time', -1):.2f}s" if r.get('dg_time', -1) >= 0 else 'ERR',
                 f"{r.get('dg_wer', 1):.1%}",
                 r.get('dg_words', 0),
+                r.get('dg_punct', 0),
                 f"{r.get('mod_time', -1):.2f}s" if r.get('mod_time', -1) >= 0 else 'ERR',
                 f"{r.get('mod_wer', 1):.1%}",
                 r.get('mod_words', 0),
+                r.get('mod_punct', 0),
             ]
         )
 
@@ -251,9 +296,11 @@ def main():
                 'DG Time',
                 'DG WER',
                 'DG Words',
+                'DG Punct',
                 'Mod Time',
                 'Mod WER',
                 'Mod Words',
+                'Mod Punct',
             ],
             tablefmt='grid',
         )
@@ -262,15 +309,40 @@ def main():
     valid_dg = [r for r in results if r.get('dg_time', -1) >= 0]
     valid_mod = [r for r in results if r.get('mod_time', -1) >= 0]
 
-    print('\nSUMMARY:')
+    print('\nSUMMARY (WER computed after stripping punctuation):')
     if valid_dg:
         avg_dg_time = sum(r['dg_time'] for r in valid_dg) / len(valid_dg)
         avg_dg_wer = sum(r['dg_wer'] for r in valid_dg) / len(valid_dg)
-        print(f"  Deepgram:  avg_latency={avg_dg_time:.2f}s  avg_WER={avg_dg_wer:.1%}  cases={len(valid_dg)}")
+        avg_dg_punct = sum(r.get('dg_punct', 0) for r in valid_dg) / len(valid_dg)
+        print(
+            f"  Deepgram:  avg_latency={avg_dg_time:.2f}s  avg_WER={avg_dg_wer:.1%}  "
+            f"avg_punct={avg_dg_punct:.1f}  cases={len(valid_dg)}"
+        )
     if valid_mod:
         avg_mod_time = sum(r['mod_time'] for r in valid_mod) / len(valid_mod)
         avg_mod_wer = sum(r['mod_wer'] for r in valid_mod) / len(valid_mod)
-        print(f"  Modulate:  avg_latency={avg_mod_time:.2f}s  avg_WER={avg_mod_wer:.1%}  cases={len(valid_mod)}")
+        avg_mod_punct = sum(r.get('mod_punct', 0) for r in valid_mod) / len(valid_mod)
+        print(
+            f"  Modulate:  avg_latency={avg_mod_time:.2f}s  avg_WER={avg_mod_wer:.1%}  "
+            f"avg_punct={avg_mod_punct:.1f}  cases={len(valid_mod)}"
+        )
+
+    print('\nTRANSCRIPT COMPARISON:')
+    for r in results:
+        print(f"\n  [{r['id']}] {r['description']}")
+        print(f"    REF:      {r['ref_text']}")
+        if r.get('dg_text', '').startswith('ERROR'):
+            print(f"    DEEPGRAM: {r.get('dg_text', 'N/A')}")
+        else:
+            print(
+                f"    DEEPGRAM: {r.get('dg_text', 'N/A')}  (WER={r.get('dg_wer', 1):.1%}, punct={r.get('dg_punct', 0)})"
+            )
+        if r.get('mod_text', '').startswith('ERROR'):
+            print(f"    MODULATE: {r.get('mod_text', 'N/A')}")
+        else:
+            print(
+                f"    MODULATE: {r.get('mod_text', 'N/A')}  (WER={r.get('mod_wer', 1):.1%}, punct={r.get('mod_punct', 0)})"
+            )
 
     output_path = RESULTS_DIR / 'suite02_prerecorded_benchmark.json'
     with open(output_path, 'w') as f:
