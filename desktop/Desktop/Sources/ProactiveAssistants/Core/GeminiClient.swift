@@ -1,5 +1,18 @@
 import Foundation
 
+// MARK: - Thinking Budget Configuration
+
+/// Controls how many tokens Gemini 2.5 spends on internal reasoning.
+/// Budget 0 disables thinking (cheapest). Budget -1 = dynamic (model decides).
+/// Flash range: 0–24576. Pro range: 128–32768.
+struct ThinkingConfig: Encodable {
+  let thinkingBudget: Int
+
+  enum CodingKeys: String, CodingKey {
+    case thinkingBudget = "thinking_budget"
+  }
+}
+
 // MARK: - Gemini API Request/Response Types
 
 struct GeminiRequest: Encodable {
@@ -56,12 +69,14 @@ struct GeminiRequest: Encodable {
   }
 
   struct GenerationConfig: Encodable {
-    let responseMimeType: String
+    let responseMimeType: String?
     let responseSchema: ResponseSchema?
+    let thinkingConfig: ThinkingConfig?
 
     enum CodingKeys: String, CodingKey {
       case responseMimeType = "response_mime_type"
       case responseSchema = "response_schema"
+      case thinkingConfig = "thinking_config"
     }
 
     struct ResponseSchema: Encodable {
@@ -334,7 +349,8 @@ actor GeminiClient {
     prompt: String,
     imageData: Data,
     systemPrompt: String,
-    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema
+    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
+    thinkingBudget: Int = 0
   ) async throws -> String {
     let maxRetries = 2
     var lastError: Error?
@@ -359,7 +375,8 @@ actor GeminiClient {
             ),
             generationConfig: GeminiRequest.GenerationConfig(
               responseMimeType: "application/json",
-              responseSchema: responseSchema
+              responseSchema: responseSchema,
+              thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
             )
           )
 
@@ -417,7 +434,8 @@ actor GeminiClient {
     prompt: String,
     systemPrompt: String,
     maxRetries: Int = 2,
-    timeout: TimeInterval = 300
+    timeout: TimeInterval = 300,
+    thinkingBudget: Int = 0
   ) async throws -> String {
     var lastError: Error?
 
@@ -432,7 +450,11 @@ actor GeminiClient {
           systemInstruction: GeminiRequest.SystemInstruction(
             parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
           ),
-          generationConfig: nil
+          generationConfig: GeminiRequest.GenerationConfig(
+            responseMimeType: nil,
+            responseSchema: nil,
+            thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
+          )
         )
 
         let url = proxyURL(action: "generateContent")
@@ -482,7 +504,8 @@ actor GeminiClient {
   func sendRequest(
     prompt: String,
     systemPrompt: String,
-    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema
+    responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
+    thinkingBudget: Int = 0
   ) async throws -> String {
     let maxRetries = 2
     var lastError: Error?
@@ -500,7 +523,8 @@ actor GeminiClient {
           ),
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: "application/json",
-            responseSchema: responseSchema
+            responseSchema: responseSchema,
+            thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
           )
         )
 
@@ -550,7 +574,8 @@ actor GeminiClient {
   func sendChatStreamRequest(
     messages: [ChatMessage],
     systemPrompt: String,
-    onChunk: @escaping (String) -> Void
+    onChunk: @escaping (String) -> Void,
+    thinkingBudget: Int = 4096
   ) async throws -> String {
     // Build contents from chat messages
     let contents = messages.map { message in
@@ -567,7 +592,8 @@ actor GeminiClient {
       ),
       generationConfig: GeminiChatRequest.GenerationConfig(
         temperature: 0.7,
-        maxOutputTokens: 8192
+        maxOutputTokens: 8192,
+        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
       )
     )
 
@@ -652,10 +678,12 @@ struct GeminiChatRequest: Encodable {
   struct GenerationConfig: Encodable {
     let temperature: Double?
     let maxOutputTokens: Int?
+    let thinkingConfig: ThinkingConfig?
 
     enum CodingKeys: String, CodingKey {
       case temperature
       case maxOutputTokens = "max_output_tokens"
+      case thinkingConfig = "thinking_config"
     }
   }
 }
@@ -843,10 +871,12 @@ struct GeminiToolChatRequest: Encodable {
   struct GenerationConfig: Encodable {
     let temperature: Double?
     let maxOutputTokens: Int?
+    let thinkingConfig: ThinkingConfig?
 
     enum CodingKeys: String, CodingKey {
       case temperature
       case maxOutputTokens = "max_output_tokens"
+      case thinkingConfig = "thinking_config"
     }
   }
 }
@@ -919,7 +949,8 @@ extension GeminiClient {
   func sendToolChatRequest(
     messages: [ChatMessage],
     systemPrompt: String,
-    tools: [GeminiTool]? = nil
+    tools: [GeminiTool]? = nil,
+    thinkingBudget: Int = 4096
   ) async throws -> ToolChatResult {
     // Build contents from chat messages
     let contents = messages.map { message in
@@ -936,7 +967,8 @@ extension GeminiClient {
       ),
       generationConfig: GeminiToolChatRequest.GenerationConfig(
         temperature: 0.7,
-        maxOutputTokens: 8192
+        maxOutputTokens: 8192,
+        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
       ),
       tools: tools ?? Self.chatTools
     )
@@ -999,7 +1031,8 @@ extension GeminiClient {
     toolCalls: [ToolCall],
     toolResults: [String: String],
     systemPrompt: String,
-    tools: [GeminiTool]? = nil
+    tools: [GeminiTool]? = nil,
+    thinkingBudget: Int = 4096
   ) async throws -> ToolChatResult {
     var contents = previousContents
 
@@ -1041,7 +1074,8 @@ extension GeminiClient {
       ),
       generationConfig: GeminiToolChatRequest.GenerationConfig(
         temperature: 0.7,
-        maxOutputTokens: 8192
+        maxOutputTokens: 8192,
+        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
       ),
       tools: tools
     )
