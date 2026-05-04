@@ -531,6 +531,8 @@ class SafeModulateSocket:
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
         self._send_queue: asyncio.Queue = asyncio.Queue(maxsize=2000)
+        self._partial_words_emitted: int = 0
+        self._partial_speaker: Optional[str] = None
         self._recv_task = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task = asyncio.ensure_future(self._send_loop(), loop=loop)
 
@@ -638,6 +640,8 @@ class SafeModulateSocket:
                 elif msg_type == 'done':
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
                     continue
+                elif msg_type == 'partial_utterance':
+                    self._handle_partial_utterance(msg.get('partial_utterance', msg))
                 elif msg_type == 'utterance':
                     utt = msg.get('utterance', msg)
                     self._handle_utterance(utt)
@@ -645,6 +649,45 @@ class SafeModulateSocket:
             self._mark_dead(f'ws recv closed: {e}')
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}')
+
+    def _handle_partial_utterance(self, msg: dict):
+        text = msg.get('text', '').strip()
+        if not text:
+            return
+
+        start_ms = msg.get('start_ms') or 0
+        start = start_ms / 1000.0
+
+        if self._preseconds and start < self._preseconds:
+            return
+
+        raw_speaker = msg.get('speaker')
+        if isinstance(raw_speaker, int) and raw_speaker >= 1:
+            speaker_idx = raw_speaker - 1
+        else:
+            speaker_idx = 0
+        speaker = f'SPEAKER_{speaker_idx:02d}'
+
+        words = text.split()
+        confirmed_end = len(words) - 1
+        if confirmed_end <= self._partial_words_emitted:
+            return
+
+        delta_text = ' '.join(words[self._partial_words_emitted : confirmed_end])
+        self._partial_words_emitted = confirmed_end
+        self._partial_speaker = speaker
+
+        segments = [
+            {
+                'speaker': speaker,
+                'start': start,
+                'end': start,
+                'text': delta_text,
+                'is_user': False,
+                'person_id': None,
+            }
+        ]
+        self._stream_transcript(segments)
 
     def _handle_utterance(self, msg: dict):
         text = msg.get('text', '').strip()
@@ -665,6 +708,15 @@ class SafeModulateSocket:
         else:
             speaker_idx = 0
         speaker = f'SPEAKER_{speaker_idx:02d}'
+
+        words = text.split()
+        if self._partial_words_emitted > 0:
+            remaining = words[self._partial_words_emitted :]
+            self._partial_words_emitted = 0
+            self._partial_speaker = None
+            if not remaining:
+                return
+            text = ' '.join(remaining)
 
         segments = [
             {
@@ -692,6 +744,7 @@ async def process_audio_modulate(
     params = {
         'api_key': api_key,
         'speaker_diarization': 'true',
+        'partial_results': 'true',
         'sample_rate': str(sample_rate),
         'audio_format': 's16le',
         'num_channels': '1',
