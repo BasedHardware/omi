@@ -76,7 +76,7 @@ from utils.stt.streaming import (
     process_audio_dg,
     process_audio_modulate,
 )
-from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -975,15 +975,12 @@ async def _stream_handler(
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
-        # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
 
-    async def _create_stt_socket(callback, lang, sr, model, kw=None, use_vad_gate=None, active_check=None):
+    async def _create_stt_socket(callback, lang, sr, model, kw=None, active_check=None):
         if stt_service == STTService.modulate:
             return await process_audio_modulate(callback, sr, lang, preseconds=speech_profile_preseconds)
-        return await process_audio_dg(
-            callback, lang, sr, 1, model=model, keywords=kw, vad_gate=use_vad_gate, is_active=active_check
-        )
+        return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
 
     async def _process_stt():
         nonlocal websocket_close_code
@@ -1014,44 +1011,53 @@ async def _stream_handler(
                 )
                 return None
 
-            # VAD gate only for Deepgram — Modulate handles VAD/endpointing internally
             nonlocal vad_gate
-            if stt_service == STTService.deepgram:
-                gate_enabled_by_override = vad_gate_override == 'enabled'
-                gate_disabled_by_override = vad_gate_override == 'disabled'
-                if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
-                    gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
-                    try:
-                        vad_gate = VADStreamingGate(
-                            sample_rate=sample_rate,
-                            channels=1,
-                            mode=gate_mode,
-                            uid=uid,
-                            session_id=session_id,
-                        )
-                        logger.info(
-                            'VAD gate initialized mode=%s codec=%s sample_rate=%s uid=%s session=%s',
-                            gate_mode,
-                            codec,
-                            sample_rate,
-                            uid,
-                            session_id,
-                        )
-                    except Exception:
-                        logger.exception(
-                            'VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id
-                        )
-                        vad_gate = None
+            gate_enabled_by_override = vad_gate_override == 'enabled'
+            gate_disabled_by_override = vad_gate_override == 'disabled'
+            if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
+                gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
+                try:
+                    vad_gate = VADStreamingGate(
+                        sample_rate=sample_rate,
+                        channels=1,
+                        mode=gate_mode,
+                        uid=uid,
+                        session_id=session_id,
+                    )
+                    logger.info(
+                        'VAD gate initialized mode=%s codec=%s sample_rate=%s uid=%s session=%s',
+                        gate_mode,
+                        codec,
+                        sample_rate,
+                        uid,
+                        session_id,
+                    )
+                except Exception:
+                    logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
+                    vad_gate = None
 
-            stt_socket = await _create_stt_socket(
-                stream_transcript,
+            def _make_stream_callback(callback):
+                if vad_gate is not None:
+
+                    def wrapped(segments):
+                        vad_gate.remap_segments(segments)
+                        callback(segments)
+
+                    return wrapped
+                return callback
+
+            raw_socket = await _create_stt_socket(
+                _make_stream_callback(stream_transcript),
                 stt_language,
                 sample_rate,
                 stt_model,
                 kw=vocabulary[:100] if vocabulary else None,
-                use_vad_gate=vad_gate,
                 active_check=lambda: websocket_active,
             )
+            if vad_gate is not None and raw_socket is not None:
+                stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate)
+            else:
+                stt_socket = raw_socket
             return None
 
         except Exception as e:
@@ -2360,7 +2366,7 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket):
+    async def receive_data(stt_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal audio_ring_buffer, dg_usage_ms_pending
@@ -2373,7 +2379,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, dg_usage_ms_pending, dg_socket
+            nonlocal stt_audio_buffer, dg_usage_ms_pending, stt_socket
 
             if not stt_audio_buffer:
                 return
@@ -2383,24 +2389,22 @@ async def _stream_handler(
             chunk = bytes(stt_audio_buffer)
             stt_audio_buffer.clear()
 
-            # Check if DG connection died (keepalive or send failure) (#5870)
-            if dg_socket is not None and dg_socket.is_connection_dead:
-                close_reason = dg_socket.death_reason or 'unknown'
+            if stt_socket is not None and stt_socket.is_connection_dead:
+                close_reason = stt_socket.death_reason or 'unknown'
                 logger.error(
-                    'DG connection died mid-session uid=%s session=%s reason=%s',
+                    'STT connection died mid-session uid=%s session=%s reason=%s',
                     uid,
                     session_id,
                     close_reason,
                 )
-                dg_socket = None  # Stop sending to dead connection
+                stt_socket = None
 
-            if dg_socket is not None:
+            if stt_socket is not None:
                 # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083).
                 if fair_use_dg_budget_exhausted:
-                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
+                    pass  # Audio not forwarded to STT — budget exhausted or trial paywall
                 else:
-                    dg_socket.send(chunk)
-                    # Accumulate DG usage locally, flushed every 60s (#5854)
+                    stt_socket.send(chunk)
                     if fair_use_track_dg_usage:
                         chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
                         dg_usage_ms_pending += chunk_ms
@@ -2527,7 +2531,7 @@ async def _stream_handler(
                             audio_ring_buffer.write(data, last_audio_received_time)
 
                         if not use_custom_stt:
-                            # VAD gating is handled inside GatedDeepgramSocket.send()
+                            # VAD gating is handled inside GatedSTTSocket.send()
                             stt_audio_buffer.extend(data)
                             await flush_stt_buffer()
 
@@ -2619,18 +2623,21 @@ async def _stream_handler(
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
-            # Modulate EOS drain: send EOS and wait for final transcripts while
+            # EOS drain: send EOS and wait for final transcripts while
             # stream_transcript_process is still running (before websocket_active=False)
-            if stt_service == STTService.modulate:
-                try:
-                    if is_multi_channel:
-                        for mc_stt_socket in stt_sockets_multi:
-                            if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
-                                await mc_stt_socket.drain_and_close()
-                    elif dg_socket and hasattr(dg_socket, 'drain_and_close'):
-                        await dg_socket.drain_and_close()
-                except Exception as e:
-                    logger.error(f"Error draining Modulate EOS: {e} {uid} {session_id}")
+            try:
+                if is_multi_channel:
+                    for mc_stt_socket in stt_sockets_multi:
+                        if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
+                            await mc_stt_socket.drain_and_close()
+                else:
+                    drain_target = stt_socket
+                    if isinstance(stt_socket, GatedSTTSocket):
+                        drain_target = stt_socket._conn
+                    if drain_target and hasattr(drain_target, 'drain_and_close'):
+                        await drain_target.drain_and_close()
+            except Exception as e:
+                logger.error(f"Error draining STT EOS: {e} {uid} {session_id}")
             websocket_active = False
 
     # Start
