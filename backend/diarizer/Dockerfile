@@ -13,14 +13,8 @@ WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
 
-# Install CUDA Toolkit 13.2 Update 1
 RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget && \ 
-wget https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-dpkg -i cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-cp /var/cuda-repo-debian12-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
-apt-get update && \
-apt-get -y install cuda-runtime-12-6 && \
-rm -rf /var/lib/apt/lists/* cuda-repo-debian11-12-6-local_12.6.3-560.35.05-1_amd64.deb
+rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/diarizer/ .
