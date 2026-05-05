@@ -213,7 +213,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             loop.close()
 
     def test_send_then_drain_ordering(self):
-        """Audio sent via send() must arrive at ws.send() before EOS from drain_and_close()."""
+        """Audio sent via send() must arrive at ws.send(); EOS sentinel is NOT forwarded to ws."""
         sent_data = []
         ws = AsyncMock()
         ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
@@ -225,19 +225,15 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
             sock.set_wav_header(b'')  # empty header for simplicity
             sock._recv_task.cancel()
-            # send() uses call_soon_threadsafe, then drain_and_close() enqueues EOS
             sock.send(b'audio_chunk')
             await sock.drain_and_close()
             return sent_data
 
         try:
             result = loop.run_until_complete(run())
-            # audio_chunk must appear before EOS ('')
-            audio_idx = next((i for i, d in enumerate(result) if d == b'audio_chunk'), None)
-            eos_idx = next((i for i, d in enumerate(result) if d == ''), None)
-            self.assertIsNotNone(audio_idx, 'audio_chunk was not sent')
-            self.assertIsNotNone(eos_idx, 'EOS was not sent')
-            self.assertLess(audio_idx, eos_idx, 'audio must be sent before EOS')
+            self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
+            self.assertNotIn(b'', result, 'empty EOS must not be forwarded to ws')
+            self.assertNotIn(b'__EOS__', result, 'EOS sentinel must not be forwarded to ws')
         finally:
             loop.close()
 
@@ -506,6 +502,17 @@ class TestRecvLoop(unittest.TestCase):
         sock = self._run_recv([msg])
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('rate limit', sock.death_reason)
+        self.assertTrue(sock._done_event.is_set(), 'error must set done_event so drain does not hang')
+
+    def test_error_flushes_pending_partial(self):
+        """Error message must flush any pending partial text before marking dead."""
+        partial = json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'hello world', 'start_ms': 0}})
+        error = json.dumps({'type': 'error', 'error': 'connection reset'})
+        sock = self._run_recv([partial, error])
+        self.assertTrue(sock.is_connection_dead)
+        self.assertTrue(sock._done_event.is_set())
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'hello world')
 
     def test_done_message_ends_recv(self):
         utt = json.dumps(
