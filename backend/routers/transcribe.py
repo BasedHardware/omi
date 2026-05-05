@@ -979,7 +979,7 @@ async def _stream_handler(
 
     async def _create_stt_socket(callback, lang, sr, model, kw=None, active_check=None):
         if stt_service == STTService.modulate:
-            return await process_audio_modulate(callback, sr, lang, preseconds=speech_profile_preseconds)
+            return await process_audio_modulate(callback, sr, lang)
         return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
 
     async def _process_stt():
