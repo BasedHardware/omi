@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed drag-to-reorder on Tasks page \u2014 dragged row now visually dims while in flight"
+  ],
   "releases": [
     {
       "version": "0.11.377",
