@@ -1015,6 +1015,9 @@ async def _stream_handler(
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
+            # Modulate has its own internal VAD — external gating fragments audio and causes word loss
+            if stt_service == STTService.modulate:
+                gate_disabled_by_override = True
             if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
                 gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
                 try:
