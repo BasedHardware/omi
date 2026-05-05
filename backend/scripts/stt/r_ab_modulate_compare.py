@@ -343,11 +343,11 @@ async def test_backend_listen(playlist, port=BACKEND_PORT):
 
     recv_task = asyncio.create_task(recv())
 
-    # Wait for ready
+    # Wait for ready (local dev takes ~60s due to Pusher retries)
     try:
-        await asyncio.wait_for(ready.wait(), timeout=30)
+        await asyncio.wait_for(ready.wait(), timeout=90)
     except asyncio.TimeoutError:
-        print('  [BACKEND] No ready signal, proceeding...')
+        print('  [BACKEND] No ready signal after 90s, proceeding...')
 
     await send_audio(ws, playlist, 'BACKEND', send_eos=False)
 
