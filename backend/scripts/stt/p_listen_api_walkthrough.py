@@ -164,7 +164,7 @@ async def run_listen_test(
         'codec': 'pcm8',
         'channels': '1',
         'include_speech_profile': 'false',
-        'conversation_timeout': '600',
+        'conversation_timeout': '30',
     }
     url = f'{LISTEN_URL}?{"&".join(f"{k}={v}" for k, v in params.items())}'
 
