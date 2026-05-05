@@ -161,7 +161,7 @@ async def run_listen_test(
     params = {
         'language': 'en',
         'sample_rate': '16000',
-        'codec': 'pcm8',
+        'codec': 'pcm16',
         'channels': '1',
         'include_speech_profile': 'false',
         'conversation_timeout': '30',
@@ -348,9 +348,10 @@ async def run_listen_test(
 
     stream_duration = time.monotonic() - stream_start
 
-    # Wait for trailing transcription
+    # Wait for trailing transcription — Modulate without partial_results
+    # batches utterances and can take 30-45s after end-of-audio
     print(f'  Waiting for trailing transcription results...')
-    await asyncio.sleep(8)
+    await asyncio.sleep(50)
 
     # Close
     try:
