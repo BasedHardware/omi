@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import audioop
 import struct
 import time
 import uuid
@@ -2525,6 +2526,10 @@ async def _stream_handler(
                                     f"Sample rate: {sample_rate}Hz {uid} {session_id}"
                                 )
                                 continue
+
+                        if codec == 'pcm8':
+                            data = audioop.bias(data, 1, -128)
+                            data = audioop.lin2lin(data, 1, 2)
 
                         # Feed ring buffer for speaker identification (always, with wall-clock time)
                         if audio_ring_buffer is not None:
