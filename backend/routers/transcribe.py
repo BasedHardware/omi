@@ -1015,9 +1015,6 @@ async def _stream_handler(
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
-            # Modulate has its own internal VAD — external gating fragments audio and causes word loss
-            if stt_service == STTService.modulate:
-                gate_disabled_by_override = True
             if not gate_disabled_by_override and (is_gate_enabled() or gate_enabled_by_override):
                 gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
                 try:
@@ -1059,7 +1056,8 @@ async def _stream_handler(
                 active_check=lambda: websocket_active,
             )
             if vad_gate is not None and raw_socket is not None:
-                stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate)
+                passthrough = stt_service == STTService.modulate
+                stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate, passthrough_audio=passthrough)
             else:
                 stt_socket = raw_socket
             return None
