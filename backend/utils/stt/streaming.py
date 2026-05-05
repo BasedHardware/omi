@@ -604,8 +604,6 @@ class SafeModulateSocket(STTSocket):
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
                 if data == b'' or data == _EOS_SENTINEL:
-                    if data == _EOS_SENTINEL:
-                        await self._ws.send('')
                     break
                 await self._ws.send(data)
         except websockets.exceptions.ConnectionClosed as e:
@@ -627,6 +625,9 @@ class SafeModulateSocket(STTSocket):
                 if msg_type == 'error':
                     err = msg.get('error', msg.get('message', 'unknown error'))
                     logger.error(f'Modulate streaming error: {err}')
+                    if self._prev_partial_text:
+                        self._flush_partial()
+                    self._done_event.set()
                     self._mark_dead(f'modulate error: {err}')
                     break
                 elif msg_type == 'done':
