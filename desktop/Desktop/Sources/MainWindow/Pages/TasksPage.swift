@@ -854,17 +854,37 @@ class TasksViewModel: ObservableObject {
 
         categoryOrder[category] = order
 
-        // Write sortOrder in-memory immediately so getOrderedTasks() reflects the change
+        // Apply the new sortOrder to every source array the displayed list could be
+        // backed by. recomputeDisplayCaches picks displayTasks from searchResults,
+        // filteredFromDatabase, or store.incompleteTasks (in priority order), so a
+        // write to only one of them misses when filters/search are active. Each
+        // reassignment fires its own @Published; recomputeAllCaches at the end folds
+        // them all into categorizedTasks.
         let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
-        for (index, taskId) in order.enumerated() {
-            let newSortOrder = categoryOffset + (index + 1) * 1000
-            if let storeIndex = store.incompleteTasks.firstIndex(where: { $0.id == taskId }) {
-                store.incompleteTasks[storeIndex].sortOrder = newSortOrder
+
+        func applyOrder(to array: inout [TaskActionItem]) {
+            for (index, taskId) in order.enumerated() {
+                let newSortOrder = categoryOffset + (index + 1) * 1000
+                if let i = array.firstIndex(where: { $0.id == taskId }) {
+                    array[i].sortOrder = newSortOrder
+                }
             }
         }
 
-        // Recompute caches immediately so the UI updates
-        recomputeAllCaches()
+        var incomplete = store.incompleteTasks
+        applyOrder(to: &incomplete)
+        store.incompleteTasks = incomplete
+
+        applyOrder(to: &filteredFromDatabase)
+        applyOrder(to: &searchResults)
+
+        // Recompute caches immediately so the UI updates. Suppress the async
+        // SQLite requery — when filters are active, the requery would otherwise
+        // overwrite filteredFromDatabase with stale data before scheduleSortOrderSync
+        // (debounced 500ms) writes the new sortOrders to SQLite. The flag is
+        // cleared via defer inside syncSortOrders once SQLite is fresh.
+        suppressDatabaseRequery = true
+        recomputeDisplayCaches()
 
         // Schedule debounced sync to SQLite + backend
         scheduleSortOrderSync()
@@ -1103,6 +1123,10 @@ class TasksViewModel: ObservableObject {
 
     /// Collect current sort orders from all categories and write to SQLite + backend
     private func syncSortOrders() async {
+        // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
+        // during the debounce window. Always reset on exit (incl. errors / cancellation)
+        // so we don't leave the flag stuck on for unrelated callers.
+        defer { suppressDatabaseRequery = false }
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
 
         for category in TaskCategory.allCases {
