@@ -407,6 +407,9 @@ async def run_listen_test(
     results['stats'] = stats
     results['events'] = events_received[:100]
     results['end_time'] = datetime.now(tz=None).isoformat()
+    results['final_segments'] = final_segments
+    results['full_transcript'] = all_received_text
+    results['full_reference'] = all_ref_text
 
     # Flaw detection
     if not final_segments:
