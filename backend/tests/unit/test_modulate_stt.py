@@ -507,16 +507,23 @@ class TestRecvLoop(unittest.TestCase):
         self.assertTrue(sock.is_connection_dead)
         self.assertIn('rate limit', sock.death_reason)
 
-    def test_done_message_continues(self):
-        done = json.dumps({'type': 'done', 'duration_ms': 5000})
+    def test_done_message_ends_recv(self):
         utt = json.dumps(
             {
                 'type': 'utterance',
                 'utterance': {'text': 'hello', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
             }
         )
-        sock = self._run_recv([done, utt])
+        done = json.dumps({'type': 'done', 'duration_ms': 5000})
+        utt2 = json.dumps(
+            {
+                'type': 'utterance',
+                'utterance': {'text': 'after done', 'start_ms': 2000, 'duration_ms': 500, 'speaker': 1},
+            }
+        )
+        sock = self._run_recv([utt, done, utt2])
         self.assertFalse(sock.is_connection_dead)
+        self.assertTrue(sock._done_event.is_set())
         self.assertEqual(len(self.segments), 1)
         self.assertEqual(self.segments[0]['text'], 'hello')
 
@@ -696,7 +703,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         self.assertEqual(call_kwargs[1]['data'], {'speaker_diarization': 'false'})
 
 
-class TestPartialResults(unittest.TestCase):
+class TestUtteranceResults(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         self.segments = []
@@ -725,126 +732,138 @@ class TestPartialResults(unittest.TestCase):
 
         return self.loop.run_until_complete(create())
 
-    def test_partial_cumulative_delta(self):
+    def test_utterance_emits_full_text(self):
         msgs = [
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world foo', 'start_ms': 0, 'speaker': 1},
-                }
-            ),
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world foo bar baz', 'start_ms': 0, 'speaker': 1},
-                }
-            ),
-        ]
-        self._run_recv(msgs)
-        self.assertEqual(len(self.segments), 2)
-        self.assertEqual(self.segments[0]['text'], 'hello world')
-        self.assertEqual(self.segments[1]['text'], 'foo bar')
-
-    def test_partial_then_final_utterance_emits_remainder(self):
-        msgs = [
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
-                }
-            ),
             json.dumps(
                 {
                     'type': 'utterance',
-                    'utterance': {'text': 'hello world end', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
-                }
-            ),
-        ]
-        self._run_recv(msgs)
-        self.assertEqual(len(self.segments), 2)
-        self.assertEqual(self.segments[0]['text'], 'hello world')
-        self.assertEqual(self.segments[1]['text'], 'end')
-
-    def test_partial_resets_on_final(self):
-        msgs = [
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'alpha beta gamma', 'start_ms': 0, 'speaker': 1},
-                }
-            ),
-            json.dumps(
-                {
-                    'type': 'utterance',
-                    'utterance': {'text': 'alpha beta gamma', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1},
-                }
-            ),
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'new words here', 'start_ms': 600, 'speaker': 1},
-                }
-            ),
-        ]
-        self._run_recv(msgs)
-        self.assertEqual(self.segments[0]['text'], 'alpha beta')
-        self.assertEqual(self.segments[1]['text'], 'gamma')
-        self.assertEqual(self.segments[2]['text'], 'new words')
-
-    def test_partial_no_new_words_skipped(self):
-        msgs = [
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
-                }
-            ),
-            json.dumps(
-                {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world end', 'start_ms': 0, 'speaker': 1},
+                    'utterance': {'text': 'hello world foo bar', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
                 }
             ),
         ]
         self._run_recv(msgs)
         self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'hello world')
+        self.assertEqual(self.segments[0]['text'], 'hello world foo bar')
+        self.assertEqual(self.segments[0]['start'], 0.0)
+        self.assertEqual(self.segments[0]['end'], 1.0)
 
-    def test_partial_speaker_mapping(self):
+    def test_multiple_utterances(self):
         msgs = [
             json.dumps(
                 {
-                    'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'word1 word2 word3', 'start_ms': 0, 'speaker': 2},
+                    'type': 'utterance',
+                    'utterance': {'text': 'first sentence here', 'start_ms': 0, 'duration_ms': 2000, 'speaker': 1},
+                }
+            ),
+            json.dumps(
+                {
+                    'type': 'utterance',
+                    'utterance': {'text': 'second sentence', 'start_ms': 2500, 'duration_ms': 1500, 'speaker': 1},
+                }
+            ),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 2)
+        self.assertEqual(self.segments[0]['text'], 'first sentence here')
+        self.assertEqual(self.segments[1]['text'], 'second sentence')
+        self.assertEqual(self.segments[1]['start'], 2.5)
+        self.assertEqual(self.segments[1]['end'], 4.0)
+
+    def test_utterance_speaker_mapping(self):
+        msgs = [
+            json.dumps(
+                {
+                    'type': 'utterance',
+                    'utterance': {'text': 'speaker two text', 'start_ms': 0, 'duration_ms': 500, 'speaker': 2},
                 }
             ),
         ]
         self._run_recv(msgs)
         self.assertEqual(self.segments[0]['speaker'], 'SPEAKER_01')
 
-    def test_partial_empty_text_skipped(self):
+    def test_utterance_empty_text_skipped(self):
         msgs = [
-            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': '', 'start_ms': 0, 'speaker': 1}}),
-            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': '  ', 'start_ms': 0, 'speaker': 1}}),
+            json.dumps(
+                {'type': 'utterance', 'utterance': {'text': '', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1}}
+            ),
+            json.dumps(
+                {'type': 'utterance', 'utterance': {'text': '  ', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1}}
+            ),
         ]
         self._run_recv(msgs)
         self.assertEqual(self.segments, [])
 
-    def test_final_utterance_all_covered_by_partial(self):
+    def test_partial_superseded_by_utterance(self):
         msgs = [
             json.dumps(
                 {
                     'type': 'partial_utterance',
-                    'partial_utterance': {'text': 'hello world extra', 'start_ms': 0, 'speaker': 1},
+                    'partial_utterance': {'text': 'partial text here', 'start_ms': 0, 'speaker': 1},
                 }
             ),
             json.dumps(
-                {'type': 'utterance', 'utterance': {'text': 'hello', 'start_ms': 0, 'duration_ms': 500, 'speaker': 1}}
+                {
+                    'type': 'utterance',
+                    'utterance': {'text': 'final utterance', 'start_ms': 0, 'duration_ms': 1000, 'speaker': 1},
+                }
             ),
         ]
         self._run_recv(msgs)
         self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'hello world')
+        self.assertEqual(self.segments[0]['text'], 'final utterance')
+
+    def test_partial_flush_at_done(self):
+        msgs = [
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one', 'start_ms': 0}}),
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two', 'start_ms': 0}}),
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two three', 'start_ms': 0}}),
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'new start', 'start_ms': 5000}}),
+            json.dumps({'type': 'done', 'duration_ms': 6000}),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'new start')
+        self.assertEqual(self.segments[0]['start'], 5.0)
+
+    def test_partial_word_count_drop_is_revision_not_flush(self):
+        msgs = [
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'a b c d e', 'start_ms': 0}}),
+            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'x y z', 'start_ms': 0}}),
+            json.dumps({'type': 'done', 'duration_ms': 3000}),
+        ]
+        self._run_recv(msgs)
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'x y z')
+
+    def test_utterance_preseconds_filter(self):
+        async def create():
+            ws = AsyncMock()
+            ws.close = AsyncMock()
+
+            async def aiter_messages():
+                yield json.dumps(
+                    {
+                        'type': 'utterance',
+                        'utterance': {'text': 'too early', 'start_ms': 500, 'duration_ms': 500, 'speaker': 1},
+                    }
+                )
+                yield json.dumps(
+                    {
+                        'type': 'utterance',
+                        'utterance': {'text': 'after preseconds', 'start_ms': 5500, 'duration_ms': 1000, 'speaker': 1},
+                    }
+                )
+
+            ws.__aiter__ = lambda s: aiter_messages()
+            sock = SafeModulateSocket(ws, lambda s: self.segments.extend(s), self.loop, preseconds=5)
+            sock._send_task.cancel()
+            sock._recv_task.cancel()
+            self.segments.clear()
+            await sock._recv_loop()
+
+        self.loop.run_until_complete(create())
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'after preseconds')
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
