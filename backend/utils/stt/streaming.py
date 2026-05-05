@@ -518,8 +518,10 @@ class SafeModulateSocket(STTSocket):
         self._header_sent = False
         self._wav_header: Optional[bytes] = None
         self._send_queue: asyncio.Queue = asyncio.Queue(maxsize=2000)
-        self._partial_words_emitted: int = 0
-        self._partial_speaker: Optional[str] = None
+        self._done_event = asyncio.Event()
+        self._prev_partial_text: str = ''
+        self._prev_partial_start_ms: int = 0
+        self._prev_partial_word_count: int = 0
         self._recv_task = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task = asyncio.ensure_future(self._send_loop(), loop=loop)
 
@@ -584,7 +586,10 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._send_task, timeout=10)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 pass
-            await asyncio.sleep(10)
+            try:
+                await asyncio.wait_for(self._done_event.wait(), timeout=60)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                logger.warning('Modulate drain timed out waiting for done message')
         except Exception:
             pass
         self._recv_task.cancel()
@@ -626,9 +631,13 @@ class SafeModulateSocket(STTSocket):
                     break
                 elif msg_type == 'done':
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
-                    continue
+                    if self._prev_partial_text:
+                        self._flush_partial()
+                    self._done_event.set()
+                    break
                 elif msg_type == 'partial_utterance':
-                    self._handle_partial_utterance(msg.get('partial_utterance', msg))
+                    pu = msg.get('partial_utterance', msg)
+                    self._handle_partial_utterance(pu)
                 elif msg_type == 'utterance':
                     utt = msg.get('utterance', msg)
                     self._handle_utterance(utt)
@@ -641,35 +650,27 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
+        start_ms = msg.get('start_ms', 0)
+        self._prev_partial_text = text
+        self._prev_partial_start_ms = start_ms
+        self._prev_partial_word_count = len(text.split())
 
-        start_ms = msg.get('start_ms') or 0
+    def _flush_partial(self):
+        text = self._prev_partial_text
+        start_ms = self._prev_partial_start_ms
+        self._prev_partial_text = ''
+        self._prev_partial_word_count = 0
+        if not text:
+            return
         start = start_ms / 1000.0
-
         if self._preseconds and start < self._preseconds:
             return
-
-        raw_speaker = msg.get('speaker')
-        if isinstance(raw_speaker, int) and raw_speaker >= 1:
-            speaker_idx = raw_speaker - 1
-        else:
-            speaker_idx = 0
-        speaker = f'SPEAKER_{speaker_idx:02d}'
-
-        words = text.split()
-        confirmed_end = len(words) - 1
-        if confirmed_end <= self._partial_words_emitted:
-            return
-
-        delta_text = ' '.join(words[self._partial_words_emitted : confirmed_end])
-        self._partial_words_emitted = confirmed_end
-        self._partial_speaker = speaker
-
         segments = [
             {
-                'speaker': speaker,
+                'speaker': 'SPEAKER_00',
                 'start': start,
                 'end': start,
-                'text': delta_text,
+                'text': text,
                 'is_user': False,
                 'person_id': None,
             }
@@ -680,6 +681,9 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
+
+        self._prev_partial_text = ''
+        self._prev_partial_word_count = 0
 
         start_ms = msg.get('start_ms', 0)
         duration_ms = msg.get('duration_ms', 0)
@@ -695,15 +699,6 @@ class SafeModulateSocket(STTSocket):
         else:
             speaker_idx = 0
         speaker = f'SPEAKER_{speaker_idx:02d}'
-
-        words = text.split()
-        if self._partial_words_emitted > 0:
-            remaining = words[self._partial_words_emitted :]
-            self._partial_words_emitted = 0
-            self._partial_speaker = None
-            if not remaining:
-                return
-            text = ' '.join(remaining)
 
         segments = [
             {
