@@ -555,9 +555,12 @@ class GatedSTTSocket(STTSocket):
     This keeps all VAD logic out of transcribe.py.
     """
 
-    def __init__(self, stt_connection: STTSocket, gate: Optional['VADStreamingGate'] = None):
+    def __init__(
+        self, stt_connection: STTSocket, gate: Optional['VADStreamingGate'] = None, passthrough_audio: bool = False
+    ):
         self._conn = stt_connection
         self._gate = gate
+        self._passthrough_audio = passthrough_audio
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -597,11 +600,10 @@ class GatedSTTSocket(STTSocket):
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
-        if gate_out.audio_to_send:
-            # SafeDeepgramSocket.send() handles dead detection internally
+        if self._passthrough_audio:
+            self._conn.send(data)
+        elif gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
-        # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
-        # No explicit keep_alive() call needed here (#5870 architecture).
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
