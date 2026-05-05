@@ -394,20 +394,6 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
     cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
-# Copy HeapSwiftCore framework and its dependency CSSwiftProtobuf
-HEAP_FRAMEWORK="Desktop/.build/artifacts/heap-swift-core-sdk/HeapSwiftCore/HeapSwiftCore.xcframework/macos-arm64_x86_64/HeapSwiftCore.framework"
-if [ -d "$HEAP_FRAMEWORK" ]; then
-    substep "Copying HeapSwiftCore framework"
-    rm -rf "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
-    cp -R "$HEAP_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
-fi
-CSPROTOBUF_FRAMEWORK="Desktop/.build/artifacts/csswiftprotobuf/CSSwiftProtobuf/CSSwiftProtobuf.xcframework/macos-arm64_x86_64/CSSwiftProtobuf.framework"
-if [ -d "$CSPROTOBUF_FRAMEWORK" ]; then
-    substep "Copying CSSwiftProtobuf framework"
-    rm -rf "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
-    cp -R "$CSPROTOBUF_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
-fi
-
 # Copy libwebp dylibs and rewrite load paths
 WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
 if [ -f "$WEBP_LIB" ]; then
@@ -562,10 +548,6 @@ if [ -n "$SIGN_IDENTITY" ]; then
         substep "Signing Sparkle framework"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
     fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework" ]; then
-        substep "Signing CSSwiftProtobuf framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
-    fi
     if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
         substep "Signing libsharpyuv"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
@@ -573,10 +555,6 @@ if [ -n "$SIGN_IDENTITY" ]; then
     if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
         substep "Signing libwebp"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-    fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework" ]; then
-        substep "Signing HeapSwiftCore framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
     fi
     # Sign the bundled node binary with developer identity + Node.entitlements
     # (macOS requires executables inside app bundles to be properly signed)
