@@ -3855,6 +3855,18 @@ struct TaskRow: View {
                 onDismiss: { showTaskDetail = false }
             )
         }
+        // Hover lives on the outer body — not on taskRowContent — so the drag
+        // handle (which is a sibling of taskRowContent inside the outer HStack)
+        // reveals when the cursor approaches it, not only when it's over text.
+        .onHover { hovering in
+            isHovering = hovering
+            onHover?(hovering ? task.id : nil)
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 
     // MARK: - Swipeable Content
@@ -4422,15 +4434,6 @@ struct TaskRow: View {
         .onChange(of: animateToggleTaskId) { _, newValue in
             if newValue == task.id {
                 handleToggle()
-            }
-        }
-        .onHover { hovering in
-            isHovering = hovering
-            onHover?(hovering ? task.id : nil)
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
             }
         }
     }
