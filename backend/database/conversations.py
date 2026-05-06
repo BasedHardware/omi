@@ -10,7 +10,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from database import users as users_db
+from database import users as users_db, redis_db
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -220,11 +220,13 @@ def get_conversations(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    # Fetch extra rows when post-filtering trashed conversations so recent trashed
+    # documents do not produce short pages while older visible rows exist.
+    fetch_limit = limit if include_trashed else min(limit * 3, 500)
+    conversations_ref = conversations_ref.limit(fetch_limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return _filter_trashed(conversations, include_trashed)
+    return _filter_trashed(conversations, include_trashed)[:limit]
 
 
 def get_conversations_count(
@@ -287,11 +289,13 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    # Fetch extra rows when post-filtering trashed conversations so recent trashed
+    # documents do not produce short pages while older visible rows exist.
+    fetch_limit = limit if include_trashed else min(limit * 3, 500)
+    conversations_ref = conversations_ref.limit(fetch_limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return _filter_trashed(conversations, include_trashed)
+    return _filter_trashed(conversations, include_trashed)[:limit]
 
 
 def iter_all_conversations(
@@ -335,9 +339,16 @@ def trash_conversation(uid: str, conversation_id: str):
     conversation_ref = (
         db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     )
-    if not conversation_ref.get().exists:
+    conversation_snapshot = conversation_ref.get()
+    if not conversation_snapshot.exists:
         return None
-    conversation_ref.update({'trashed_at': datetime.now(timezone.utc)})
+    conversation = conversation_snapshot.to_dict()
+    update_data = {'trashed_at': datetime.now(timezone.utc)}
+    if conversation.get('visibility') in ['public', 'shared']:
+        redis_db.remove_conversation_to_uid(conversation_id)
+        redis_db.remove_public_conversation(conversation_id)
+        update_data['visibility'] = 'private'
+    conversation_ref.update(update_data)
     return conversation_ref.get().to_dict()
 
 

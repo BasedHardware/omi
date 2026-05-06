@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+import importlib
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,16 @@ os.environ.setdefault(
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+
+
+def _prefer_real_module(module_name):
+    previous_module = sys.modules.get(module_name)
+    sys.modules.pop(module_name, None)
+    try:
+        importlib.import_module(module_name)
+    except Exception:
+        if previous_module is not None:
+            sys.modules[module_name] = previous_module
 
 
 if "google" not in sys.modules:
@@ -83,6 +94,14 @@ sys.modules["models.conversation_photo"] = conversation_photo_stub
 transcript_segment_stub = types.ModuleType("models.transcript_segment")
 transcript_segment_stub.TranscriptSegment = type("TranscriptSegment", (), {})
 sys.modules["models.transcript_segment"] = transcript_segment_stub
+
+for model_module_name in [
+    "models.audio_file",
+    "models.conversation_enums",
+    "models.conversation_photo",
+    "models.transcript_segment",
+]:
+    _prefer_real_module(model_module_name)
 
 
 class FakeDocumentSnapshot:
@@ -255,29 +274,42 @@ fake_db = FakeFirestore()
 database_client_stub = types.ModuleType("database._client")
 database_client_stub.db = fake_db
 database_client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
+database_stub = sys.modules.setdefault("database", types.ModuleType("database"))
+database_stub.__path__ = [str(BACKEND_DIR / "database")]
 sys.modules["database._client"] = database_client_stub
 
-redis_db_stub = types.ModuleType("database.redis_db")
+redis_db_stub = sys.modules.get("database.redis_db") or types.ModuleType("database.redis_db")
+if "r" not in redis_db_stub.__dict__:
+    redis_db_stub.r = MagicMock()
 redis_db_stub.get_user_data_protection_level = MagicMock(return_value="standard")
 redis_db_stub.set_user_data_protection_level = MagicMock()
+redis_db_stub.remove_conversation_to_uid = MagicMock()
+redis_db_stub.remove_public_conversation = MagicMock()
 sys.modules["database.redis_db"] = redis_db_stub
 
-users_db_stub = types.ModuleType("database.users")
+users_db_stub = sys.modules.get("database.users") or types.ModuleType("database.users")
 users_db_stub.get_user_profile = MagicMock(return_value={"data_protection_level": "standard"})
 sys.modules["database.users"] = users_db_stub
 
 utils_other_stub = types.ModuleType("utils.other")
 utils_other_stub.__path__ = [str(BACKEND_DIR / "utils" / "other")]
+utils_stub = sys.modules.setdefault("utils", types.ModuleType("utils"))
+utils_stub.__path__ = [str(BACKEND_DIR / "utils")]
+utils_conversations_stub = sys.modules.setdefault("utils.conversations", types.ModuleType("utils.conversations"))
+utils_conversations_stub.__path__ = [str(BACKEND_DIR / "utils" / "conversations")]
 sys.modules["utils.other"] = utils_other_stub
 
-hume_stub = types.ModuleType("utils.other.hume")
-hume_stub.HumeJobModelPredictionResponseModel = type("HumeJobModelPredictionResponseModel", (), {})
+hume_stub = sys.modules.get("utils.other.hume") or types.ModuleType("utils.other.hume")
+if "HumeJobModelPredictionResponseModel" not in hume_stub.__dict__:
+    hume_stub.HumeJobModelPredictionResponseModel = type("HumeJobModelPredictionResponseModel", (), {})
 sys.modules["utils.other.hume"] = hume_stub
 utils_other_stub.hume = hume_stub
 
-storage_stub = types.ModuleType("utils.other.storage")
-storage_stub.list_audio_chunks = MagicMock(return_value=[])
-storage_stub.delete_conversation_audio_files = MagicMock()
+storage_stub = sys.modules.get("utils.other.storage") or types.ModuleType("utils.other.storage")
+if "list_audio_chunks" not in storage_stub.__dict__:
+    storage_stub.list_audio_chunks = MagicMock(return_value=[])
+if "delete_conversation_audio_files" not in storage_stub.__dict__:
+    storage_stub.delete_conversation_audio_files = MagicMock()
 sys.modules["utils.other.storage"] = storage_stub
 utils_other_stub.storage = storage_stub
 
@@ -285,8 +317,26 @@ typesense_stub = types.ModuleType("typesense")
 typesense_stub.Client = MagicMock(return_value=MagicMock())
 sys.modules.setdefault("typesense", typesense_stub)
 
+existing_conversations_module = sys.modules.get("database.conversations")
+if existing_conversations_module and "upsert_conversation" not in existing_conversations_module.__dict__:
+    del sys.modules["database.conversations"]
+
 import database.conversations as conversations_db
 import utils.conversations.search as search
+
+REAL_CONVERSATION_DB_FUNCS = {
+    name: getattr(conversations_db, name)
+    for name in [
+        "filter_visible_conversation_ids",
+        "get_conversations",
+        "get_conversations_without_photos",
+        "get_trashed_conversations",
+        "restore_conversation",
+        "set_conversation_visibility",
+        "trash_conversation",
+        "upsert_conversation",
+    ]
+}
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -296,7 +346,11 @@ def initialize_firebase():
 
 @pytest.fixture(autouse=True)
 def reset_fake_db():
+    for name, func in REAL_CONVERSATION_DB_FUNCS.items():
+        setattr(conversations_db, name, func)
     fake_db.reset()
+    redis_db_stub.remove_conversation_to_uid.reset_mock()
+    redis_db_stub.remove_public_conversation.reset_mock()
     yield
     fake_db.reset()
 
@@ -334,6 +388,20 @@ def test_trash_then_restore():
     assert "trashed_at" not in restored
 
 
+@pytest.mark.parametrize("visibility", ["shared", "public"])
+def test_trash_revokes_shared_access(visibility):
+    uid = "uid-trash-shared"
+    _upsert(uid, "conv-1")
+    conversations_db.set_conversation_visibility(uid, "conv-1", visibility)
+
+    trashed = conversations_db.trash_conversation(uid, "conv-1")
+
+    assert trashed["visibility"] == "private"
+    assert isinstance(trashed["trashed_at"], datetime)
+    redis_db_stub.remove_conversation_to_uid.assert_called_once_with("conv-1")
+    redis_db_stub.remove_public_conversation.assert_called_once_with("conv-1")
+
+
 def test_get_trashed_conversations():
     uid = "uid-trashed-list"
     _upsert(uid, "older")
@@ -358,6 +426,26 @@ def test_default_list_excludes_trashed():
 
     assert [conversation["id"] for conversation in visible] == ["visible"]
     assert {conversation["id"] for conversation in with_trashed} == {"visible", "trashed"}
+
+
+def test_default_list_fetches_past_recent_trashed_conversations():
+    uid = "uid-list-pagination"
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for index in range(4):
+        _upsert(uid, f"visible-{index}", created_at=base.replace(day=index + 1))
+    for index in range(2):
+        _upsert(uid, f"trashed-{index}", created_at=base.replace(day=index + 10))
+        conversations_db.trash_conversation(uid, f"trashed-{index}")
+
+    visible = conversations_db.get_conversations(uid, limit=3)
+    visible_without_photos = conversations_db.get_conversations_without_photos(uid, limit=3)
+
+    assert [conversation["id"] for conversation in visible] == ["visible-3", "visible-2", "visible-1"]
+    assert [conversation["id"] for conversation in visible_without_photos] == [
+        "visible-3",
+        "visible-2",
+        "visible-1",
+    ]
 
 
 def test_trash_404_when_missing():
