@@ -253,12 +253,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildOverflowMenu(ActionItemsProvider provider) {
     final showingCompleted = provider.showCompletedView;
-    // "Select all" flips to "Deselect all" once every selectable task is
-    // already selected. `selectAllItems()` skips items that are already
-    // exported, so we compare against the unexported count — otherwise the
-    // label never flips when any task has been exported before.
-    final selectableCount = provider.actionItems.where((i) => !i.exported).length;
-    final allSelected = selectableCount > 0 && provider.selectedCount == selectableCount;
+    final hasItems = provider.actionItems.isNotEmpty;
+    final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
 
     return PopupMenuButton<String>(
       tooltip: '',
@@ -1428,12 +1424,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Trailing square selection box — only in selection mode.
               // Different shape + position from the leading completion circle
               // so completion vs. selection cannot be confused.
-              // Exported items show a disabled square — they can't be re-exported.
               if (provider.isSelectionMode)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, right: 8),
-                  child:
-                      item.exported ? _buildSelectionSquare(false, disabled: true) : _buildSelectionSquare(isSelected),
+                  child: _buildSelectionSquare(isSelected),
                 ),
             ],
           ),
@@ -1462,19 +1456,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   /// Trailing selection box rendered only in selection mode. Rounded **square**
   /// — different shape from the leading completion circle so users can't
   /// confuse "selected for bulk action" with "marked as done".
-  Widget _buildSelectionSquare(bool isSelected, {bool disabled = false}) {
-    if (disabled) {
-      return Container(
-        width: 22,
-        height: 22,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[800]!, width: 1.5),
-          color: Colors.grey[850],
-        ),
-        child: Icon(Icons.check, size: 14, color: Colors.grey[600]),
-      );
-    }
+  Widget _buildSelectionSquare(bool isSelected) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: 22,
