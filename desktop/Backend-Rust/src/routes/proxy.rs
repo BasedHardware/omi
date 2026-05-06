@@ -1671,4 +1671,59 @@ mod tests {
         let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
         assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
+
+    #[test]
+    fn sanitize_dual_generation_config_both_get_thinking() {
+        // Attacker sends both casings — both should get thinking budget injected.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": {"max_output_tokens": 100},
+            "generationConfig": {"maxOutputTokens": 200}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // Both casings should have thinkingConfig injected
+        let gc_snake = parsed.get("generation_config").unwrap().as_object().unwrap();
+        assert!(gc_snake.contains_key("thinkingConfig"));
+        let gc_camel = parsed.get("generationConfig").unwrap().as_object().unwrap();
+        assert!(gc_camel.contains_key("thinkingConfig"));
+    }
+
+    #[test]
+    fn sanitize_null_generation_config_gets_new_one() {
+        // Malformed: generation_config is null — proxy should create a fresh one.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": null
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // null generation_config is not an object, so proxy creates generationConfig
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
+    }
+
+    #[test]
+    fn sanitize_string_generation_config_gets_new_one() {
+        // Malformed: generation_config is a string — proxy should create a fresh one.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": "invalid"
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
+    }
 }
