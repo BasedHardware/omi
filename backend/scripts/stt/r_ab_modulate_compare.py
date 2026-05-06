@@ -24,7 +24,7 @@ from pathlib import Path
 
 import websockets
 
-MODULATE_API_KEY = os.getenv('MODULATE_API_KEY', '11561b42-7e06-453e-a8a3-01f4eb3e9d2b')
+MODULATE_API_KEY = os.getenv('MODULATE_API_KEY', '')
 BACKEND_HOST = 'localhost'
 BACKEND_PORT = 8700
 LIBRISPEECH_DIR = Path('/tmp/librispeech/LibriSpeech/test-clean')
