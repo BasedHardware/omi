@@ -41,9 +41,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // Track the item being hovered over during drag
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
+  int _hoverIndent = 0; // target indent_level for the drop slot
 
   // Whether the current long-press drag has actually moved (reorder) or stayed still (select)
   bool _dragHasMoved = false;
+
+  // Horizontal anchor for the active long-press drag — the feedback widget's
+  // top-left X at first onMove. Indent target = origin indent + round(deltaX / step).
+  static const double _indentStep = 28.0;
+  double? _dragStartX;
 
   // Overdue section expanded by default — missed deadlines are the most
   // important thing to surface, hiding them behind a tap caused regret.
@@ -1119,9 +1125,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       onAcceptWithDetails: (details) {
         final draggedItem = details.data;
+        final targetIndent = _hoverIndent;
 
         // Reorder within category
         _reorderItemInCategory(draggedItem, item.id, _hoverAbove, category, categoryItems);
+
+        // Apply indent change from the drag's horizontal travel.
+        if (draggedItem.indentLevel != targetIndent) {
+          Provider.of<ActionItemsProvider>(context, listen: false).updateItemIndentLevel(draggedItem.id, targetIndent);
+        }
 
         // Also update category if different
         final draggedCategory = _getCategoryForItem(draggedItem);
@@ -1137,10 +1149,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final localPosition = box.globalToLocal(details.offset);
         final isAbove = localPosition.dy < box.size.height / 2;
 
-        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+        // Anchor the horizontal drag origin on the first onMove; subsequent
+        // moves measure delta from there so the user has to consciously
+        // travel right/left to indent/outdent.
+        _dragStartX ??= details.offset.dx;
+        final deltaX = details.offset.dx - _dragStartX!;
+        final draggedItem = details.data;
+        final targetIdx = categoryItems.indexWhere((i) => i.id == item.id);
+        final maxIndent = _maxIndentForDrop(
+          draggedItem: draggedItem,
+          targetIdx: targetIdx,
+          isAbove: isAbove,
+          categoryItems: categoryItems,
+        );
+        final newIndent = (draggedItem.indentLevel + (deltaX / _indentStep).round()).clamp(0, maxIndent);
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove || _hoverIndent != newIndent) {
           setState(() {
             _hoveredItemId = item.id;
             _hoverAbove = isAbove;
+            _hoverIndent = newIndent;
           });
         }
       },
@@ -1153,6 +1181,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       builder: (ctx, candidateData, rejectedData) {
         itemContext = ctx;
+        // Drop bar mirrors the target indent so the user sees where the row
+        // will land before they release.
+        final barLeft = 4 + _hoverIndent * _indentStep;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1160,15 +1191,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             if (isHovered && _hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: EdgeInsets.only(left: barLeft, right: 4),
                 decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
-            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth),
+            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
             if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: EdgeInsets.only(left: barLeft, right: 4),
                 decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
           ],
@@ -1177,13 +1208,51 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// Walks the displayed [categoryItems] forward from [parent] and returns
+  /// every contiguous descendant — rows with strictly greater indent_level,
+  /// stopping at the first sibling/ancestor. The data model is flat (no
+  /// parent_id), so the page is the right layer to compute this: it owns the
+  /// category-grouped display order; the provider does not.
+  List<String> _visibleDescendantIds(
+    ActionItemWithMetadata parent,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    final idx = categoryItems.indexWhere((i) => i.id == parent.id);
+    if (idx < 0) return const [];
+    final ids = <String>[];
+    for (int i = idx + 1; i < categoryItems.length; i++) {
+      if (categoryItems[i].indentLevel <= parent.indentLevel) break;
+      ids.add(categoryItems[i].id);
+    }
+    return ids;
+  }
+
+  /// Caps the drop indent at one level deeper than the row immediately
+  /// preceding the drop slot (skipping the dragged row itself). Without this,
+  /// a user could indent past a parent that doesn't exist yet.
+  int _maxIndentForDrop({
+    required ActionItemWithMetadata draggedItem,
+    required int targetIdx,
+    required bool isAbove,
+    required List<ActionItemWithMetadata> categoryItems,
+  }) {
+    if (targetIdx < 0) return 3;
+    int idx = isAbove ? targetIdx - 1 : targetIdx;
+    while (idx >= 0 && categoryItems[idx].id == draggedItem.id) {
+      idx--;
+    }
+    if (idx < 0) return 0;
+    return (categoryItems[idx].indentLevel + 1).clamp(0, 3);
+  }
+
   Widget _buildDraggableTaskItem(
     ActionItemWithMetadata item,
     ActionItemsProvider provider,
     int indentLevel,
     double indentWidth,
+    List<ActionItemWithMetadata> categoryItems,
   ) {
-    final taskContent = _buildTaskItemContent(item, provider, indentWidth);
+    final taskContent = _buildTaskItemContent(item, provider, indentWidth, categoryItems);
 
     // In selection mode: no drag, no swipe — just tappable content.
     if (provider.isSelectionMode) {
@@ -1197,6 +1266,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         hapticFeedbackOnStart: true,
         onDragStarted: () {
           _dragHasMoved = false;
+          _dragStartX = null;
+          _hoverIndent = item.indentLevel;
           HapticFeedback.mediumImpact();
         },
         onDragUpdate: (_) {
@@ -1211,6 +1282,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           setState(() {
             _hoveredItemId = null;
             _dragHasMoved = false;
+            _hoverIndent = 0;
+            _dragStartX = null;
           });
         },
         feedback: Material(
@@ -1327,7 +1400,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  Widget _buildTaskItemContent(ActionItemWithMetadata item, ActionItemsProvider provider, double indentWidth) {
+  Widget _buildTaskItemContent(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    double indentWidth,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
@@ -1337,7 +1415,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () {
         if (provider.isSelectionMode) {
           HapticFeedback.selectionClick();
-          provider.toggleItemSelection(item.id);
+          provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
         } else {
           _showEditSheet(item);
         }
