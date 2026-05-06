@@ -1,4 +1,4 @@
-name: Deploy Speech Models to Cloud RUN
+name: Deploy Speech Models to GKE
 
 # TODO: determine if changes to backend folder before pushing
 
@@ -17,6 +17,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: models
@@ -70,41 +74,13 @@ jobs:
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-vad ./backend/charts/vad -f ./backend/charts/vad/${{ vars.ENV }}_omi_vad_values.yaml --set "image.tag=${GITHUB_SHA::7}"
 
-      # - name: Create SSH Key
-      #   run: |
-      #     mkdir -p ~/.ssh
-      #     echo "${{ secrets.SPEECH_MODELS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-      #     chmod 600 ~/.ssh/id_ed25519
-
-      # - name: Deploy Docker image
-      #   run: |
-      #     ssh -o StrictHostKeyChecking=no \
-      #     ${{ secrets.SPEECH_MODELS_SSH_USERNAME }}@${{ secrets.SPEECH_MODELS_SSH_HOST }} \
-      #     "set -x; \
-      #     echo '[+] Pull latest Speech Models image...'; \
-      #     docker pull gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}; \
-      #     echo '[+] Remove current Speech Models container...'; \
-      #     docker rm -f ${{ env.CONTAINER_NAME }}; \
-      #     echo '[+
-      #     ] Start new Speech Models container...'; \
-      #     docker run -d --name ${{ env.CONTAINER_NAME }} -p 8080:8080 \
-      #       --volume /var/lib/nvidia/lib64:/usr/local/nvidia/lib64 \
-      #       --volume /var/lib/nvidia/bin:/usr/local/nvidia/bin \
-      #       --device /dev/nvidia0:/dev/nvidia0 \
-      #       --device /dev/nvidia-uvm:/dev/nvidia-uvm \
-      #       --device /dev/nvidiactl:/dev/nvidiactl \
-      #       -e OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-      #       -e HUGGINGFACE_TOKEN=${{ secrets.HUGGINGFACE_TOKEN }} \
-      #       gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}"
-
-      # - name: Deploy to Cloud Run
-      #   id: deploy
-      #   uses: google-github-actions/deploy-cloudrun@v2
-      #   with:
-      #     service: ${{ env.SERVICE }}
-      #     region: ${{ env.REGION }}
-      #     image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-
-      # If required, use the Cloud Run url output in later steps
-      # - name: Show Output
-      #   run: echo ${{ steps.deploy.outputs.url }}
+      - name: Generate deployment summary
+        if: always() # Ensure this step runs even if previous steps fail
+        uses: ./.github/actions/deployment-summary
+        with:
+          workflow_name: ${{ github.workflow }}
+          environment: ${{ github.event.inputs.environment }}
+          branch: ${{ github.event.inputs.branch }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}

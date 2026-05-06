@@ -64,6 +64,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copySummary => 'Copy Summary';
 
   @override
+  String get copyConversationId => 'Copy Conversation ID';
+
+  @override
+  String get conversationIdCopied => 'Conversation ID copied to clipboard';
+
+  @override
   String get testPrompt => 'Test Prompt';
 
   @override
@@ -4526,12 +4532,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Your plan ended on $date.\\nResubscribe now - you\'ll be charged immediately for a new billing period.';
+    return 'Your plan ended on $date.\nResubscribe now - you\'ll be charged immediately for a new billing period.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Your plan is set to cancel on $date.\\nResubscribe now to keep your benefits - no charge until $date.';
+    return 'Your plan is set to cancel on $date.\nResubscribe now to keep your benefits - no charge until $date.';
   }
 
   @override
@@ -6534,7 +6540,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Set $appName as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.';
+    return 'Set $appName as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.';
   }
 
   @override
@@ -9159,4 +9165,76 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Voice Mode';
+
+  @override
+  String get quickActionAskOmi => 'Ask Omi Anything';
+
+  @override
+  String get record => 'Record';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get recordWithPhoneMic => 'Record with Phone Mic';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capture audio around you';
+
+  @override
+  String get phoneCall => 'Phone Call';
+
+  @override
+  String get phoneCallSubtitle => 'Record a call with live transcription';
+
+  @override
+  String get searchActionItems => 'Search action items';
+
+  @override
+  String get selectActionItems => 'Select multiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Export $count item(s) to…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exporting…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exported $count to $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exported $success of $total to $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Show completed';
+
+  @override
+  String get hideCompletedTasks => 'Hide completed';
+
+  @override
+  String get selectAllTasksMenu => 'Select all';
+
+  @override
+  String get connectTaskAppToExport => 'Connect a task app in Settings to export';
+
+  @override
+  String get connectAction => 'Connect';
+
+  @override
+  String get deselectAllTasksMenu => 'Deselect all';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

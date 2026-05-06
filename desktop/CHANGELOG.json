@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.378",
+      "date": "2026-05-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.377",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.376",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.375",
+      "date": "2026-05-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.374",
+      "date": "2026-05-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.373",
       "date": "2026-04-29",
       "changes": [

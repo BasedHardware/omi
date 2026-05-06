@@ -139,14 +139,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause;
+        captureProvider.recordingState == RecordingState.pause ||
+        captureProvider.recordingState == RecordingState.interrupted;
 
-    // Check if any recording is active (phone mic, system audio, or device recording)
+    // Check if any recording is active (phone mic, system audio, or device recording).
+    // `interrupted` is included so the in-session UI stays visible while the
+    // pipeline is transiently broken (e.g., iOS audio session interruption).
     bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
         captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause ||
+        captureProvider.recordingState == RecordingState.interrupted ||
         captureProvider.isPaused ||
         _isPhoneMicPaused;
 
@@ -214,7 +218,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     var stateText = "";
 
     // Always check pause state first with highest priority (both desktop and phone)
-    if (captureProvider.isPaused || _isPhoneMicPaused) {
+    if (captureProvider.recordingState == RecordingState.interrupted && captureProvider.isCallActive) {
+      stateText = context.l10n.paused;
+      statusIndicator = const PausedStatusIndicator();
+    } else if (captureProvider.isPaused || _isPhoneMicPaused) {
       stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
@@ -272,25 +279,30 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
+        provider.recordingState == RecordingState.interrupted ||
         _isPhoneMicPaused;
 
-    // Determine pause state based on recording type
+    // Determine pause state based on recording type.
+    // Call-active interruption is treated as paused for button/dot display.
+    bool isCallInterrupted = provider.recordingState == RecordingState.interrupted && provider.isCallActive;
     bool isPaused = false;
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = _isPhoneMicPaused || provider.isPaused;
+      isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
     }
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
     // Show "Listening" for all active recording states — WAL ensures audio is
     // saved locally regardless of transcription connection status.
-    String statusText = isPaused
-        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-        : hasPhotos
-            ? 'Capturing'
-            : context.l10n.listening;
+    String statusText = provider.recordingState == RecordingState.interrupted && provider.isCallActive
+        ? context.l10n.paused
+        : isPaused
+            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
+            : hasPhotos
+                ? 'Capturing'
+                : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {

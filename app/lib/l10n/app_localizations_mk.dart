@@ -64,6 +64,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get copySummary => 'Копирај резиме';
 
   @override
+  String get copyConversationId => 'Копирај ID на разговорот';
+
+  @override
+  String get conversationIdCopied => 'ID на разговорот е копиран во клипборд';
+
+  @override
   String get testPrompt => 'Тест подсетник';
 
   @override
@@ -4547,12 +4553,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Вашиот план заврши на $date.\\nПретплатете се сега - ќе бидете наплатени веднаш за нов период на наплатување.';
+    return 'Вашиот план заврши на $date.\nПретплатете се сега - ќе бидете наплатени веднаш за нов период на наплатување.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Вашиот план е поставен да се откаже на $date.\\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
+    return 'Вашиот план е поставен да се откаже на $date.\nПретплатете се сега за да ги задржите вашите бенефиции - без наплата до $date.';
   }
 
   @override
@@ -5123,7 +5129,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Задачите од вашите разговори ќе се појават овде.\\nОтвори + за да создадеш една ручно.';
+      'Задачите од вашите разговори ќе се појават овде.\nОтвори + за да создадеш една ручно.';
 
   @override
   String get clearChatAction => 'Очисти разговор';
@@ -9204,11 +9210,83 @@ class AppLocalizationsMk extends AppLocalizations {
   String get agreeAndContinue => 'Се согласувам и продолжи';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Започни гласовно снимање';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Започни снимање повик';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Гласовен режим';
+
+  @override
+  String get quickActionAskOmi => 'Прашајте го Omi за сè';
+
+  @override
+  String get record => 'Сними';
+
+  @override
+  String get stop => 'Стоп';
+
+  @override
+  String get recordWithPhoneMic => 'Снимај со микрофон на телефонот';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Снимајте звук околу вас';
+
+  @override
+  String get phoneCall => 'Телефонски повик';
+
+  @override
+  String get phoneCallSubtitle => 'Снимајте повик со транскрипција во живо';
+
+  @override
+  String get searchActionItems => 'Пребарај акциски ставки';
+
+  @override
+  String get selectActionItems => 'Избери повеќе';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Извези $count ставка/и во…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Извезување…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Извезени $count во $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Извезени $success од $total во $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Прикажи завршени';
+
+  @override
+  String get hideCompletedTasks => 'Сокриј завршени';
+
+  @override
+  String get selectAllTasksMenu => 'Избери ги сите';
+
+  @override
+  String get connectTaskAppToExport => 'Поврзете апликација за задачи во Поставки за извоз';
+
+  @override
+  String get connectAction => 'Поврзи';
+
+  @override
+  String get deselectAllTasksMenu => 'Одселектирај ги сите';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

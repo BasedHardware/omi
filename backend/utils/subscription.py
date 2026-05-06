@@ -461,6 +461,29 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
     ]
 
 
+def _has_active_stripe_subscription(uid: str) -> bool:
+    """Check Stripe directly for active subscriptions owned by this user.
+
+    This catches cases where Firestore hasn't been updated yet (e.g. webhook
+    write hasn't propagated) but Stripe already has an active subscription.
+    """
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return False
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status='active', limit=5)
+        for sub in subs.data:
+            sub_dict = sub.to_dict()
+            if sub_dict.get('cancel_at_period_end'):
+                continue
+            if sub_dict.get('metadata', {}).get('uid') == uid:
+                return True
+    except Exception as e:
+        logger.error(f"Error checking Stripe for active subscriptions: {e}")
+        return True  # fail-closed: block checkout if Stripe is unreachable
+    return False
+
+
 def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -474,8 +497,11 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
     """
     subscription = users_db.get_user_valid_subscription(uid)
 
-    # If no subscription or basic plan, user can pay
+    # If no subscription or basic plan, check Stripe as source of truth
+    # to guard against Firestore read-after-write lag
     if not subscription or subscription.plan == PlanType.basic:
+        if _has_active_stripe_subscription(uid):
+            return False, "User already has an active subscription (pending sync)"
         return True, "User can make payment"
 
     # If unlimited plan but inactive, user can pay

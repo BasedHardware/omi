@@ -361,6 +361,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case 'link_event':
         _handleLinkEvent(context, provider);
         break;
+      case 'copy_conversation_id':
+        Clipboard.setData(ClipboardData(text: provider.conversation.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.conversationIdCopied)),
+        );
+        HapticFeedback.lightImpact();
+        break;
       case 'delete':
         _handleDelete(context, provider);
         break;
@@ -868,6 +875,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
+                              PullDownMenuItem(
+                                title: context.l10n.copyConversationId,
+                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
+                              ),
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
@@ -1033,55 +1045,56 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ),
               ),
 
-              // Floating bottom bar
-              Positioned(
-                bottom: 32,
-                left: 0,
-                right: 0,
-                child: Consumer<ConversationDetailProvider>(
-                  builder: (context, provider, child) {
-                    final conversation = provider.conversation;
-                    final hasActionItems =
-                        conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
-                    return ConversationBottomBar(
-                      mode: ConversationBottomBarMode.detail,
-                      selectedTab: selectedTab,
-                      conversation: conversation,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                          conversation.photos.isNotEmpty ||
-                          conversation.externalIntegration != null,
-                      hasActionItems: hasActionItems,
-                      onSeekFunctionReady: (seekFunction) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) {
-                            setState(() {
-                              _seekToSegmentCallback = seekFunction;
-                            });
+              // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
+              if (MediaQuery.of(context).viewInsets.bottom == 0)
+                Positioned(
+                  bottom: 32,
+                  left: 0,
+                  right: 0,
+                  child: Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      final conversation = provider.conversation;
+                      final hasActionItems =
+                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      return ConversationBottomBar(
+                        mode: ConversationBottomBarMode.detail,
+                        selectedTab: selectedTab,
+                        conversation: conversation,
+                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                            conversation.photos.isNotEmpty ||
+                            conversation.externalIntegration != null,
+                        hasActionItems: hasActionItems,
+                        onSeekFunctionReady: (seekFunction) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _seekToSegmentCallback = seekFunction;
+                              });
+                            }
+                          });
+                        },
+                        onTabSelected: (tab) {
+                          int index;
+                          switch (tab) {
+                            case ConversationTab.transcript:
+                              index = 0;
+                              break;
+                            case ConversationTab.summary:
+                              index = 1;
+                              break;
+                            case ConversationTab.actionItems:
+                              index = 2;
+                              break;
                           }
-                        });
-                      },
-                      onTabSelected: (tab) {
-                        int index;
-                        switch (tab) {
-                          case ConversationTab.transcript:
-                            index = 0;
-                            break;
-                          case ConversationTab.summary:
-                            index = 1;
-                            break;
-                          case ConversationTab.actionItems:
-                            index = 2;
-                            break;
-                        }
-                        _controller!.animateTo(index);
-                      },
-                      onStopPressed: () {
-                        // Empty since we don't show the stop button in detail mode
-                      },
-                    );
-                  },
+                          _controller!.animateTo(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
 
               // thinh's comment: temporary disabled
               //// Unassigned segments notification - positioned above the bottom bar
@@ -1352,51 +1365,53 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Listener(
-      onPointerDown: (PointerDownEvent event) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
         FocusScope.of(context).unfocus();
+        // If search is empty, call the callback to close search
         if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
           widget.onTapWhenSearchEmpty!();
         }
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          // If search is empty, call the callback to close search
-          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-            widget.onTapWhenSearchEmpty!();
-          }
+      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
+        selector: (context, provider) =>
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        builder: (context, data, child) {
+          return Stack(
+            children: [
+              ListView(
+                shrinkWrap: true,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                children: [
+                  const GetSummaryWidgets(),
+                  data.item1
+                      ? const ReprocessDiscardedWidget()
+                      : GetAppsWidgets(
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                          canStartEditing: () {
+                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                            if (!connectivityProvider.isConnected) {
+                              ConnectivityProvider.showNoInternetDialog(context);
+                              return false;
+                            }
+                            return true;
+                          },
+                          onEditStarted: (_) => MixpanelManager().editSummaryStarted(),
+                          onEditCancelled: (_) => MixpanelManager().editSummaryCancelled(),
+                          onSaveSummary: (appId, newContent) {
+                            MixpanelManager().editSummarySaved();
+                            context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
+                          },
+                        ),
+                  const GetGeolocationWidgets(),
+                  const SizedBox(height: 150),
+                ],
+              ),
+            ],
+          );
         },
-        child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-          selector: (context, provider) =>
-              Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
-          builder: (context, data, child) {
-            return Stack(
-              children: [
-                Consumer<ConversationDetailProvider>(
-                  builder: (context, provider, child) {
-                    return ListView(
-                      shrinkWrap: true,
-                      children: [
-                        const GetSummaryWidgets(),
-                        // Calendar event is now shown via chips under the title (in GetSummaryWidgets)
-                        data.item1
-                            ? const ReprocessDiscardedWidget()
-                            : GetAppsWidgets(
-                                searchQuery: widget.searchQuery,
-                                currentResultIndex: widget.currentResultIndex,
-                              ),
-                        const GetGeolocationWidgets(),
-                        const SizedBox(height: 150),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            );
-          },
-        ),
       ),
     );
   }

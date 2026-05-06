@@ -126,6 +126,13 @@
             ]
           },
           {
+            "group": "Folders",
+            "pages": [
+              "doc/developer/api/folders",
+              "api-reference/endpoint/folders/list"
+            ]
+          },
+          {
             "group": "Action Items",
             "pages": [
               "doc/developer/api/action-items",

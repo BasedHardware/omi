@@ -467,6 +467,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
+    data['uid'] = uid
     if not data.get('author') and not data.get('email'):
         user = get_user_from_uid(uid)
         data['author'] = user.get('display_name', '')

@@ -15,7 +15,6 @@ let package = Package(
     .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
-    .package(url: "https://github.com/heap/heap-swift-core-sdk.git", from: "0.8.0"),
   ],
   targets: [
     .target(
@@ -44,7 +43,6 @@ let package = Package(
         .product(name: "Sparkle", package: "Sparkle"),
         .product(name: "MarkdownUI", package: "swift-markdown-ui"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
-        .product(name: "HeapSwiftCore", package: "heap-swift-core-sdk"),
       ],
       path: "Sources",
       resources: [

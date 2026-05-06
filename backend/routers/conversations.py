@@ -26,6 +26,7 @@ from models.conversation import (
     TestPromptRequest,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
+    UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import redact_conversations_for_list
@@ -266,7 +267,9 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')})
+    conversations_db.update_conversation(
+        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    )
 
     return calendar_event
 
@@ -316,7 +319,9 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')})
+    conversations_db.update_conversation(
+        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    )
 
     return calendar_event
 
@@ -399,6 +404,18 @@ async def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends
                     raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
 
         raise HTTPException(status_code=500, detail=f"Failed to update calendar event: {error_msg}")
+
+
+@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+def patch_conversation_summary(
+    conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
+    if result == 'not_found':
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if result == 'app_result_not_found':
+        raise HTTPException(status_code=404, detail="App summary not found for this conversation")
+    return {'status': 'Ok'}
 
 
 @router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])

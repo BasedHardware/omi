@@ -64,6 +64,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get copySummary => 'Kopiera sammanfattning';
 
   @override
+  String get copyConversationId => 'Kopiera konversations-ID';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID kopierat till urklipp';
+
+  @override
   String get testPrompt => 'Testa prompt';
 
   @override
@@ -4525,12 +4531,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Din plan avslutades $date.\\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
+    return 'Din plan avslutades $date.\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Din plan är inställd på att avbrytas $date.\\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
+    return 'Din plan är inställd på att avbrytas $date.\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
   }
 
   @override
@@ -6542,7 +6548,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Ange $appName som din standardapp för sammanfattningar?\\n\\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.';
+    return 'Ange $appName som din standardapp för sammanfattningar?\n\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.';
   }
 
   @override
@@ -9159,11 +9165,83 @@ class AppLocalizationsSv extends AppLocalizations {
   String get agreeAndContinue => 'Godkänn och fortsätt';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Starta röstinspelning';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Starta samtalsinspelning';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Röstläge';
+
+  @override
+  String get quickActionAskOmi => 'Fråga Omi vad som helst';
+
+  @override
+  String get record => 'Spela in';
+
+  @override
+  String get stop => 'Stoppa';
+
+  @override
+  String get recordWithPhoneMic => 'Spela in med telefonmikrofon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Fånga ljudet runt dig';
+
+  @override
+  String get phoneCall => 'Telefonsamtal';
+
+  @override
+  String get phoneCallSubtitle => 'Spela in samtal med live-transkribering';
+
+  @override
+  String get searchActionItems => 'Sök åtgärdspunkter';
+
+  @override
+  String get selectActionItems => 'Välj flera';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportera $count objekt till…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exporterar…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exporterade $count till $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exporterade $success av $total till $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Visa slutförda';
+
+  @override
+  String get hideCompletedTasks => 'Dölj slutförda';
+
+  @override
+  String get selectAllTasksMenu => 'Välj alla';
+
+  @override
+  String get connectTaskAppToExport => 'Anslut en uppgiftsapp i Inställningar för att exportera';
+
+  @override
+  String get connectAction => 'Anslut';
+
+  @override
+  String get deselectAllTasksMenu => 'Avmarkera alla';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

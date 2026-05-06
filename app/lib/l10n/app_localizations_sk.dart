@@ -64,6 +64,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get copySummary => 'Kopírovať zhrnutie';
 
   @override
+  String get copyConversationId => 'Kopírovať ID konverzácie';
+
+  @override
+  String get conversationIdCopied => 'ID konverzácie skopírované do schránky';
+
+  @override
   String get testPrompt => 'Otestovať výzvu';
 
   @override
@@ -4520,12 +4526,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Váš plán skončil $date.\\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.';
+    return 'Váš plán skončil $date.\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Váš plán je nastavený na zrušenie $date.\\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
+    return 'Váš plán je nastavený na zrušenie $date.\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
   }
 
   @override
@@ -6538,7 +6544,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Nastaviť $appName ako predvolenú aplikáciu na zhrnutia?\\n\\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.';
+    return 'Nastaviť $appName ako predvolenú aplikáciu na zhrnutia?\n\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.';
   }
 
   @override
@@ -9143,11 +9149,83 @@ class AppLocalizationsSk extends AppLocalizations {
   String get agreeAndContinue => 'Súhlasím a pokračovať';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Spustiť hlasový záznam';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Spustiť nahrávanie hovoru';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Hlasový režim';
+
+  @override
+  String get quickActionAskOmi => 'Spýtajte sa Omi na čokoľvek';
+
+  @override
+  String get record => 'Nahrať';
+
+  @override
+  String get stop => 'Zastaviť';
+
+  @override
+  String get recordWithPhoneMic => 'Nahrať mikrofónom telefónu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Zachyťte zvuk okolo vás';
+
+  @override
+  String get phoneCall => 'Telefonický hovor';
+
+  @override
+  String get phoneCallSubtitle => 'Nahrávajte hovor so živým prepisom';
+
+  @override
+  String get searchActionItems => 'Hľadať akčné položky';
+
+  @override
+  String get selectActionItems => 'Vybrať viacero';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportovať $count položku/iek do…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportovanie…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportovaných $count do $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportovaných $success z $total do $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Zobraziť dokončené';
+
+  @override
+  String get hideCompletedTasks => 'Skryť dokončené';
+
+  @override
+  String get selectAllTasksMenu => 'Vybrať všetko';
+
+  @override
+  String get connectTaskAppToExport => 'Pripojte aplikáciu úloh v Nastaveniach na export';
+
+  @override
+  String get connectAction => 'Pripojiť';
+
+  @override
+  String get deselectAllTasksMenu => 'Zrušiť výber všetkých';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

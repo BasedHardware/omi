@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
+import database.folders as folders_db
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
@@ -16,6 +17,7 @@ import database.goals as goals_db
 import database.users as users_db
 from database.vector_db import upsert_memory_vectors_batch
 
+from models.folder import Folder
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
 from models.conversation_enums import (
@@ -731,6 +733,31 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
 
 
+@router.get("/v1/dev/user/folders", response_model=List[Folder], tags=["developer"])
+def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
+    """
+    Get all folders for the authenticated user.
+
+    This endpoint is strictly read-only and returns an empty list if the user has no folders.
+    Unlike the internal `/v1/folders` endpoint, it does NOT call `initialize_system_folders`,
+    because doing so under a `conversations:read` scope would silently write to Firestore
+    (violating the read-only contract) and opens a TOCTOU window where concurrent first
+    requests can race past the outer empty-check and create duplicate system folders.
+
+    System folders (Work, Personal, Social) are still initialized lazily through other paths:
+    - The mobile app calls the internal `GET /v1/folders` whenever the conversations screen
+      is rendered (`app/lib/pages/conversations/conversations_page.dart`), which triggers
+      `initialize_system_folders` on first access.
+    - The conversation post-processing pipeline calls `initialize_system_folders` whenever
+      a new conversation is created (`backend/utils/conversations/process_conversation.py`).
+
+    In practice, any user who can issue a Developer API key has already gone through one of
+    those paths, so the empty-list case here only affects users who have never opened the
+    conversations tab nor created a single conversation.
+    """
+    return folders_db.get_folders(uid)
+
+
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
@@ -739,12 +766,16 @@ def get_conversations(
     limit: int = 25,
     offset: int = 0,
     include_transcript: bool = False,
+    folder_id: Optional[str] = Query(default=None, min_length=1),
+    starred: Optional[bool] = None,
     uid: str = Depends(get_uid_with_conversations_read),
 ):
     """
     Get conversations with optional transcript inclusion.
 
     - **include_transcript**: If True, includes full transcript_segments in the response
+    - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
+    - **starred**: Filter by starred status (true/false)
     """
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
@@ -760,6 +791,8 @@ def get_conversations(
         start_date=start_date,
         end_date=end_date,
         categories=[c.value for c in category_list],
+        folder_id=folder_id,
+        starred=starred,
     )
 
     # Filter out locked conversations completely

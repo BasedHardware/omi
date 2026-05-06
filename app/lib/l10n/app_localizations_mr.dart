@@ -64,6 +64,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get copySummary => 'सारांश कॉपी करा';
 
   @override
+  String get copyConversationId => 'संभाषण आयडी कॉपी करा';
+
+  @override
+  String get conversationIdCopied => 'संभाषण आयडी क्लिपबोर्डवर कॉपी झाला';
+
+  @override
   String get testPrompt => 'टेस्ट प्रॉम्प्ट';
 
   @override
@@ -4533,12 +4539,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'आपली योजना $date ला संपली.\\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी आपला तात्काळ चार्ज होईल.';
+    return 'आपली योजना $date ला संपली.\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी आपला तात्काळ चार्ज होईल.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'आपली योजना $date ला रद्द होण्यासाठी सेट केली आहे.\\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतीही शुल्क नाही.';
+    return 'आपली योजना $date ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतीही शुल्क नाही.';
   }
 
   @override
@@ -5107,7 +5113,7 @@ class AppLocalizationsMr extends AppLocalizations {
       'पुढे चालू ठेवल्यास, तुमच्या संभाषणा, रेकॉर्डिंग आणि वैयक्तिक माहिती आमच्या सर्व्हरवर सुरक्षितपणे साठवली जाईल. तुमच्या ऑडिओ रेकॉर्डिंग आणि ट्रान्सक्रिप्ट तृतीय-पक्ष AI सेवांद्वारे प्रक्रिया केली जातात (ट्रान्सक्रिप्शनसाठी Deepgram आणि विश्लेषणासाठी OpenAI सह) तुम्हाला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अॅप वैशिष्ट्ये सक्षम करण्यासाठी.';
 
   @override
-  String get tasksEmptyStateMessage => 'आपल्या संभाषणातील कार्य येथे दिसतील.\\n+ टॅप करून एक मॅन्युअल्ली तयार करा.';
+  String get tasksEmptyStateMessage => 'आपल्या संभाषणातील कार्य येथे दिसतील.\n+ टॅप करून एक मॅन्युअल्ली तयार करा.';
 
   @override
   String get clearChatAction => 'चॅट साफ करा';
@@ -5140,14 +5146,14 @@ class AppLocalizationsMr extends AppLocalizations {
   String get checkingAppleWatch => 'Apple Watch तपासत आहे...';
 
   @override
-  String get installOmiOnAppleWatch => 'Omi आपल्या\\nApple Watch वर स्थापित करा';
+  String get installOmiOnAppleWatch => 'Omi आपल्या\nApple Watch वर स्थापित करा';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Omi सह आपल्या Apple Watch वापरण्यासाठी, आपल्याला प्रथम आपल्या घड्याळावर Omi अ‍ॅप स्थापित करणे आवश्यक आहे.';
 
   @override
-  String get openOmiOnAppleWatch => 'Omi आपल्या\\nApple Watch वर उघडा';
+  String get openOmiOnAppleWatch => 'Omi आपल्या\nApple Watch वर उघडा';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5401,10 +5407,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get wrappedProcessingDefault => 'प्रक्रियाकरण...';
 
   @override
-  String get wrappedCreatingYourStory => 'आपल्या\\n२०२५ कथा तयार करत आहे...';
+  String get wrappedCreatingYourStory => 'आपल्या\n२०२५ कथा तयार करत आहे...';
 
   @override
-  String get wrappedSomethingWentWrong => 'काहीतरी\\nचुकीचे झाले';
+  String get wrappedSomethingWentWrong => 'काहीतरी\nचुकीचे झाले';
 
   @override
   String get wrappedAnErrorOccurred => 'त्रुटी आली';
@@ -9166,11 +9172,83 @@ class AppLocalizationsMr extends AppLocalizations {
   String get agreeAndContinue => 'सहमत व्हा आणि सुरू ठेवा';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'व्हॉइस रेकॉर्डिंग सुरू करा';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'कॉल रेकॉर्डिंग सुरू करा';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'व्हॉइस मोड';
+
+  @override
+  String get quickActionAskOmi => 'Omi ला काहीही विचारा';
+
+  @override
+  String get record => 'रेकॉर्ड';
+
+  @override
+  String get stop => 'थांबवा';
+
+  @override
+  String get recordWithPhoneMic => 'फोन माइकने रेकॉर्ड करा';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'तुमच्या आजूबाजूचा ऑडिओ कॅप्चर करा';
+
+  @override
+  String get phoneCall => 'फोन कॉल';
+
+  @override
+  String get phoneCallSubtitle => 'लाइव्ह ट्रान्स्क्रिप्शनसह कॉल रेकॉर्ड करा';
+
+  @override
+  String get searchActionItems => 'कृती आयटम शोधा';
+
+  @override
+  String get selectActionItems => 'अनेक निवडा';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count आयटम निर्यात करा…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'निर्यात होत आहे…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count $platform वर निर्यात केले';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total पैकी $success $platform वर निर्यात केले';
+  }
+
+  @override
+  String get showCompletedTasks => 'पूर्ण झालेले दाखवा';
+
+  @override
+  String get hideCompletedTasks => 'पूर्ण झालेले लपवा';
+
+  @override
+  String get selectAllTasksMenu => 'सर्व निवडा';
+
+  @override
+  String get connectTaskAppToExport => 'निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा';
+
+  @override
+  String get connectAction => 'जोडा';
+
+  @override
+  String get deselectAllTasksMenu => 'सर्वांची निवड रद्द करा';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

@@ -64,6 +64,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get copySummary => 'Kopieer samenvatting';
 
   @override
+  String get copyConversationId => 'Gesprek-ID kopiëren';
+
+  @override
+  String get conversationIdCopied => 'Gesprek-ID gekopieerd naar klembord';
+
+  @override
   String get testPrompt => 'Prompt testen';
 
   @override
@@ -4537,12 +4543,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Uw plan eindigde op $date.\\nAbonneer nu opnieuw - u wordt direct belast voor een nieuwe factureringsperiode.';
+    return 'Uw plan eindigde op $date.\nAbonneer nu opnieuw - u wordt direct belast voor een nieuwe factureringsperiode.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Uw plan wordt geannuleerd op $date.\\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+    return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }
 
   @override
@@ -6559,7 +6565,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName instellen als je standaard samenvattingsapp?\\n\\nDeze app wordt automatisch gebruikt voor alle toekomstige gesprekssamenvattingen.';
+    return '$appName instellen als je standaard samenvattingsapp?\n\nDeze app wordt automatisch gebruikt voor alle toekomstige gesprekssamenvattingen.';
   }
 
   @override
@@ -9183,11 +9189,83 @@ class AppLocalizationsNl extends AppLocalizations {
   String get agreeAndContinue => 'Akkoord en doorgaan';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Spraakopname starten';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Gespreksopname starten';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Spraakmodus';
+
+  @override
+  String get quickActionAskOmi => 'Vraag Omi van alles';
+
+  @override
+  String get record => 'Opnemen';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get recordWithPhoneMic => 'Opnemen met telefoonmicrofoon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Leg het geluid om je heen vast';
+
+  @override
+  String get phoneCall => 'Telefoongesprek';
+
+  @override
+  String get phoneCallSubtitle => 'Neem een gesprek op met live transcriptie';
+
+  @override
+  String get searchActionItems => 'Actiepunten zoeken';
+
+  @override
+  String get selectActionItems => 'Meerdere selecteren';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count item(s) exporteren naar…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exporteren…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count geëxporteerd naar $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success van $total geëxporteerd naar $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Voltooide tonen';
+
+  @override
+  String get hideCompletedTasks => 'Voltooide verbergen';
+
+  @override
+  String get selectAllTasksMenu => 'Alles selecteren';
+
+  @override
+  String get connectTaskAppToExport => 'Verbind een taken-app in Instellingen om te exporteren';
+
+  @override
+  String get connectAction => 'Verbinden';
+
+  @override
+  String get deselectAllTasksMenu => 'Alles deselecteren';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

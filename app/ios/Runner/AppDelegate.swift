@@ -9,6 +9,76 @@ import WidgetKit
 
 extension FlutterError: Error {}
 
+// MARK: - Quick Actions Icon Patcher
+
+/// Observes UIApplication.shortcutItems via KVO and replaces template-image icons
+/// (set by the quick_actions Flutter plugin) with native SF Symbol icons.
+final class QuickActionsIconPatcher: NSObject {
+
+    static let shared = QuickActionsIconPatcher()
+    private var isObserving = false
+
+    private let symbolMap: [String: String] = [
+        "add_task":        "checkmark.circle.fill",
+        "ask_omi":         "message.fill",
+        "voice_mode":      "waveform",
+        "mute":            "mic.slash.fill",
+        "unmute":          "mic.fill",
+        "connect_device":  "cable.connector.horizontal",
+        "device_settings": "slider.horizontal.3",
+    ]
+
+    func startObserving() {
+        guard !isObserving else { return }
+        UIApplication.shared.addObserver(
+            self,
+            forKeyPath: #keyPath(UIApplication.shortcutItems),
+            options: [.new],
+            context: nil
+        )
+        isObserving = true
+    }
+
+    func stopObserving() {
+        guard isObserving else { return }
+        UIApplication.shared.removeObserver(self, forKeyPath: #keyPath(UIApplication.shortcutItems))
+        isObserving = false
+    }
+
+    override func observeValue(
+        forKeyPath keyPath: String?,
+        of object: Any?,
+        change: [NSKeyValueChangeKey: Any]?,
+        context: UnsafeMutableRawPointer?
+    ) {
+        guard keyPath == #keyPath(UIApplication.shortcutItems) else { return }
+        DispatchQueue.main.async { self.patchIcons() }
+    }
+
+    private func patchIcons() {
+        guard let items = UIApplication.shared.shortcutItems, !items.isEmpty else { return }
+
+        let patched = items.map { item -> UIApplicationShortcutItem in
+            guard let symbol = symbolMap[item.type] else { return item }
+            let icon = UIApplicationShortcutIcon(systemImageName: symbol)
+            return UIApplicationShortcutItem(
+                type: item.type,
+                localizedTitle: item.localizedTitle,
+                localizedSubtitle: item.localizedSubtitle,
+                icon: icon,
+                userInfo: item.userInfo
+            )
+        }
+
+        // Stop observing before setting to avoid infinite KVO loop.
+        stopObserving()
+        UIApplication.shared.shortcutItems = patched
+        startObserving()
+    }
+
+    deinit { stopObserving() }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
@@ -16,6 +86,7 @@ extension FlutterError: Error {}
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private let audioInterruptionManager = AudioInterruptionManager()
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -30,6 +101,7 @@ extension FlutterError: Error {}
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    QuickActionsIconPatcher.shared.startObserving()
       
       
       if WCSession.isSupported() {
@@ -100,6 +172,12 @@ extension FlutterError: Error {}
         }
     }
 
+    // AVAudioSession interruption bridge (issue #6499). Surfaces .began/.ended
+    // events to Dart so phone-mic recording can reflect the interruption in
+    // UI state and restart capture once iOS signals the interruption has
+    // ended — flutter_sound does not auto-resume on its own.
+    audioInterruptionManager.register(with: controller!.binaryMessenger)
+
     // Audio session configuration for Bluetooth microphone support
     let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
     audioSessionChannel.setMethodCallHandler { (call, result) in
@@ -112,6 +190,17 @@ extension FlutterError: Error {}
                     options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
                 )
                 try audioSession.setActive(true)
+                result(true)
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
+        } else if call.method == "reactivate" {
+            // Reactivate the shared AVAudioSession after an interruption. Called
+            // from Dart when the stall heartbeat triggers a restart and the iOS
+            // .ended notification was never delivered (e.g. iOS 26 declined-call
+            // path), so AudioInterruptionManager never ran setActive(true).
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
                 result(true)
             } catch {
                 result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
@@ -248,6 +337,7 @@ extension FlutterError: Error {}
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
+    QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
 
     // If title and body are nil, then we don't need to show notification.
