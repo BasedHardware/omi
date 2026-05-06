@@ -42,7 +42,8 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 
 /// Default thinking budget injected when client omits thinkingConfig.
 /// Gemini 2.5 Flash thinking output costs $3.50/M vs $0.60/M regular (5.8x).
-/// 1024 tokens is enough for simple reasoning; 0 disables thinking entirely.
+/// 1024 tokens caps reasoning for old clients; current Swift client sends budget=0
+/// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
 /// Proxy-specific error type — allows JSON 429 responses alongside bare status codes.
