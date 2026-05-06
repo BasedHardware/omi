@@ -13,8 +13,7 @@ import 'package:omi/pages/apps/widgets/category_apps_page.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/widgets/redesign/app_row_card.dart';
 import 'package:omi/pages/apps/widgets/redesign/app_section.dart';
-import 'package:omi/pages/apps/widgets/redesign/capability_pills_row.dart';
-import 'package:omi/pages/apps/widgets/redesign/segmented_filter.dart';
+import 'package:omi/pages/apps/widgets/redesign/text_tabs.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -22,7 +21,6 @@ import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -35,13 +33,12 @@ String filterValueToString(dynamic value) {
   return value.toString();
 }
 
-// Re-exported so existing callers (PopularAppsSection etc.) still compile.
 class SelectAppNotification extends Notification {
   final App app;
   SelectAppNotification(this.app);
 }
 
-enum _AppsScope { all, connected, mine }
+enum _Tab { discover, installed }
 
 class ExploreInstallPage extends StatefulWidget {
   final ScrollController? scrollController;
@@ -56,8 +53,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   late TextEditingController searchController;
   Debouncer debouncer = Debouncer(delay: const Duration(milliseconds: 500));
 
-  /// Which capability pill is currently selected (null = show all sections).
-  String? _selectedCapabilityId;
+  static const Color _pageBg = Color(0xFF0F0F0F);
+  static const Color _surface = Color(0xFF1A1A1F);
 
   @override
   void initState() {
@@ -86,86 +83,57 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     super.dispose();
   }
 
-  // ----- Scope / filter helpers ---------------------------------------------
+  // ----- Tab state ----------------------------------------------------------
 
-  _AppsScope _currentScope(AppProvider provider) {
-    if (provider.isFilterSelected('Installed Apps', 'Apps')) return _AppsScope.connected;
-    if (provider.isFilterSelected('My Apps', 'Apps')) return _AppsScope.mine;
-    return _AppsScope.all;
+  _Tab _currentTab(AppProvider provider) {
+    if (provider.isFilterSelected('Installed Apps', 'Apps')) return _Tab.installed;
+    return _Tab.discover;
   }
 
-  void _setScope(_AppsScope scope) {
+  void _setTab(_Tab tab) {
     final provider = context.read<AppProvider>();
-    final myApps = provider.isFilterSelected('My Apps', 'Apps');
     final installed = provider.isFilterSelected('Installed Apps', 'Apps');
 
-    switch (scope) {
-      case _AppsScope.all:
-        if (myApps) provider.addOrRemoveFilter('My Apps', 'Apps');
+    switch (tab) {
+      case _Tab.discover:
         if (installed) provider.addOrRemoveFilter('Installed Apps', 'Apps');
         break;
-      case _AppsScope.connected:
-        if (myApps) provider.addOrRemoveFilter('My Apps', 'Apps');
-        if (!installed) provider.addOrRemoveFilter('Installed Apps', 'Apps');
-        MixpanelManager().appsTypeFilter('Installed Apps', true);
-        break;
-      case _AppsScope.mine:
-        if (installed) provider.addOrRemoveFilter('Installed Apps', 'Apps');
-        if (!myApps) provider.addOrRemoveFilter('My Apps', 'Apps');
-        MixpanelManager().appsTypeFilter('My Apps', true);
+      case _Tab.installed:
+        if (!installed) {
+          provider.addOrRemoveFilter('Installed Apps', 'Apps');
+          MixpanelManager().appsTypeFilter('Installed Apps', true);
+        }
         break;
     }
     provider.applyFilters();
   }
 
-  // ----- Build helpers ------------------------------------------------------
+  // ----- Toolbar ------------------------------------------------------------
 
-  /// Pull capability pills from grouped apps so the row stays in sync with what
-  /// the backend returns. We hide `memories` and `chat` (accessed elsewhere).
-  List<CapabilityPill> _buildCapabilityPills(List<Map<String, dynamic>> groups) {
-    final out = <CapabilityPill>[];
-    for (final g in groups) {
-      final cap = g['capability'] as Map<String, dynamic>?;
-      final cat = g['category'] as Map<String, dynamic>?;
-      final src = cap ?? cat;
-      if (src == null) continue;
-      final id = (src['id'] as String? ?? '').trim();
-      if (id == 'memories' || id == 'chat') continue;
-      final title = (src['title'] as String? ?? '').trim();
-      if (id.isEmpty || title.isEmpty) continue;
-
-      // Localize via AppCapability/Category helper for consistency with section headers.
-      final label = cap != null
-          ? AppCapability(title: title, id: id).getLocalizedTitle(context)
-          : Category(title: title, id: id).getLocalizedTitle(context);
-      out.add(CapabilityPill(id: id, label: label));
-    }
-    return out;
-  }
-
-  Widget _buildSearchAndFilters(_ToolbarState state) {
+  Widget _buildToolbar(_ToolbarState state) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Search + filter row
           Row(
             children: [
               Expanded(child: _buildSearchField(state)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               _buildFilterButton(state),
             ],
           ),
-          const SizedBox(height: 10),
-          // Segmented scope: All / Connected / Mine
-          SegmentedFilter<_AppsScope>(
-            value: state.scope,
-            onChanged: _setScope,
-            items: [
-              SegmentedFilterItem(label: context.l10n.all, value: _AppsScope.all),
-              SegmentedFilterItem(label: context.l10n.installed, value: _AppsScope.connected),
-              SegmentedFilterItem(label: context.l10n.myApps, value: _AppsScope.mine),
-            ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: TextTabs<_Tab>(
+              value: state.tab,
+              onChanged: _setTab,
+              items: [
+                TextTabItem(label: context.l10n.all, value: _Tab.discover),
+                TextTabItem(label: context.l10n.installed, value: _Tab.installed),
+              ],
+            ),
           ),
         ],
       ),
@@ -173,106 +141,103 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildSearchField(_ToolbarState state) {
-    return SizedBox(
-      height: 44,
-      child: SearchBar(
-        hintText: context.l10n.searchAppsPlaceholder,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 8.0),
-          child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
-        ),
-        backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
-        elevation: WidgetStateProperty.all(0),
-        padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
-        focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
-        controller: searchController,
-        trailing: state.searchActive
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white70, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                  onPressed: () {
-                    searchController.clear();
-                    context.read<AppProvider>().searchApps('');
-                  },
-                ),
-              ]
-            : null,
-        hintStyle: WidgetStateProperty.all(TextStyle(color: AppStyles.textTertiary, fontSize: 14)),
-        textStyle: WidgetStateProperty.all(const TextStyle(color: AppStyles.textPrimary, fontSize: 14)),
-        shape: WidgetStateProperty.all(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppStyles.radiusLarge)),
-        ),
-        onChanged: (value) {
-          debouncer.run(() {
-            context.read<AppProvider>().searchApps(value);
-          });
-        },
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
       ),
-    );
-  }
-
-  Widget _buildFilterButton(_ToolbarState state) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Row(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: state.visibleFilterCount > 0
-                  ? Colors.deepPurpleAccent.withValues(alpha: 0.5)
-                  : AppStyles.backgroundSecondary,
-              borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-            ),
-            child: IconButton(
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                showModalBottomSheet(
-                  context: context,
-                  isScrollControlled: true,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (context) => const FilterBottomSheet(),
-                );
+          const SizedBox(width: 16),
+          const Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white54, size: 14),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: searchController,
+              focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
+              style: const TextStyle(color: Colors.white, fontSize: 15, letterSpacing: -0.2),
+              cursorColor: const Color(0xFF8B5CF6),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                border: InputBorder.none,
+                hintText: context.l10n.searchAppsPlaceholder,
+                hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 15, letterSpacing: -0.2),
+              ),
+              onChanged: (value) {
+                debouncer.run(() {
+                  context.read<AppProvider>().searchApps(value);
+                });
               },
-              icon: const Icon(FontAwesomeIcons.filter, size: 14, color: Colors.white),
-              padding: EdgeInsets.zero,
             ),
           ),
-          if (state.visibleFilterCount > 0)
-            Positioned(
-              top: -4,
-              right: -4,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black, width: 1.5),
-                ),
-                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                child: Center(
-                  child: Text(
-                    state.visibleFilterCount.toString(),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      height: 1.0,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
+          if (state.searchActive)
+            IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              constraints: const BoxConstraints(),
+              onPressed: () {
+                searchController.clear();
+                context.read<AppProvider>().searchApps('');
+              },
             ),
         ],
       ),
     );
   }
+
+  Widget _buildFilterButton(_ToolbarState state) {
+    final hasFilters = state.visibleFilterCount > 0;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: _surface,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: IconButton(
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const FilterBottomSheet(),
+              );
+            },
+            icon: Icon(
+              hasFilters ? FontAwesomeIcons.solidStar : Icons.tune_rounded,
+              size: hasFilters ? 14 : 18,
+              color: hasFilters ? const Color(0xFF8B5CF6) : Colors.white70,
+            ),
+            padding: EdgeInsets.zero,
+          ),
+        ),
+        if (hasFilters)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: Color(0xFF8B5CF6), shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              child: Center(
+                child: Text(
+                  state.visibleFilterCount.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700, height: 1.0),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ----- Body ---------------------------------------------------------------
 
   Widget _buildFilteredAppsSlivers() {
     return Selector<AppProvider, List<App>>(
@@ -280,11 +245,21 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
       builder: (context, filteredApps, _) {
         if (filteredApps.isEmpty) return _buildEmptySliver();
         return SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-          sliver: SliverList.separated(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
+          sliver: SliverList.builder(
             itemCount: filteredApps.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => AppRowCard(app: filteredApps[index]),
+            itemBuilder: (context, index) {
+              return Column(
+                children: [
+                  AppRowCard(app: filteredApps[index]),
+                  if (index != filteredApps.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 70),
+                      child: Container(height: 0.5, color: Colors.white.withValues(alpha: 0.06)),
+                    ),
+                ],
+              );
+            },
           ),
         );
       },
@@ -294,20 +269,20 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   Widget _buildEmptySliver() {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.25),
+        padding: EdgeInsets.only(top: MediaQuery.sizeOf(context).height * 0.18),
         child: Column(
           children: [
-            Icon(Icons.search_off, size: 56, color: Colors.grey.shade600),
-            const SizedBox(height: 12),
+            Icon(Icons.search_off_rounded, size: 48, color: Colors.grey.shade700),
+            const SizedBox(height: 14),
             Text(
               context.l10n.noAppsFound,
-              style: const TextStyle(fontSize: 17, color: Colors.white70),
+              style: const TextStyle(fontSize: 17, color: Colors.white, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
             Text(
               context.l10n.tryAdjustingSearch,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -316,7 +291,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  /// Renders all backend-grouped sections as vertical card-row sections.
   Widget _buildCategorizedAppsSlivers() {
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (_, p) => p.groupedApps,
@@ -327,28 +301,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
           return id != 'memories' && id != 'chat';
         }).toList();
 
-        // If a capability pill is selected, flatten only that group's apps.
-        if (_selectedCapabilityId != null) {
-          final selected = filteredGroups.firstWhere(
-            (g) {
-              final cap = g['capability'] as Map<String, dynamic>?;
-              final cat = g['category'] as Map<String, dynamic>?;
-              final id = (cap?['id'] ?? cat?['id']) as String? ?? '';
-              return id == _selectedCapabilityId;
-            },
-            orElse: () => <String, dynamic>{},
-          );
-          final apps = selected['data'] as List<App>? ?? <App>[];
-          if (apps.isEmpty) return _buildEmptySliver();
-          return SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-            sliver: SliverList.separated(
-              itemCount: apps.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (context, i) => AppRowCard(app: apps[i]),
-            ),
-          );
-        }
+        if (filteredGroups.isEmpty) return _buildEmptySliver();
 
         return SliverPadding(
           padding: const EdgeInsets.only(bottom: 100),
@@ -383,7 +336,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               return AppSection(
                 title: localizedTitle,
                 apps: apps,
-                onViewAll: apps.length > 4
+                onViewAll: apps.length > 5
                     ? () {
                         if (cap != null) {
                           final capability = AppCapability(
@@ -411,45 +364,38 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  // ----- Shimmer skeletons --------------------------------------------------
+  // ----- Shimmers -----------------------------------------------------------
 
   Widget _buildShimmerToolbar() {
     return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
+      baseColor: _surface,
+      highlightColor: const Color(0xFF2A2A30),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(
                   child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                    ),
+                    height: 48,
+                    decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
-                  ),
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(14)),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 20),
             Container(
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppStyles.backgroundSecondary,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              width: 180,
+              height: 18,
+              decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
             ),
           ],
         ),
@@ -459,45 +405,52 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
 
   Widget _buildShimmerSection() {
     return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
+      baseColor: _surface,
+      highlightColor: const Color(0xFF2A2A30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 140,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  width: 60,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(24, 36, 24, 16),
+            child: Container(
+              width: 160,
+              height: 22,
+              decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
             ),
           ),
-          for (int i = 0; i < 3; i++) ...[
-            Container(
-              height: 84,
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              decoration: BoxDecoration(
-                color: AppStyles.backgroundSecondary,
-                borderRadius: BorderRadius.circular(12),
+          for (int i = 0; i < 4; i++)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 14, 24, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(14)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 120,
+                          height: 16,
+                          decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          height: 13,
+                          decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
         ],
       ),
     );
@@ -506,8 +459,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   Widget _buildShimmerAppsView() {
     return Column(
       children: [
-        const SizedBox(height: 4),
-        _buildShimmerSection(),
         _buildShimmerSection(),
         _buildShimmerSection(),
         const SizedBox(height: 100),
@@ -517,20 +468,42 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
 
   Widget _buildSearchLoadingSliver() {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
       sliver: SliverList.builder(
         itemCount: 5,
         itemBuilder: (_, __) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: ShimmerWithTimeout(
-            baseColor: AppStyles.backgroundSecondary,
-            highlightColor: AppStyles.backgroundTertiary,
-            child: Container(
-              height: 84,
-              decoration: BoxDecoration(
-                color: AppStyles.backgroundSecondary,
-                borderRadius: BorderRadius.circular(12),
-              ),
+            baseColor: _surface,
+            highlightColor: const Color(0xFF2A2A30),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(14)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 16,
+                        decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        height: 13,
+                        decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -543,72 +516,54 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return NotificationListener<SelectAppNotification>(
-      onNotification: _handleSelectAppNotification,
-      child: Selector<AppProvider, _ToolbarState>(
-        selector: (context, p) {
-          final visible = p.filters.entries.where((e) {
-            if (e.key == 'Apps') return e.value != 'My Apps' && e.value != 'Installed Apps';
-            return true;
-          }).toList();
-          return _ToolbarState(
-            isLoading: p.isLoading,
-            isSearching: p.isSearching,
-            searchActive: p.isSearchActive(),
-            filterActive: p.isFilterActive(),
-            visibleFilterCount: visible.length,
-            scope: _currentScope(p),
-          );
-        },
-        builder: (context, state, _) {
-          return RefreshIndicator(
-            onRefresh: () async {
-              HapticFeedback.mediumImpact();
-              await context.read<AppProvider>().forceRefreshApps();
-            },
-            color: Colors.deepPurpleAccent,
-            backgroundColor: Colors.white,
-            child: CustomScrollView(
-              controller: widget.scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 4)),
-                SliverToBoxAdapter(
-                  child: state.isLoading ? _buildShimmerToolbar() : _buildSearchAndFilters(state),
-                ),
-                if (!state.isLoading && !state.searchActive && !state.filterActive)
-                  SliverToBoxAdapter(child: _buildCapabilityPillsSection()),
-                if (state.isLoading)
-                  SliverToBoxAdapter(child: _buildShimmerAppsView())
-                else if (state.isSearching)
-                  _buildSearchLoadingSliver()
-                else if (state.filterActive || state.searchActive)
-                  _buildFilteredAppsSlivers()
-                else
-                  _buildCategorizedAppsSlivers(),
-              ],
-            ),
-          );
-        },
+    return Container(
+      color: _pageBg,
+      child: NotificationListener<SelectAppNotification>(
+        onNotification: _handleSelectAppNotification,
+        child: Selector<AppProvider, _ToolbarState>(
+          selector: (context, p) {
+            final visible = p.filters.entries.where((e) {
+              if (e.key == 'Apps') return e.value != 'My Apps' && e.value != 'Installed Apps';
+              return true;
+            }).toList();
+            return _ToolbarState(
+              isLoading: p.isLoading,
+              isSearching: p.isSearching,
+              searchActive: p.isSearchActive(),
+              filterActive: p.isFilterActive(),
+              visibleFilterCount: visible.length,
+              tab: _currentTab(p),
+            );
+          },
+          builder: (context, state, _) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                HapticFeedback.mediumImpact();
+                await context.read<AppProvider>().forceRefreshApps();
+              },
+              color: const Color(0xFF8B5CF6),
+              backgroundColor: _surface,
+              child: CustomScrollView(
+                controller: widget.scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: state.isLoading ? _buildShimmerToolbar() : _buildToolbar(state),
+                  ),
+                  if (state.isLoading)
+                    SliverToBoxAdapter(child: _buildShimmerAppsView())
+                  else if (state.isSearching)
+                    _buildSearchLoadingSliver()
+                  else if (state.filterActive || state.searchActive)
+                    _buildFilteredAppsSlivers()
+                  else
+                    _buildCategorizedAppsSlivers(),
+                ],
+              ),
+            );
+          },
+        ),
       ),
-    );
-  }
-
-  Widget _buildCapabilityPillsSection() {
-    return Selector<AppProvider, List<Map<String, dynamic>>>(
-      selector: (_, p) => p.groupedApps,
-      builder: (context, groups, _) {
-        final pills = _buildCapabilityPills(groups);
-        if (pills.isEmpty) return const SizedBox(height: 4);
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: CapabilityPillsRow(
-            pills: pills,
-            selectedId: _selectedCapabilityId,
-            onSelected: (id) => setState(() => _selectedCapabilityId = id),
-          ),
-        );
-      },
     );
   }
 
@@ -622,7 +577,7 @@ class _ToolbarState {
   final bool searchActive;
   final bool filterActive;
   final int visibleFilterCount;
-  final _AppsScope scope;
+  final _Tab tab;
 
   _ToolbarState({
     required this.isLoading,
@@ -630,7 +585,7 @@ class _ToolbarState {
     required this.searchActive,
     required this.filterActive,
     required this.visibleFilterCount,
-    required this.scope,
+    required this.tab,
   });
 
   @override
@@ -641,8 +596,8 @@ class _ToolbarState {
       searchActive == other.searchActive &&
       filterActive == other.filterActive &&
       visibleFilterCount == other.visibleFilterCount &&
-      scope == other.scope;
+      tab == other.tab;
 
   @override
-  int get hashCode => Object.hash(isLoading, isSearching, searchActive, filterActive, visibleFilterCount, scope);
+  int get hashCode => Object.hash(isLoading, isSearching, searchActive, filterActive, visibleFilterCount, tab);
 }
