@@ -788,14 +788,16 @@ public class ProactiveAssistantsPlugin: NSObject {
                         captureTime: captureTime
                     )
 
-                    // Always track the frame for context switch detection (even during delay)
-                    AssistantCoordinator.shared.trackFrame(frame)
+                    if !isRewindExcluded {
+                        // Track and distribute only frames that pass the shared screen privacy gate.
+                        AssistantCoordinator.shared.trackFrame(frame)
 
-                    if !isInDelayPeriod {
-                        distributeFrameIfChanged(frame)
-                    } else {
-                        // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                        AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                        if !isInDelayPeriod {
+                            distributeFrameIfChanged(frame)
+                        } else {
+                            // During delay, still distribute to assistants that need it (e.g. refocus detection)
+                            AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                        }
                     }
                 }
 
@@ -856,14 +858,16 @@ public class ProactiveAssistantsPlugin: NSObject {
                 frameNumber: frameCount
             )
 
-            // Always track the frame for context switch detection (even during delay)
-            AssistantCoordinator.shared.trackFrame(frame)
+            if !isRewindExcluded {
+                // Track and distribute only frames that pass the shared screen privacy gate.
+                AssistantCoordinator.shared.trackFrame(frame)
 
-            if !isInDelayPeriod {
-                distributeFrameIfChanged(frame)
-            } else {
-                // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                if !isInDelayPeriod {
+                    distributeFrameIfChanged(frame)
+                } else {
+                    // During delay, still distribute to assistants that need it (e.g. refocus detection)
+                    AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                }
             }
 
             if !isRewindExcluded {

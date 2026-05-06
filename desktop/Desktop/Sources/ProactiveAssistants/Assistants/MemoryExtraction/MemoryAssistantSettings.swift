@@ -245,9 +245,11 @@ class MemoryAssistantSettings {
         }
     }
 
-    /// Check if an app is excluded from memory extraction (built-in list + user's custom list)
+    /// Check if an app is excluded from memory extraction (Rewind privacy, built-in list, or user's custom list)
     func isAppExcluded(_ appName: String) -> Bool {
-        TaskAssistantSettings.builtInExcludedApps.contains(appName) || excludedApps.contains(appName)
+        RewindSettings.shared.isAppExcluded(appName)
+            || TaskAssistantSettings.builtInExcludedApps.contains(appName)
+            || excludedApps.contains(appName)
     }
 
     /// Add an app to the memory extraction exclusion list
