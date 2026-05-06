@@ -4627,10 +4627,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription、$triggerDescription。';
   }
 
@@ -9082,4 +9079,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'すべて選択解除';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

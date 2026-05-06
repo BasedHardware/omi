@@ -9260,4 +9260,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

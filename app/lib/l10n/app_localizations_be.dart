@@ -9254,4 +9254,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Зняць выбар усіх';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

@@ -17222,6 +17222,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Deselect all'**
   String get deselectAllTasksMenu;
+
+  /// Snackbar shown when every selected task is already exported and Export is tapped
+  ///
+  /// In en, this message translates to:
+  /// **'All selected tasks already exported'**
+  String get bulkExportAlreadyExported;
+
+  /// Snackbar shown when the bulk delete request fails and the local list is restored
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete tasks. Please try again.'**
+  String get bulkDeleteFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9228,4 +9228,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Bỏ chọn tất cả';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }
