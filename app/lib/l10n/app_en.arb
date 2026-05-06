@@ -11004,5 +11004,13 @@
     "deselectAllTasksMenu": "Deselect all",
     "@deselectAllTasksMenu": {
         "description": "Action menu entry that clears any current task selection while staying in selection mode"
+    },
+    "bulkExportAlreadyExported": "All selected tasks already exported",
+    "@bulkExportAlreadyExported": {
+        "description": "Snackbar shown when every selected task is already exported and Export is tapped"
+    },
+    "bulkDeleteFailed": "Could not delete tasks. Please try again.",
+    "@bulkDeleteFailed": {
+        "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
     }
 }
