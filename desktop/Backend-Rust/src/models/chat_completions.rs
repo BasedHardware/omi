@@ -231,23 +231,16 @@ pub struct AnthropicUsage {
 #[serde(tag = "type")]
 pub enum AnthropicStreamEvent {
     #[serde(rename = "message_start")]
-    MessageStart {
-        message: AnthropicStreamMessage,
-    },
+    MessageStart { message: AnthropicStreamMessage },
     #[serde(rename = "content_block_start")]
     ContentBlockStart {
         index: usize,
         content_block: AnthropicContentBlock,
     },
     #[serde(rename = "content_block_delta")]
-    ContentBlockDelta {
-        index: usize,
-        delta: AnthropicDelta,
-    },
+    ContentBlockDelta { index: usize, delta: AnthropicDelta },
     #[serde(rename = "content_block_stop")]
-    ContentBlockStop {
-        index: usize,
-    },
+    ContentBlockStop { index: usize },
     #[serde(rename = "message_delta")]
     MessageDelta {
         delta: AnthropicMessageDelta,
@@ -258,9 +251,7 @@ pub enum AnthropicStreamEvent {
     #[serde(rename = "ping")]
     Ping {},
     #[serde(rename = "error")]
-    Error {
-        error: AnthropicStreamError,
-    },
+    Error { error: AnthropicStreamError },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -339,6 +330,16 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
         upstream_model: "claude-sonnet-4-6",
         provider: Provider::Anthropic,
     },
+    ModelRoute {
+        public_model: "omi-haiku",
+        upstream_model: "claude-haiku-4-5-20251001",
+        provider: Provider::Anthropic,
+    },
+    ModelRoute {
+        public_model: "claude-haiku-4-5-20251001",
+        upstream_model: "claude-haiku-4-5-20251001",
+        provider: Provider::Anthropic,
+    },
 ];
 
 pub fn resolve_model(model: &str) -> Option<&'static ModelRoute> {
@@ -358,9 +359,8 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
 }
 
 pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
-    let prompt_tokens = usage.input_tokens
-        + usage.cache_creation_input_tokens
-        + usage.cache_read_input_tokens;
+    let prompt_tokens =
+        usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
     let completion_tokens = usage.output_tokens;
     Usage {
         prompt_tokens,

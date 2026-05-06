@@ -70,6 +70,12 @@ fn model_cost(upstream_model: &str) -> ModelCost {
             cache_read_per_token: 1.50 / 1_000_000.0,
             cache_write_per_token: 18.75 / 1_000_000.0,
         },
+        "claude-haiku-4-5-20251001" => ModelCost {
+            input_per_token: 0.80 / 1_000_000.0,
+            output_per_token: 4.00 / 1_000_000.0,
+            cache_read_per_token: 0.08 / 1_000_000.0,
+            cache_write_per_token: 1.00 / 1_000_000.0,
+        },
         _ => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
@@ -948,7 +954,7 @@ mod tests {
     fn test_resolve_model_unknown() {
         assert!(resolve_model("gpt-4").is_none());
         assert!(resolve_model("").is_none());
-        assert!(resolve_model("omi-haiku").is_none());
+        assert!(resolve_model("omi-haiku").is_some());
     }
 
     #[test]
