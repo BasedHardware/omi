@@ -64,6 +64,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get copySummary => 'ಸಾರಾಂಶ ನಕಲಿ ಮಾಡಿ';
 
   @override
+  String get copyConversationId => 'ಸಂಭಾಷಣೆ ID ನಕಲಿಸಿ';
+
+  @override
+  String get conversationIdCopied => 'ಸಂಭಾಷಣೆ ID ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ';
+
+  @override
   String get testPrompt => 'ಪ್ರಯೋಗ ನಿರ್ದೇಶನ';
 
   @override

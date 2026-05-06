@@ -64,6 +64,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get copySummary => 'सारांश कॉपी करा';
 
   @override
+  String get copyConversationId => 'संभाषण आयडी कॉपी करा';
+
+  @override
+  String get conversationIdCopied => 'संभाषण आयडी क्लिपबोर्डवर कॉपी झाला';
+
+  @override
   String get testPrompt => 'टेस्ट प्रॉम्प्ट';
 
   @override

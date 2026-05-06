@@ -18,6 +18,8 @@
     "clear": "Ryd",
     "copyTranscript": "Kopier transskription",
     "copySummary": "Kopier opsummering",
+    "copyConversationId": "Kopiér samtale-ID",
+    "conversationIdCopied": "Samtale-ID kopieret til udklipsholder",
     "testPrompt": "Test prompt",
     "reprocessConversation": "Genbehandl samtale",
     "deleteConversation": "Slet samtale",

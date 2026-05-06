@@ -64,6 +64,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get copySummary => 'Kopēt kopsavilkumu';
 
   @override
+  String get copyConversationId => 'Kopēt sarakstes ID';
+
+  @override
+  String get conversationIdCopied => 'Sarakstes ID nokopēts starpliktuvē';
+
+  @override
   String get testPrompt => 'Testēt uzvedni';
 
   @override

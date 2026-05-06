@@ -64,6 +64,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get copySummary => 'Copiază rezumatul';
 
   @override
+  String get copyConversationId => 'Copiază ID-ul conversației';
+
+  @override
+  String get conversationIdCopied => 'ID-ul conversației a fost copiat în clipboard';
+
+  @override
   String get testPrompt => 'Testează promptul';
 
   @override

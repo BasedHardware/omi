@@ -64,6 +64,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get copySummary => 'Kopiera sammanfattning';
 
   @override
+  String get copyConversationId => 'Kopiera konversations-ID';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID kopierat till urklipp';
+
+  @override
   String get testPrompt => 'Testa prompt';
 
   @override

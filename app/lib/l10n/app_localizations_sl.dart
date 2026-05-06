@@ -64,6 +64,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get copySummary => 'Kopiraj povzetek';
 
   @override
+  String get copyConversationId => 'Kopiraj ID pogovora';
+
+  @override
+  String get conversationIdCopied => 'ID pogovora je bil kopiran v odložišče';
+
+  @override
   String get testPrompt => 'Testiraj poziv';
 
   @override

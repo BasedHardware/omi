@@ -64,6 +64,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get copySummary => 'Kopiuj podsumowanie';
 
   @override
+  String get copyConversationId => 'Kopiuj ID rozmowy';
+
+  @override
+  String get conversationIdCopied => 'ID rozmowy skopiowane do schowka';
+
+  @override
   String get testPrompt => 'Testuj prompt';
 
   @override

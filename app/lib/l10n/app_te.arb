@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "సంభాషణ ID కాపీ చేయండి",
+    "conversationIdCopied": "సంభాషణ ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "testPrompt": "ప్రాంప్ట్‌ను పరీక్షించండి",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

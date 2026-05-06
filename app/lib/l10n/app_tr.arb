@@ -18,6 +18,8 @@
     "clear": "Temizle",
     "copyTranscript": "Transkripti kopyala",
     "copySummary": "Özeti kopyala",
+    "copyConversationId": "Konuşma kimliğini kopyala",
+    "conversationIdCopied": "Konuşma kimliği panoya kopyalandı",
     "testPrompt": "İstemi Test Et",
     "reprocessConversation": "Konuşmayı Yeniden İşle",
     "deleteConversation": "Sohbeti Sil",

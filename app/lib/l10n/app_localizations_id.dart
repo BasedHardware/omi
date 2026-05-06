@@ -64,6 +64,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get copySummary => 'Salin ringkasan';
 
   @override
+  String get copyConversationId => 'Salin ID percakapan';
+
+  @override
+  String get conversationIdCopied => 'ID percakapan disalin ke papan klip';
+
+  @override
   String get testPrompt => 'Uji Prompt';
 
   @override

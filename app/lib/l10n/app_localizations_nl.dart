@@ -64,6 +64,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get copySummary => 'Kopieer samenvatting';
 
   @override
+  String get copyConversationId => 'Gesprek-ID kopiëren';
+
+  @override
+  String get conversationIdCopied => 'Gesprek-ID gekopieerd naar klembord';
+
+  @override
   String get testPrompt => 'Prompt testen';
 
   @override

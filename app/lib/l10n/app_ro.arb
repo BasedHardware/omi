@@ -18,6 +18,8 @@
     "clear": "Curăță",
     "copyTranscript": "Copiază transcrierea",
     "copySummary": "Copiază rezumatul",
+    "copyConversationId": "Copiază ID-ul conversației",
+    "conversationIdCopied": "ID-ul conversației a fost copiat în clipboard",
     "testPrompt": "Testează promptul",
     "reprocessConversation": "Reprocesează conversația",
     "deleteConversation": "Șterge conversația",

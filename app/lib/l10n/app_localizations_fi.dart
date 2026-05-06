@@ -64,6 +64,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get copySummary => 'Kopioi tiivistelmä';
 
   @override
+  String get copyConversationId => 'Kopioi keskustelun tunnus';
+
+  @override
+  String get conversationIdCopied => 'Keskustelun tunnus kopioitu leikepöydälle';
+
+  @override
   String get testPrompt => 'Testaa kehotetta';
 
   @override

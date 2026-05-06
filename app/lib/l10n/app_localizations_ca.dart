@@ -64,6 +64,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get copySummary => 'Copiar resum';
 
   @override
+  String get copyConversationId => 'Copia l\'ID de la conversa';
+
+  @override
+  String get conversationIdCopied => 'ID de la conversa copiat al porta-retalls';
+
+  @override
   String get testPrompt => 'Provar indicació';
 
   @override

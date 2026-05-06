@@ -63,6 +63,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get copySummary => '要約をコピー';
 
   @override
+  String get copyConversationId => '会話IDをコピー';
+
+  @override
+  String get conversationIdCopied => '会話IDをクリップボードにコピーしました';
+
+  @override
   String get testPrompt => 'プロンプトをテスト';
 
   @override

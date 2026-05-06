@@ -18,6 +18,8 @@
     "clear": "Rensa",
     "copyTranscript": "Kopiera transkription",
     "copySummary": "Kopiera sammanfattning",
+    "copyConversationId": "Kopiera konversations-ID",
+    "conversationIdCopied": "Konversations-ID kopierat till urklipp",
     "testPrompt": "Testa prompt",
     "reprocessConversation": "Bearbeta konversation igen",
     "deleteConversation": "Radera konversation",

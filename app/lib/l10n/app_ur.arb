@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "گفتگو کی ID کاپی کریں",
+    "conversationIdCopied": "گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی",
     "testPrompt": "ٹیسٹ پروپٹ",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

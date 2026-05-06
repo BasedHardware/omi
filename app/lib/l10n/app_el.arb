@@ -18,6 +18,8 @@
     "clear": "Εκκαθάριση",
     "copyTranscript": "Αντιγραφή απομαγνητοφώνησης",
     "copySummary": "Αντιγραφή σύνοψης",
+    "copyConversationId": "Αντιγραφή ID συνομιλίας",
+    "conversationIdCopied": "Το ID συνομιλίας αντιγράφηκε στο πρόχειρο",
     "testPrompt": "Δοκιμή Εντολής",
     "reprocessConversation": "Επανεπεξεργασία Συνομιλίας",
     "deleteConversation": "Διαγραφή συνομιλίας",

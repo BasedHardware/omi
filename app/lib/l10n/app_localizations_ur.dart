@@ -64,6 +64,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get copySummary => 'خلاصہ کاپی کریں';
 
   @override
+  String get copyConversationId => 'گفتگو کی ID کاپی کریں';
+
+  @override
+  String get conversationIdCopied => 'گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی';
+
+  @override
   String get testPrompt => 'ٹیسٹ پروپٹ';
 
   @override

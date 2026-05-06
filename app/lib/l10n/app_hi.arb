@@ -18,6 +18,8 @@
     "clear": "साफ़ करें",
     "copyTranscript": "प्रतिलिपि कॉपी करें",
     "copySummary": "सारांश कॉपी करें",
+    "copyConversationId": "बातचीत ID कॉपी करें",
+    "conversationIdCopied": "बातचीत ID क्लिपबोर्ड पर कॉपी हो गई",
     "testPrompt": "टेस्ट प्रॉम्प्ट",
     "reprocessConversation": "बातचीत को पुनः संसाधित करें",
     "deleteConversation": "बातचीत हटाएं",

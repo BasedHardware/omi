@@ -64,6 +64,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get copySummary => 'সারসংক্ষেপ কপি করুন';
 
   @override
+  String get copyConversationId => 'কথোপকথন আইডি কপি করুন';
+
+  @override
+  String get conversationIdCopied => 'কথোপকথন আইডি ক্লিপবোর্ডে কপি হয়েছে';
+
+  @override
   String get testPrompt => 'পরীক্ষা প্রম্পট';
 
   @override

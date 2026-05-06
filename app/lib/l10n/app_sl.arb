@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopiraj ID pogovora",
+    "conversationIdCopied": "ID pogovora je bil kopiran v odložišče",
     "testPrompt": "Testiraj poziv",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

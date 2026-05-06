@@ -18,6 +18,8 @@
     "clear": "Notīrīt",
     "copyTranscript": "Kopēt transkripciju",
     "copySummary": "Kopēt kopsavilkumu",
+    "copyConversationId": "Kopēt sarakstes ID",
+    "conversationIdCopied": "Sarakstes ID nokopēts starpliktuvē",
     "testPrompt": "Testēt uzvedni",
     "reprocessConversation": "Pārstrādāt sarunu",
     "deleteConversation": "Dzēst sarunu",

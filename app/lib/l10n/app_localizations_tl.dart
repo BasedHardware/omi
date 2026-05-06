@@ -64,6 +64,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get copySummary => 'Kopyahin ang Buod';
 
   @override
+  String get copyConversationId => 'Kopyahin ang ID ng usapan';
+
+  @override
+  String get conversationIdCopied => 'Nakopya na ang ID ng usapan sa clipboard';
+
+  @override
   String get testPrompt => 'Subukan ang Prompt';
 
   @override

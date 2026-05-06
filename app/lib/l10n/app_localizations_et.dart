@@ -64,6 +64,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get copySummary => 'Kopeeri kokkuvõte';
 
   @override
+  String get copyConversationId => 'Kopeeri vestluse ID';
+
+  @override
+  String get conversationIdCopied => 'Vestluse ID kopeeriti lõikelauale';
+
+  @override
   String get testPrompt => 'Testi käsku';
 
   @override

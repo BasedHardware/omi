@@ -17,6 +17,8 @@
     "close": "閉じる",
     "copyTranscript": "文字起こしをコピー",
     "copySummary": "要約をコピー",
+    "copyConversationId": "会話IDをコピー",
+    "conversationIdCopied": "会話IDをクリップボードにコピーしました",
     "testPrompt": "プロンプトをテスト",
     "reprocessConversation": "会話を再処理",
     "deleteConversation": "会話を削除",

@@ -64,6 +64,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get copySummary => 'Összefoglaló másolása';
 
   @override
+  String get copyConversationId => 'Társalgás azonosítójának másolása';
+
+  @override
+  String get conversationIdCopied => 'A társalgás azonosítója vágólapra másolva';
+
+  @override
   String get testPrompt => 'Prompt tesztelése';
 
   @override

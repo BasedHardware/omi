@@ -18,6 +18,8 @@
     "clear": "Очистить",
     "copyTranscript": "Копировать транскрипт",
     "copySummary": "Копировать сводку",
+    "copyConversationId": "Скопировать ID разговора",
+    "conversationIdCopied": "ID разговора скопирован в буфер обмена",
     "testPrompt": "Тестовый запрос",
     "reprocessConversation": "Переобработать разговор",
     "deleteConversation": "Удалить разговор",

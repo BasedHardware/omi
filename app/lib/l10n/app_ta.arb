@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "உரையாடல் ID நகலெடு",
+    "conversationIdCopied": "உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது",
     "testPrompt": "தேர்வு கேட்டுகோள்",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

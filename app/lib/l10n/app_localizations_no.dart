@@ -64,6 +64,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get copySummary => 'Kopier oppsummering';
 
   @override
+  String get copyConversationId => 'Kopier samtale-ID';
+
+  @override
+  String get conversationIdCopied => 'Samtale-ID kopiert til utklippstavle';
+
+  @override
   String get testPrompt => 'Test prompt';
 
   @override

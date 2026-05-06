@@ -18,6 +18,8 @@
     "clear": "Wissen",
     "copyTranscript": "Kopieer transcript",
     "copySummary": "Kopieer samenvatting",
+    "copyConversationId": "Gesprek-ID kopiëren",
+    "conversationIdCopied": "Gesprek-ID gekopieerd naar klembord",
     "testPrompt": "Prompt testen",
     "reprocessConversation": "Gesprek opnieuw verwerken",
     "deleteConversation": "Gesprek verwijderen",

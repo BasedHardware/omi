@@ -73,6 +73,14 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Copy Conversation ID",
+    "@copyConversationId": {
+        "description": "Menu item to copy conversation ID to clipboard"
+    },
+    "conversationIdCopied": "Conversation ID copied to clipboard",
+    "@conversationIdCopied": {
+        "description": "Snackbar message when conversation ID is copied"
+    },
     "testPrompt": "Test Prompt",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Копирај ID разговора",
+    "conversationIdCopied": "ID разговора је копиран у клипборд",
     "testPrompt": "Тестирај подстицај",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

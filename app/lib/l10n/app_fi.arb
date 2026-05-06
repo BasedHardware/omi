@@ -18,6 +18,8 @@
     "clear": "Tyhjennä",
     "copyTranscript": "Kopioi litterointi",
     "copySummary": "Kopioi tiivistelmä",
+    "copyConversationId": "Kopioi keskustelun tunnus",
+    "conversationIdCopied": "Keskustelun tunnus kopioitu leikepöydälle",
     "testPrompt": "Testaa kehotetta",
     "reprocessConversation": "Käsittele keskustelu uudelleen",
     "deleteConversation": "Poista keskustelu",

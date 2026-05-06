@@ -18,6 +18,8 @@
     "clear": "Bersihkan",
     "copyTranscript": "Salin transkrip",
     "copySummary": "Salin ringkasan",
+    "copyConversationId": "Salin ID percakapan",
+    "conversationIdCopied": "ID percakapan disalin ke papan klip",
     "testPrompt": "Uji Prompt",
     "reprocessConversation": "Proses Ulang Percakapan",
     "deleteConversation": "Hapus Percakapan",

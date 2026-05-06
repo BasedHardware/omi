@@ -18,6 +18,8 @@
     "clear": "ล้าง",
     "copyTranscript": "คัดลอกบทถอดความ",
     "copySummary": "คัดลอกสรุป",
+    "copyConversationId": "คัดลอก ID การสนทนา",
+    "conversationIdCopied": "คัดลอก ID การสนทนาไปยังคลิปบอร์ดแล้ว",
     "testPrompt": "ทดสอบคำสั่ง",
     "reprocessConversation": "ประมวลผลบทสนทนาใหม่",
     "deleteConversation": "ลบการสนทนา",

@@ -18,6 +18,8 @@
     "clear": "Tøm",
     "copyTranscript": "Kopier transkripsjon",
     "copySummary": "Kopier oppsummering",
+    "copyConversationId": "Kopier samtale-ID",
+    "conversationIdCopied": "Samtale-ID kopiert til utklippstavle",
     "testPrompt": "Test prompt",
     "reprocessConversation": "Behandle samtale på nytt",
     "deleteConversation": "Slett samtale",

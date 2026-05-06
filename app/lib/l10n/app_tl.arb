@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopyahin ang ID ng usapan",
+    "conversationIdCopied": "Nakopya na ang ID ng usapan sa clipboard",
     "testPrompt": "Subukan ang Prompt",
     "@testPrompt": {
         "description": "Menu item for testing prompts"

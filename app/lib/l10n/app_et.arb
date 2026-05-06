@@ -18,6 +18,8 @@
     "clear": "Tühjenda",
     "copyTranscript": "Kopeeri transkriptsioon",
     "copySummary": "Kopeeri kokkuvõte",
+    "copyConversationId": "Kopeeri vestluse ID",
+    "conversationIdCopied": "Vestluse ID kopeeriti lõikelauale",
     "testPrompt": "Testi käsku",
     "reprocessConversation": "Töötle vestlust uuesti",
     "deleteConversation": "Kustuta vestlus",
