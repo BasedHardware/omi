@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
@@ -11,7 +12,6 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -228,29 +228,49 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildPageHeader(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
-            child: OmiSearchInput(
+            child: TextFormField(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              hint: context.l10n.searchActionItems,
-              highlightOnFocus: false,
               onChanged: (value) {
                 _searchDebouncer.run(() {
                   if (!mounted) return;
                   provider.setSearchQuery(value);
                 });
               },
-              onClear: () {
-                _searchController.clear();
-                _searchDebouncer.cancel();
-                provider.clearSearchQuery();
-              },
+              decoration: InputDecoration(
+                hintText: context.l10n.searchActionItems,
+                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+                filled: true,
+                fillColor: const Color(0xFF1F1F25),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                prefixIcon: const Icon(Icons.search, color: Colors.white60),
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (_, val, __) => val.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            _searchDebouncer.cancel();
+                            provider.clearSearchQuery();
+                          },
+                          child: const Icon(Icons.close, color: Colors.white),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              style: const TextStyle(color: Colors.white),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           _buildOverflowMenu(provider),
         ],
       ),
@@ -262,64 +282,53 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final hasItems = provider.actionItems.isNotEmpty;
     final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
 
-    return PopupMenuButton<String>(
-      tooltip: '',
-      icon: Icon(Icons.more_horiz_rounded, color: Colors.grey[400], size: 22),
-      color: const Color(0xFF1F1F25),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) {
-        switch (value) {
-          case 'select':
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.selectActionItems,
+          iconWidget: const Icon(Icons.check_box_outlined, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             _searchFocusNode.unfocus();
             provider.startSelection();
-            break;
-          case 'select_all':
+          },
+        ),
+        PullDownMenuItem(
+          title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
+          iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             _searchFocusNode.unfocus();
             if (allSelected) {
-              // Stay in selection mode but clear — user can re-pick individuals.
               provider.clearSelection();
             } else {
               if (!provider.isSelectionMode) provider.startSelection();
               provider.selectAllItems();
             }
-            break;
-          case 'toggle_completed':
+          },
+        ),
+        PullDownMenuItem(
+          title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+          iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             provider.toggleShowCompletedView();
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        _menuItem(
-          value: 'select',
-          icon: Icons.check_box_outlined,
-          label: context.l10n.selectActionItems,
-        ),
-        _menuItem(
-          value: 'select_all',
-          icon: allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
-          label: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
-        ),
-        _menuItem(
-          value: 'toggle_completed',
-          icon: showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-          label: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+          },
         ),
       ],
-    );
-  }
-
-  PopupMenuItem<String> _menuItem({required String value, required IconData icon, required String label}) {
-    return PopupMenuItem<String>(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 18),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-        ],
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          showMenu();
+        },
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+          child: const Center(
+            child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20),
+          ),
+        ),
       ),
     );
   }
