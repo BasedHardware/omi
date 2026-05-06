@@ -1245,6 +1245,10 @@ class AppState: ObservableObject {
     let previous = isConversationListening
     guard previous != on else { return }
 
+    if !on && isTranscribing {
+      stopTranscription()
+    }
+
     isConversationListening = on
     persistedConversationListening = on
     UserDefaults.standard.set(on, forKey: Self.conversationListeningDefaultsKey)
@@ -1265,6 +1269,10 @@ class AppState: ObservableObject {
   /// Start real-time transcription
   /// - Parameter source: Audio source to use (defaults to current audioSource setting)
   func startTranscription(source: AudioSource? = nil) {
+    guard isConversationListening else {
+      log("Transcription: Start ignored while listening is paused")
+      return
+    }
     guard !isTranscribing else { return }
 
     // Use provided source or fall back to current setting
