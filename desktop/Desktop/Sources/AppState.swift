@@ -34,13 +34,18 @@ enum FinishConversationResult {
 
 @MainActor
 class AppState: ObservableObject {
+  private static let conversationListeningDefaultsKey = "omi.listening.enabled"
+
   /// Weak reference to the current AppState instance, set on init.
   /// Used by background services (e.g. TranscriptionRetryService) to check recording state.
   static weak var current: AppState?
 
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
+  @AppStorage(AppState.conversationListeningDefaultsKey) private var persistedConversationListening = true
 
   // Transcription state
+  @Published var isConversationListening =
+    UserDefaults.standard.object(forKey: AppState.conversationListeningDefaultsKey) as? Bool ?? true
   @Published var isTranscribing = false
   /// Monotonically increasing counter — incremented each time a new recording starts.
   /// Used to detect if a new recording began during the post-stop force-process delay.
@@ -212,6 +217,7 @@ class AppState: ObservableObject {
   private var screenUnlockedObserver: NSObjectProtocol?
   private var screenCapturePermissionLostObserver: NSObjectProtocol?
   private var screenCaptureKitBrokenObserver: NSObjectProtocol?
+  private var toggleListeningShortcutObserver: NSObjectProtocol?
 
   // Track transcription state across sleep/wake cycles
   private var wasTranscribingBeforeSleep = false
@@ -238,6 +244,14 @@ class AppState: ObservableObject {
 
     // Setup lifecycle observers for saving conversations
     setupLifecycleObservers()
+
+    toggleListeningShortcutObserver = NotificationCenter.default.addObserver(
+      forName: .toggleListeningShortcutPressed,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      self?.toggleListening(source: "hotkey")
+    }
 
     // Wire up memory pressure callback so ResourceMonitor can trim transcript state
     ResourceMonitor.shared.onMemoryPressureTrimTranscript = { [weak self] in
@@ -445,6 +459,9 @@ class AppState: ObservableObject {
       NotificationCenter.default.removeObserver(observer)
     }
     if let observer = screenCaptureKitBrokenObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
+    if let observer = toggleListeningShortcutObserver {
       NotificationCenter.default.removeObserver(observer)
     }
   }
@@ -1220,6 +1237,22 @@ class AppState: ObservableObject {
 
   // MARK: - Transcription
 
+  func toggleListening(source: String = "ui") {
+    setListening(!isConversationListening, source: source)
+  }
+
+  func setListening(_ on: Bool, source: String = "ui") {
+    let previous = isConversationListening
+    guard previous != on else { return }
+
+    isConversationListening = on
+    persistedConversationListening = on
+    UserDefaults.standard.set(on, forKey: Self.conversationListeningDefaultsKey)
+
+    AnalyticsManager.shared.listeningToggled(isListening: on, source: source)
+    log("listening: \(previous ? "on" : "off") -> \(on ? "on" : "off") (source=\(source))")
+  }
+
   /// Toggle transcription on/off
   func toggleTranscription() {
     if isTranscribing {
@@ -1424,6 +1457,7 @@ class AppState: ObservableObject {
     // Start the mixer — it sums mic + system into a mono stream and forwards it to
     // the transcription WebSocket.
     audioMixer?.start { [weak self] monoMixed in
+      guard self?.isConversationListening == true else { return }
       self?.transcriptionService?.sendAudio(monoMixed)
     }
 
@@ -1513,12 +1547,16 @@ class AppState: ObservableObject {
     // Start BLE audio processing and pipe directly to transcription
     await BleAudioService.shared.startProcessing(
       from: connection,
-      transcriptionService: transcriptionService,
+      transcriptionService: nil,
       audioDataHandler: { _ in
         // Audio level is updated by BleAudioService
         Task { @MainActor in
           AudioLevelMonitor.shared.updateMicrophoneLevel(BleAudioService.shared.audioLevel)
         }
+      },
+      conversationAudioHandler: { [weak self, weak transcriptionService] audioData in
+        guard self?.isConversationListening == true else { return }
+        transcriptionService?.sendAudio(audioData)
       }
     )
 
@@ -3058,6 +3096,8 @@ extension Notification.Name {
   static let navigateToTaskSettings = Notification.Name("navigateToTaskSettings")
   /// Posted to navigate to Ask Omi Floating Bar settings
   static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
+  /// Posted when the global Toggle Listening shortcut fires
+  static let toggleListeningShortcutPressed = Notification.Name("toggleListeningShortcutPressed")
   /// Posted to navigate to AI Chat settings
   static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
   /// Posted when a new Rewind frame is captured (for live frame count updates)

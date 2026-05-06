@@ -8,6 +8,8 @@ class ShortcutSettings: ObservableObject {
 
     /// Notification posted when the Ask Omi shortcut changes so hotkeys can be re-registered.
     nonisolated static let askOmiShortcutChanged = Notification.Name("ShortcutSettings.askOmiShortcutChanged")
+    /// Notification posted when the Toggle Listening shortcut changes so hotkeys can be re-registered.
+    nonisolated static let toggleListeningShortcutChanged = Notification.Name("ShortcutSettings.toggleListeningShortcutChanged")
 
     struct KeyboardShortcut: Codable, Hashable {
         var keyCode: UInt16?
@@ -275,6 +277,10 @@ class ShortcutSettings: ObservableObject {
         KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command),
     ]
 
+    static let toggleListeningPresets: [KeyboardShortcut] = [
+        KeyboardShortcut(keyCode: 37, keyDisplay: "L", modifiers: [.command, .shift]),
+    ]
+
     static let pttPresets: [KeyboardShortcut] = [
         KeyboardShortcut(modifierOnly: .option),
         KeyboardShortcut(modifierOnly: .command, requiresRightCommand: true),
@@ -294,10 +300,24 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
+    @Published var toggleListeningShortcut: KeyboardShortcut {
+        didSet {
+            persistShortcut(toggleListeningShortcut, forKey: Self.toggleListeningShortcutDefaultsKey)
+            NotificationCenter.default.post(name: Self.toggleListeningShortcutChanged, object: nil)
+        }
+    }
+
     @Published var askOmiEnabled: Bool {
         didSet {
             UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
             NotificationCenter.default.post(name: Self.askOmiShortcutChanged, object: nil)
+        }
+    }
+
+    @Published var toggleListeningEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(toggleListeningEnabled, forKey: "shortcut_toggleListeningEnabled")
+            NotificationCenter.default.post(name: Self.toggleListeningShortcutChanged, object: nil)
         }
     }
 
@@ -445,11 +465,16 @@ class ShortcutSettings: ObservableObject {
         !Self.askOmiPresets.contains(askOmiShortcut)
     }
 
+    var toggleListeningUsesCustomShortcut: Bool {
+        !Self.toggleListeningPresets.contains(toggleListeningShortcut)
+    }
+
     var pttUsesCustomShortcut: Bool {
         !Self.pttPresets.contains(pttShortcut)
     }
 
     private static let askOmiShortcutDefaultsKey = "shortcut_askOmiKey"
+    private static let toggleListeningShortcutDefaultsKey = "shortcut_toggleListeningKey"
     private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
     private init() {
@@ -463,7 +488,14 @@ class ShortcutSettings: ObservableObject {
             legacyMapper: Self.legacyAskOmiShortcut
         ) ?? Self.askOmiPresets[0]
 
+        self.toggleListeningShortcut = Self.loadShortcut(
+            forKey: Self.toggleListeningShortcutDefaultsKey,
+            legacyMapper: { _ in nil }
+        ) ?? Self.toggleListeningPresets[0]
+
         self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
+        self.toggleListeningEnabled =
+            UserDefaults.standard.object(forKey: "shortcut_toggleListeningEnabled") as? Bool ?? true
         self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false

@@ -3,6 +3,7 @@ import SwiftUI
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject var appState: AppState
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     weak var window: NSWindow?
     var onPlayPause: () -> Void
@@ -280,6 +281,7 @@ struct FloatingControlBarView: View {
                     }
 
                     HStack(spacing: 6) {
+                        listeningStatusButton
                         compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
                     }
                 }
@@ -296,9 +298,48 @@ struct FloatingControlBarView: View {
 
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        RoundedRectangle(cornerRadius: 3)
-            .fill(Color.white.opacity(0.5))
-            .frame(width: 28, height: 6)
+        Button {
+            appState.toggleListening(source: "ui")
+        } label: {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(appState.isConversationListening ? Color.green : Color.orange)
+                    .frame(width: 6, height: 6)
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: 28, height: 6)
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(appState.isConversationListening ? "Listening" : "Paused")
+    }
+
+    private var listeningStatusButton: some View {
+        let isListening = appState.isConversationListening
+        return Button {
+            appState.toggleListening(source: "ui")
+        } label: {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(isListening ? Color.green : Color.orange)
+                    .frame(width: 6, height: 6)
+                Image(systemName: isListening ? "ear.fill" : "ear.slash.fill")
+                    .scaledFont(size: 10, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.9))
+                Text(isListening ? "Listening" : "Paused")
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(5)
+        }
+        .buttonStyle(.plain)
+        .help(isListening ? "Pause conversation listening" : "Resume conversation listening")
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

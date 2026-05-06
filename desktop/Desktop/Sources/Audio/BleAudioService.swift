@@ -29,6 +29,7 @@ final class BleAudioService: ObservableObject {
     // Audio delivery
     private var transcriptionService: TranscriptionService?
     private var audioDataHandler: ((Data) -> Void)?
+    private var conversationAudioHandler: ((Data) -> Void)?
     private var rawFrameHandler: ((Data) -> Void)?
 
     // Statistics
@@ -51,6 +52,7 @@ final class BleAudioService: ObservableObject {
         from connection: DeviceConnection,
         transcriptionService: TranscriptionService? = nil,
         audioDataHandler: ((Data) -> Void)? = nil,
+        conversationAudioHandler: ((Data) -> Void)? = nil,
         rawFrameHandler: ((Data) -> Void)? = nil
     ) async {
         guard !isProcessing else {
@@ -60,6 +62,7 @@ final class BleAudioService: ObservableObject {
 
         self.transcriptionService = transcriptionService
         self.audioDataHandler = audioDataHandler
+        self.conversationAudioHandler = conversationAudioHandler
         self.rawFrameHandler = rawFrameHandler
 
         // Get codec from device
@@ -128,6 +131,7 @@ final class BleAudioService: ObservableObject {
         isProcessing = false
         transcriptionService = nil
         audioDataHandler = nil
+        conversationAudioHandler = nil
         rawFrameHandler = nil
 
         // Log statistics
@@ -199,6 +203,8 @@ final class BleAudioService: ObservableObject {
             transcription.sendAudio(pcmData)
         }
 
+        conversationAudioHandler?(pcmData)
+
         // Send to custom handler
         audioDataHandler?(pcmData)
     }
@@ -260,4 +266,3 @@ extension BleAudioService {
 }
 
 // MARK: - Integration with DeviceProvider
-

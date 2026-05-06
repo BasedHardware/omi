@@ -31,6 +31,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let responseViewOverhead: CGFloat = 190
 
     let state = FloatingControlBarState()
+    private let appState: AppState
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var isUserDragging = false
@@ -60,10 +61,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
 
-    override init(
-        contentRect: NSRect, styleMask style: NSWindow.StyleMask,
+    init(
+        appState: AppState, contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
+        self.appState = appState
         let initialRect = NSRect(origin: .zero, size: FloatingControlBarWindow.minBarSize)
 
         super.init(
@@ -129,6 +131,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func setupViews() {
         let swiftUIView = FloatingControlBarView(
+            appState: appState,
             window: self,
             onPlayPause: { [weak self] in self?.onPlayPause?() },
             onAskAI: { [weak self] in self?.handleAskAI() },
@@ -957,6 +960,7 @@ class FloatingControlBarManager {
         log("FloatingControlBarManager: setup() creating floating bar window")
 
         let barWindow = FloatingControlBarWindow(
+            appState: appState,
             contentRect: .zero,
             styleMask: [.borderless],
             backing: .buffered,
