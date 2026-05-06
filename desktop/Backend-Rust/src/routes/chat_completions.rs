@@ -933,6 +933,14 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_model_haiku() {
+        let route = resolve_model("omi-haiku").unwrap();
+        assert_eq!(route.public_model, "omi-haiku");
+        assert_eq!(route.upstream_model, "claude-haiku-4-5-20251001");
+        assert_eq!(route.provider, Provider::Anthropic);
+    }
+
+    #[test]
     fn test_resolve_model_claude_aliases() {
         let route = resolve_model("claude-opus-4-6").unwrap();
         assert_eq!(route.upstream_model, "claude-opus-4-6");
@@ -954,7 +962,6 @@ mod tests {
     fn test_resolve_model_unknown() {
         assert!(resolve_model("gpt-4").is_none());
         assert!(resolve_model("").is_none());
-        assert!(resolve_model("omi-haiku").is_some());
     }
 
     #[test]
