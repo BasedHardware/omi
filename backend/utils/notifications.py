@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import math
+import uuid
 from typing import List
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
@@ -520,13 +521,17 @@ def send_action_items_batch_deletion_message(user_id: str, action_item_ids: List
     # Action item ids are UUID-shaped (~36 chars); 100 per chunk keeps the
     # serialized payload comfortably under FCM's 4KB limit.
     chunk_size = 100
+    # Per-invocation nonce so concurrent bulk-delete calls that happen to
+    # share a leading id don't collide on FCM tags (which would let the
+    # second dispatch silently replace the first).
+    nonce = uuid.uuid4().hex[:8]
     for start in range(0, len(action_item_ids), chunk_size):
         chunk = action_item_ids[start : start + chunk_size]
         data = {
             'type': 'action_item_batch_delete',
             'ids': ','.join(chunk),
         }
-        tag = _generate_tag(f"{user_id}:action_item_batch_delete:{start}:{chunk[0]}")
+        tag = _generate_tag(f"{user_id}:action_item_batch_delete:{nonce}:{start}")
         _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
     logger.info(f'send_action_items_batch_deletion_message to user {user_id} count={len(action_item_ids)}')
 
