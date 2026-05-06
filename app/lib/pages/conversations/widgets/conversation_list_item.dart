@@ -409,6 +409,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     padding: EdgeInsets.only(right: 4.0),
                                     child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
+                                _buildOverflowMenu(context),
                               ],
                             ),
                     ],

@@ -299,9 +299,14 @@ def get_conversations_without_photos(
 
 
 def iter_all_conversations(
-    uid: str, batch_size: int = 400, include_discarded: bool = True, include_trashed: bool = False
+    uid: str, batch_size: int = 400, include_discarded: bool = True, include_trashed: bool = True
 ):
-    """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
+    """Yield all conversations for a user, decrypted, in batches. Used for streaming data export.
+
+    Defaults to include_trashed=True so /v1/users/export streams the full set of stored
+    conversations, including those soft-deleted within the 30-day window. Callers that
+    want only currently-visible conversations should pass include_trashed=False explicitly.
+    """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
