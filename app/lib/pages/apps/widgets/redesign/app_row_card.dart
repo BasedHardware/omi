@@ -4,20 +4,21 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/apps/widgets/redesign/status_pill.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
-/// Vertical row card replacing the App-Store-style list item / icon-tile carousel cell.
+/// One row in the apps list.
 ///
-/// Visual shape (Shopify App Store / GPT Store inspired):
-/// - 48×48 icon (smaller than App Store's 60-64)
-/// - bold name + 2-line description + author/status footer
-/// - single purple ★ + score on the trailing edge (no 5-star row, no "(52)" parenthetical)
-/// - no inline action button — entire row taps through to detail
+/// Borderless. Three pieces of information only: icon, name + one-line
+/// description, rating. No author, no status pill, no inline action button —
+/// those belong on the detail page. Tapping the row opens the detail page.
+///
+/// Visually leans on whitespace and a hairline separator (provided by the
+/// parent [AppSection]) rather than card backgrounds, so the list reads as
+/// "content first" rather than "row of products".
 class AppRowCard extends StatelessWidget {
   final App app;
   final bool showPrivateIcon;
@@ -26,53 +27,48 @@ class AppRowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<AppProvider, bool>(
-      selector: (context, provider) {
-        final current = provider.apps.firstWhere((a) => a.id == app.id, orElse: () => app);
-        return current.enabled;
-      },
-      builder: (context, isEnabled, child) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () async {
-            MixpanelManager().pageOpened('App Detail');
-            await routeToPage(context, AppDetailPage(app: app));
-            if (context.mounted) {
-              context.read<AppProvider>().filterApps();
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25).withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildIcon(),
-                const SizedBox(width: 12),
-                Expanded(child: _buildBody(context, isEnabled)),
-                const SizedBox(width: 8),
-                _buildRating(),
-              ],
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          MixpanelManager().pageOpened('App Detail');
+          await routeToPage(context, AppDetailPage(app: app));
+          if (context.mounted) {
+            context.read<AppProvider>().filterApps();
+          }
+        },
+        splashColor: Colors.white.withValues(alpha: 0.04),
+        highlightColor: Colors.white.withValues(alpha: 0.02),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _Icon(app: app),
+              const SizedBox(width: 14),
+              Expanded(child: _Body(app: app, showPrivateIcon: showPrivateIcon)),
+              const SizedBox(width: 12),
+              if (app.ratingAvg != null) _Rating(value: app.getRatingAvg()!),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
+}
 
-  Widget _buildIcon() {
+class _Icon extends StatelessWidget {
+  final App app;
+  const _Icon({required this.app});
+
+  @override
+  Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: const Color(0xFF35343B),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        width: 56,
+        height: 56,
+        color: const Color(0xFF1A1A1F),
         child: CachedNetworkImage(
           imageUrl: app.getImageUrl(),
           httpHeaders: const {
@@ -81,88 +77,108 @@ class AppRowCard extends StatelessWidget {
           },
           fit: BoxFit.cover,
           placeholder: (context, url) => ShimmerWithTimeout(
-            baseColor: const Color(0xFF1F1F25),
-            highlightColor: const Color(0xFF35343B),
-            child: Container(color: const Color(0xFF1F1F25)),
+            baseColor: const Color(0xFF1A1A1F),
+            highlightColor: const Color(0xFF2A2A30),
+            child: Container(color: const Color(0xFF1A1A1F)),
           ),
-          errorWidget: (context, url, error) => Icon(Icons.apps, size: 24, color: Colors.grey.shade600),
+          errorWidget: (context, url, error) => Icon(Icons.apps_rounded, size: 26, color: Colors.grey.shade600),
         ),
       ),
     );
   }
+}
 
-  Widget _buildBody(BuildContext context, bool isEnabled) {
+class _Body extends StatelessWidget {
+  final App app;
+  final bool showPrivateIcon;
+  const _Body({required this.app, required this.showPrivateIcon});
+
+  @override
+  Widget build(BuildContext context) {
+    final showLock = app.private && showPrivateIcon;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          app.name.decodeString + (app.private && showPrivateIcon ? ' 🔒'.decodeString : ''),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (app.description.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(
-            app.description,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400, height: 1.3),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-        const SizedBox(height: 4),
         Row(
           children: [
             Flexible(
               child: Text(
-                app.author.isNotEmpty ? 'By ${app.author}' : (app.email ?? ''),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                app.name.decodeString,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: -0.2,
+                  height: 1.25,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (isEnabled) ...[
-              const SizedBox(width: 8),
-              const StatusPill(label: 'Connected', tone: StatusPillTone.success),
-            ] else if (_needsSetup(app)) ...[
-              const SizedBox(width: 8),
-              const StatusPill(label: 'Setup needed', tone: StatusPillTone.warning),
+            if (showLock) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.lock_rounded, size: 12, color: Colors.grey.shade500),
             ],
           ],
+        ),
+        if (app.description.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            app.description,
+            style: TextStyle(
+              fontSize: 13.5,
+              color: Colors.grey.shade400,
+              height: 1.35,
+              letterSpacing: -0.1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _Rating extends StatelessWidget {
+  final String value;
+  const _Rating({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 15),
+        const SizedBox(width: 3),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13.5,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.1,
+            height: 1.0,
+          ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildRating() {
-    if (app.ratingAvg == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.star_rounded, color: Color(0xFF8B5CF6), size: 14),
-              const SizedBox(width: 2),
-              Text(
-                app.getRatingAvg() ?? '',
-                style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ],
-      ),
+/// Selector wrapper around [AppRowCard] for cases where the row should react
+/// to provider state changes (currently a thin pass-through; reserved for
+/// future per-app reactive bits).
+class AppRowCardReactive extends StatelessWidget {
+  final App app;
+  const AppRowCardReactive({super.key, required this.app});
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<AppProvider, App>(
+      selector: (_, p) => p.apps.firstWhere((a) => a.id == app.id, orElse: () => app),
+      builder: (context, current, _) => AppRowCard(app: current),
     );
-  }
-
-  bool _needsSetup(App app) {
-    // External integrations with auth steps that aren't completed yet need setup.
-    // We can't reliably check setup completion from the row context, so this is a
-    // conservative signal: only show the pill if the app is external and not yet enabled.
-    return !app.enabled && app.worksExternally();
   }
 }
