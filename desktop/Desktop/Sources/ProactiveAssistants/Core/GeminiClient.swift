@@ -785,11 +785,15 @@ extension GeminiClient {
 
   /// Send image + tool loop request: takes pre-built contents array for multi-turn tool calling.
   /// Retries up to 2 times for transient errors.
+  /// - Parameter thinkingBudget: Token budget for model reasoning. Tool-calling features that need
+  ///   multi-step reasoning (e.g. InsightAssistant SQL generation, TaskAssistant screen analysis)
+  ///   should pass a reasonable budget (e.g. 1024). Default 0 = minimal thinking.
   func sendImageToolLoop(
     contents: [GeminiImageToolRequest.Content],
     systemPrompt: String,
     tools: [GeminiTool],
-    forceToolCall: Bool = false
+    forceToolCall: Bool = false,
+    thinkingBudget: Int = 0
   ) async throws -> ToolChatResult {
     let maxRetries = 2
     var lastError: Error?
@@ -811,7 +815,7 @@ extension GeminiClient {
               parts: [.init(text: systemPrompt)]
             ),
             generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: ThinkingConfig.minimumBudget(for: model))
+              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             ),
             tools: tools,
             toolConfig: toolConfig
