@@ -509,8 +509,11 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
         // Validate inside generation_config / generationConfig.
         // Check BOTH casings to prevent dual-key bypass where an attacker
         // sends an empty generation_config + a real generationConfig.
+        let mut found_generation_config = false;
         for gc_key in &["generation_config", "generationConfig"] {
             if let Some(gc) = obj.get_mut(*gc_key).and_then(|v| v.as_object_mut()) {
+                found_generation_config = true;
+
                 // Reject candidate_count > 1
                 for cc_key in &["candidate_count", "candidateCount"] {
                     if let Some(v) = gc.get(*cc_key) {
@@ -545,6 +548,15 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                     );
                 }
             }
+        }
+
+        // If no generation_config exists at all (legacy clients), create one
+        // with the default thinking budget to prevent unlimited thinking spend.
+        if !found_generation_config {
+            obj.insert(
+                "generationConfig".to_string(),
+                serde_json::json!({"thinkingConfig": {"thinkingBudget": DEFAULT_THINKING_BUDGET}}),
+            );
         }
     }
 
@@ -1640,5 +1652,23 @@ mod tests {
         // Embed requests have no generation_config, so no injection
         assert!(parsed.get("thinkingConfig").is_none());
         assert!(parsed.get("generation_config").is_none());
+    }
+
+    #[test]
+    fn sanitize_injects_generation_config_when_absent() {
+        // Legacy clients may send only contents with no generation_config at all.
+        // Proxy must create generationConfig with thinking budget to prevent
+        // unlimited thinking spend.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
 }
