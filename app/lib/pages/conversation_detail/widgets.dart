@@ -142,11 +142,18 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   void _showCalendarEventDetails(BuildContext context, CalendarEventLink calendarEvent) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => CalendarEventDetailsSheet(calendarEvent: calendarEvent),
+      builder: (context) => CalendarEventDetailsSheet(
+        calendarEvent: calendarEvent,
+        onUnlink: () async {
+          await provider.unlinkCalendarEvent();
+        },
+        onAddSummary: () => provider.addSummaryToCalendarEvent(),
+      ),
     );
   }
 
@@ -1440,14 +1447,45 @@ _getLoadingIndicator() {
   );
 }
 
-class CalendarEventDetailsSheet extends StatelessWidget {
+class CalendarEventDetailsSheet extends StatefulWidget {
   final CalendarEventLink calendarEvent;
-  const CalendarEventDetailsSheet({super.key, required this.calendarEvent});
+  final Future<void> Function()? onUnlink;
+  final Future<String?> Function()? onAddSummary;
+
+  const CalendarEventDetailsSheet({
+    super.key,
+    required this.calendarEvent,
+    this.onUnlink,
+    this.onAddSummary,
+  });
+
+  @override
+  State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
+}
+
+class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
+  bool _unlinking = false;
+  bool _addingSummary = false;
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  Future<void> _shareWithAttendees() async {
+    final emails = widget.calendarEvent.attendeeEmails;
+    if (emails.isEmpty) return;
+    final subject = Uri.encodeComponent('Notes: ${widget.calendarEvent.title}');
+    final uri = Uri.parse('mailto:${emails.join(',')}?subject=$subject');
+    await launchUrl(uri);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final start = calendarEvent.startTime;
-    final end = calendarEvent.endTime;
+    final start = widget.calendarEvent.startTime;
+    final end = widget.calendarEvent.endTime;
     final timeStr = '${_fmt(start)} – ${_fmt(end)}';
 
     return Container(
@@ -1472,8 +1510,10 @@ class CalendarEventDetailsSheet extends StatelessWidget {
             const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(calendarEvent.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+              child: Text(
+                widget.calendarEvent.title,
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
             ),
           ]),
           const SizedBox(height: 12),
@@ -1482,34 +1522,105 @@ class CalendarEventDetailsSheet extends StatelessWidget {
             const SizedBox(width: 8),
             Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
           ]),
-          if (calendarEvent.attendees.isNotEmpty) ...[
+          if (widget.calendarEvent.attendees.isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Icon(Icons.people_outline, size: 16, color: Colors.white54),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(calendarEvent.attendees.join(', '),
-                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                child: Text(
+                  widget.calendarEvent.attendees.join(', '),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
               ),
             ]),
           ],
-          if (calendarEvent.htmlLink != null) ...[
+          if (widget.calendarEvent.htmlLink != null) ...[
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => launchUrl(Uri.parse(calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
-              child: const Text('Open in Google Calendar',
-                  style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline)),
+              onTap: () => launchUrl(Uri.parse(widget.calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
+              child: const Text(
+                'Open in Google Calendar',
+                style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline),
+              ),
             ),
           ],
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFF2C2C2E)),
+          const SizedBox(height: 8),
+          // Add Summary button
+          if (widget.onAddSummary != null)
+            _ActionRow(
+              icon: Icons.note_add_outlined,
+              label: 'Add summary to event',
+              loading: _addingSummary,
+              onTap: () async {
+                setState(() => _addingSummary = true);
+                final link = await widget.onAddSummary!();
+                if (!mounted) return;
+                setState(() => _addingSummary = false);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(link != null ? 'Summary added to calendar event' : 'Failed to add summary'),
+                ));
+              },
+            ),
+          // Share with attendees button
+          if (widget.calendarEvent.attendeeEmails.isNotEmpty)
+            _ActionRow(
+              icon: Icons.share_outlined,
+              label: 'Share with attendees',
+              onTap: _shareWithAttendees,
+            ),
+          // Unlink button
+          if (widget.onUnlink != null)
+            _ActionRow(
+              icon: Icons.link_off,
+              label: 'Unlink calendar event',
+              color: Colors.redAccent,
+              loading: _unlinking,
+              onTap: () async {
+                setState(() => _unlinking = true);
+                await widget.onUnlink!();
+                if (!mounted) return;
+                Navigator.pop(context);
+              },
+            ),
         ],
       ),
     );
   }
+}
 
-  String _fmt(DateTime dt) {
-    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final m = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour < 12 ? 'AM' : 'PM';
-    return '$h:$m $period';
+class _ActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+  final bool loading;
+
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.color = Colors.white,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: loading ? null : onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(children: [
+          loading
+              ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+              : Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color, fontSize: 15)),
+        ]),
+      ),
+    );
   }
 }
