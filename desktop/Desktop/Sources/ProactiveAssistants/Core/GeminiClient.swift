@@ -11,6 +11,12 @@ struct ThinkingConfig: Encodable {
   enum CodingKeys: String, CodingKey {
     case thinkingBudget = "thinking_budget"
   }
+
+  /// Minimum thinking budget that disables or minimizes reasoning for a given model.
+  /// Flash supports 0 (fully off). Pro requires at least 128.
+  static func minimumBudget(for model: String) -> Int {
+    model.contains("pro") ? 128 : 0
+  }
 }
 
 // MARK: - Gemini API Request/Response Types
@@ -367,7 +373,7 @@ actor GeminiClient {
             generationConfig: GeminiRequest.GenerationConfig(
               responseMimeType: "application/json",
               responseSchema: responseSchema,
-              thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
+              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             )
           )
 
@@ -444,7 +450,7 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: nil,
             responseSchema: nil,
-            thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
+            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -515,7 +521,7 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: "application/json",
             responseSchema: responseSchema,
-            thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
+            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -805,7 +811,7 @@ extension GeminiClient {
               parts: [.init(text: systemPrompt)]
             ),
             generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: 0)
+              thinkingConfig: ThinkingConfig(thinkingBudget: ThinkingConfig.minimumBudget(for: model))
             ),
             tools: tools,
             toolConfig: toolConfig
