@@ -36,6 +36,16 @@ def _ensure_timezone_aware(dt: datetime) -> datetime:
     return dt
 
 
+def _is_not_trashed(conversation_data: Dict[str, Any]) -> bool:
+    return conversation_data.get('trashed_at') is None
+
+
+def _filter_trashed(conversations: List[dict], include_trashed: bool) -> List[dict]:
+    if include_trashed:
+        return conversations
+    return [conversation for conversation in conversations if _is_not_trashed(conversation)]
+
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -178,6 +188,7 @@ def get_conversations(
     limit: int = 100,
     offset: int = 0,
     include_discarded: bool = False,
+    include_trashed: bool = False,
     statuses: List[str] = [],
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -213,15 +224,23 @@ def get_conversations(
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return conversations
+    return _filter_trashed(conversations, include_trashed)
 
 
-def get_conversations_count(uid: str, include_discarded: bool = False, statuses: List[str] = []):
+def get_conversations_count(
+    uid: str, include_discarded: bool = False, include_trashed: bool = False, statuses: List[str] = []
+):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if not include_trashed:
+        count = 0
+        for doc in conversations_ref.stream():
+            if _is_not_trashed(doc.to_dict()):
+                count += 1
+        return count
     result = conversations_ref.count().get()
     return int(result[0][0].value)
 
@@ -232,6 +251,7 @@ def get_conversations_without_photos(
     limit: int = 100,
     offset: int = 0,
     include_discarded: bool = False,
+    include_trashed: bool = False,
     statuses: List[str] = [],
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -271,10 +291,12 @@ def get_conversations_without_photos(
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return conversations
+    return _filter_trashed(conversations, include_trashed)
 
 
-def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
+def iter_all_conversations(
+    uid: str, batch_size: int = 400, include_discarded: bool = True, include_trashed: bool = False
+):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -286,6 +308,8 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         batch = []
         for doc in batch_ref.stream():
             conv = doc.to_dict()
+            if not include_trashed and not _is_not_trashed(conv):
+                continue
             conv = _prepare_conversation_for_read(conv, uid) or conv
             batch.append(conv)
         yield from batch
@@ -303,6 +327,81 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def trash_conversation(uid: str, conversation_id: str):
+    conversation_ref = (
+        db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    if not conversation_ref.get().exists:
+        return None
+    conversation_ref.update({'trashed_at': datetime.now(timezone.utc)})
+    return conversation_ref.get().to_dict()
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def restore_conversation(uid: str, conversation_id: str):
+    conversation_ref = (
+        db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    if not conversation_ref.get().exists:
+        return None
+    conversation_ref.update({'trashed_at': firestore.DELETE_FIELD})
+    return conversation_ref.get().to_dict()
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def get_trashed_conversations(uid: str, limit: int = 100, offset: int = 0):
+    conversations_ref = (
+        db.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .where(filter=FieldFilter('trashed_at', '!=', None))
+        .order_by('trashed_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+        .offset(offset)
+    )
+    return [doc.to_dict() for doc in conversations_ref.stream()]
+
+
+def list_expired_trashed(cutoff_dt: datetime):
+    cutoff_dt = _ensure_timezone_aware(cutoff_dt)
+    query = db.collection_group(conversations_collection).where(filter=FieldFilter('trashed_at', '<', cutoff_dt))
+    for doc in query.stream():
+        user_ref = doc.reference.parent.parent
+        if user_ref is None:
+            continue
+        yield user_ref.id, doc.id
+
+
+def filter_visible_conversation_ids(
+    uid: str, conversation_ids: List[str], include_discarded: bool = False, include_trashed: bool = False
+) -> List[str]:
+    if not conversation_ids:
+        return []
+
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+    doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
+    docs = db.get_all(doc_refs)
+
+    visible_ids = []
+    for doc in docs:
+        if not doc.exists:
+            continue
+        data = doc.to_dict()
+        if not include_discarded and data.get('discarded'):
+            continue
+        if not include_trashed and not _is_not_trashed(data):
+            continue
+        visible_ids.append(doc.id)
+
+    visible_set = set(visible_ids)
+    return [conversation_id for conversation_id in conversation_ids if conversation_id in visible_set]
 
 
 def create_audio_files_from_chunks(
@@ -557,6 +656,8 @@ def get_conversations_by_id(uid, conversation_ids):
         if doc.exists:
             data = doc.to_dict()
             if data.get('discarded'):
+                continue
+            if not _is_not_trashed(data):
                 continue
             conversations.append(data)
 

@@ -6,6 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
+import database.conversations as conversations_db
 from utils.llm.clients import embeddings
 import logging
 
@@ -61,7 +62,8 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
-    return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+    conversation_ids = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+    return conversations_db.filter_visible_conversation_ids(uid, conversation_ids)
 
 
 def query_vectors_by_metadata(
@@ -130,6 +132,7 @@ def query_vectors_by_metadata(
 
     conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
     conversations_id.sort(key=lambda x: conversation_id_to_matches[x], reverse=True)
+    conversations_id = conversations_db.filter_visible_conversation_ids(uid, conversations_id)
     return conversations_id[:limit] if len(conversations_id) > limit else conversations_id
 
 

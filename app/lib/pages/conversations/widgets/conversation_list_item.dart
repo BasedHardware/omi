@@ -171,14 +171,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       color: isSelected
                           ? Colors.deepPurple.withValues(alpha: 0.3)
                           : (isSelectionMode && !isEligible)
-                              ? Colors.grey.shade800
-                              : const Color(0xFF1F1F25),
+                          ? Colors.grey.shade800
+                          : const Color(0xFF1F1F25),
                       borderRadius: BorderRadius.circular(24.0),
                       border: isSelected
                           ? Border.all(color: Colors.deepPurple, width: 2)
                           : (isSelectionMode && !isEligible)
-                              ? Border.all(color: Colors.grey.shade600, width: 1)
-                              : null,
+                          ? Border.all(color: Colors.grey.shade600, width: 1)
+                          : null,
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24.0),
@@ -381,6 +381,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                     padding: EdgeInsets.only(right: 4.0),
                                     child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                                   ),
+                                _buildOverflowMenu(context),
                               ],
                             )
                           : Row(
@@ -576,6 +577,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           padding: EdgeInsets.only(left: 8.0),
                           child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
                         ),
+                      _buildOverflowMenu(context),
                     ],
                   ),
           ),
@@ -589,6 +591,49 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (durationSeconds <= 0) return '';
 
     return secondsToCompactDuration(durationSeconds, context);
+  }
+
+  Widget _buildOverflowMenu(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_horiz, color: Color(0xFF8E8E93), size: 20),
+      color: const Color(0xFF1F1F25),
+      onSelected: (value) async {
+        if (value == 'trash') {
+          await _confirmMoveToTrash(context);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'trash',
+          child: Row(
+            children: [
+              const Icon(Icons.delete_outline, color: Colors.white70, size: 18),
+              const SizedBox(width: 10),
+              Text(context.l10n.moveToTrash, style: const TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmMoveToTrash(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.l10n.trashConfirmTitle),
+        content: Text(context.l10n.trashConfirmMessage),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(context.l10n.cancel)),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(context.l10n.moveToTrash)),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final success = await context.read<ConversationProvider>().trashConversation(widget.conversation);
+    if (!context.mounted || !success) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.trashedAtLabel)));
   }
 }
 

@@ -213,6 +213,7 @@ class ServerConversation {
 
   ConversationStatus status;
   bool discarded;
+  DateTime? trashedAt;
   final bool deleted;
   final bool isLocked;
   bool starred;
@@ -235,6 +236,7 @@ class ServerConversation {
     this.photos = const [],
     this.audioFiles = const [],
     this.discarded = false,
+    this.trashedAt,
     this.deleted = false,
     this.source,
     this.language,
@@ -268,6 +270,7 @@ class ServerConversation {
           : [],
       audioFiles: ((json['audio_files'] ?? []) as List<dynamic>).map((af) => AudioFile.fromJson(af)).toList(),
       discarded: json['discarded'] ?? false,
+      trashedAt: json['trashed_at'] != null ? DateTime.parse(json['trashed_at']).toLocal() : null,
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
@@ -297,6 +300,7 @@ class ServerConversation {
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
+      'trashed_at': trashedAt?.toUtc().toIso8601String(),
       'deleted': deleted,
       'source': source?.toString(),
       'language': language,

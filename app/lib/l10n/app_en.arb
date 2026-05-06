@@ -93,6 +93,59 @@
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"
     },
+    "trash": "Trash",
+    "@trash": {
+        "description": "Settings entry and page title for trashed conversations"
+    },
+    "trashEmpty": "Trash is empty",
+    "@trashEmpty": {
+        "description": "Empty state title for Trash"
+    },
+    "trashDescription": "Conversations in Trash are permanently deleted after 30 days.",
+    "@trashDescription": {
+        "description": "Description of Trash retention behavior"
+    },
+    "moveToTrash": "Move to Trash",
+    "@moveToTrash": {
+        "description": "Action label to soft-delete a conversation"
+    },
+    "restoreConversation": "Restore",
+    "@restoreConversation": {
+        "description": "Action label to restore a trashed conversation"
+    },
+    "deleteForever": "Delete forever",
+    "@deleteForever": {
+        "description": "Action label to permanently delete a trashed conversation"
+    },
+    "daysRemaining": "{days} days remaining",
+    "@daysRemaining": {
+        "description": "Number of days remaining before a trashed conversation is permanently deleted",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trashConfirmTitle": "Move conversation to Trash?",
+    "@trashConfirmTitle": {
+        "description": "Confirmation dialog title for moving a conversation to Trash"
+    },
+    "trashConfirmMessage": "You can restore it from Settings > Trash for the next 30 days.",
+    "@trashConfirmMessage": {
+        "description": "Confirmation dialog message for moving a conversation to Trash"
+    },
+    "restoreSuccess": "Conversation restored",
+    "@restoreSuccess": {
+        "description": "Snackbar message after restoring a conversation"
+    },
+    "deleteForeverConfirmTitle": "Delete forever?",
+    "@deleteForeverConfirmTitle": {
+        "description": "Confirmation dialog title for permanent delete"
+    },
+    "trashedAtLabel": "Moved to Trash",
+    "@trashedAtLabel": {
+        "description": "Label for the timestamp when a conversation was moved to Trash"
+    },
     "contentCopied": "Content copied to clipboard",
     "@contentCopied": {
         "description": "Snackbar message when content is copied"

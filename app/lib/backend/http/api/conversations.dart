@@ -99,6 +99,54 @@ Future<bool> deleteConversationServer(String conversationId) async {
   return response.statusCode == 204;
 }
 
+Future<ServerConversation?> trashConversationServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/trash',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  Logger.debug('trashConversation: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return ServerConversation.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<ServerConversation?> restoreConversationServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/restore',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  Logger.debug('restoreConversation: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return ServerConversation.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<List<ServerConversation>> getTrashedConversations({int limit = 100, int offset = 0}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/trash?limit=$limit&offset=$offset',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>)
+        .map((conversation) => ServerConversation.fromJson(conversation))
+        .toList();
+  }
+  Logger.debug('getTrashedConversations error ${response.statusCode}');
+  return [];
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
