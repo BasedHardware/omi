@@ -654,11 +654,17 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleItemSelection(String itemId) {
-    if (_selectedItems.contains(itemId)) {
+  /// Cascades the toggle to [cascadeIds] — typically the parent's visible
+  /// descendants computed at the call site (the page has the category-grouped
+  /// display order; the provider does not). Pass an empty list for a leaf row.
+  void toggleItemSelection(String itemId, {Iterable<String> cascadeIds = const []}) {
+    final wasSelected = _selectedItems.contains(itemId);
+    if (wasSelected) {
       _selectedItems.remove(itemId);
+      _selectedItems.removeAll(cascadeIds);
     } else {
       _selectedItems.add(itemId);
+      _selectedItems.addAll(cascadeIds);
     }
     notifyListeners();
   }
