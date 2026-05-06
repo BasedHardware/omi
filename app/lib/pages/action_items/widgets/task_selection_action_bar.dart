@@ -184,7 +184,8 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
       ),
     );
     if (confirmed != true) return;
-    await provider.deleteSelectedItems();
+    if (!context.mounted) return;
+    await provider.deleteSelectedItems(context: context);
   }
 }
 

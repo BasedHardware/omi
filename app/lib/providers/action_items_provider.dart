@@ -722,11 +722,17 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
-  Future<bool> deleteSelectedItems() async {
+  Future<bool> deleteSelectedItems({BuildContext? context}) async {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
+    // Snapshot positions so a failed bulk delete can re-insert the rows
+    // back where the user expected them, instead of dumping them at the end.
+    final snapshot = <int, ActionItemWithMetadata>{
+      for (final item in itemsToDelete) _actionItems.indexOf(item): item,
+    };
+    final wasInSelection = _isSelectionMode;
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
@@ -742,7 +748,28 @@ class ActionItemsProvider extends ChangeNotifier {
 
     final deleted = await api.bulkDeleteActionItems(ids);
     if (deleted == null) {
-      Logger.debug('bulkDeleteActionItems returned null');
+      Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      // Re-insert rows at their original positions, oldest index first.
+      final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+      for (final entry in entries) {
+        final idx = entry.key.clamp(0, _actionItems.length);
+        _actionItems.insert(idx, entry.value);
+      }
+      _isSelectionMode = wasInSelection;
+      _selectedItems = ids.toSet();
+      notifyListeners();
+
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.bulkDeleteFailed),
+              backgroundColor: const Color(0xFFB3261E),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+      }
       return false;
     }
     return deleted.length == ids.length;
@@ -793,6 +820,13 @@ class ActionItemsProvider extends ChangeNotifier {
     messenger.clearSnackBars();
 
     if (total == 0) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.bulkExportAlreadyExported),
+          backgroundColor: const Color(0xFF2C2C2E),
+          duration: const Duration(seconds: 3),
+        ),
+      );
       endSelection();
       return;
     }
