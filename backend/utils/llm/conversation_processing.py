@@ -318,10 +318,7 @@ def extract_action_items(
         language_code: Language code for the conversation
         tz: User's timezone
         photos: Optional conversation photos
-        existing_action_items: Open action items semantically related to this
-            conversation (top vector matches, recently active). Caller is
-            expected to pre-filter to open items only; this function defends
-            in depth by skipping any item that arrives marked completed.
+        existing_action_items: Recent action items for deduplication (from past 2 days)
 
     Returns:
         List of extracted ActionItem objects
@@ -334,21 +331,15 @@ def extract_action_items(
     if existing_action_items:
         items_list = []
         for item in existing_action_items:
-            # Defensive: the rendered section is "OPEN TASKS"; a completed item
-            # leaking through (e.g. a future caller that doesn't pre-filter)
-            # would mislead the LLM into suppressing valid new tasks.
-            if item.get('completed', False):
-                continue
             desc = item.get('description', '')
             due = item.get('due_at')
             due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
-            items_list.append(f"  • {desc} (Due: {due_str})")
+            completed = '✓ Completed' if item.get('completed', False) else 'Pending'
+            items_list.append(f"  • {desc} (Due: {due_str}) [{completed}]")
 
-        if items_list:
-            existing_items_context = (
-                f"\n\nPOTENTIALLY RELATED OPEN TASKS — recently active, semantically similar ({len(items_list)} items):\n"
-                + "\n".join(items_list)
-            )
+        existing_items_context = f"\n\nEXISTING ACTION ITEMS FROM PAST 2 DAYS ({len(items_list)} items):\n" + "\n".join(
+            items_list
+        )
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: {language_code} is in the context message, not here, to keep this prefix fully static across all languages.
@@ -363,23 +354,21 @@ def extract_action_items(
     - Consider the scheduled meeting time and duration when extracting due dates
     - If you cannot confidently match a speaker to a name, use the action description without speaker references
 
-    DEDUPLICATION RULES — be conservative about suppressing:
-    • The "POTENTIALLY RELATED OPEN TASKS" section lists open items recently active in the user's task list, semantically similar to this conversation. They may or may not be true duplicates.
-    • Only suppress a candidate if you are 100% confident the existing task captures this EXACT intent and the user is just re-mentioning it (not re-doing it).
-    • EXTRACT (do not suppress) when the user signals re-occurrence or distinct scope:
-      - Re-occurrence cues: "again", "another", "still need to", "I forgot to", "more", "one more"
-      - Different person, scope, or deadline ("Submit report by March 1" vs "Submit report by April 15" — different deadlines, both valid)
-      - Existing item describes a one-off task that's already in progress; user is starting a new instance
-    • If user says "I did X" / "I just X'd" / "X is done" / "X is taken care of": DO NOT extract a new item AND do not modify the existing one — just leave it (auto-completion of existing tasks is out of scope here).
-    • Examples of true DUPLICATES (suppress):
-      - "Call John" said today, existing open "Call John" from this morning, no new context → DUPLICATE
-      - "Email Sarah about meeting" said today, existing "Email Sarah about meeting" still open → DUPLICATE (same intent re-mentioned)
-    • Examples of NOT duplicates (extract anyway):
-      - Existing: "Buy milk" (open). User says "I need to buy more milk" → EXTRACT (re-occurrence cue)
-      - Existing: "Submit report by March 1" (open). User says "Submit report by April 15" → EXTRACT (different deadline)
-      - Existing: "Call dentist" (open). User says "Call plumber" → EXTRACT (different scope)
-    • When unsure → EXTRACT. A duplicate the user can delete is recoverable; a silently-suppressed real task is not.
-    • SINGLE-TOPIC LIMIT: Within THIS conversation, extract AT MOST 1 action item per topic — not one per variation, option, or detail. (This rule applies within the current transcript, not across conversations.)
+    CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
+    • DO NOT extract action items that are >95% similar to existing ones in the content
+    • Check both the description AND the due date/timeframe
+    • Consider semantic similarity, not just exact word matches
+    • Examples of what counts as DUPLICATES (DO NOT extract):
+      - "Call John" vs "Phone John" → DUPLICATE
+      - "Finish report by Friday" (existing) vs "Complete report by end of week" → DUPLICATE
+      - "Buy milk" (existing) vs "Get milk from store" → DUPLICATE
+      - "Email Sarah about meeting" (existing) vs "Send email to Sarah regarding the meeting" → DUPLICATE
+    • Examples of what is NOT duplicate (OK to extract):
+      - "Buy groceries" (existing) vs "Buy milk" → NOT duplicate (different scope)
+      - "Call dentist" (existing) vs "Call plumber" → NOT duplicate (different person/service)
+      - "Submit report by March 1st" (existing) vs "Submit report by March 15th" → NOT duplicate (different deadlines)
+    • If you're unsure whether something is a duplicate, err on the side of treating it as a duplicate (DON'T extract)
+    • SINGLE-TOPIC LIMIT: If a conversation discusses one topic, extract AT MOST 1 action item for it — not one per variation, option, or detail mentioned in the discussion.
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
