@@ -423,9 +423,11 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     """
     Delete multiple action items by id in chunked Firestore batches.
 
-    Returns the ids that were actually deleted (skipping any that don't exist),
-    so the caller can scope downstream cleanup (vectors, FCM cancellation
-    messages) to the rows that were really removed.
+    Skips the existence check — Firestore's batch.delete() is a no-op for
+    docs that don't exist, and queueing N sequential blocking get()s would
+    eat the entire latency budget on large requests. Returns the input ids
+    so the caller can fan out vector + FCM cleanup, both of which are
+    idempotent for unknown ids.
     """
     if not action_item_ids:
         return []
@@ -433,17 +435,11 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    deleted_ids: List[str] = []
     batch = db.batch()
     count = 0
 
     for item_id in action_item_ids:
-        doc_ref = action_items_ref.document(item_id)
-        snapshot = doc_ref.get()
-        if not snapshot.exists:
-            continue
-        batch.delete(doc_ref)
-        deleted_ids.append(item_id)
+        batch.delete(action_items_ref.document(item_id))
         count += 1
 
         if count >= 499:  # Firestore batch limit is 500
@@ -454,7 +450,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     if count > 0:
         batch.commit()
 
-    return deleted_ids
+    return list(action_item_ids)
 
 
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
