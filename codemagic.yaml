@@ -2260,6 +2260,22 @@ workflows:
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
 
+          # Copy Sentry framework
+          SENTRY_FW="Desktop/.build/x86_64-apple-macosx/release/Sentry.framework"
+          [ ! -d "$SENTRY_FW" ] && SENTRY_FW="Desktop/.build/arm64-apple-macosx/release/Sentry.framework"
+          if [ -d "$SENTRY_FW" ]; then
+            cp -R "$SENTRY_FW" "$APP_BUNDLE/Contents/Frameworks/"
+            echo "Bundled Sentry framework"
+          fi
+
+          # Copy onnxruntime framework
+          ONNX_FW="Desktop/.build/x86_64-apple-macosx/release/onnxruntime.framework"
+          [ ! -d "$ONNX_FW" ] && ONNX_FW="Desktop/.build/arm64-apple-macosx/release/onnxruntime.framework"
+          if [ -d "$ONNX_FW" ]; then
+            cp -R "$ONNX_FW" "$APP_BUNDLE/Contents/Frameworks/"
+            echo "Bundled onnxruntime framework"
+          fi
+
           # Add rpath so Sparkle can be found at runtime
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
