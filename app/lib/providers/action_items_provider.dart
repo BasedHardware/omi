@@ -658,16 +658,12 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.contains(itemId)) {
       _selectedItems.remove(itemId);
     } else {
-      final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
-      if (item != null && item.exported) return;
       _selectedItems.add(itemId);
     }
     notifyListeners();
   }
 
   void selectItem(String itemId) {
-    final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
-    if (item != null && item.exported) return;
     if (!_selectedItems.contains(itemId)) {
       _selectedItems.add(itemId);
       notifyListeners();
@@ -682,10 +678,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void selectAllItems() {
-    _selectedItems.clear();
-    for (final item in _actionItems) {
-      if (!item.exported) _selectedItems.add(item.id);
-    }
+    _selectedItems
+      ..clear()
+      ..addAll(_actionItems.map((i) => i.id));
     notifyListeners();
   }
 
@@ -705,9 +700,7 @@ class ActionItemsProvider extends ChangeNotifier {
         break;
     }
 
-    for (final item in itemsToSelect) {
-      if (!item.exported) _selectedItems.add(item.id);
-    }
+    _selectedItems.addAll(itemsToSelect.map((i) => i.id));
     notifyListeners();
   }
 
@@ -729,10 +722,17 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
-  Future<bool> deleteSelectedItems() async {
+  Future<bool> deleteSelectedItems({BuildContext? context}) async {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+    final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
+    // Snapshot positions so a failed bulk delete can re-insert the rows
+    // back where the user expected them, instead of dumping them at the end.
+    final snapshot = <int, ActionItemWithMetadata>{
+      for (final item in itemsToDelete) _actionItems.indexOf(item): item,
+    };
+    final wasInSelection = _isSelectionMode;
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
@@ -740,8 +740,39 @@ class ActionItemsProvider extends ChangeNotifier {
     _isSelectionMode = false;
     notifyListeners();
 
-    final results = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)));
-    return results.every((success) => success);
+    // Apple Reminders mirror lives client-side, so it still has to fan out
+    // per-item. The action-item record itself goes through the bulk endpoint.
+    for (final item in itemsToDelete) {
+      _deleteAppleReminderIfLinked(item);
+    }
+
+    final deleted = await api.bulkDeleteActionItems(ids);
+    if (deleted == null) {
+      Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      // Re-insert rows at their original positions, oldest index first.
+      final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+      for (final entry in entries) {
+        final idx = entry.key.clamp(0, _actionItems.length);
+        _actionItems.insert(idx, entry.value);
+      }
+      _isSelectionMode = wasInSelection;
+      _selectedItems = ids.toSet();
+      notifyListeners();
+
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.bulkDeleteFailed),
+              backgroundColor: const Color(0xFFB3261E),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+      }
+      return false;
+    }
+    return deleted.length == ids.length;
   }
 
   Future<bool> clearCompletedItems() async {
@@ -753,8 +784,6 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void startSelectionWithItem(String itemId) {
-    final item = _actionItems.where((i) => i.id == itemId).firstOrNull;
-    if (item != null && item.exported) return;
     _isSelectionMode = true;
     _selectedItems = {itemId};
     notifyListeners();
@@ -780,11 +809,28 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.isEmpty) return;
 
     final ids = _selectedItems.toList(growable: false);
-    final items = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
+    final selected = _actionItems.where((i) => ids.contains(i.id)).toList(growable: false);
+    // Exported items can now be selected (Delete shares the bar), but Export
+    // itself silently no-ops on them so the user doesn't double-create on the
+    // integration side.
+    final items = selected.where((i) => !i.exported).toList(growable: false);
     final total = items.length;
 
     final messenger = ScaffoldMessenger.of(context);
     messenger.clearSnackBars();
+
+    if (total == 0) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.bulkExportAlreadyExported),
+          backgroundColor: const Color(0xFF2C2C2E),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      endSelection();
+      return;
+    }
+
     messenger.showSnackBar(
       SnackBar(
         content: Text(context.l10n.bulkExportInProgress),

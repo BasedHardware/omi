@@ -220,6 +220,9 @@ class _FCMNotificationService implements NotificationInterface {
         } else if (messageType == 'action_item_delete') {
           ActionItemNotificationHandler.handleDeletionMessage(data);
           return;
+        } else if (messageType == 'action_item_batch_delete') {
+          ActionItemNotificationHandler.handleBatchDeletionMessage(data);
+          return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(data, channel.channelKey!, isAppInForeground: true);
           return;
