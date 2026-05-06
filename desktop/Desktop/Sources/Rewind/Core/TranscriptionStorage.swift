@@ -107,10 +107,13 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
+            let completedAt = Date()
             record.status = .completed
+            record.conversationStatus = .completed
+            record.finishedAt = record.finishedAt ?? completedAt
             record.backendId = backendId
             record.backendSynced = true
-            record.updatedAt = Date()
+            record.updatedAt = completedAt
             try record.update(database)
         }
 
