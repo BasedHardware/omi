@@ -1126,7 +1126,13 @@ class TasksViewModel: ObservableObject {
         // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
         // during the debounce window. Always reset on exit (incl. errors / cancellation)
         // so we don't leave the flag stuck on for unrelated callers.
-        defer { suppressDatabaseRequery = false }
+        defer {
+            suppressDatabaseRequery = false
+            // Recompute caches after syncing sort orders. When non-status filters are
+            // active, recomputeAllCaches will now re-query SQLite (the flag is cleared)
+            // and pick up any membership changes that happened during the debounce window.
+            recomputeAllCaches()
+        }
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
 
         for category in TaskCategory.allCases {
