@@ -263,15 +263,6 @@ actor GeminiClient {
     URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(model):\(action)")!
   }
 
-  /// Build streaming proxy URL for a Gemini model action
-  private func streamProxyURL(action: String, queryParams: [String: String] = [:]) -> URL {
-    var urlString = "\(Self.proxyBaseURL)v1/proxy/gemini-stream/models/\(model):\(action)"
-    if !queryParams.isEmpty {
-      let params = queryParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
-      urlString += "?\(params)"
-    }
-    return URL(string: urlString)!
-  }
 
   /// Log the raw API error message for debugging and throw a sanitized error.
   /// The `errorDescription` on GeminiClientError is user-friendly; this log preserves the raw detail.
@@ -565,157 +556,8 @@ actor GeminiClient {
     throw lastError!
   }
 
-  /// Send a multi-turn chat request with streaming response
-  /// - Parameters:
-  ///   - messages: Array of chat messages (role: user/model, text)
-  ///   - systemPrompt: System instructions for the model
-  ///   - onChunk: Callback for each text chunk received
-  /// - Returns: The complete text response
-  func sendChatStreamRequest(
-    messages: [ChatMessage],
-    systemPrompt: String,
-    onChunk: @escaping (String) -> Void,
-    thinkingBudget: Int = 4096
-  ) async throws -> String {
-    // Build contents from chat messages
-    let contents = messages.map { message in
-      GeminiChatRequest.Content(
-        role: message.role,
-        parts: [GeminiChatRequest.Part(text: message.text)]
-      )
-    }
-
-    let request = GeminiChatRequest(
-      contents: contents,
-      systemInstruction: GeminiChatRequest.SystemInstruction(
-        parts: [GeminiChatRequest.SystemInstruction.TextPart(text: systemPrompt)]
-      ),
-      generationConfig: GeminiChatRequest.GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
-      )
-    )
-
-    // Use streamGenerateContent endpoint for streaming (via backend proxy)
-    let url = streamProxyURL(action: "streamGenerateContent", queryParams: ["alt": "sse"])
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-    urlRequest.timeoutInterval = 300
-    urlRequest.httpBody = try JSONEncoder().encode(request)
-
-    var fullText = ""
-
-    // Use URLSession bytes for streaming
-    let (bytes, response) = try await URLSession.shared.bytes(for: urlRequest)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw GeminiClientError.invalidResponse
-    }
-
-    if httpResponse.statusCode != 200 {
-      throw GeminiClientError.apiError("HTTP \(httpResponse.statusCode)")
-    }
-
-    // Parse SSE stream
-    for try await line in bytes.lines {
-      // SSE format: "data: {json}"
-      if line.hasPrefix("data: ") {
-        let jsonString = String(line.dropFirst(6))
-        if let data = jsonString.data(using: .utf8) {
-          if let chunk = try? JSONDecoder().decode(GeminiStreamChunk.self, from: data) {
-            if let text = chunk.candidates?.first?.content?.parts?.first?.text {
-              fullText += text
-              onChunk(text)
-            }
-          }
-        }
-      }
-    }
-
-    return fullText
-  }
-
-  /// Chat message for multi-turn conversation
-  struct ChatMessage {
-    let role: String  // "user" or "model"
-    let text: String
-  }
 }
 
-// MARK: - Gemini Chat Request (multi-turn with roles)
-
-struct GeminiChatRequest: Encodable {
-  let contents: [Content]
-  let systemInstruction: SystemInstruction?
-  let generationConfig: GenerationConfig?
-
-  enum CodingKeys: String, CodingKey {
-    case contents
-    case systemInstruction = "system_instruction"
-    case generationConfig = "generation_config"
-  }
-
-  struct Content: Encodable {
-    let role: String  // "user" or "model"
-    let parts: [Part]
-  }
-
-  struct Part: Encodable {
-    let text: String
-  }
-
-  struct SystemInstruction: Encodable {
-    let parts: [TextPart]
-
-    struct TextPart: Encodable {
-      let text: String
-    }
-  }
-
-  struct GenerationConfig: Encodable {
-    let temperature: Double?
-    let maxOutputTokens: Int?
-    let thinkingConfig: ThinkingConfig?
-
-    enum CodingKeys: String, CodingKey {
-      case temperature
-      case maxOutputTokens = "max_output_tokens"
-      case thinkingConfig = "thinking_config"
-    }
-  }
-}
-
-// MARK: - Gemini Stream Chunk Response
-
-struct GeminiStreamChunk: Decodable {
-  let candidates: [Candidate]?
-
-  struct Candidate: Decodable {
-    let content: Content?
-
-    struct Content: Decodable {
-      let parts: [Part]?
-
-      struct Part: Decodable {
-        let text: String?
-        let functionCall: FunctionCall?
-
-        enum CodingKeys: String, CodingKey {
-          case text
-          case functionCall = "functionCall"
-        }
-      }
-    }
-  }
-
-  struct FunctionCall: Decodable {
-    let name: String
-    let args: [String: AnyCodable]?
-  }
-}
 
 // MARK: - Tool Calling Support
 
@@ -792,102 +634,12 @@ struct GeminiTool: Encodable {
   }
 }
 
-/// Chat request with tools
-struct GeminiToolChatRequest: Encodable {
-  let contents: [Content]
-  let systemInstruction: SystemInstruction?
-  let generationConfig: GenerationConfig?
-  let tools: [GeminiTool]?
-
-  enum CodingKeys: String, CodingKey {
-    case contents
-    case systemInstruction = "system_instruction"
-    case generationConfig = "generation_config"
-    case tools
-  }
-
-  struct Content: Encodable {
-    let role: String
-    let parts: [Part]
-  }
-
-  struct Part: Encodable {
-    let text: String?
-    let functionCall: FunctionCallPart?
-    let functionResponse: FunctionResponsePart?
-    let thoughtSignature: String?
-
-    enum CodingKeys: String, CodingKey {
-      case text
-      case functionCall = "functionCall"
-      case functionResponse = "functionResponse"
-      case thoughtSignature = "thought_signature"
-    }
-
-    init(text: String) {
-      self.text = text
-      self.functionCall = nil
-      self.functionResponse = nil
-      self.thoughtSignature = nil
-    }
-
-    init(functionResponse: FunctionResponsePart) {
-      self.text = nil
-      self.functionCall = nil
-      self.functionResponse = functionResponse
-      self.thoughtSignature = nil
-    }
-
-    init(functionCall: FunctionCallPart, thoughtSignature: String? = nil) {
-      self.text = nil
-      self.functionCall = functionCall
-      self.functionResponse = nil
-      self.thoughtSignature = thoughtSignature
-    }
-  }
-
-  struct FunctionCallPart: Encodable {
-    let name: String
-    let args: [String: String]
-  }
-
-  struct FunctionResponsePart: Encodable {
-    let name: String
-    let response: ResponseContent
-
-    struct ResponseContent: Encodable {
-      let result: String
-    }
-  }
-
-  struct SystemInstruction: Encodable {
-    let parts: [TextPart]
-
-    struct TextPart: Encodable {
-      let text: String
-    }
-  }
-
-  struct GenerationConfig: Encodable {
-    let temperature: Double?
-    let maxOutputTokens: Int?
-    let thinkingConfig: ThinkingConfig?
-
-    enum CodingKeys: String, CodingKey {
-      case temperature
-      case maxOutputTokens = "max_output_tokens"
-      case thinkingConfig = "thinking_config"
-    }
-  }
-}
 
 /// Result of a tool-enabled chat (may include tool calls)
 struct ToolChatResult {
   let text: String
   let toolCalls: [ToolCall]
   let requiresToolExecution: Bool
-  /// Accumulated conversation contents for multi-turn tool loops
-  var contents: [GeminiToolChatRequest.Content]?
 }
 
 /// A function call from the model
@@ -897,254 +649,30 @@ struct ToolCall {
   let thoughtSignature: String?
 }
 
-// MARK: - GeminiClient Tool Extensions
-
-extension GeminiClient {
-
-  /// Available chat tools
-  static let chatTools: [GeminiTool] = [
-    GeminiTool(functionDeclarations: [
-      // Execute SQL on local omi.db
-      GeminiTool.FunctionDeclaration(
-        name: "execute_sql",
-        description:
-          "Execute a SQL query on the local omi.db database. Supports SELECT, INSERT, UPDATE, DELETE. Use this for any structured data lookup — app usage, screenshots, tasks, conversations, time-based queries, aggregations, etc. The system prompt contains the full database schema.",
-        parameters: GeminiTool.FunctionDeclaration.Parameters(
-          type: "object",
-          properties: [
-            "query": .init(
-              type: "string",
-              description:
-                "SQL query to execute. SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE clause. DROP/ALTER/CREATE are blocked."
-            )
-          ],
-          required: ["query"]
-        )
-      ),
-      // Semantic vector search
-      GeminiTool.FunctionDeclaration(
-        name: "semantic_search",
-        description:
-          "Search screen history using semantic similarity (vector embeddings). Use this for fuzzy conceptual queries where exact keywords won't work — e.g. 'reading about machine learning', 'working on design mockups', 'chatting with friends'. Returns screenshots ranked by semantic similarity.",
-        parameters: GeminiTool.FunctionDeclaration.Parameters(
-          type: "object",
-          properties: [
-            "query": .init(
-              type: "string", description: "Natural language description of what to search for."),
-            "days": .init(
-              type: "integer",
-              description: "Search the last N days (default: 7). Use 1 for today only."),
-            "app_filter": .init(
-              type: "string",
-              description: "Optional: filter by app name (e.g., 'Google Chrome', 'Cursor', 'Slack')"
-            ),
-          ],
-          required: ["query"]
-        )
-      ),
-    ])
-  ]
-
-  /// Send a chat request with tool support (non-streaming)
-  func sendToolChatRequest(
-    messages: [ChatMessage],
-    systemPrompt: String,
-    tools: [GeminiTool]? = nil,
-    thinkingBudget: Int = 4096
-  ) async throws -> ToolChatResult {
-    // Build contents from chat messages
-    let contents = messages.map { message in
-      GeminiToolChatRequest.Content(
-        role: message.role,
-        parts: [GeminiToolChatRequest.Part(text: message.text)]
-      )
-    }
-
-    let request = GeminiToolChatRequest(
-      contents: contents,
-      systemInstruction: GeminiToolChatRequest.SystemInstruction(
-        parts: [GeminiToolChatRequest.SystemInstruction.TextPart(text: systemPrompt)]
-      ),
-      generationConfig: GeminiToolChatRequest.GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
-      ),
-      tools: tools ?? Self.chatTools
-    )
-
-    let url = proxyURL(action: "generateContent")
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-    urlRequest.timeoutInterval = 300
-    urlRequest.httpBody = try JSONEncoder().encode(request)
-
-    let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-    try checkHTTPStatus(urlResponse, data: data)
-
-    // Parse response
-    let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-    if let error = response.error {
-      try throwAPIError(error.message)
-    }
-
-    guard let candidate = response.candidates?.first,
-      let parts = candidate.content?.parts
-    else {
-      try throwBlockedOrInvalidResponse(
-        blockReason: response.promptFeedback?.blockReason,
-        finishReason: response.candidates?.first?.finishReason
-      )
-    }
-
-    // Check for function calls
-    var toolCalls: [ToolCall] = []
-    var textResponse = ""
-
-    for part in parts {
-      if let functionCall = part.functionCall {
-        let args = functionCall.args?.mapValues { $0.value } ?? [:]
-        toolCalls.append(
-          ToolCall(
-            name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
-      }
-      if let text = part.text {
-        textResponse += text
-      }
-    }
-
-    return ToolChatResult(
-      text: textResponse,
-      toolCalls: toolCalls,
-      requiresToolExecution: !toolCalls.isEmpty,
-      contents: contents
-    )
-  }
-
-  /// Continue a conversation after executing tools
-  /// Returns ToolChatResult so the caller can check if more tool calls are needed (multi-turn loop)
-  func continueWithToolResults(
-    previousContents: [GeminiToolChatRequest.Content],
-    toolCalls: [ToolCall],
-    toolResults: [String: String],
-    systemPrompt: String,
-    tools: [GeminiTool]? = nil,
-    thinkingBudget: Int = 4096
-  ) async throws -> ToolChatResult {
-    var contents = previousContents
-
-    // Add the model's function call as a model turn
-    var functionCallParts: [GeminiToolChatRequest.Part] = []
-    for call in toolCalls {
-      functionCallParts.append(
-        GeminiToolChatRequest.Part(
-          functionCall: GeminiToolChatRequest.FunctionCallPart(
-            name: call.name,
-            args: call.arguments.mapValues { "\($0)" }
-          ),
-          thoughtSignature: call.thoughtSignature
-        ))
-    }
-    contents.append(GeminiToolChatRequest.Content(role: "model", parts: functionCallParts))
-
-    // Add function responses
-    for call in toolCalls {
-      let result = toolResults[call.name] ?? "No result"
-      contents.append(
-        GeminiToolChatRequest.Content(
-          role: "function",
-          parts: [
-            GeminiToolChatRequest.Part(
-              functionResponse: GeminiToolChatRequest.FunctionResponsePart(
-                name: call.name,
-                response: .init(result: result)
-              )
-            )
-          ]
-        ))
-    }
-
-    let request = GeminiToolChatRequest(
-      contents: contents,
-      systemInstruction: GeminiToolChatRequest.SystemInstruction(
-        parts: [GeminiToolChatRequest.SystemInstruction.TextPart(text: systemPrompt)]
-      ),
-      generationConfig: GeminiToolChatRequest.GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-        thinkingConfig: ThinkingConfig(thinkingBudget: thinkingBudget)
-      ),
-      tools: tools
-    )
-
-    let url = proxyURL(action: "generateContent")
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-    urlRequest.timeoutInterval = 300
-    urlRequest.httpBody = try JSONEncoder().encode(request)
-
-    let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-    try checkHTTPStatus(urlResponse, data: data)
-
-    let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-    if let error = response.error {
-      try throwAPIError(error.message)
-    }
-
-    guard let candidate = response.candidates?.first,
-      let parts = candidate.content?.parts
-    else {
-      try throwBlockedOrInvalidResponse(
-        blockReason: response.promptFeedback?.blockReason,
-        finishReason: response.candidates?.first?.finishReason
-      )
-    }
-
-    // Check for more function calls or text
-    var newToolCalls: [ToolCall] = []
-    var textResponse = ""
-
-    for part in parts {
-      if let functionCall = part.functionCall {
-        let args = functionCall.args?.mapValues { $0.value } ?? [:]
-        newToolCalls.append(
-          ToolCall(
-            name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
-      }
-      if let text = part.text {
-        textResponse += text
-      }
-    }
-
-    return ToolChatResult(
-      text: textResponse,
-      toolCalls: newToolCalls,
-      requiresToolExecution: !newToolCalls.isEmpty,
-      contents: contents
-    )
-  }
-}
-
 // MARK: - Image + Tool Calling Request
 
 /// Request type combining image analysis with tool calling
 struct GeminiImageToolRequest: Encodable {
   let contents: [Content]
   let systemInstruction: SystemInstruction?
+  let generationConfig: GenerationConfig?
   let tools: [GeminiTool]?
   let toolConfig: ToolConfig?
 
   enum CodingKeys: String, CodingKey {
     case contents
     case systemInstruction = "system_instruction"
+    case generationConfig = "generation_config"
     case tools
     case toolConfig = "tool_config"
+  }
+
+  struct GenerationConfig: Encodable {
+    let thinkingConfig: ThinkingConfig?
+
+    enum CodingKeys: String, CodingKey {
+      case thinkingConfig = "thinking_config"
+    }
   }
 
   struct Content: Encodable {
@@ -1249,109 +777,6 @@ struct GeminiImageToolRequest: Encodable {
 
 extension GeminiClient {
 
-  /// Send image + text + tools, returns the model's function call
-  /// Retries up to 2 times for transient errors.
-  func sendImageToolRequest(
-    prompt: String,
-    imageData: Data,
-    systemPrompt: String,
-    tools: [GeminiTool],
-    forceToolCall: Bool = true
-  ) async throws -> ToolChatResult {
-    let maxRetries = 2
-    var lastError: Error?
-
-    for attempt in 0...maxRetries {
-      do {
-        // Wrap base64 encoding + JSON serialization in autoreleasepool.
-        // See sendRequest() comment for rationale.
-        let requestBody: Data = try autoreleasepool {
-          let base64Data = imageData.base64EncodedString()
-
-          let toolConfig =
-            forceToolCall
-            ? GeminiImageToolRequest.ToolConfig(
-              functionCallingConfig: .init(mode: "ANY")
-            ) : nil
-
-          let request = GeminiImageToolRequest(
-            contents: [
-              GeminiImageToolRequest.Content(
-                role: "user",
-                parts: [
-                  GeminiImageToolRequest.Part(text: prompt),
-                  GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
-                ]
-              )
-            ],
-            systemInstruction: GeminiImageToolRequest.SystemInstruction(
-              parts: [.init(text: systemPrompt)]
-            ),
-            tools: tools,
-            toolConfig: toolConfig
-          )
-
-          return try JSONEncoder().encode(request)
-        }
-
-        let url = proxyURL(action: "generateContent")
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
-        urlRequest.httpBody = requestBody
-
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-        try checkHTTPStatus(urlResponse, data: data)
-
-        let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-        if let error = response.error {
-          try throwAPIError(error.message)
-        }
-
-        guard let candidate = response.candidates?.first,
-          let parts = candidate.content?.parts
-        else {
-          try throwBlockedOrInvalidResponse(
-            blockReason: response.promptFeedback?.blockReason,
-            finishReason: response.candidates?.first?.finishReason
-          )
-        }
-
-        var toolCalls: [ToolCall] = []
-        var textResponse = ""
-
-        for part in parts {
-          if let functionCall = part.functionCall {
-            let args = functionCall.args?.mapValues { $0.value } ?? [:]
-            toolCalls.append(
-              ToolCall(
-                name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
-          }
-          if let text = part.text {
-            textResponse += text
-          }
-        }
-
-        return ToolChatResult(
-          text: textResponse,
-          toolCalls: toolCalls,
-          requiresToolExecution: !toolCalls.isEmpty
-        )
-      } catch {
-        lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
-          throw error
-        }
-        await retryBackoff(attempt: attempt, error: error)
-      }
-    }
-
-    throw lastError!
-  }
-
   /// Send image + tool loop request: takes pre-built contents array for multi-turn tool calling.
   /// Retries up to 2 times for transient errors.
   func sendImageToolLoop(
@@ -1379,6 +804,9 @@ extension GeminiClient {
             systemInstruction: GeminiImageToolRequest.SystemInstruction(
               parts: [.init(text: systemPrompt)]
             ),
+            generationConfig: GeminiImageToolRequest.GenerationConfig(
+              thinkingConfig: ThinkingConfig(thinkingBudget: 0)
+            ),
             tools: tools,
             toolConfig: toolConfig
           )
@@ -1444,105 +872,6 @@ extension GeminiClient {
     throw lastError!
   }
 
-  /// Continue conversation after tool execution: sends full history + tool result, returns text
-  /// No tools on continuation — model returns plain JSON guided by system prompt.
-  func continueImageToolRequest(
-    originalPrompt: String,
-    originalImageData: Data,
-    toolCall: ToolCall,
-    toolResult: String,
-    systemPrompt: String
-  ) async throws -> String {
-    let maxRetries = 2
-    var lastError: Error?
-
-    for attempt in 0...maxRetries {
-      do {
-        // Wrap base64 encoding + JSON serialization in autoreleasepool.
-        // See sendRequest() comment for rationale.
-        let requestBody: Data = try autoreleasepool {
-          let base64Data = originalImageData.base64EncodedString()
-
-          let contents: [GeminiImageToolRequest.Content] = [
-            GeminiImageToolRequest.Content(
-              role: "user",
-              parts: [
-                GeminiImageToolRequest.Part(text: originalPrompt),
-                GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
-              ]
-            ),
-            GeminiImageToolRequest.Content(
-              role: "model",
-              parts: [
-                GeminiImageToolRequest.Part(
-                  functionCall: .init(
-                    name: toolCall.name,
-                    args: toolCall.arguments.compactMapValues { "\($0)" }
-                  ),
-                  thoughtSignature: toolCall.thoughtSignature
-                )
-              ]
-            ),
-            GeminiImageToolRequest.Content(
-              role: "user",
-              parts: [
-                GeminiImageToolRequest.Part(
-                  functionResponse: .init(
-                    name: toolCall.name,
-                    response: .init(result: toolResult)
-                  ))
-              ]
-            ),
-          ]
-
-          let request = GeminiImageToolRequest(
-            contents: contents,
-            systemInstruction: GeminiImageToolRequest.SystemInstruction(
-              parts: [.init(text: systemPrompt)]
-            ),
-            tools: nil,
-            toolConfig: nil
-          )
-
-          return try JSONEncoder().encode(request)
-        }
-
-        let url = proxyURL(action: "generateContent")
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
-        urlRequest.httpBody = requestBody
-
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-        try checkHTTPStatus(urlResponse, data: data)
-
-        let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-        if let error = response.error {
-          try throwAPIError(error.message)
-        }
-
-        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
-          try throwBlockedOrInvalidResponse(
-            blockReason: response.promptFeedback?.blockReason,
-            finishReason: response.candidates?.first?.finishReason
-          )
-        }
-
-        return text
-      } catch {
-        lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
-          throw error
-        }
-        await retryBackoff(attempt: attempt, error: error)
-      }
-    }
-
-    throw lastError!
-  }
 }
 
 /// Response type for tool-enabled requests
