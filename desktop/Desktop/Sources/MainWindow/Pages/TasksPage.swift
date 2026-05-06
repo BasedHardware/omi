@@ -3178,6 +3178,13 @@ struct TasksPage: View {
                                     findTaskGlobal: { viewModel.findTask($0) },
                                     onDragStarted: { viewModel.draggedTaskId = $0 },
                                     onDragEnded: {
+                                        // Idempotent: TaskDragItemProvider.deinit fires onDragEnded
+                                        // a second time after the synchronous drop handler. Without
+                                        // this guard, the duplicate dispatch would no-op redundantly
+                                        // in the common case but could clobber state during a rapid
+                                        // re-drag (deinit dispatch is one main.async hop, sub-ms).
+                                        // Keep the guard so the design is strictly idempotent.
+                                        guard viewModel.draggedTaskId != nil else { return }
                                         viewModel.draggedTaskId = nil
                                         viewModel.dropTargetTaskId = nil
                                     },
