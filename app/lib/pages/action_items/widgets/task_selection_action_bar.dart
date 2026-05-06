@@ -92,23 +92,20 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
                         ),
                       ),
                       const Spacer(),
-                      // Center: count
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 150),
-                        child: Text(
-                          context.l10n.selectedCount(taskCount, taskCount),
-                          key: ValueKey(taskCount),
-                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                        ),
+                      // Destructive secondary: bulk delete. Icon-only on purpose
+                      // so the Export pill stays the visual primary; the count
+                      // lives on that pill instead of in the centre to keep this
+                      // row from feeling crowded.
+                      _IconActionButton(
+                        icon: Icons.delete_outline_rounded,
+                        enabled: canExport,
+                        tint: const Color(0xFFFF453A),
+                        onTap: () => _handleDelete(context, provider, taskCount),
                       ),
-                      const Spacer(),
-                      // Export pill — single primary action. Bulk-delete is
-                      // handled per-row via swipe-left and via the Clear-completed
-                      // path in the section header — keeping the bar at one
-                      // primary action mirrors the conversations merge bar.
+                      const SizedBox(width: 8),
                       _ActionPillButton(
                         icon: Icons.ios_share_rounded,
-                        label: context.l10n.exportButton,
+                        label: canExport ? '${context.l10n.exportButton}  ·  $taskCount' : context.l10n.exportButton,
                         enabled: canExport,
                         accent: const Color(0xFF7C3AED),
                         onTap: () => _handleExport(context, provider),
@@ -151,6 +148,74 @@ class _TaskSelectionActionBarState extends State<TaskSelectionActionBar> with Si
     }
 
     await provider.bulkExportSelected(context, connected.first);
+  }
+
+  Future<void> _handleDelete(BuildContext context, ActionItemsProvider provider, int taskCount) async {
+    HapticFeedback.lightImpact();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          context.l10n.deleteSelectedItemsTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          context.l10n.deleteSelectedItemsMessage(taskCount, taskCount > 1 ? 's' : ''),
+          style: const TextStyle(color: Color(0xFFB0B0B5), fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              context.l10n.cancel,
+              style: const TextStyle(color: Color(0xFF8E8E93), fontWeight: FontWeight.w500),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              context.l10n.delete,
+              style: const TextStyle(color: Color(0xFFFF453A), fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await provider.deleteSelectedItems();
+  }
+}
+
+class _IconActionButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final Color tint;
+  final VoidCallback onTap;
+
+  const _IconActionButton({
+    required this.icon,
+    required this.enabled,
+    required this.tint,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 44,
+        height: 44,
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          size: 22,
+          color: enabled ? tint : const Color(0xFF636366),
+        ),
+      ),
+    );
   }
 }
 
