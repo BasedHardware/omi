@@ -537,11 +537,6 @@ class AnalyticsManager {
 
   // MARK: - Launch At Login Events
 
-  /// Track launch at login status once per app launch (not continuously)
-  func launchAtLoginStatusChecked(enabled: Bool) {
-    PostHogManager.shared.launchAtLoginStatusChecked(enabled: enabled)
-  }
-
   /// Track when launch at login state changes
   /// - Parameters:
   ///   - enabled: New state
@@ -681,18 +676,6 @@ class AnalyticsManager {
 
   func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
     PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
-  }
-
-  // MARK: - Settings State
-
-  /// Track the current state of key settings (screenshots, memory extraction, notifications)
-  /// Called when monitoring starts and daily while monitoring is active
-  func trackSettingsState(
-    screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool
-  ) {
-    PostHogManager.shared.settingsStateTracked(
-      screenshotsEnabled: screenshotsEnabled, memoryExtractionEnabled: memoryExtractionEnabled,
-      memoryNotificationsEnabled: memoryNotificationsEnabled)
   }
 
   // MARK: - All Settings State (Comprehensive daily report)
@@ -901,32 +884,4 @@ class AnalyticsManager {
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
-  // MARK: - Display Info
-
-  /// Track display characteristics (notch, screen size, etc.)
-  /// Called at app launch to help diagnose menu bar visibility issues
-  func trackDisplayInfo() {
-    guard let screen = NSScreen.main else { return }
-
-    let frame = screen.frame
-    let visibleFrame = screen.visibleFrame
-    let safeAreaInsets = screen.safeAreaInsets
-
-    // Detect notch: MacBooks with notch have safeAreaInsets.top > 0
-    let hasNotch = safeAreaInsets.top > 0
-
-    // Calculate menu bar height (difference between frame and visible frame at top)
-    let menuBarHeight = frame.height - visibleFrame.height - visibleFrame.origin.y
-
-    let displayInfo: [String: Any] = [
-      "screen_width": Int(frame.width),
-      "screen_height": Int(frame.height),
-      "has_notch": hasNotch,
-      "safe_area_top": Int(safeAreaInsets.top),
-      "menu_bar_height": Int(menuBarHeight),
-      "scale_factor": screen.backingScaleFactor,
-    ]
-
-    PostHogManager.shared.displayInfoTracked(info: displayInfo)
-  }
 }

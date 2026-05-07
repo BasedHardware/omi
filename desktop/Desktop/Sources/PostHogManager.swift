@@ -467,12 +467,6 @@ extension PostHogManager {
 
     // MARK: - Launch At Login Events
 
-    func launchAtLoginStatusChecked(enabled: Bool) {
-        track("Launch At Login Status", properties: [
-            "enabled": enabled
-        ])
-    }
-
     func launchAtLoginChanged(enabled: Bool, source: String) {
         track("Launch At Login Changed", properties: [
             "enabled": enabled,
@@ -681,22 +675,8 @@ extension PostHogManager {
 
     // MARK: - Settings State
 
-    func settingsStateTracked(screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool) {
-        track("Settings State", properties: [
-            "screenshots_enabled": screenshotsEnabled,
-            "memory_extraction_enabled": memoryExtractionEnabled,
-            "memory_notifications_enabled": memoryNotificationsEnabled
-        ])
-    }
-
     /// Comprehensive all-settings snapshot (fired on app launch, at most once per day)
     func allSettingsStateTracked(properties: [String: Any]) {
         track("All Settings State", properties: properties)
-    }
-
-    // MARK: - Display Info
-
-    func displayInfoTracked(info: [String: Any]) {
-        track("Display Info", properties: info)
     }
 }

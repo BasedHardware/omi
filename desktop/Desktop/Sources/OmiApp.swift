@@ -352,7 +352,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.appLaunched()
-    AnalyticsManager.shared.trackDisplayInfo()
 
     // Tier gating: migrate old boolean key to new 6-tier system
     TierManager.migrateExistingUsersIfNeeded()
@@ -431,12 +430,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       queue: .main
     ) { [weak self] _ in
       self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
-    }
-
-    // Track launch at login status once per app launch
-    Task { @MainActor in
-      let isEnabled = LaunchAtLoginManager.shared.isEnabled
-      AnalyticsManager.shared.launchAtLoginStatusChecked(enabled: isEnabled)
     }
 
     // Register for Apple Events to handle URL scheme
