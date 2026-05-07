@@ -228,6 +228,8 @@ class AppState: ObservableObject {
 
   // BLE device button handling
   private var buttonStreamTask: Task<Void, Never>?
+  private nonisolated(unsafe) let conversationListeningSnapshotLock = NSLock()
+  private nonisolated(unsafe) var conversationListeningSnapshot = true
 
   // Combine subscriptions
   private var bluetoothStateCancellable: AnyCancellable?
@@ -235,6 +237,7 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    setConversationListeningSnapshot(isConversationListening)
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()
@@ -1251,10 +1254,26 @@ class AppState: ObservableObject {
 
     isConversationListening = on
     persistedConversationListening = on
-    UserDefaults.standard.set(on, forKey: Self.conversationListeningDefaultsKey)
+    setConversationListeningSnapshot(on)
+
+    if on && !isTranscribing {
+      startTranscription()
+    }
 
     AnalyticsManager.shared.listeningToggled(isListening: on, source: source)
     log("listening: \(previous ? "on" : "off") -> \(on ? "on" : "off") (source=\(source))")
+  }
+
+  nonisolated private func snapshotIsConversationListening() -> Bool {
+    conversationListeningSnapshotLock.lock()
+    defer { conversationListeningSnapshotLock.unlock() }
+    return conversationListeningSnapshot
+  }
+
+  nonisolated private func setConversationListeningSnapshot(_ value: Bool) {
+    conversationListeningSnapshotLock.lock()
+    conversationListeningSnapshot = value
+    conversationListeningSnapshotLock.unlock()
   }
 
   /// Toggle transcription on/off
@@ -1464,9 +1483,9 @@ class AppState: ObservableObject {
 
     // Start the mixer — it sums mic + system into a mono stream and forwards it to
     // the transcription WebSocket.
-    audioMixer?.start { [weak self] monoMixed in
-      guard self?.isConversationListening == true else { return }
-      self?.transcriptionService?.sendAudio(monoMixed)
+    audioMixer?.start { [weak self, weak transcriptionService] monoMixed in
+      guard self?.snapshotIsConversationListening() == true else { return }
+      transcriptionService?.sendAudio(monoMixed)
     }
 
     do {
@@ -1563,7 +1582,7 @@ class AppState: ObservableObject {
         }
       },
       conversationAudioHandler: { [weak self, weak transcriptionService] audioData in
-        guard self?.isConversationListening == true else { return }
+        guard self?.snapshotIsConversationListening() == true else { return }
         transcriptionService?.sendAudio(audioData)
       }
     )
