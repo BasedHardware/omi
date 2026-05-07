@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Reduced AI processing costs with thinking budget controls"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.379",
+      "date": "2026-05-07",
+      "changes": [
+        "Reduced AI processing costs with thinking budget controls"
+      ]
+    },
     {
       "version": "0.11.378",
       "date": "2026-05-06",
