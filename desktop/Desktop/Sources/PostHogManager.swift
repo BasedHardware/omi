@@ -25,8 +25,8 @@ class PostHogManager {
 
         // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
         // synchronously on the main thread (via NSApplicationDidFinishLaunchingNotification), which XPCs to the
-        // mds (Spotlight) daemon and can hang for 2000ms+ when the daemon is slow. We already track lifecycle
-        // events manually via AnalyticsManager.shared.appLaunched() / appBecameActive() etc.
+        // mds (Spotlight) daemon and can hang for 2000ms+ when the daemon is slow. We track the meaningful
+        // lifecycle event (App Launched / First Launch) manually via AnalyticsManager.shared.
         config.captureApplicationLifecycleEvents = false
         config.captureScreenViews = true
         config.preloadFeatureFlags = true
@@ -329,14 +329,6 @@ extension PostHogManager {
     /// Track first launch with comprehensive system diagnostics
     func firstLaunch(diagnostics: [String: Any]) {
         track("First Launch", properties: diagnostics)
-    }
-
-    func appBecameActive() {
-        track("App Became Active")
-    }
-
-    func appResignedActive() {
-        track("App Resigned Active")
     }
 
     // MARK: - Page/Screen Views (PostHog specific)

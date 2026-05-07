@@ -1251,12 +1251,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
-    AnalyticsManager.shared.appBecameActive()
     // Sync remote assistant settings so server-side changes take effect promptly
     Task { await SettingsSyncManager.shared.syncFromServer() }
-  }
-
-  func applicationWillResignActive(_ notification: Notification) {
-    AnalyticsManager.shared.appResignedActive()
   }
 }

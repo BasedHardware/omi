@@ -356,14 +356,6 @@ class AnalyticsManager {
     return diagnostics
   }
 
-  func appBecameActive() {
-    PostHogManager.shared.appBecameActive()
-  }
-
-  func appResignedActive() {
-    PostHogManager.shared.appResignedActive()
-  }
-
   // MARK: - Conversation Events
   // Note: The event is named "Memory Created" in analytics for historical reasons,
   // but it actually tracks when a conversation/recording is created, not a "memory".
