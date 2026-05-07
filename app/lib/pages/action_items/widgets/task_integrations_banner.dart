@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class TaskIntegrationsBanner extends StatelessWidget {
@@ -16,7 +16,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
         HapticFeedback.lightImpact();
 
         // Track banner click
-        MixpanelManager().exportTasksBannerClicked();
+        AnalyticsManager().exportTasksBannerClicked();
 
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
       },

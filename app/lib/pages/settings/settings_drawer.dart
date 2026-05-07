@@ -28,7 +28,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'device_settings.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
@@ -295,7 +295,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     void goToIntegrations() =>
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
     void goToPermissions() {
-      MixpanelManager().permissionsSettingsOpened();
+      AnalyticsManager().permissionsSettingsOpened();
       routeToPage(context, const PermissionsPage());
     }
 
@@ -397,7 +397,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         title: context.l10n.whatsNew,
         icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
         onTap: () {
-          MixpanelManager().whatsNewOpened();
+          AnalyticsManager().whatsNewOpened();
           ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
         },
       ),
@@ -471,8 +471,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -557,8 +558,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -595,7 +597,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.permissions,
                   icon: const FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    MixpanelManager().permissionsSettingsOpened();
+                    AnalyticsManager().permissionsSettingsOpened();
                     routeToPage(context, const PermissionsPage());
                   },
                 ),
@@ -654,7 +656,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.whatsNew,
                   icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    MixpanelManager().whatsNewOpened();
+                    AnalyticsManager().whatsNewOpened();
                     ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
                   },
                 ),

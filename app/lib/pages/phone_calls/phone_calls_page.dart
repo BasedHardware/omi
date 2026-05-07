@@ -11,7 +11,7 @@ import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PhoneCallsPage extends StatefulWidget {
@@ -36,7 +36,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadContacts();
-    MixpanelManager().phoneCallPageOpened();
+    AnalyticsManager().phoneCallPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PhoneCallProvider>().loadVerifiedNumbers();
     });
@@ -99,9 +99,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     // Block if already on a call
     if (provider.callState != PhoneCallState.idle && provider.callState != PhoneCallState.ended) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.callAlreadyInProgress)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.callAlreadyInProgress)));
       return;
     }
 
@@ -166,9 +164,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage()),
-            ),
+            onPressed: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage())),
           ),
         ],
         bottom: TabBar(

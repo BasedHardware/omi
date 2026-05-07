@@ -7,7 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class ManageCreatePage extends StatelessWidget {
@@ -86,7 +86,7 @@ class ManageCreatePage extends StatelessWidget {
                           const SizedBox(height: 16),
                           GestureDetector(
                             onTap: () {
-                              MixpanelManager().pageOpened('Submit App');
+                              AnalyticsManager().pageOpened('Submit App');
                               routeToPage(context, const AddAppPage());
                             },
                             child: Container(

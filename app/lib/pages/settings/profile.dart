@@ -10,7 +10,7 @@ import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -141,7 +141,7 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, setSheetState) {
             void pick(int value) {
               setState(() => SharedPreferencesUtil().voiceResponseMode = value);
-              MixpanelManager().voiceResponseModeChanged(value);
+              AnalyticsManager().voiceResponseModeChanged(value);
               Navigator.pop(sheetContext);
             }
 
@@ -262,7 +262,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    MixpanelManager().pageOpened('Profile Change Name');
+                    AnalyticsManager().pageOpened('Profile Change Name');
                     await showDialog(
                       context: context,
                       builder: (BuildContext context) {
@@ -274,8 +274,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.email,
-                  chipValue:
-                      SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
+                  chipValue: SharedPreferencesUtil().email.isEmpty
+                      ? context.l10n.notSet
+                      : SharedPreferencesUtil().email,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
                   showChevron: false,
@@ -308,7 +309,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const SpeechProfilePage());
-                    MixpanelManager().pageOpened('Profile Speech Profile');
+                    AnalyticsManager().pageOpened('Profile Speech Profile');
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -366,8 +367,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 Builder(
                   builder: (context) {
                     final uid = SharedPreferencesUtil().uid;
-                    final truncatedUid =
-                        uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+                    final truncatedUid = uid.length > 6
+                        ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}'
+                        : uid;
                     return _buildProfileItem(
                       title: context.l10n.userId,
                       chipValue: truncatedUid,
@@ -384,7 +386,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: context.l10n.deleteAccountTitle,
                   icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
                   onTap: () {
-                    MixpanelManager().pageOpened('Profile Delete Account Dialog');
+                    AnalyticsManager().pageOpened('Profile Delete Account Dialog');
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
                   },
                 ),

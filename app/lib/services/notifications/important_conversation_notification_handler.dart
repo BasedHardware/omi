@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -49,7 +49,7 @@ class ImportantConversationNotificationHandler {
     Logger.debug('[ImportantConversationNotification] Navigate to: $navigateTo');
 
     // Track notification received
-    MixpanelManager().importantConversationNotificationReceived(conversationId);
+    AnalyticsManager().importantConversationNotificationReceived(conversationId);
 
     // Broadcast the event so providers can update their state
     _importantConversationController.add(
@@ -82,7 +82,8 @@ class ImportantConversationNotificationHandler {
           id: notificationId,
           channelKey: channelKey,
           title: ctx?.l10n.importantConversationTitle ?? 'Important Conversation',
-          body: ctx?.l10n.importantConversationBody ??
+          body:
+              ctx?.l10n.importantConversationBody ??
               'You just had an important convo. Tap to share the summary with others.',
           payload: {'conversation_id': conversationId, 'navigate_to': navigateTo},
           notificationLayout: NotificationLayout.Default,

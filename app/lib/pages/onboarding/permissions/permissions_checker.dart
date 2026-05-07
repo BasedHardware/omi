@@ -9,7 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -185,7 +185,7 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                       }
                                     }
                                   });
-                                  MixpanelManager().permissionsInterstitialCompleted();
+                                  AnalyticsManager().permissionsInterstitialCompleted();
                                   provider.setLoading(false);
                                   if (context.mounted) {
                                     _goHome(context);

@@ -7,7 +7,7 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -26,11 +26,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().connectDevicePageOpened();
+    AnalyticsManager().connectDevicePageOpened();
   }
 
   void _showConnectionGuide() {
-    MixpanelManager().connectionGuideOpened();
+    AnalyticsManager().connectionGuideOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

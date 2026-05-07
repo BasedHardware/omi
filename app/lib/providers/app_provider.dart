@@ -9,7 +9,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -97,20 +97,20 @@ class AppProvider extends BaseProvider {
     // Track filter changes
     if (filterGroup == 'Apps') {
       if (filter == 'My Apps') {
-        MixpanelManager().appsFilterMyApps(enabled: isAdding);
+        AnalyticsManager().appsFilterMyApps(enabled: isAdding);
       } else if (filter == 'Installed Apps') {
-        MixpanelManager().appsFilterInstalled(enabled: isAdding);
+        AnalyticsManager().appsFilterInstalled(enabled: isAdding);
       }
     } else if (filterGroup == 'Rating') {
       if (isAdding) {
         String ratingStr = filter.replaceAll('+ Stars', '').trim();
         int? rating = int.tryParse(ratingStr);
         if (rating != null) {
-          MixpanelManager().appsFilterRating(rating: rating);
+          AnalyticsManager().appsFilterRating(rating: rating);
         }
       }
     } else if (filterGroup == 'Sort' && isAdding) {
-      MixpanelManager().appsSortChanged(sortOption: filter);
+      AnalyticsManager().appsSortChanged(sortOption: filter);
     }
 
     notifyListeners();
@@ -131,7 +131,7 @@ class AppProvider extends BaseProvider {
 
     // Track category filter
     if (isAdding) {
-      MixpanelManager().appsFilterCategory(category: category.title);
+      AnalyticsManager().appsFilterCategory(category: category.title);
     }
 
     notifyListeners();
@@ -152,7 +152,7 @@ class AppProvider extends BaseProvider {
 
     // Track capability filter
     if (isAdding) {
-      MixpanelManager().appsFilterCapability(capability: capability.title);
+      AnalyticsManager().appsFilterCapability(capability: capability.title);
     }
 
     notifyListeners();
@@ -284,7 +284,7 @@ class AppProvider extends BaseProvider {
 
         // Track search if there was a query
         if (queryBeingSearched.isNotEmpty) {
-          MixpanelManager().appsSearched(searchTerm: queryBeingSearched, resultCount: result.apps.length);
+          AnalyticsManager().appsSearched(searchTerm: queryBeingSearched, resultCount: result.apps.length);
         }
       }
     } catch (e) {
@@ -803,18 +803,19 @@ class AppProvider extends BaseProvider {
               ? context.l10n.errorActivatingAppIntegration
               : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
-          MixpanelManager().appEnabled(appId);
+          AnalyticsManager().appEnabled(appId);
         }
       } else {
         await disableAppServer(appId);
         success = true;
-        MixpanelManager().appDisabled(appId);
+        AnalyticsManager().appDisabled(appId);
       }
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage =
-          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
+      errorMessage = context != null
+          ? context.l10n.errorUpdatingAppStatus
+          : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {

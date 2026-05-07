@@ -15,7 +15,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class CreateTemplateBottomSheet extends StatefulWidget {
@@ -137,7 +137,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
       if (submitResult.$1) {
         // Success
-        MixpanelManager().quickTemplateCreated(
+        AnalyticsManager().quickTemplateCreated(
           conversationId: widget.conversationId ?? '',
           appName: name,
           isPublic: _isPublic,

@@ -32,7 +32,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -189,7 +189,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   void _openSettingsDrawer() {
     HapticFeedback.mediumImpact();
-    MixpanelManager().pageOpened('Settings');
+    AnalyticsManager().pageOpened('Settings');
     final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
     final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
     final previousModel = SharedPreferencesUtil().transcriptionModel;
@@ -237,115 +237,113 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           ],
                         )
                       : provider.isClearingChat
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                const SizedBox(height: 16),
-                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                              ],
-                            )
-                          : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 100.0),
-                                    child: Text(
-                                      connectivityProvider.isConnected
-                                          ? context.l10n.noMessagesYet
-                                          : context.l10n.noInternetConnection,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: Colors.white.withOpacity(0.3),
-                                          selectionHandleColor: Colors.blue,
-                                        ),
-                                      ),
-                                      child: ListView.builder(
-                                        shrinkWrap: false,
-                                        reverse: false,
-                                        controller: scrollController,
-                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                        itemCount: provider.messages.length,
-                                        itemBuilder: (context, chatIndex) {
-                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                            _hasInitialScrolled = true;
-                                            SchedulerBinding.instance.addPostFrameCallback((_) {
-                                              if (scrollController.hasClients) {
-                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
-                                              }
-                                            });
-                                          }
-
-                                          final message = provider.messages[chatIndex];
-                                          double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                          double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                          return Padding(
-                                            key: ValueKey(message.id),
-                                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                            child: message.sender == MessageSender.ai
-                                                ? Builder(
-                                                    builder: (context) {
-                                                      final child = AIMessage(
-                                                        showTypingIndicator: provider.showTypingIndicator &&
-                                                            chatIndex == provider.messages.length - 1,
-                                                        showThinkingAfterText: provider.agentThinkingAfterText,
-                                                        message: message,
-                                                        sendMessage: _sendMessageUtil,
-                                                        onAskOmi: (text) {
-                                                          setState(() {
-                                                            _selectedContext = text;
-                                                          });
-                                                          textFieldFocusNode.requestFocus();
-                                                        },
-                                                        displayOptions: provider.messages.length <= 1,
-                                                        appSender: provider.messageSenderApp(message.appId),
-                                                        updateConversation: (ServerConversation conversation) {
-                                                          context
-                                                              .read<ConversationProvider>()
-                                                              .updateConversation(conversation);
-                                                        },
-                                                        setMessageNps: (int value, {String? reason}) {
-                                                          provider.setMessageNps(message, value, reason: reason);
-                                                        },
-                                                      );
-
-                                                      // Dynamic spacer logic
-                                                      if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
-                                                        return Container(
-                                                          constraints: BoxConstraints(
-                                                            minHeight: MediaQuery.of(context).size.height * 0.5,
-                                                          ),
-                                                          alignment: Alignment.topLeft,
-                                                          child: child,
-                                                        );
-                                                      }
-                                                      return child;
-                                                    },
-                                                  )
-                                                : HumanMessage(
-                                                    message: message,
-                                                    onAskOmi: (text) {
-                                                      setState(() {
-                                                        _selectedContext = text;
-                                                      });
-                                                      textFieldFocusNode.requestFocus();
-                                                    },
-                                                  ),
-                                          );
-                                        },
-                                      ),
-                                    );
-                                  },
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                            const SizedBox(height: 16),
+                            Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
+                          ],
+                        )
+                      : (provider.messages.isEmpty)
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 100.0),
+                            child: Text(
+                              connectivityProvider.isConnected
+                                  ? context.l10n.noMessagesYet
+                                  : context.l10n.noInternetConnection,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                textSelectionTheme: TextSelectionThemeData(
+                                  selectionColor: Colors.white.withOpacity(0.3),
+                                  selectionHandleColor: Colors.blue,
                                 ),
+                              ),
+                              child: ListView.builder(
+                                shrinkWrap: false,
+                                reverse: false,
+                                controller: scrollController,
+                                padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                itemCount: provider.messages.length,
+                                itemBuilder: (context, chatIndex) {
+                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                    _hasInitialScrolled = true;
+                                    SchedulerBinding.instance.addPostFrameCallback((_) {
+                                      if (scrollController.hasClients) {
+                                        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                                      }
+                                    });
+                                  }
+
+                                  final message = provider.messages[chatIndex];
+                                  double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                  return Padding(
+                                    key: ValueKey(message.id),
+                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                    child: message.sender == MessageSender.ai
+                                        ? Builder(
+                                            builder: (context) {
+                                              final child = AIMessage(
+                                                showTypingIndicator:
+                                                    provider.showTypingIndicator &&
+                                                    chatIndex == provider.messages.length - 1,
+                                                showThinkingAfterText: provider.agentThinkingAfterText,
+                                                message: message,
+                                                sendMessage: _sendMessageUtil,
+                                                onAskOmi: (text) {
+                                                  setState(() {
+                                                    _selectedContext = text;
+                                                  });
+                                                  textFieldFocusNode.requestFocus();
+                                                },
+                                                displayOptions: provider.messages.length <= 1,
+                                                appSender: provider.messageSenderApp(message.appId),
+                                                updateConversation: (ServerConversation conversation) {
+                                                  context.read<ConversationProvider>().updateConversation(conversation);
+                                                },
+                                                setMessageNps: (int value, {String? reason}) {
+                                                  provider.setMessageNps(message, value, reason: reason);
+                                                },
+                                              );
+
+                                              // Dynamic spacer logic
+                                              if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                return Container(
+                                                  constraints: BoxConstraints(
+                                                    minHeight: MediaQuery.of(context).size.height * 0.5,
+                                                  ),
+                                                  alignment: Alignment.topLeft,
+                                                  child: child,
+                                                );
+                                              }
+                                              return child;
+                                            },
+                                          )
+                                        : HumanMessage(
+                                            message: message,
+                                            onAskOmi: (text) {
+                                              setState(() {
+                                                _selectedContext = text;
+                                              });
+                                              textFieldFocusNode.requestFocus();
+                                            },
+                                          ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
                 ),
                 // Send message area
                 Container(
@@ -468,9 +466,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 bottom: widget.isPivotBottom
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
-                                            (textController.text.length > 40 || textController.text.contains('\n'))
-                                        ? 0
-                                        : 2),
+                                              (textController.text.length > 40 || textController.text.contains('\n'))
+                                          ? 0
+                                          : 2),
                               ),
                               child: Stack(
                                 clipBehavior: Clip.none,
@@ -530,8 +528,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                             color: const Color(0xFF1f1f25),
                                                             borderRadius: BorderRadius.circular(16),
                                                           ),
-                                                          padding:
-                                                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 8,
+                                                          ),
                                                           child: Row(
                                                             mainAxisSize: MainAxisSize.min,
                                                             children: [
@@ -565,8 +565,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                                     _selectedContext = null;
                                                                   });
                                                                 },
-                                                                child: const Icon(Icons.close,
-                                                                    size: 14, color: Colors.blue),
+                                                                child: const Icon(
+                                                                  Icons.close,
+                                                                  size: 14,
+                                                                  color: Colors.blue,
+                                                                ),
                                                               ),
                                                             ],
                                                           ),
@@ -607,8 +610,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                               textAlignVertical: const TextAlignVertical(y: -0.35),
                                                               decoration: InputDecoration(
                                                                 hintText: context.l10n.askAnything,
-                                                                hintStyle:
-                                                                    const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                                hintStyle: const TextStyle(
+                                                                  fontSize: 16.0,
+                                                                  color: Colors.grey,
+                                                                ),
                                                                 focusedBorder: InputBorder.none,
                                                                 enabledBorder: InputBorder.none,
                                                                 contentPadding: const EdgeInsets.symmetric(
@@ -657,8 +662,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                         FontAwesomeIcons.arrowUp,
                                                         color:
                                                             voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                                ? const Color(0xFF1f1f25)
-                                                                : Colors.grey.shade400,
+                                                            ? const Color(0xFF1f1f25)
+                                                            : Colors.grey.shade400,
                                                         size: 16,
                                                       ),
                                                     ),
@@ -698,7 +703,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     bool hasText = value.text.trim().isNotEmpty;
                                                     if (!hasText) return const SizedBox.shrink();
 
-                                                    bool canSend = hasText &&
+                                                    bool canSend =
+                                                        hasText &&
                                                         !provider.sendingMessage &&
                                                         !provider.isUploadingFiles &&
                                                         connectivityProvider.isConnected;
@@ -777,9 +783,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 ),
                                               ],
                                             ),
-                                            child: const Center(
-                                              child: Icon(Icons.stop, color: Colors.white, size: 18),
-                                            ),
+                                            child: const Center(child: Icon(Icons.stop, color: Colors.white, size: 18)),
                                           ),
                                         ),
                                       ),
@@ -1079,7 +1083,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   Future<void> _navigateToChatAppsPage() async {
     if (!mounted) return;
 
-    MixpanelManager().pageOpened('Chat Apps');
+    AnalyticsManager().pageOpened('Chat Apps');
     // Navigate to chat capability apps page
     await routeToPage(
       context,
@@ -1443,18 +1447,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
               child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
             )
           : appId != null && onConfirmDelete != null
-              ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _pendingDeleteAppId = appId;
-                    });
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-                  ),
-                )
-              : null,
+          ? GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = appId;
+                });
+              },
+              child: const Padding(
+                padding: EdgeInsets.only(left: 2, top: 1),
+                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+              ),
+            )
+          : null,
       selected: isSelected,
       selectedTileColor: Colors.white.withOpacity(0.1),
       onTap: onTap,
@@ -1627,8 +1631,10 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
     _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
     _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation =
-        Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+    _arrowAnimation = Tween<double>(
+      begin: 0,
+      end: 10,
+    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
   }
 
   @override

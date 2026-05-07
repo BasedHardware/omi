@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/pages/settings/widgets/create_dev_api_key_sheet.dart';
 import 'package:omi/pages/settings/widgets/dev_api_key_list_item.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DeveloperApiKeysSection extends StatelessWidget {
@@ -20,7 +20,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
       child: InkWell(
         onTap: () {
           launchUrl(Uri.parse(url));
-          MixpanelManager().pageOpened('$label Docs');
+          AnalyticsManager().pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
         child: Padding(

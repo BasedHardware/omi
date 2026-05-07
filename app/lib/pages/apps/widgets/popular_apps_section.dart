@@ -6,7 +6,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 // Custom notification class to communicate with parent widgets
@@ -77,7 +77,7 @@ class PopularAppsSection extends StatelessWidget {
 
                 appProvider.filterApps();
 
-                MixpanelManager().pageOpened('App Detail');
+                AnalyticsManager().pageOpened('App Detail');
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

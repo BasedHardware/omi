@@ -6,7 +6,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PermissionsPage extends StatefulWidget {
@@ -83,7 +83,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         await openAppSettings();
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: name, granted: status.isGranted);
+      AnalyticsManager().permissionChanged(permission: name, granted: status.isGranted);
     }
   }
 
@@ -104,7 +104,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         }
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
+      AnalyticsManager().permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
     }
   }
 
@@ -114,7 +114,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
     } else {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'background', granted: _backgroundGranted);
+      AnalyticsManager().permissionChanged(permission: 'background', granted: _backgroundGranted);
     }
   }
 
@@ -125,7 +125,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
       if (await Permission.location.serviceStatus.isDisabled) {
         await openAppSettings();
         await _checkPermissions();
-        MixpanelManager().permissionChanged(permission: 'location', granted: _locationGranted);
+        AnalyticsManager().permissionChanged(permission: 'location', granted: _locationGranted);
         return;
       }
       final status = await Permission.locationWhenInUse.request();
@@ -136,7 +136,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         await openAppSettings();
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'location', granted: _locationGranted);
+      AnalyticsManager().permissionChanged(permission: 'location', granted: _locationGranted);
     }
   }
 

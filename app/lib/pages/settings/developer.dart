@@ -27,7 +27,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -307,7 +307,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       child: InkWell(
         onTap: () {
           launchUrl(Uri.parse(url));
-          MixpanelManager().pageOpened('$label Docs');
+          AnalyticsManager().pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
         child: Padding(
@@ -849,7 +849,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
-                            MixpanelManager().exportMemories();
+                            AnalyticsManager().exportMemories();
                             setState(() => provider.loadingExportMemories = false);
                           },
                     child: Container(

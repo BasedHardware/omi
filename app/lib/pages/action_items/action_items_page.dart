@@ -12,7 +12,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -76,7 +76,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      MixpanelManager().actionItemsPageOpened();
+      AnalyticsManager().actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
@@ -152,7 +152,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Future<void> _onActionItemCompleted() async {
-    MixpanelManager().actionItemCompleted(fromTab: 'Tasks');
+    AnalyticsManager().actionItemCompleted(fromTab: 'Tasks');
 
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
@@ -190,7 +190,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             currentValue: current,
           );
           if (created != null) {
-            MixpanelManager().goalCreated(
+            AnalyticsManager().goalCreated(
               goalId: created.id,
               titleLength: title.length,
               targetValue: target,
@@ -247,10 +247,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 filled: true,
                 fillColor: const Color(0xFF1F1F25),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                focusedBorder:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                enabledBorder:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                 prefixIcon: const Icon(Icons.search, color: Colors.white60),
                 suffixIcon: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _searchController,
@@ -325,9 +323,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           width: 36,
           height: 36,
           decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-          child: const Center(
-            child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20),
-          ),
+          child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
         ),
       ),
     );
@@ -581,8 +577,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the purple corner FAB when the empty-state already
@@ -611,10 +607,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: _buildEmptyTasksContent()),
-        ),
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
       ],
     );
   }
@@ -637,10 +630,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      Colors.deepPurple.withValues(alpha: 0.35),
-                      Colors.deepPurple.withValues(alpha: 0.0),
-                    ],
+                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -672,12 +662,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           const SizedBox(height: 28),
           Text(
             context.l10n.noTasksYet,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
           const SizedBox(height: 10),
           ConstrainedBox(
@@ -685,11 +670,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             child: Text(
               context.l10n.tasksEmptyStateMessage,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 15,
-                height: 1.5,
-              ),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
             ),
           ),
           const SizedBox(height: 28),
@@ -710,11 +691,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
                 ],
               ),
               child: Row(
@@ -756,27 +733,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: _buildNoSearchResultsContent()),
-            )
+            SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoSearchResultsContent()))
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = filteredItems[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildTaskItem(
-                      item,
-                      provider,
-                      category: _getCategoryForItem(item),
-                      categoryItems: filteredItems,
-                    ),
-                  );
-                },
-                childCount: filteredItems.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = filteredItems[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildTaskItem(
+                    item,
+                    provider,
+                    category: _getCategoryForItem(item),
+                    categoryItems: filteredItems,
+                  ),
+                );
+              }, childCount: filteredItems.length),
             ),
         ] else ...[
           SliverToBoxAdapter(child: _buildGoalsRow()),
@@ -834,7 +805,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         GestureDetector(
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                            AnalyticsManager().track('Add Goal Clicked from Tasks Page');
                             _showCreateGoalSheet();
                           },
                           child: Container(
@@ -866,7 +837,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onWillAcceptWithDetails: (details) => goal != null,
       onAcceptWithDetails: (details) {
         if (goal == null) return;
-        MixpanelManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
+        AnalyticsManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
         _attachTaskToGoal(details.data.id, goal.id);
       },
       builder: (context, candidateData, rejectedData) {
@@ -1222,10 +1193,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   /// stopping at the first sibling/ancestor. The data model is flat (no
   /// parent_id), so the page is the right layer to compute this: it owns the
   /// category-grouped display order; the provider does not.
-  List<String> _visibleDescendantIds(
-    ActionItemWithMetadata parent,
-    List<ActionItemWithMetadata> categoryItems,
-  ) {
+  List<String> _visibleDescendantIds(ActionItemWithMetadata parent, List<ActionItemWithMetadata> categoryItems) {
     final idx = categoryItems.indexWhere((i) => i.id == parent.id);
     if (idx < 0) return const [];
     final ids = <String>[];
@@ -1462,11 +1430,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         await provider.updateActionItemState(item, !item.completed);
                         if (!item.completed) _onActionItemCompleted();
                       },
-                child: SizedBox(
-                  width: 44,
-                  height: 48,
-                  child: Center(child: _buildCheckbox(item.completed)),
-                ),
+                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(item.completed))),
               ),
               // Task text
               Expanded(
@@ -1512,10 +1476,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Different shape + position from the leading completion circle
               // so completion vs. selection cannot be confused.
               if (provider.isSelectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8),
-                  child: _buildSelectionSquare(isSelected),
-                ),
+                Padding(padding: const EdgeInsets.only(left: 8, right: 8), child: _buildSelectionSquare(isSelected)),
             ],
           ),
         ),
@@ -1599,7 +1560,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Goals are not part of selection mode — selection only applies to
         // tasks (the action bar's Export action acts on tasks only).
         if (provider.isSelectionMode) return;
-        MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+        AnalyticsManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
         _showEditGoalSheet(goal);
       },
       child: Container(
@@ -1669,7 +1630,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
-        MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
+        AnalyticsManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
         await _deleteGoal(goal);
       },
       background: Container(
@@ -1695,10 +1656,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           // Update goal via provider
           final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
           await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-          MixpanelManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
+          AnalyticsManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
         },
         onDelete: () {
-          MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+          AnalyticsManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
           _deleteGoal(goal);
         },
       ),
@@ -2168,13 +2129,7 @@ class _DashedCirclePainter extends CustomPainter {
 
     for (var i = 0; i < segments; i++) {
       final startAngle = i * stepAngle;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        dashAngle,
-        false,
-        paint,
-      );
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashAngle, false, paint);
     }
   }
 

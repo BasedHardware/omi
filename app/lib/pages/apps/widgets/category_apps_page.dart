@@ -6,7 +6,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -32,7 +32,7 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
     _totalCount = widget.apps.length;
 
     // Track category page opened
-    MixpanelManager().appsCategoryPageOpened(category: widget.category.title, appCount: widget.apps.length);
+    AnalyticsManager().appsCategoryPageOpened(category: widget.category.title, appCount: widget.apps.length);
 
     _fetchCategoryApps();
   }

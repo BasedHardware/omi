@@ -14,7 +14,7 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -42,10 +42,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
         onPickPhoneCall: () {
           Navigator.pop(sheetContext);
           if (!context.mounted) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
         },
       ),
     );
@@ -58,11 +55,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     if (captureProvider.recordingState == RecordingState.record) {
       await captureProvider.stopStreamRecording();
       captureProvider.forceProcessingCurrentConversation();
-      MixpanelManager().phoneMicRecordingStopped();
+      AnalyticsManager().phoneMicRecordingStopped();
       return;
     }
     await captureProvider.streamRecording();
-    MixpanelManager().phoneMicRecordingStarted();
+    AnalyticsManager().phoneMicRecordingStarted();
     if (context.mounted) {
       final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
           ? captureProvider.conversationProvider!.conversations.first.id
@@ -87,7 +84,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
             provider.connectedDevice,
             provider.pairedDevice,
             provider.isConnecting,
-            provider.isCharging
+            provider.isCharging,
           ),
           builder: (context, data, child) {
             final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging) = data;
@@ -95,7 +92,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final batteryPill = GestureDetector(
                 onTap: () {
                   routeToPage(context, const ConnectedDevice());
-                  MixpanelManager().batteryIndicatorClicked();
+                  AnalyticsManager().batteryIndicatorClicked();
                 },
                 child: Container(
                   height: 36,
@@ -131,8 +128,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                               color: batteryLevel > 75
                                   ? const Color.fromARGB(255, 0, 255, 8)
                                   : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
+                                  ? Colors.yellow.shade700
+                                  : Colors.red,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -155,10 +152,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   GestureDetector(
                     onTap: () {
                       HapticFeedback.lightImpact();
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
                     },
                     child: Container(
                       height: 36,
@@ -167,11 +161,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                         color: const Color(0xFF1F1F25),
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      child: const Icon(
-                        Icons.phone_in_talk_rounded,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                      child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
                     ),
                   ),
                 ],
@@ -196,10 +186,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                         height: 16,
                         child: Stack(
                           children: [
-                            Image.asset(
-                              DeviceUtils.getDeviceImageFromBtDevice(pairedDevice),
-                              fit: BoxFit.contain,
-                            ),
+                            Image.asset(DeviceUtils.getDeviceImageFromBtDevice(pairedDevice), fit: BoxFit.contain),
                             // Slash line across the image
                             Positioned.fill(child: CustomPaint(painter: SlashLinePainter())),
                           ],
@@ -222,7 +209,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     onTap: () async {
                       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
                         routeToPage(context, const ConnectDevicePage());
-                        MixpanelManager().connectFriendClicked();
+                        AnalyticsManager().connectFriendClicked();
                       } else {
                         await routeToPage(context, const ConnectedDevice());
                       }
@@ -243,17 +230,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                           isConnecting && isMemoriesPage
                               ? Text(
                                   context.l10n.searching,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium!
-                                      .copyWith(color: Colors.white, fontSize: 12),
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : isMemoriesPage
-                                  ? Text(
-                                      context.l10n.connect,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                                    )
-                                  : const SizedBox.shrink(),
+                              ? Text(context.l10n.connect, style: const TextStyle(color: Colors.white, fontSize: 12))
+                              : const SizedBox.shrink(),
                         ],
                       ),
                     ),
@@ -303,21 +286,20 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                           isRecording
                                               ? context.l10n.stop
                                               : isInitialising
-                                                  ? '...'
-                                                  : context.l10n.record,
+                                              ? '...'
+                                              : context.l10n.record,
                                           style: const TextStyle(
-                                              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ),
                                 if (showChevron) ...[
-                                  Container(
-                                    width: 1,
-                                    height: 18,
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                  ),
+                                  Container(width: 1, height: 18, color: Colors.white.withValues(alpha: 0.25)),
                                   GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () => _showRecordOptions(context),
@@ -386,10 +368,7 @@ class _RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
 
-  const _RecordOptionsSheet({
-    required this.onPickPhoneMic,
-    required this.onPickPhoneCall,
-  });
+  const _RecordOptionsSheet({required this.onPickPhoneMic, required this.onPickPhoneCall});
 
   @override
   Widget build(BuildContext context) {
@@ -407,10 +386,7 @@ class _RecordOptionsSheet extends StatelessWidget {
             child: Container(
               width: 36,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(height: 18),
@@ -439,12 +415,7 @@ class _RecordOption extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
-  const _RecordOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  const _RecordOption({required this.icon, required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -455,10 +426,7 @@ class _RecordOption extends StatelessWidget {
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A2A33),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF2A2A33), borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             Container(
@@ -492,10 +460,7 @@ class _RecordOption extends StatelessWidget {
                     style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                  ),
+                  Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                 ],
               ),
             ),

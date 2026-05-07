@@ -8,7 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/functions.dart';
@@ -258,7 +258,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                                         onPressed: () {
                                                           _searchController.clear();
                                                           provider.setSearchQuery('');
-                                                          MixpanelManager().memorySearchCleared(
+                                                          AnalyticsManager().memorySearchCleared(
                                                             provider.memories.length,
                                                           );
                                                         },
@@ -279,7 +279,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               onChanged: (value) => provider.setSearchQuery(value),
                                               onSubmitted: (value) {
                                                 if (value.isNotEmpty) {
-                                                  MixpanelManager().memorySearched(
+                                                  AnalyticsManager().memorySearched(
                                                     value,
                                                     provider.filteredMemories.length,
                                                   );
@@ -342,11 +342,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                             ? context.l10n.noMemoriesYet
                                             : provider.selectedCategories.isNotEmpty
-                                                ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
-                                                : context.l10n.noMemoriesFound,
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                      provider.selectedCategories.length == 1
+                                                  ? context.l10n.noManualMemories
+                                                  : context.l10n.noMemoriesInCategories
+                                            : context.l10n.noMemoriesFound,
                                         style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                       ),
                                       if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
@@ -371,9 +371,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       provider: provider,
                                       onTap:
                                           (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                        MixpanelManager().memoryListItemClicked(tappedMemory);
-                                        _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                      },
+                                            AnalyticsManager().memoryListItemClicked(tappedMemory);
+                                            _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                          },
                                     );
                                   }, childCount: provider.filteredMemories.length),
                                 ),
@@ -388,7 +388,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                     heroTag: 'memories_fab',
                     onPressed: () {
                       showMemoryDialog(context, provider);
-                      MixpanelManager().memoriesPageCreateMemoryBtn();
+                      AnalyticsManager().memoriesPageCreateMemoryBtn();
                     },
                     backgroundColor: Colors.deepPurple,
                     tooltip: context.l10n.createMemoryTooltip,
@@ -490,7 +490,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _showMemoryManagementSheet(BuildContext context, MemoriesProvider provider) {
-    MixpanelManager().memoriesManagementSheetOpened();
+    AnalyticsManager().memoriesManagementSheetOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

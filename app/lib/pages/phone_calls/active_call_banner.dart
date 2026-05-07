@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Compact call banner shown on the home screen when a phone call is active.
@@ -19,7 +19,8 @@ class ActiveCallBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+        bool isCallInProgress =
+            provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -27,15 +28,12 @@ class ActiveCallBanner extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            MixpanelManager().track('Phone Call Banner Tapped');
+            AnalyticsManager().track('Phone Call Banner Tapped');
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(24),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
               child: Column(
@@ -120,26 +118,28 @@ class _CallInfoRow extends StatelessWidget {
     return Row(
       children: [
         // Phone icon — green when transcribing, orange when reconnecting, red when failed
-        Builder(builder: (context) {
-          final provider = context.watch<PhoneCallProvider>();
-          Color iconColor;
-          switch (provider.transcriptionStatus) {
-            case TranscriptionStatus.reconnecting:
-              iconColor = Colors.orange;
-              break;
-            case TranscriptionStatus.failed:
-              iconColor = Colors.red;
-              break;
-            default:
-              iconColor = const Color(0xFF34C759);
-          }
-          return Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
-            child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
-          );
-        }),
+        Builder(
+          builder: (context) {
+            final provider = context.watch<PhoneCallProvider>();
+            Color iconColor;
+            switch (provider.transcriptionStatus) {
+              case TranscriptionStatus.reconnecting:
+                iconColor = Colors.orange;
+                break;
+              case TranscriptionStatus.failed:
+                iconColor = Colors.red;
+                break;
+              default:
+                iconColor = const Color(0xFF34C759);
+            }
+            return Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
+              child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
+            );
+          },
+        ),
         const SizedBox(width: 10),
         // Contact name / number
         Expanded(
@@ -319,7 +319,8 @@ class ActiveCallTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+        bool isCallInProgress =
+            provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -335,7 +336,7 @@ class ActiveCallTopBar extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            MixpanelManager().track('Phone Call Top Bar Tapped');
+            AnalyticsManager().track('Phone Call Top Bar Tapped');
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
           },
           child: Container(

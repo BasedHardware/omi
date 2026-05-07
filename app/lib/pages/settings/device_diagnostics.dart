@@ -12,7 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DeviceDiagnostics extends StatefulWidget {
@@ -38,7 +38,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().track('Diagnostics Opened');
+    AnalyticsManager().track('Diagnostics Opened');
     _loadAll();
     _startRssiStreaming();
   }
@@ -121,7 +121,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
     await file.writeAsString(json);
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Omi Device Diagnostics'));
-    MixpanelManager().track(
+    AnalyticsManager().track(
       'Diagnostics Exported',
       properties: {
         'disconnect_count': (_diagnostics?.disconnectHistory ?? []).length,
@@ -479,8 +479,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         ),
         child: Text(
           label,
-          style:
-              TextStyle(color: active ? Colors.white : Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            color: active ? Colors.white : Colors.grey.shade400,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -544,8 +547,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             return touchedSpots.map((spot) {
               final level = spot.y.toInt();
               final hoursAgo = spot.x.abs();
-              final timeLabel =
-                  hoursAgo < 1 ? '${(hoursAgo * 60).toInt()}m ago' : '${hoursAgo.toStringAsFixed(1)}h ago';
+              final timeLabel = hoursAgo < 1
+                  ? '${(hoursAgo * 60).toInt()}m ago'
+                  : '${hoursAgo.toStringAsFixed(1)}h ago';
               return LineTooltipItem(
                 '$level%\n$timeLabel',
                 TextStyle(color: _batteryColor(level), fontWeight: FontWeight.w600, fontSize: 13),

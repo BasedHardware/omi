@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -105,7 +105,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                             final provider = Provider.of<ConversationProvider>(context, listen: false);
                             Navigator.of(context).pop();
                             await provider.clearDateFilter();
-                            MixpanelManager().calendarFilterCleared();
+                            AnalyticsManager().calendarFilterCleared();
                           } else {
                             Navigator.of(context).pop();
                           }
@@ -122,7 +122,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           final provider = Provider.of<ConversationProvider>(context, listen: false);
                           Navigator.of(context).pop();
                           await provider.filterConversationsByDate(selectedDate);
-                          MixpanelManager().calendarFilterApplied(selectedDate);
+                          AnalyticsManager().calendarFilterApplied(selectedDate);
                         },
                         child: Text(
                           context.l10n.done,
@@ -171,7 +171,7 @@ class _SearchWidgetState extends State<SearchWidget> {
               controller: searchController,
               focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
               onTap: () {
-                MixpanelManager().searchBarFocused();
+                AnalyticsManager().searchBarFocused();
               },
               onChanged: (value) {
                 var provider = Provider.of<ConversationProvider>(context, listen: false);
@@ -179,7 +179,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   await provider.searchConversations(value);
                   if (value.isNotEmpty) {
                     // Track search query with results count
-                    MixpanelManager().searchQueryEntered(value, provider.searchedConversations.length);
+                    AnalyticsManager().searchQueryEntered(value, provider.searchedConversations.length);
                   }
                 });
                 setShowClearButton();
@@ -203,7 +203,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           setShowClearButton();
                           // Hide search bar when search is cleared
                           homeProvider.hideConvoSearchBar();
-                          MixpanelManager().searchQueryCleared();
+                          AnalyticsManager().searchQueryCleared();
                         },
                         child: const Icon(Icons.close, color: Colors.white),
                       )

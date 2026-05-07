@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -93,7 +93,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (success) {
-          MixpanelManager().folderUpdated(folderId: widget.folderToEdit!.id, folderName: name);
+          AnalyticsManager().folderUpdated(folderId: widget.folderToEdit!.id, folderName: name);
         }
       } else {
         final result = await folderProvider.createFolder(
@@ -105,7 +105,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (result != null) {
-          MixpanelManager().folderCreated(folderId: result.id, folderName: name, icon: _selectedIcon, color: colorHex);
+          AnalyticsManager().folderCreated(folderId: result.id, folderName: name, icon: _selectedIcon, color: colorHex);
         }
       }
 

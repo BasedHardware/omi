@@ -15,7 +15,7 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -170,7 +170,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings =
+        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -180,16 +181,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   void _openSelectedAppSettings() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
     if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
-      MixpanelManager().taskIntegrationSettingsOpened(appName: 'asana');
+      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'asana');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
     } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
-      MixpanelManager().taskIntegrationSettingsOpened(appName: 'clickup');
+      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'clickup');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
     } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
-      MixpanelManager().taskIntegrationSettingsOpened(appName: 'todoist');
+      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'todoist');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
     } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
-      MixpanelManager().taskIntegrationSettingsOpened(appName: 'google_tasks');
+      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'google_tasks');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
     }
   }
@@ -214,7 +215,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           // Save connected status to backend so auto-sync works
           await provider.saveConnectionDetails(app.key, {'connected': true});
           await provider.setSelectedApp(app);
-          MixpanelManager().taskIntegrationEnabled(appName: app.key, success: true);
+          AnalyticsManager().taskIntegrationEnabled(appName: app.key, success: true);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
           if (mounted) {
@@ -254,7 +255,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(appName: 'todoist');
+            AnalyticsManager().taskIntegrationAuthFailed(appName: 'todoist');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -288,7 +289,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(appName: 'asana');
+            AnalyticsManager().taskIntegrationAuthFailed(appName: 'asana');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -322,7 +323,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(appName: 'google_tasks');
+            AnalyticsManager().taskIntegrationAuthFailed(appName: 'google_tasks');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +357,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            MixpanelManager().taskIntegrationAuthFailed(appName: 'clickup');
+            AnalyticsManager().taskIntegrationAuthFailed(appName: 'clickup');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
 class FilterBottomSheet extends StatelessWidget {
@@ -106,7 +106,7 @@ class FilterBottomSheet extends StatelessWidget {
                       child: TextButton(
                         onPressed: () {
                           provider.clearFilters();
-                          MixpanelManager().appsClearFilters();
+                          AnalyticsManager().appsClearFilters();
                           Navigator.of(context).pop();
                           Future.microtask(() => provider.applyFilters());
                         },
@@ -170,7 +170,7 @@ class FilterBottomSheet extends StatelessWidget {
           child: GestureDetector(
             onTap: () {
               provider.addOrRemoveFilter(filterKey, 'Rating');
-              MixpanelManager().appsRatingFilter(filterKey, provider.isFilterSelected(filterKey, 'Rating'));
+              AnalyticsManager().appsRatingFilter(filterKey, provider.isFilterSelected(filterKey, 'Rating'));
             },
             child: Container(
               margin: const EdgeInsets.only(right: 8),
@@ -206,7 +206,7 @@ class FilterBottomSheet extends StatelessWidget {
         return GestureDetector(
           onTap: () {
             provider.addOrRemoveCategoryFilter(category);
-            MixpanelManager().appsCategoryFilter(category.title, provider.isCategoryFilterSelected(category));
+            AnalyticsManager().appsCategoryFilter(category.title, provider.isCategoryFilterSelected(category));
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -247,7 +247,7 @@ class FilterBottomSheet extends StatelessWidget {
           child: GestureDetector(
             onTap: () {
               provider.addOrRemoveFilter(option['key']!, 'Sort');
-              MixpanelManager().appsSortFilter(option['key']!, provider.isFilterSelected(option['key']!, 'Sort'));
+              AnalyticsManager().appsSortFilter(option['key']!, provider.isFilterSelected(option['key']!, 'Sort'));
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -296,7 +296,7 @@ class FilterBottomSheet extends StatelessWidget {
         return GestureDetector(
           onTap: () {
             provider.addOrRemoveCapabilityFilter(capability);
-            MixpanelManager().appsCapabilityFilter(capability.title, provider.isCapabilityFilterSelected(capability));
+            AnalyticsManager().appsCapabilityFilter(capability.title, provider.isCapabilityFilterSelected(capability));
           },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

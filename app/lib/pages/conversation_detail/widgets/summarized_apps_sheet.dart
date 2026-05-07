@@ -14,7 +14,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -36,7 +36,7 @@ class SummarizedAppsBottomSheet extends StatelessWidget {
             final currentAppId = summarizedApp?.appId;
             final conversationId = provider.conversation.id;
 
-            MixpanelManager().summarizedAppSheetViewed(
+            AnalyticsManager().summarizedAppSheetViewed(
               conversationId: conversationId,
               currentSummarizedAppId: currentAppId,
             );
@@ -355,7 +355,7 @@ class _AppsListState extends State<_AppsList> {
     final previousAppId = provider.getSummarizedApp()?.appId;
     final conversationId = provider.conversation.id;
 
-    MixpanelManager().summarizedAppSelected(
+    AnalyticsManager().summarizedAppSelected(
       conversationId: conversationId,
       selectedAppId: app.id,
       previousAppId: previousAppId,
@@ -401,7 +401,7 @@ class _AppsListState extends State<_AppsList> {
       }
 
       // Track analytics
-      MixpanelManager().summarizedAppSelected(
+      AnalyticsManager().summarizedAppSelected(
         conversationId: conversationId,
         selectedAppId: app.id,
         previousAppId: conversationProvider.getSummarizedApp()?.appId,
@@ -719,7 +719,7 @@ class _CreateTemplateListItem extends StatelessWidget {
           trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            MixpanelManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
+            AnalyticsManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
 
             // Close the current bottom sheet first
             Navigator.pop(context);
@@ -757,7 +757,7 @@ class _EnableAppsListItem extends StatelessWidget {
           onTap: () {
             Navigator.pop(context);
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
+            AnalyticsManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
 
             // Navigate to Summary (memories) capability apps page
             final appProvider = context.read<AppProvider>();
@@ -770,7 +770,7 @@ class _EnableAppsListItem extends StatelessWidget {
                 apps: memoriesApps,
               ),
             );
-            MixpanelManager().pageOpened('Summary Apps');
+            AnalyticsManager().pageOpened('Summary Apps');
           },
         ),
         Divider(height: 1, thickness: 0.5, color: Colors.grey.withValues(alpha: 0.2), indent: 56, endIndent: 16),

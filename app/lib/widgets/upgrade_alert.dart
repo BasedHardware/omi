@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MyUpgrader extends Upgrader {
@@ -48,14 +48,14 @@ class MyUpgradeAlertState extends UpgradeAlertState {
                 child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
                 onPressed: () {
                   onUserIgnored(context, true);
-                  MixpanelManager().upgradeModalDismissed();
+                  AnalyticsManager().upgradeModalDismissed();
                 },
               ),
               TextButton(
                 child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
                 onPressed: () {
                   onUserUpdated(context, !widget.upgrader.blocked());
-                  MixpanelManager().upgradeModalClicked();
+                  AnalyticsManager().upgradeModalClicked();
                 },
               ),
             ],

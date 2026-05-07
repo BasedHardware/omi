@@ -23,7 +23,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -244,7 +244,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest = config.requestType != null ||
+      final hasCustomRequest =
+          config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
@@ -864,7 +865,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (isLowSpec && !isIOS) {
       // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -911,7 +913,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else if (isLowSpec && isIOS) {
       // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -957,7 +960,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else {
       // Standard "High Resource Usage" Warning for capable devices
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -1005,7 +1009,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (!isIOS) {
         _checkLocalModel();
       }
-      MixpanelManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
+      AnalyticsManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
     });
   }
 
@@ -1036,7 +1040,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 onTap: () {
                   setState(() {
                     _useCustomStt = false;
-                    MixpanelManager().transcriptionSourceSelected(source: 'omi');
+                    AnalyticsManager().transcriptionSourceSelected(source: 'omi');
                   });
                 },
               ),
@@ -1063,7 +1067,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     }
 
                     // Track source selection
-                    MixpanelManager().transcriptionSourceSelected(source: 'custom_cloud');
+                    AnalyticsManager().transcriptionSourceSelected(source: 'custom_cloud');
                   });
                 },
               ),
@@ -1233,7 +1237,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   });
 
                   // Track which provider was selected (name only, no keys/URLs)
-                  MixpanelManager().transcriptionProviderSelected(provider: provider.name);
+                  AnalyticsManager().transcriptionProviderSelected(provider: provider.name);
 
                   _validateAndSetError();
                 }
@@ -1761,8 +1765,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed:
-                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
+            onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
+                ? null
+                : () => Navigator.pop(context, true),
             child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
           ),
         ],
@@ -2224,14 +2229,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                               isError
                                   ? Icons.error_outline
                                   : isWarning
-                                      ? Icons.warning_amber_outlined
-                                      : Icons.info_outline,
+                                  ? Icons.warning_amber_outlined
+                                  : Icons.info_outline,
                               size: 12,
                               color: isError
                                   ? Colors.red.shade400
                                   : isWarning
-                                      ? Colors.orange.shade400
-                                      : Colors.grey.shade500,
+                                  ? Colors.orange.shade400
+                                  : Colors.grey.shade500,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -2241,8 +2246,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                                   color: isError
                                       ? Colors.red.shade300
                                       : isWarning
-                                          ? Colors.orange.shade300
-                                          : Colors.grey.shade400,
+                                      ? Colors.orange.shade300
+                                      : Colors.grey.shade400,
                                   fontSize: 11,
                                   fontFamily: 'monospace',
                                 ),
@@ -2401,8 +2406,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildTemplateSelector() {
     final isResponseSchema = widget.isResponseSchema;
-    final templates =
-        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
+    final templates = isResponseSchema
+        ? SttResponseSchema.templates.keys.toList()
+        : SttProviderConfig.requestTemplates.keys.toList();
     final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
 
     return Column(

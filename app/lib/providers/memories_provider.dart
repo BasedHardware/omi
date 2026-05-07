@@ -11,7 +11,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -56,8 +56,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
 
       return matchesSearch && categoryMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setShowOnlyManual(bool showOnly) {
@@ -288,7 +287,7 @@ class MemoriesProvider extends ChangeNotifier {
     await deleteAllMemoriesServer();
     _memories.clear();
     if (countBeforeDeletion > 0) {
-      MixpanelManager().memoriesAllDeleted(countBeforeDeletion);
+      AnalyticsManager().memoriesAllDeleted(countBeforeDeletion);
     }
     _setCategories();
   }
@@ -346,7 +345,7 @@ class MemoriesProvider extends ChangeNotifier {
       memoryToUpdate.visibility = visibility;
       _memories[idx] = memoryToUpdate;
 
-      MixpanelManager().memoryVisibilityChanged(memoryToUpdate, visibility);
+      AnalyticsManager().memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
     }
   }
@@ -394,7 +393,7 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     if (updatedCount > 0) {
-      MixpanelManager().memoriesAllVisibilityChanged(visibility, updatedCount);
+      AnalyticsManager().memoriesAllVisibilityChanged(visibility, updatedCount);
     }
 
     _setCategories();

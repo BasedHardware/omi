@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -47,7 +47,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
-                MixpanelManager().pageOpened('Submit App');
+                AnalyticsManager().pageOpened('Submit App');
                 routeToPage(context, const AddAppPage());
               },
             ),
@@ -71,7 +71,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
-                MixpanelManager().pageOpened('Add MCP Server');
+                AnalyticsManager().pageOpened('Add MCP Server');
                 routeToPage(context, const AddMcpServerPage());
               },
             ),

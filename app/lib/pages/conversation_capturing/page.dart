@@ -15,7 +15,7 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -63,7 +63,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.streamRecording();
-        MixpanelManager().phoneMicRecordingStarted();
+        AnalyticsManager().phoneMicRecordingStarted();
       }
     } else {
       // Mute - pause recording with interesting haptic
@@ -80,7 +80,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.stopStreamRecording();
-        MixpanelManager().phoneMicRecordingStopped();
+        AnalyticsManager().phoneMicRecordingStopped();
       }
     }
   }
@@ -198,8 +198,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     provider.photos.isNotEmpty
                         ? "📸"
                         : effectivelyMuted
-                            ? "🔇"
-                            : "🎙️",
+                        ? "🔇"
+                        : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -234,63 +234,62 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(provider)
-                                      : getTranscriptWidget(
-                                          false,
-                                          provider.segments,
-                                          provider.photos,
-                                          deviceProvider.connectedDevice,
-                                          bottomMargin: 150,
-                                          suggestions: provider.suggestionsBySegmentId,
-                                          taggingSegmentIds: provider.taggingSegmentIds,
-                                          onAcceptSuggestion: (suggestion) {
-                                            provider.assignSpeakerToConversation(
-                                              suggestion.speakerId,
-                                              suggestion.personId,
-                                              suggestion.personName,
-                                              [suggestion.segmentId],
+                                  ? _buildChronologicalTimeline(provider)
+                                  : getTranscriptWidget(
+                                      false,
+                                      provider.segments,
+                                      provider.photos,
+                                      deviceProvider.connectedDevice,
+                                      bottomMargin: 150,
+                                      suggestions: provider.suggestionsBySegmentId,
+                                      taggingSegmentIds: provider.taggingSegmentIds,
+                                      onAcceptSuggestion: (suggestion) {
+                                        provider.assignSpeakerToConversation(
+                                          suggestion.speakerId,
+                                          suggestion.personId,
+                                          suggestion.personName,
+                                          [suggestion.segmentId],
+                                        );
+                                      },
+                                      editSegment: (segmentId, speakerId) {
+                                        final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                          context,
+                                          listen: false,
+                                        );
+                                        if (!connectivityProvider.isConnected) {
+                                          ConnectivityProvider.showNoInternetDialog(context);
+                                          return;
+                                        }
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.black,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                          ),
+                                          builder: (context) {
+                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                              (s) => s.speakerId == speakerId,
+                                              orElse: () => SpeakerLabelSuggestionEvent.empty(),
                                             );
-                                          },
-                                          editSegment: (segmentId, speakerId) {
-                                            final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                              context,
-                                              listen: false,
-                                            );
-                                            if (!connectivityProvider.isConnected) {
-                                              ConnectivityProvider.showNoInternetDialog(context);
-                                              return;
-                                            }
-                                            showModalBottomSheet(
-                                              context: context,
-                                              isScrollControlled: true,
-                                              backgroundColor: Colors.black,
-                                              shape: const RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                              ),
-                                              builder: (context) {
-                                                final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                                  (s) => s.speakerId == speakerId,
-                                                  orElse: () => SpeakerLabelSuggestionEvent.empty(),
-                                                );
-                                                return NameSpeakerBottomSheet(
-                                                  speakerId: speakerId,
-                                                  segmentId: segmentId,
-                                                  segments: provider.segments,
-                                                  suggestion: suggestion,
-                                                  onSpeakerAssigned:
-                                                      (speakerId, personId, personName, segmentIds) async {
-                                                    await provider.assignSpeakerToConversation(
-                                                      speakerId,
-                                                      personId,
-                                                      personName,
-                                                      segmentIds,
-                                                    );
-                                                  },
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                  speakerId,
+                                                  personId,
+                                                  personName,
+                                                  segmentIds,
                                                 );
                                               },
                                             );
                                           },
-                                        ),
+                                        );
+                                      },
+                                    ),
                             ),
                           ],
                         ),

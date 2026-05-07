@@ -1,7 +1,7 @@
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Orchestrates bidirectional Apple Reminders sync on foreground resume.
@@ -31,7 +31,7 @@ class AppleRemindersSyncService {
       final stats = await _performBidirectionalSync(syncData.syncedItems);
       _lastSyncTime = DateTime.now();
 
-      MixpanelManager().appleRemindersSyncCompleted(
+      AnalyticsManager().appleRemindersSyncCompleted(
         pendingExported: exported,
         syncedChecked: stats['checked'] ?? 0,
         completionsPulled: stats['completionsPulled'] ?? 0,

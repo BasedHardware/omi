@@ -8,7 +8,7 @@ import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class MobileApp extends StatelessWidget {
   const MobileApp({super.key});
@@ -81,7 +81,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
     if (_permissionsGranted!) {
       return const HomePageWrapper();
     }
-    MixpanelManager().permissionsInterstitialShown();
+    AnalyticsManager().permissionsInterstitialShown();
     return const PermissionsInterstitialPage();
   }
 }

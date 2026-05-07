@@ -27,7 +27,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -501,7 +501,7 @@ class MessageProvider extends ChangeNotifier {
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = false;
 
-    MixpanelManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
+    AnalyticsManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
@@ -576,7 +576,8 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
@@ -621,7 +622,7 @@ class MessageProvider extends ChangeNotifier {
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
     bool isPersonaChat = false;
 
-    MixpanelManager().chatMessageSent(
+    AnalyticsManager().chatMessageSent(
       message: text,
       includesFiles: uploadedFiles.isNotEmpty,
       numberOfFiles: uploadedFiles.length,
@@ -708,7 +709,8 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = l10n?.chatQuotaExceededReply ??
+            message.text =
+                l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             notifyListeners();
             return;

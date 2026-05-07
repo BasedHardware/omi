@@ -15,7 +15,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -40,9 +40,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
+  }) : position = initialPosition,
+       velocity = v.Vector3.zero(),
+       force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -285,7 +285,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     if (widget.trackOpenEvent) {
-      MixpanelManager().brainMapOpened();
+      AnalyticsManager().brainMapOpened();
     }
     _loadGraph();
   }
@@ -374,7 +374,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
-      MixpanelManager().brainMapRebuilt();
+      AnalyticsManager().brainMapRebuilt();
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
@@ -524,7 +524,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   Future<void> _shareGraph() async {
-    MixpanelManager().brainMapShareClicked();
+    AnalyticsManager().brainMapShareClicked();
     try {
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -821,7 +821,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
-          MixpanelManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
+          AnalyticsManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
         }
 
         // Find neighbors

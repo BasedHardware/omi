@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/pages/settings/ai_app_generator_page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class AiAppGeneratorBanner extends StatelessWidget {
   const AiAppGeneratorBanner({super.key});
@@ -16,7 +16,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
         HapticFeedback.lightImpact();
 
         // Track banner click
-        MixpanelManager().track('AI App Generator Banner Clicked');
+        AnalyticsManager().track('AI App Generator Banner Clicked');
 
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AiAppGeneratorPage()));
       },

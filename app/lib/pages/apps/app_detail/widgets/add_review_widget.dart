@@ -7,7 +7,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -243,10 +243,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                         var index = appsList.indexWhere((element) => element.id == widget.app.id);
                                         appsList[index] = widget.app;
                                         SharedPreferencesUtil().appsList = appsList;
-                                        MixpanelManager().appRated(widget.app.id.toString(), rating);
+                                        AnalyticsManager().appRated(widget.app.id.toString(), rating);
 
                                         // Track review added
-                                        MixpanelManager().appDetailReviewAdded(
+                                        AnalyticsManager().appDetailReviewAdded(
                                           appId: widget.app.id,
                                           rating: rating.toInt(),
                                           hasComment: reviewController.text.trim().isNotEmpty,

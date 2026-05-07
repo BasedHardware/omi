@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:webview_flutter/webview_flutter.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ReferralPage extends StatefulWidget {
@@ -20,7 +20,7 @@ class _ReferralPageState extends State<ReferralPage> {
   void initState() {
     super.initState();
 
-    MixpanelManager().pageOpened('Referral Program');
+    AnalyticsManager().pageOpened('Referral Program');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

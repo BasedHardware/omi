@@ -20,7 +20,7 @@ import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'widgets/capabilities_chips_widget.dart';
@@ -69,7 +69,7 @@ class _AddAppPageState extends State<AddAppPage> {
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(
                       onTap: () {
-                        MixpanelManager().pageOpened('App Submission Help');
+                        AnalyticsManager().pageOpened('App Submission Help');
                         launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
                       },
                       borderRadius: BorderRadius.circular(20),
@@ -723,14 +723,14 @@ class _AddAppPageState extends State<AddAppPage> {
                                         },
                                         onConfirm: () async {
                                           if (provider.makeAppPublic) {
-                                            MixpanelManager().publicAppSubmitted({
+                                            AnalyticsManager().publicAppSubmitted({
                                               'app_name': provider.appNameController.text,
                                               'app_category': provider.appCategory,
                                               'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
                                               'is_paid': provider.isPaid,
                                             });
                                           } else {
-                                            MixpanelManager().privateAppSubmitted({
+                                            AnalyticsManager().privateAppSubmitted({
                                               'app_name': provider.appNameController.text,
                                               'app_category': provider.appCategory,
                                               'app_capabilities': provider.capabilities.map((e) => e.id).toList(),

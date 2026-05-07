@@ -9,7 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
@@ -206,7 +206,7 @@ class ConversationProvider extends ChangeNotifier {
       fetchConversations();
     }
 
-    MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
+    AnalyticsManager().showDiscardedMemoriesToggled(showDiscardedConversations);
   }
 
   void toggleShortConversations() {
@@ -777,8 +777,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -791,8 +791,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -961,7 +961,7 @@ class ConversationProvider extends ChangeNotifier {
   void enterSelectionMode() {
     isSelectionModeActive = true;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeEntered();
+    AnalyticsManager().conversationMergeSelectionModeEntered();
     notifyListeners();
   }
 
@@ -969,7 +969,7 @@ class ConversationProvider extends ChangeNotifier {
   void exitSelectionMode() {
     isSelectionModeActive = false;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeExited();
+    AnalyticsManager().conversationMergeSelectionModeExited();
     notifyListeners();
   }
 
@@ -996,7 +996,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       selectedConversationIds.add(conversationId);
-      MixpanelManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
+      AnalyticsManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
     }
     notifyListeners();
   }
@@ -1042,10 +1042,10 @@ class ConversationProvider extends ChangeNotifier {
 
     // Call merge API
     final response = await mergeConversations(idsToMerge);
-    MixpanelManager().conversationMergeInitiated(idsToMerge);
+    AnalyticsManager().conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
-      MixpanelManager().conversationMergeFailed(idsToMerge);
+      AnalyticsManager().conversationMergeFailed(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
@@ -1069,7 +1069,7 @@ class ConversationProvider extends ChangeNotifier {
       mergingConversationIds.remove(id);
     }
 
-    MixpanelManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
+    AnalyticsManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {

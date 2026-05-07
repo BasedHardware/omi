@@ -15,7 +15,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/services/phone_call_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 enum TranscriptionStatus { idle, connecting, active, reconnecting, failed }
@@ -134,7 +134,7 @@ class PhoneCallProvider extends ChangeNotifier {
     _verificationStatus = null;
     notifyListeners();
 
-    MixpanelManager().phoneCallVerificationStarted();
+    AnalyticsManager().phoneCallVerificationStarted();
 
     var result = await api.verifyPhoneNumber(phoneNumber);
     _isLoading = false;
@@ -163,7 +163,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
     bool verified = result['verified'] == true;
     if (verified) {
-      MixpanelManager().phoneCallVerificationCompleted();
+      AnalyticsManager().phoneCallVerificationCompleted();
       await loadVerifiedNumbers();
     }
     return verified;
@@ -243,13 +243,13 @@ class PhoneCallProvider extends ChangeNotifier {
     if (!callStarted) {
       _callState = PhoneCallState.idle;
       _error = 'Failed to start call';
-      MixpanelManager().phoneCallFailed(error: 'Failed to start call');
+      AnalyticsManager().phoneCallFailed(error: 'Failed to start call');
       _disconnectTranscriptionSocket();
       notifyListeners();
       return false;
     }
 
-    MixpanelManager().phoneCallStarted(contactName: _contactName);
+    AnalyticsManager().phoneCallStarted(contactName: _contactName);
     return true;
   }
 
@@ -307,7 +307,7 @@ class PhoneCallProvider extends ChangeNotifier {
       _callStartTime = DateTime.now();
       _startDurationTimer();
       _connectTranscriptionSocket();
-      MixpanelManager().phoneCallConnected();
+      AnalyticsManager().phoneCallConnected();
     } else if (state == PhoneCallState.ended || state == PhoneCallState.failed) {
       _onCallEnded();
     }
@@ -347,7 +347,7 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _onCallEnded() {
-    MixpanelManager().phoneCallEnded(durationSeconds: _callDuration.inSeconds);
+    AnalyticsManager().phoneCallEnded(durationSeconds: _callDuration.inSeconds);
     _callState = PhoneCallState.ended;
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
@@ -437,8 +437,9 @@ class PhoneCallProvider extends ChangeNotifier {
     _transcriptionStatus = TranscriptionStatus.connecting;
     notifyListeners();
 
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,

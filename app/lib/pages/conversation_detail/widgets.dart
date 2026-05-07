@@ -28,7 +28,7 @@ import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -61,8 +61,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -178,7 +179,7 @@ class GetSummaryWidgets extends StatelessWidget {
         HapticFeedback.selectionClick();
 
         // Track folder chip clicked
-        MixpanelManager().conversationDetailFolderChipClicked(
+        AnalyticsManager().conversationDetailFolderChipClicked(
           conversationId: conversationId,
           currentFolderId: currentFolderId,
         );
@@ -197,7 +198,7 @@ class GetSummaryWidgets extends StatelessWidget {
           context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
 
           // Track conversation moved to folder
-          MixpanelManager().conversationMovedToFolder(
+          AnalyticsManager().conversationMovedToFolder(
             conversationId: conversationId,
             fromFolderId: currentFolderId,
             toFolderId: newFolderId,
@@ -323,7 +324,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  AnalyticsManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.private_.value,
@@ -353,7 +354,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  AnalyticsManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.shared.value,
@@ -495,7 +496,7 @@ class ActionItemsListWidget extends StatelessWidget {
                               duration: const Duration(seconds: 2),
                             ),
                           );
-                          MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
+                          AnalyticsManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
                         },
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                       ),
@@ -522,7 +523,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     var tempIdx = idx;
                     provider.deleteActionItem(idx);
                     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    MixpanelManager().deletedActionItem(provider.conversation);
+                    AnalyticsManager().deletedActionItem(provider.conversation);
                     // ScaffoldMessenger.of(context)
                     //     .showSnackBar(
                     //       SnackBar(
@@ -541,7 +542,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     //     .then((reason) {
                     //   if (reason != SnackBarClosedReason.action) {
                     //     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    //     MixpanelManager().deletedActionItem(provider.conversation);
+                    //     AnalyticsManager().deletedActionItem(provider.conversation);
                     //   }
                     // });
                   },
@@ -563,9 +564,9 @@ class ActionItemsListWidget extends StatelessWidget {
                                   context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
                                   setConversationActionItemState(provider.conversation.id, [idx], [value]);
                                   if (value) {
-                                    MixpanelManager().checkedActionItem(provider.conversation, idx);
+                                    AnalyticsManager().checkedActionItem(provider.conversation, idx);
                                   } else {
-                                    MixpanelManager().uncheckedActionItem(provider.conversation, idx);
+                                    AnalyticsManager().uncheckedActionItem(provider.conversation, idx);
                                   }
                                 }
                               },
@@ -824,15 +825,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context, content)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -840,7 +841,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
-                  MixpanelManager().pageOpened('App Detail');
+                  AnalyticsManager().pageOpened('App Detail');
                   await routeToPage(context, AppDetailPage(app: widget.app!));
                 }
               },

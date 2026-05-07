@@ -13,7 +13,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -174,11 +174,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
-                    ? const FaIcon(
-                        FontAwesomeIcons.chargingStation,
-                        color: Color.fromARGB(255, 0, 255, 8),
-                        size: 20,
-                      )
+                    ? const FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
                     : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
@@ -222,13 +218,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             chipValue: provider.connectedDevice == null
                 ? context.l10n.offline
                 : provider.havingNewFirmware
-                    ? context.l10n.available
-                    : null,
+                ? context.l10n.available
+                : null,
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
                     final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
-                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
+                    final isOpenGlass =
+                        provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');
@@ -296,8 +293,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page =
-                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                final page = context.read<DeviceProvider>().supportsMultiFileSync
+                    ? const AutoSyncPage()
+                    : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),
@@ -376,7 +374,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted && Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
               }
-              MixpanelManager().disconnectFriendClicked();
+              AnalyticsManager().disconnectFriendClicked();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),

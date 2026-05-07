@@ -9,7 +9,7 @@ import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/pages/announcements/feature_screen.dart';
 import 'package:omi/providers/announcement_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Service that handles announcement detection and display.
 /// Call this on app startup and after firmware updates.
@@ -54,13 +54,13 @@ class AnnouncementService {
         if (changelogs.isNotEmpty && context.mounted) {
           _isShowingAnnouncement = true;
           try {
-            MixpanelManager().changelogShown(
+            AnalyticsManager().changelogShown(
               changelogCount: changelogs.length,
               fromVersion: lastKnownVersion,
               toVersion: currentVersion,
             );
             await ChangelogSheet.show(context, changelogs);
-            MixpanelManager().changelogDismissed(changelogCount: changelogs.length);
+            AnalyticsManager().changelogDismissed(changelogCount: changelogs.length);
           } finally {
             _isShowingAnnouncement = false;
           }
@@ -125,7 +125,7 @@ class AnnouncementService {
         final typeName = announcement.type.toString().split('.').last;
 
         // Track announcement shown
-        MixpanelManager().announcementShown(
+        AnalyticsManager().announcementShown(
           announcementId: announcement.id,
           type: typeName,
           priority: announcement.display?.priority,
@@ -145,7 +145,7 @@ class AnnouncementService {
         }
 
         // Track dismissal and mark as dismissed
-        MixpanelManager().announcementDismissed(
+        AnalyticsManager().announcementDismissed(
           announcementId: announcement.id,
           type: typeName,
           ctaClicked: ctaClicked,

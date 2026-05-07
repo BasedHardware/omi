@@ -6,7 +6,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ActiveCallPage extends StatefulWidget {
@@ -46,13 +46,13 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   }
 
   void _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) {
-    MixpanelManager().phoneCallDialpadOpened();
+    AnalyticsManager().phoneCallDialpadOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _DtmfDialpadSheet(
         onDigitPressed: (digit) {
-          MixpanelManager().phoneCallDialpadDigitPressed(digit);
+          AnalyticsManager().phoneCallDialpadDigitPressed(digit);
           provider.sendDtmf(digit);
         },
       ),
@@ -80,7 +80,8 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress = provider.callState == PhoneCallState.active ||
+        bool isCallInProgress =
+            provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -97,7 +98,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                       if (isCallInProgress)
                         IconButton(
                           onPressed: () {
-                            MixpanelManager().track('Phone Call Minimized');
+                            AnalyticsManager().track('Phone Call Minimized');
                             Navigator.of(context).popUntil((route) => route.isFirst);
                           },
                           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
@@ -369,8 +370,10 @@ class _CallControls extends StatelessWidget {
                 Container(
                   width: 56,
                   height: 56,
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: isSpeakerOn ? Colors.white : Colors.grey[800]),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isSpeakerOn ? Colors.white : Colors.grey[800],
+                  ),
                   child: Icon(
                     isSpeakerOn ? Icons.volume_up : Icons.volume_down,
                     color: isSpeakerOn ? Colors.black : (isActive ? Colors.white : Colors.grey[600]),
@@ -378,8 +381,10 @@ class _CallControls extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(context.l10n.phoneSpeaker,
-                    style: TextStyle(fontSize: 12, color: isActive ? Colors.white : Colors.grey[600])),
+                Text(
+                  context.l10n.phoneSpeaker,
+                  style: TextStyle(fontSize: 12, color: isActive ? Colors.white : Colors.grey[600]),
+                ),
               ],
             ),
           ),
@@ -635,11 +640,7 @@ class _AudioRouteSheet extends StatelessWidget {
   final AudioRoute? selectedRoute;
   final void Function(AudioRoute route) onRouteSelected;
 
-  const _AudioRouteSheet({
-    required this.routes,
-    required this.selectedRoute,
-    required this.onRouteSelected,
-  });
+  const _AudioRouteSheet({required this.routes, required this.selectedRoute, required this.onRouteSelected});
 
   IconData _iconForType(AudioRouteType type) {
     switch (type) {
@@ -677,8 +678,10 @@ class _AudioRouteSheet extends StatelessWidget {
             decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.audioOutput,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
+          Text(
+            context.l10n.audioOutput,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+          ),
           const SizedBox(height: 12),
           ...routes.map((route) {
             bool isSelected = selectedRoute?.id == route.id;

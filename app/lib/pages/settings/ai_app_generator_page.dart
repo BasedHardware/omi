@@ -8,7 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -18,10 +18,7 @@ class AiAppGeneratorPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AiAppGeneratorProvider(),
-      child: const _AiAppGeneratorPageView(),
-    );
+    return ChangeNotifierProvider(create: (_) => AiAppGeneratorProvider(), child: const _AiAppGeneratorPageView());
   }
 }
 
@@ -40,7 +37,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().aiAppGeneratorPageOpened();
+    AnalyticsManager().aiAppGeneratorPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AiAppGeneratorProvider>();
       provider.setAppProvider(context.read<AppProvider>());
@@ -339,27 +336,27 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                    ? const Color(0xFF6366F1).withOpacity(0.2)
-                                    : const Color(0xFF2A2A2E),
+                                ? const Color(0xFF6366F1).withOpacity(0.2)
+                                : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
                           child: Center(
                             child: isCompleted
                                 ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                        ),
-                                      )
-                                    : Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
-                                      ),
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -1106,9 +1103,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Future<void> _generateApp(AiAppGeneratorProvider provider) async {
     FocusScope.of(context).unfocus();
-    MixpanelManager().aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
+    AnalyticsManager().aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
     await provider.generateApp(_promptController.text);
-    MixpanelManager().aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
+    AnalyticsManager().aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
   }
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {

@@ -14,7 +14,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -185,7 +185,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track transcript segment tap
     final conversationId = widget.conversation?.id ?? '';
-    MixpanelManager().transcriptSegmentTapped(
+    AnalyticsManager().transcriptSegmentTapped(
       conversationId: conversationId,
       segmentStartSeconds: segmentStartSeconds,
       seekPositionSeconds: filePosition,
@@ -195,7 +195,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Auto-play after seeking to segment
     if (_audioPlayer != null && !_audioPlayer!.playing) {
-      MixpanelManager().audioPlaybackStarted(
+      AnalyticsManager().audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -274,7 +274,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       final currentIndex = _audioPlayer!.currentIndex ?? 0;
       final combinedPosition = _getCombinedPosition(currentIndex, position);
 
-      MixpanelManager().audioPlaybackPaused(
+      AnalyticsManager().audioPlaybackPaused(
         conversationId: conversationId,
         positionSeconds: combinedPosition.inSeconds,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
@@ -283,7 +283,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       await _audioPlayer!.pause();
     } else {
       // Track play
-      MixpanelManager().audioPlaybackStarted(
+      AnalyticsManager().audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -727,7 +727,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track seek
     final conversationId = widget.conversation?.id ?? '';
-    MixpanelManager().audioPlaybackSeeked(conversationId: conversationId, toPositionSeconds: targetPosition.inSeconds);
+    AnalyticsManager().audioPlaybackSeeked(conversationId: conversationId, toPositionSeconds: targetPosition.inSeconds);
 
     await _audioPlayer!.seek(positionInTrack, index: targetIndex);
   }
