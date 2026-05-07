@@ -10,6 +10,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 class AnalyticsManager {
   static final AnalyticsManager _instance = AnalyticsManager._internal();
   static AnalyticsAdapter? _adapter;
+  static bool _initStarted = false;
   static final SharedPreferencesUtil _preferences = SharedPreferencesUtil();
   static final Map<String, DateTime> _pendingTimedEvents = {};
   static const Duration _pendingTimedEventTtl = Duration(hours: 1);
@@ -19,10 +20,12 @@ class AnalyticsManager {
   /// is the right behavior for environments without an analytics key (e.g.
   /// local dev with no PostHog token).
   static void configure(AnalyticsAdapter adapter) {
+    assert(!_initStarted, 'AnalyticsManager.configure() must be called before init().');
     _adapter = adapter;
   }
 
   static Future<void> init() async {
+    _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
     }
@@ -56,29 +59,35 @@ class AnalyticsManager {
   }
 
   setPeopleValues() {
-    PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-      setUserProperty('Notifications Enabled', _preferences.notificationsEnabled);
-      setUserProperty('Location Enabled', _preferences.locationEnabled);
-      setUserProperty('Apps Enabled Count', _preferences.enabledAppsCount);
-      setUserProperty('Apps Integrations Enabled Count', _preferences.enabledAppsIntegrationsCount);
-      setUserProperty('Speaker Profile', _preferences.hasSpeakerProfile);
-      setUserProperty('Calendar Enabled', _preferences.calendarEnabled);
-      setUserProperty('Primary Language', _preferences.userPrimaryLanguage);
-      setUserProperty('Authorized Storing Recordings', _preferences.permissionStoreRecordingsEnabled);
+    _setUserPropertiesBatch({
+      'Notifications Enabled': _preferences.notificationsEnabled,
+      'Location Enabled': _preferences.locationEnabled,
+      'Apps Enabled Count': _preferences.enabledAppsCount,
+      'Apps Integrations Enabled Count': _preferences.enabledAppsIntegrationsCount,
+      'Speaker Profile': _preferences.hasSpeakerProfile,
+      'Calendar Enabled': _preferences.calendarEnabled,
+      'Primary Language': _preferences.userPrimaryLanguage,
+      'Authorized Storing Recordings': _preferences.permissionStoreRecordingsEnabled,
     });
   }
 
   void setSubscriptionTier(String tier) => setUserProperty('Subscription Tier', tier);
 
-  setUserProperty(String key, dynamic value) =>
+  setUserProperty(String key, dynamic value) => _setUserPropertiesBatch({key: value});
+
+  void _setUserPropertiesBatch(Map<String, dynamic> properties) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
         if (adapter == null) return;
         final uid = _preferences.uid;
         if (uid.isEmpty) return;
-        final coerced = _coerceProperty(value);
-        if (coerced == null) return;
-        adapter.identify(userId: uid, userProperties: {key: coerced});
+        final coerced = <String, Object>{};
+        properties.forEach((k, v) {
+          final c = _coerceProperty(v);
+          if (c != null) coerced[k] = c;
+        });
+        if (coerced.isEmpty) return;
+        adapter.identify(userId: uid, userProperties: coerced);
       });
 
   void optInTracking() {
@@ -122,8 +131,10 @@ class AnalyticsManager {
   }
 
   void setNameAndEmail() {
-    setUserProperty('\$name', SharedPreferencesUtil().fullName);
-    setUserProperty('\$email', SharedPreferencesUtil().email);
+    _setUserPropertiesBatch({
+      '\$name': SharedPreferencesUtil().fullName,
+      '\$email': SharedPreferencesUtil().email,
+    });
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -482,9 +493,11 @@ class AnalyticsManager {
       track('Manual Memory Created', properties: getConversationEventProperties(conversation));
 
   void setUserProperties(String whatDoYouDo, String whereDoYouPlanToUseYourFriend, String ageRange) {
-    setUserProperty('What the user does', whatDoYouDo);
-    setUserProperty('Using Omi At', whereDoYouPlanToUseYourFriend);
-    setUserProperty('Age Range', ageRange);
+    _setUserPropertiesBatch({
+      'What the user does': whatDoYouDo,
+      'Using Omi At': whereDoYouPlanToUseYourFriend,
+      'Age Range': ageRange,
+    });
   }
 
   void reProcessConversation(ServerConversation conversation) =>
