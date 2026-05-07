@@ -636,30 +636,12 @@ class AnalyticsManager {
 
   // MARK: - Update Events
 
-  func updateCheckStarted() {
-    PostHogManager.shared.updateCheckStarted()
-  }
-
   func updateAvailable(version: String) {
     PostHogManager.shared.updateAvailable(version: version)
   }
 
   func updateInstalled(version: String) {
     PostHogManager.shared.updateInstalled(version: version)
-  }
-
-  func updateNotFound() {
-    PostHogManager.shared.updateNotFound()
-  }
-
-  func updateCheckFailed(
-    error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil,
-    underlyingDomain: String? = nil, underlyingCode: Int? = nil
-  ) {
-    PostHogManager.shared.updateCheckFailed(
-      error: error, errorDomain: errorDomain, errorCode: errorCode,
-      underlyingError: underlyingError, underlyingDomain: underlyingDomain,
-      underlyingCode: underlyingCode)
   }
 
   // MARK: - Notification Events

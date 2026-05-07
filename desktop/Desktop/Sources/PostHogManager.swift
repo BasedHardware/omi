@@ -607,10 +607,6 @@ extension PostHogManager {
 
     // MARK: - Update Events
 
-    func updateCheckStarted() {
-        track("Update Check Started")
-    }
-
     func updateAvailable(version: String) {
         track("Update Available", properties: [
             "version": version
@@ -621,22 +617,6 @@ extension PostHogManager {
         track("Update Installed", properties: [
             "version": version
         ])
-    }
-
-    func updateNotFound() {
-        track("Update Not Found")
-    }
-
-    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
-        var props: [String: Any] = [
-            "error": error,
-            "error_domain": errorDomain,
-            "error_code": errorCode
-        ]
-        if let underlyingError { props["underlying_error"] = underlyingError }
-        if let underlyingDomain { props["underlying_domain"] = underlyingDomain }
-        if let underlyingCode { props["underlying_code"] = underlyingCode }
-        track("Update Check Failed", properties: props)
     }
 
     // MARK: - Notification Events
