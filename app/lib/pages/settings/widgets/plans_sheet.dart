@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +19,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -68,7 +68,7 @@ class _PlansSheetState extends State<PlansSheet> {
       await userProvider.optInForTrainingData();
 
       // Track the opt-in submission
-      AnalyticsManager().trainingDataOptInSubmitted();
+      PlatformManager.instance.analytics.trainingDataOptInSubmitted();
 
       if (mounted) {
         AppSnackbar.showSnackbar(context.l10n.thankYouRequestUnderReview);
@@ -260,7 +260,7 @@ class _PlansSheetState extends State<PlansSheet> {
     setState(() => _isSwitchingToFree = true);
 
     try {
-      AnalyticsManager().track('Free Plan Selected', properties: {'source': 'plans_sheet'});
+      PlatformManager.instance.analytics.track('Free Plan Selected', properties: {'source': 'plans_sheet'});
 
       final freemiumService = FreemiumTranscriptionService();
       final readiness = await freemiumService.checkReadiness();
@@ -479,7 +479,7 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     }
 
-    AnalyticsManager().upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+    PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
 
     await _handleUpgrade(priceId);
   }
@@ -553,7 +553,7 @@ class _PlansSheetState extends State<PlansSheet> {
             // Quick reactivation - no charge now
             final message = sessionData['message'] as String? ?? context.l10n.subscriptionReactivatedDefault;
             AppSnackbar.showSnackbar(message);
-            AnalyticsManager().upgradeSucceeded();
+            PlatformManager.instance.analytics.upgradeSucceeded();
             await provider.fetchSubscription();
           }
           // Otherwise, this is a new subscription requiring checkout
@@ -564,9 +564,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
             if (checkoutResult == true) {
               AppSnackbar.showSnackbar(context.l10n.subscriptionSuccessfulCharged);
-              AnalyticsManager().upgradeSucceeded();
+              PlatformManager.instance.analytics.upgradeSucceeded();
             } else {
-              AnalyticsManager().upgradeCancelled();
+              PlatformManager.instance.analytics.upgradeCancelled();
             }
           } else {
             AppSnackbar.showSnackbarError(context.l10n.couldNotProcessSubscription);

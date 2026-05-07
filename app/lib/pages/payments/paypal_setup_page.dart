@@ -1,10 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/utils/other/validators.dart';
@@ -243,7 +243,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
           onPressed: () async {
             if (_formKey.currentState!.validate()) {
               setState(() => _isLoading = true);
-              AnalyticsManager().track(_isComplete ? 'Update PayPal Details' : 'Save PayPal Details');
+              PlatformManager.instance.analytics.track(_isComplete ? 'Update PayPal Details' : 'Save PayPal Details');
               await context.read<PaymentMethodProvider>().connectPayPal(
                 _emailController.text.trim(),
                 _paypalMeLinkController.text.trim(),

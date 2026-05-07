@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -35,7 +35,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
 
     if (await canLaunchUrl(reviewUrl)) {
       await launchUrl(reviewUrl, mode: LaunchMode.externalApplication);
-      AnalyticsManager().track('App Review Opened', properties: {'source': 'onboarding'});
+      PlatformManager.instance.analytics.track('App Review Opened', properties: {'source': 'onboarding'});
       await Future.delayed(const Duration(milliseconds: 500));
     } else {
       Logger.debug('Could not launch review URL');
@@ -51,7 +51,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
 
   Future<void> _skipReview() async {
     HapticFeedback.lightImpact();
-    AnalyticsManager().track('App Review Skipped', properties: {'source': 'onboarding'});
+    PlatformManager.instance.analytics.track('App Review Skipped', properties: {'source': 'onboarding'});
     widget.goNext();
   }
 

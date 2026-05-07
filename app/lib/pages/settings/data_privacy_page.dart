@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -6,7 +7,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/pages/settings/widgets/data_protection_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -24,7 +24,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().dataPrivacyPageOpened();
+    PlatformManager.instance.analytics.dataPrivacyPageOpened();
   }
 
   Widget _buildIntroSection(BuildContext context) {

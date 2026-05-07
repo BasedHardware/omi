@@ -59,7 +59,6 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -401,7 +400,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             // Track notification opened
-            AnalyticsManager().dailySummaryNotificationOpened(
+            PlatformManager.instance.analytics.dailySummaryNotificationOpened(
               summaryId: detailPageId,
               date: '', // Date not available in navigate_to, will be fetched when detail page loads
             );
@@ -707,7 +706,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        AnalyticsManager().bottomNavigationTabClicked('Chat');
+        PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
       },
       child: Container(
@@ -745,7 +744,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
-                AnalyticsManager().bottomNavigationTabClicked('Chat Voice');
+                PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
@@ -901,7 +900,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.clearDateFilter();
-                                                    AnalyticsManager().calendarFilterCleared();
+                                                    PlatformManager.instance.analytics.calendarFilterCleared();
                                                   },
                                                   child: Text(
                                                     context.l10n.removeFilter,
@@ -918,7 +917,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.filterConversationsByDate(selectedDate);
-                                                    AnalyticsManager().calendarFilterApplied(selectedDate);
+                                                    PlatformManager.instance.analytics.calendarFilterApplied(
+                                                      selectedDate,
+                                                    );
                                                   },
                                                   child: Text(
                                                     context.l10n.done,
@@ -984,7 +985,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           icon: const Icon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            AnalyticsManager().exportTasksBannerClicked();
+                            PlatformManager.instance.analytics.exportTasksBannerClicked();
                             Navigator.of(
                               context,
                             ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
@@ -1031,7 +1032,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.createAndShareYourApp,
                           iconWidget: const Icon(Icons.apps, size: 18),
                           onTap: () {
-                            AnalyticsManager().pageOpened('Submit App');
+                            PlatformManager.instance.analytics.pageOpened('Submit App');
                             routeToPage(context, const AddAppPage());
                           },
                         ),
@@ -1040,7 +1041,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.connectExternalAiTools,
                           iconWidget: const Icon(Icons.cable, size: 18),
                           onTap: () {
-                            AnalyticsManager().pageOpened('Add MCP Server');
+                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
                             routeToPage(context, const AddMcpServerPage());
                           },
                         ),
@@ -1071,7 +1072,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
-                    AnalyticsManager().pageOpened('Settings');
+                    PlatformManager.instance.analytics.pageOpened('Settings');
                     String language = SharedPreferencesUtil().userPrimaryLanguage;
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;

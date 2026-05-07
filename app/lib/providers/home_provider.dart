@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -6,7 +7,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Languages supported by Deepgram Nova-3 multi-language auto-detection.
@@ -191,7 +191,7 @@ class HomeProvider extends ChangeNotifier {
     setSpeakerProfile(res);
     SharedPreferencesUtil().hasSpeakerProfile = res;
     Logger.debug('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
-    AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
+    PlatformManager.instance.analytics.setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
 
     setIsLoading(false);
     notifyListeners();
@@ -220,7 +220,7 @@ class HomeProvider extends ChangeNotifier {
         hasSetPrimaryLanguage = true;
         SharedPreferencesUtil().userPrimaryLanguage = language;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
-        AnalyticsManager().setUserAttribute('Primary Language', language);
+        PlatformManager.instance.analytics.setUserAttribute('Primary Language', language);
       }
       Logger.debug('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
     } catch (e) {
@@ -246,7 +246,7 @@ class HomeProvider extends ChangeNotifier {
         hasSetPrimaryLanguage = true;
         SharedPreferencesUtil().userPrimaryLanguage = languageCode;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
-        AnalyticsManager().setUserAttribute('Primary Language', languageCode);
+        PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
 
         // Backend auto-sets single_language_mode — sync local state to match
         final singleLanguageMode = !multiLanguageSupported.contains(languageCode);

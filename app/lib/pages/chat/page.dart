@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +33,6 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -189,7 +189,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   void _openSettingsDrawer() {
     HapticFeedback.mediumImpact();
-    AnalyticsManager().pageOpened('Settings');
+    PlatformManager.instance.analytics.pageOpened('Settings');
     final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
     final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
     final previousModel = SharedPreferencesUtil().transcriptionModel;
@@ -1083,7 +1083,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   Future<void> _navigateToChatAppsPage() async {
     if (!mounted) return;
 
-    AnalyticsManager().pageOpened('Chat Apps');
+    PlatformManager.instance.analytics.pageOpened('Chat Apps');
     // Navigate to chat capability apps page
     await routeToPage(
       context,

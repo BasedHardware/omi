@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +11,6 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -470,7 +470,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     ? null
                     : () {
                         widget.editSegment?.call(data.id, data.speakerId);
-                        AnalyticsManager().tagSheetOpened();
+                        PlatformManager.instance.analytics.tagSheetOpened();
                       },
                 child: Column(
                   children: [
@@ -502,7 +502,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ? null
                                 : () {
                                     widget.editSegment?.call(data.id, data.speakerId);
-                                    AnalyticsManager().tagSheetOpened();
+                                    PlatformManager.instance.analytics.tagSheetOpened();
                                   },
                             child: Text(
                               data.speakerId == omiSpeakerId
@@ -682,7 +682,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               GestureDetector(
                 onTap: () {
                   widget.editSegment?.call(data.id, data.speakerId);
-                  AnalyticsManager().tagSheetOpened();
+                  PlatformManager.instance.analytics.tagSheetOpened();
                 },
                 child: Column(
                   children: [

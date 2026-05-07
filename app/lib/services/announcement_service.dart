@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -9,7 +10,6 @@ import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/pages/announcements/feature_screen.dart';
 import 'package:omi/providers/announcement_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Service that handles announcement detection and display.
 /// Call this on app startup and after firmware updates.
@@ -54,13 +54,13 @@ class AnnouncementService {
         if (changelogs.isNotEmpty && context.mounted) {
           _isShowingAnnouncement = true;
           try {
-            AnalyticsManager().changelogShown(
+            PlatformManager.instance.analytics.changelogShown(
               changelogCount: changelogs.length,
               fromVersion: lastKnownVersion,
               toVersion: currentVersion,
             );
             await ChangelogSheet.show(context, changelogs);
-            AnalyticsManager().changelogDismissed(changelogCount: changelogs.length);
+            PlatformManager.instance.analytics.changelogDismissed(changelogCount: changelogs.length);
           } finally {
             _isShowingAnnouncement = false;
           }
@@ -125,7 +125,7 @@ class AnnouncementService {
         final typeName = announcement.type.toString().split('.').last;
 
         // Track announcement shown
-        AnalyticsManager().announcementShown(
+        PlatformManager.instance.analytics.announcementShown(
           announcementId: announcement.id,
           type: typeName,
           priority: announcement.display?.priority,
@@ -145,7 +145,7 @@ class AnnouncementService {
         }
 
         // Track dismissal and mark as dismissed
-        AnalyticsManager().announcementDismissed(
+        PlatformManager.instance.analytics.announcementDismissed(
           announcementId: announcement.id,
           type: typeName,
           ctaClicked: ctaClicked,

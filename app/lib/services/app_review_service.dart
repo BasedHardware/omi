@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,7 +8,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class AppReviewService {
@@ -158,7 +158,7 @@ class AppReviewService {
 
                         if (await canLaunchUrl(reviewUrl)) {
                           await launchUrl(reviewUrl, mode: LaunchMode.externalApplication);
-                          AnalyticsManager().track('App Review Opened');
+                          PlatformManager.instance.analytics.track('App Review Opened');
                           await Future.delayed(const Duration(milliseconds: 500));
                         } else {
                           Logger.debug('Could not launch review URL');
@@ -186,7 +186,7 @@ class AppReviewService {
                     TextButton(
                       onPressed: () {
                         HapticFeedback.lightImpact();
-                        AnalyticsManager().track('App Review Skipped');
+                        PlatformManager.instance.analytics.track('App Review Skipped');
                         Navigator.of(context).pop();
                       },
                       child: const Text('Maybe later', style: TextStyle(color: Colors.grey, fontSize: 16)),

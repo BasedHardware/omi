@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
@@ -9,7 +10,6 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -97,20 +97,20 @@ class AppProvider extends BaseProvider {
     // Track filter changes
     if (filterGroup == 'Apps') {
       if (filter == 'My Apps') {
-        AnalyticsManager().appsFilterMyApps(enabled: isAdding);
+        PlatformManager.instance.analytics.appsFilterMyApps(enabled: isAdding);
       } else if (filter == 'Installed Apps') {
-        AnalyticsManager().appsFilterInstalled(enabled: isAdding);
+        PlatformManager.instance.analytics.appsFilterInstalled(enabled: isAdding);
       }
     } else if (filterGroup == 'Rating') {
       if (isAdding) {
         String ratingStr = filter.replaceAll('+ Stars', '').trim();
         int? rating = int.tryParse(ratingStr);
         if (rating != null) {
-          AnalyticsManager().appsFilterRating(rating: rating);
+          PlatformManager.instance.analytics.appsFilterRating(rating: rating);
         }
       }
     } else if (filterGroup == 'Sort' && isAdding) {
-      AnalyticsManager().appsSortChanged(sortOption: filter);
+      PlatformManager.instance.analytics.appsSortChanged(sortOption: filter);
     }
 
     notifyListeners();
@@ -131,7 +131,7 @@ class AppProvider extends BaseProvider {
 
     // Track category filter
     if (isAdding) {
-      AnalyticsManager().appsFilterCategory(category: category.title);
+      PlatformManager.instance.analytics.appsFilterCategory(category: category.title);
     }
 
     notifyListeners();
@@ -152,7 +152,7 @@ class AppProvider extends BaseProvider {
 
     // Track capability filter
     if (isAdding) {
-      AnalyticsManager().appsFilterCapability(capability: capability.title);
+      PlatformManager.instance.analytics.appsFilterCapability(capability: capability.title);
     }
 
     notifyListeners();
@@ -284,7 +284,10 @@ class AppProvider extends BaseProvider {
 
         // Track search if there was a query
         if (queryBeingSearched.isNotEmpty) {
-          AnalyticsManager().appsSearched(searchTerm: queryBeingSearched, resultCount: result.apps.length);
+          PlatformManager.instance.analytics.appsSearched(
+            searchTerm: queryBeingSearched,
+            resultCount: result.apps.length,
+          );
         }
       }
     } catch (e) {
@@ -803,12 +806,12 @@ class AppProvider extends BaseProvider {
               ? context.l10n.errorActivatingAppIntegration
               : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
-          AnalyticsManager().appEnabled(appId);
+          PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
         await disableAppServer(appId);
         success = true;
-        AnalyticsManager().appDisabled(appId);
+        PlatformManager.instance.analytics.appDisabled(appId);
       }
     } catch (e) {
       print('Error toggling app $appId: $e');

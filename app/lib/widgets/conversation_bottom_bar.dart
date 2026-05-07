@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,7 +15,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -185,7 +185,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track transcript segment tap
     final conversationId = widget.conversation?.id ?? '';
-    AnalyticsManager().transcriptSegmentTapped(
+    PlatformManager.instance.analytics.transcriptSegmentTapped(
       conversationId: conversationId,
       segmentStartSeconds: segmentStartSeconds,
       seekPositionSeconds: filePosition,
@@ -195,7 +195,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Auto-play after seeking to segment
     if (_audioPlayer != null && !_audioPlayer!.playing) {
-      AnalyticsManager().audioPlaybackStarted(
+      PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -274,7 +274,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       final currentIndex = _audioPlayer!.currentIndex ?? 0;
       final combinedPosition = _getCombinedPosition(currentIndex, position);
 
-      AnalyticsManager().audioPlaybackPaused(
+      PlatformManager.instance.analytics.audioPlaybackPaused(
         conversationId: conversationId,
         positionSeconds: combinedPosition.inSeconds,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
@@ -283,7 +283,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       await _audioPlayer!.pause();
     } else {
       // Track play
-      AnalyticsManager().audioPlaybackStarted(
+      PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -727,7 +727,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track seek
     final conversationId = widget.conversation?.id ?? '';
-    AnalyticsManager().audioPlaybackSeeked(conversationId: conversationId, toPositionSeconds: targetPosition.inSeconds);
+    PlatformManager.instance.analytics.audioPlaybackSeeked(
+      conversationId: conversationId,
+      toPositionSeconds: targetPosition.inSeconds,
+    );
 
     await _audioPlayer!.seek(positionInTrack, index: targetIndex);
   }

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:permission_handler/permission_handler.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -185,7 +185,7 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                       }
                                     }
                                   });
-                                  AnalyticsManager().permissionsInterstitialCompleted();
+                                  PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                                   provider.setLoading(false);
                                   if (context.mounted) {
                                     _goHome(context);

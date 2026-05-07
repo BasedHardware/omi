@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -23,7 +24,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -177,7 +177,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             selectedTab = ConversationTab.summary;
         }
         if (tabName != null) {
-          AnalyticsManager().conversationDetailTabChanged(tabName);
+          PlatformManager.instance.analytics.conversationDetailTabChanged(tabName);
         }
         if (_searchQuery.isNotEmpty) {
           _updateSearchResults();
@@ -314,7 +314,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
     // Track the menu action selection
-    AnalyticsManager().conversationThreeDotsMenuActionSelected(conversationId: provider.conversation.id, action: value);
+    PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
+      conversationId: provider.conversation.id,
+      action: value,
+    );
 
     switch (value) {
       case 'copy_transcript':
@@ -419,7 +422,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     final startTime = DateTime.now();
 
     // Track share start
-    AnalyticsManager().audioShareStarted(conversationId: provider.conversation.id, audioFileCount: audioFileCount);
+    PlatformManager.instance.analytics.audioShareStarted(
+      conversationId: provider.conversation.id,
+      audioFileCount: audioFileCount,
+    );
 
     AudioDownloadState currentState = AudioDownloadState.preparing;
     double currentProgress = 0.0;
@@ -481,7 +487,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
-        AnalyticsManager().audioShareCompleted(
+        PlatformManager.instance.analytics.audioShareCompleted(
           conversationId: provider.conversation.id,
           audioFileCount: audioFileCount,
           wasCombined: audioFileCount > 1,
@@ -495,7 +501,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         // Track failure (no audio available)
-        AnalyticsManager().audioShareFailed(
+        PlatformManager.instance.analytics.audioShareFailed(
           conversationId: provider.conversation.id,
           errorMessage: 'No audio files available',
         );
@@ -504,7 +510,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       Logger.debug('Error downloading audio: $e');
 
       // Track failure
-      AnalyticsManager().audioShareFailed(conversationId: provider.conversation.id, errorMessage: e.toString());
+      PlatformManager.instance.analytics.audioShareFailed(
+        conversationId: provider.conversation.id,
+        errorMessage: e.toString(),
+      );
 
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});
@@ -663,7 +672,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                           provider.conversation,
                                         );
                                         // Track star/unstar action
-                                        AnalyticsManager().conversationStarToggled(
+                                        PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
                                           starred: newStarredState,
                                           source: 'detail_page_button',
@@ -729,7 +738,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       }
                                       provider.updateVisibilityLocally(ConversationVisibility.shared);
                                       // Track share event
-                                      AnalyticsManager().conversationShared(
+                                      PlatformManager.instance.analytics.conversationShared(
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
@@ -788,7 +797,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     _searchFocusNode.unfocus();
                                   } else {
                                     _searchFocusNode.requestFocus();
-                                    AnalyticsManager().conversationDetailSearchClicked(
+                                    PlatformManager.instance.analytics.conversationDetailSearchClicked(
                                       conversationId: provider.conversation.id,
                                     );
                                   }
@@ -853,7 +862,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             buttonBuilder: (context, showMenu) => GestureDetector(
                               onTap: () {
                                 HapticFeedback.mediumImpact();
-                                AnalyticsManager().conversationThreeDotsMenuOpened(
+                                PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
                                   conversationId: provider.conversation.id,
                                 );
                                 showMenu();
@@ -1251,7 +1260,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   if (value.isNotEmpty) {
                                     // Track search query with results
                                     final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                    AnalyticsManager().conversationDetailSearchQueryEntered(
+                                    PlatformManager.instance.analytics.conversationDetailSearchQueryEntered(
                                       conversationId: provider.conversation.id,
                                       query: value,
                                       resultsCount: _totalSearchResults,
@@ -1326,10 +1335,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             }
                             return true;
                           },
-                          onEditStarted: (_) => AnalyticsManager().editSummaryStarted(),
-                          onEditCancelled: (_) => AnalyticsManager().editSummaryCancelled(),
+                          onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
+                          onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
                           onSaveSummary: (appId, newContent) {
-                            AnalyticsManager().editSummarySaved();
+                            PlatformManager.instance.analytics.editSummarySaved();
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
@@ -1435,7 +1444,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 final speakerName =
                     person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
-                AnalyticsManager().editSegmentTextStarted();
+                PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
                 showEditSegmentBottomSheet(
                   context,
@@ -1443,11 +1452,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   speakerName: speakerName,
                   onSave: (newText) {
                     saved = true;
-                    AnalyticsManager().editSegmentTextSaved();
+                    PlatformManager.instance.analytics.editSegmentTextSaved();
                     provider.saveEditingSegmentText(segmentIndex, newText);
                   },
                   onDismissed: () {
-                    if (!saved) AnalyticsManager().editSegmentTextCancelled();
+                    if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
                   },
                 );
               },
@@ -1482,7 +1491,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               }
                             }
 
-                            AnalyticsManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                            PlatformManager.instance.analytics.taggedSegment(
+                              finalPersonId == 'user' ? 'User' : 'User Person',
+                            );
 
                             for (final segmentId in segmentIds) {
                               final segmentIndex = provider.conversation.transcriptSegments.indexWhere(
@@ -1655,14 +1666,14 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       );
       if (currentIndex != -1) {
         if (newValue) {
-          AnalyticsManager().checkedActionItem(provider.conversation, currentIndex);
+          PlatformManager.instance.analytics.checkedActionItem(provider.conversation, currentIndex);
 
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
             _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
           }
         } else {
-          AnalyticsManager().uncheckedActionItem(provider.conversation, currentIndex);
+          PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);
         }
       }
     } catch (e) {

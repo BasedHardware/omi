@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -15,7 +16,6 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -181,16 +181,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   void _openSelectedAppSettings() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
     if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
-      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'asana');
+      PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'asana');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
     } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
-      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'clickup');
+      PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'clickup');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
     } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
-      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'todoist');
+      PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'todoist');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
     } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
-      AnalyticsManager().taskIntegrationSettingsOpened(appName: 'google_tasks');
+      PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'google_tasks');
       Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
     }
   }
@@ -215,7 +215,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           // Save connected status to backend so auto-sync works
           await provider.saveConnectionDetails(app.key, {'connected': true});
           await provider.setSelectedApp(app);
-          AnalyticsManager().taskIntegrationEnabled(appName: app.key, success: true);
+          PlatformManager.instance.analytics.taskIntegrationEnabled(appName: app.key, success: true);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
           if (mounted) {
@@ -255,7 +255,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            AnalyticsManager().taskIntegrationAuthFailed(appName: 'todoist');
+            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'todoist');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -289,7 +289,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            AnalyticsManager().taskIntegrationAuthFailed(appName: 'asana');
+            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'asana');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -323,7 +323,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            AnalyticsManager().taskIntegrationAuthFailed(appName: 'google_tasks');
+            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'google_tasks');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -357,7 +357,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
-            AnalyticsManager().taskIntegrationAuthFailed(appName: 'clickup');
+            PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'clickup');
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

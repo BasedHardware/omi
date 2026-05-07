@@ -13,7 +13,6 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -180,7 +179,7 @@ class AuthenticationProvider extends BaseProvider {
       }
       String newUid = user.uid;
       SharedPreferencesUtil().uid = newUid;
-      AnalyticsManager().identify();
+      PlatformManager.instance.analytics.identify();
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError(

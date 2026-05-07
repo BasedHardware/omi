@@ -1,10 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -39,7 +39,7 @@ class OutOfCreditsWidget extends StatelessWidget {
               const SizedBox(width: 12),
               TextButton(
                 onPressed: () {
-                  AnalyticsManager().paywallOpened('Out of Credits Banner');
+                  PlatformManager.instance.analytics.paywallOpened('Out of Credits Banner');
                   routeToPage(context, const UsagePage());
                 },
                 child: Text(

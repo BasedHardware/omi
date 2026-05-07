@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,7 +6,6 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -37,13 +37,13 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final integrationProvider = context.read<IntegrationProvider>();
 
-    AnalyticsManager().integrationConnectAttempted(integrationName: 'Apple Health');
+    PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: 'Apple Health');
     final result = await service.connect();
 
     if (!mounted) return;
 
     if (result.isSuccess) {
-      AnalyticsManager().integrationConnectSucceeded(integrationName: 'Apple Health');
+      PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: 'Apple Health');
       final synced = await service.syncHealthDataToBackend(days: 7);
       if (synced) {
         Logger.debug('✓ Apple Health data synced to backend');
@@ -54,7 +54,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(SnackBar(content: Text(result.message), duration: const Duration(seconds: 2)));
     } else {
-      AnalyticsManager().integrationConnectFailed(integrationName: 'Apple Health');
+      PlatformManager.instance.analytics.integrationConnectFailed(integrationName: 'Apple Health');
       if (result == AppleHealthResult.permissionDenied) {
         _showDeniedDialog();
       } else {
@@ -126,7 +126,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
     if (!mounted) return;
     if (success) {
-      AnalyticsManager().integrationDisconnected(integrationName: 'Apple Health');
+      PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
       scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),

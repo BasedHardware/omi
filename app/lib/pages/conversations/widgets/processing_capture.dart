@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,7 +14,6 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -54,7 +54,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         return GestureDetector(
           onTap: () async {
             if (provider.segments.isEmpty && provider.photos.isEmpty) return;
-            AnalyticsManager().liveTranscriptCardClicked(
+            PlatformManager.instance.analytics.liveTranscriptCardClicked(
               hasSegments: provider.segments.isNotEmpty,
               hasPhotos: provider.photos.isNotEmpty,
               segmentCount: provider.segments.length,
@@ -108,14 +108,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           _isPhoneMicPaused = true;
         });
         await provider.stopStreamRecording();
-        AnalyticsManager().phoneMicRecordingStopped();
+        PlatformManager.instance.analytics.phoneMicRecordingStopped();
       } else if (_isPhoneMicPaused) {
         // Resume recording
         setState(() {
           _isPhoneMicPaused = false;
         });
         await provider.streamRecording();
-        AnalyticsManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
         Logger.debug('initialising, have to wait');
       } else {
@@ -123,7 +123,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           _isPhoneMicPaused = false;
         });
         await provider.streamRecording();
-        AnalyticsManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
     }
   }
@@ -399,13 +399,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   HapticFeedback.heavyImpact();
                   await Future.delayed(const Duration(milliseconds: 80));
                   HapticFeedback.lightImpact();
-                  AnalyticsManager().recordingMuteToggled(
+                  PlatformManager.instance.analytics.recordingMuteToggled(
                     isMuted: true,
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
                 } else {
                   HapticFeedback.mediumImpact();
-                  AnalyticsManager().recordingMuteToggled(
+                  PlatformManager.instance.analytics.recordingMuteToggled(
                     isMuted: false,
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );

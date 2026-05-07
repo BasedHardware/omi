@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,7 +24,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -1009,7 +1009,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (!isIOS) {
         _checkLocalModel();
       }
-      AnalyticsManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
+      PlatformManager.instance.analytics.transcriptionSourceSelected(
+        source: isIOS ? 'custom_on_device_ios' : 'custom_on_device',
+      );
     });
   }
 
@@ -1040,7 +1042,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 onTap: () {
                   setState(() {
                     _useCustomStt = false;
-                    AnalyticsManager().transcriptionSourceSelected(source: 'omi');
+                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
                   });
                 },
               ),
@@ -1067,7 +1069,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     }
 
                     // Track source selection
-                    AnalyticsManager().transcriptionSourceSelected(source: 'custom_cloud');
+                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
                   });
                 },
               ),
@@ -1237,7 +1239,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   });
 
                   // Track which provider was selected (name only, no keys/URLs)
-                  AnalyticsManager().transcriptionProviderSelected(provider: provider.name);
+                  PlatformManager.instance.analytics.transcriptionProviderSelected(provider: provider.name);
 
                   _validateAndSetError();
                 }

@@ -1,9 +1,9 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'device_onboarding_page.dart';
 
@@ -53,7 +53,7 @@ class _DeviceOnboardingWrapperState extends State<DeviceOnboardingWrapper> with 
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
     updateUserOnboardingState(completed: true);
-    AnalyticsManager().onboardingStepCompleted('Device Onboarding Completed');
+    PlatformManager.instance.analytics.onboardingStepCompleted('Device Onboarding Completed');
     PaintingBinding.instance.imageCache.clear();
     routeToPage(context, const HomePageWrapper(), replace: true);
   }
@@ -73,7 +73,7 @@ class _DeviceOnboardingWrapperState extends State<DeviceOnboardingWrapper> with 
               isFirstSlide: i == 0,
               isLastSlide: i == _totalSlides - 1,
               onNext: () {
-                AnalyticsManager().onboardingStepCompleted('Device Onboarding Slide ${i + 1}');
+                PlatformManager.instance.analytics.onboardingStepCompleted('Device Onboarding Slide ${i + 1}');
                 if (i == _totalSlides - 1) {
                   // Last slide, complete onboarding
                   _completeOnboarding();

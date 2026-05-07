@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,7 +17,6 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -99,7 +99,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
             if (widget.conversation.isLocked) {
               if (!context.read<UsageProvider>().showSubscriptionUI) return;
-              AnalyticsManager().paywallOpened('Conversation List Item');
+              PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
               routeToPage(context, const UsagePage(showUpgradeDialog: true));
               return;
             }
@@ -110,14 +110,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
             String searchQuery = provider.previousQuery;
             if (searchQuery.isNotEmpty) {
               // Track conversation opened from search
-              AnalyticsManager().conversationOpenedFromSearch(
+              PlatformManager.instance.analytics.conversationOpenedFromSearch(
                 conversation: widget.conversation,
                 searchQuery: searchQuery,
                 conversationIndexInResults: widget.conversationIdx,
               );
             } else {
               // Track normal conversation list item click with time difference
-              AnalyticsManager().conversationListItemClickedWithTimeDifference(
+              PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
                 conversation: widget.conversation,
                 conversationIndex: widget.conversationIdx,
                 hoursSinceConversation: hoursSinceConversation,
@@ -292,7 +292,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         onDismissed: (direction) async {
                           var conversation = widget.conversation;
                           var conversationIdx = widget.conversationIdx;
-                          AnalyticsManager().conversationSwipedToDelete(conversation);
+                          PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
                           provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                         },
                         child: Padding(

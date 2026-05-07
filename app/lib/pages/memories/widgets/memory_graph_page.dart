@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -285,7 +285,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     if (widget.trackOpenEvent) {
-      AnalyticsManager().brainMapOpened();
+      PlatformManager.instance.analytics.brainMapOpened();
     }
     _loadGraph();
   }
@@ -374,7 +374,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
-      AnalyticsManager().brainMapRebuilt();
+      PlatformManager.instance.analytics.brainMapRebuilt();
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
@@ -524,7 +524,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   Future<void> _shareGraph() async {
-    AnalyticsManager().brainMapShareClicked();
+    PlatformManager.instance.analytics.brainMapShareClicked();
     try {
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -821,7 +821,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
-          AnalyticsManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
+          PlatformManager.instance.analytics.brainMapNodeClicked(node.id, node.label, node.nodeType);
         }
 
         // Find neighbors

@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Compact call banner shown on the home screen when a phone call is active.
@@ -28,7 +28,7 @@ class ActiveCallBanner extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            AnalyticsManager().track('Phone Call Banner Tapped');
+            PlatformManager.instance.analytics.track('Phone Call Banner Tapped');
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
           },
           child: Container(
@@ -336,7 +336,7 @@ class ActiveCallTopBar extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            AnalyticsManager().track('Phone Call Top Bar Tapped');
+            PlatformManager.instance.analytics.track('Phone Call Top Bar Tapped');
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
           },
           child: Container(

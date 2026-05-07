@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
@@ -202,7 +202,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return;
     }
 
-    AnalyticsManager().goalAddButtonTapped(source: 'home');
+    PlatformManager.instance.analytics.goalAddButtonTapped(source: 'home');
     HapticFeedback.lightImpact();
     _titleController.clear();
     _currentController.text = '0';
@@ -277,7 +277,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             return GestureDetector(
                               onTap: () {
                                 HapticFeedback.selectionClick();
-                                AnalyticsManager().goalEmojiSelected(emoji: emoji);
+                                PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
                                 setSheetState(() => _selectedEmoji = emoji);
                               },
                               child: Container(
@@ -391,7 +391,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       Expanded(
                         child: TextButton(
                           onPressed: () async {
-                            AnalyticsManager().goalDeleted(goalId: existingGoal.id, source: 'home', method: 'button');
+                            PlatformManager.instance.analytics.goalDeleted(
+                              goalId: existingGoal.id,
+                              source: 'home',
+                              method: 'button',
+                            );
                             Navigator.pop(context);
                             await _deleteGoal(existingGoal);
                           },
@@ -442,7 +446,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       // Update existing goal via provider
       await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
 
-      AnalyticsManager().goalUpdated(goalId: existingGoal.id, source: 'home');
+      PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
       // Save emoji
       setState(() {
         _goalEmojis[existingGoal.id] = _selectedEmoji;
@@ -458,7 +462,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       );
 
       if (created != null) {
-        AnalyticsManager().goalCreated(
+        PlatformManager.instance.analytics.goalCreated(
           goalId: created.id,
           titleLength: title.length,
           targetValue: target,
@@ -568,12 +572,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       onDismissed: (direction) async {
-        AnalyticsManager().goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
         await _deleteGoal(goal);
       },
       child: GestureDetector(
         onTap: () {
-          AnalyticsManager().goalItemTappedForEdit(goalId: goal.id, source: 'home');
+          PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
           _editGoal(goal);
         },
         child: Container(
@@ -629,7 +633,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
                                 onChanged: (value) => _updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) {
-                                  AnalyticsManager().goalProgressChanged(
+                                  PlatformManager.instance.analytics.goalProgressChanged(
                                     goalId: goal.id,
                                     oldValue: goal.currentValue,
                                     newValue: value,

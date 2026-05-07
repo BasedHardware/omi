@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
@@ -6,7 +7,6 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -50,7 +50,11 @@ class ActionItemExportService {
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'todoist');
-      AnalyticsManager().actionItemExported(actionItemId: item.id, appName: 'Todoist', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Todoist',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Todoist bulk export failed for ${item.id}: $e');
@@ -68,7 +72,11 @@ class ActionItemExportService {
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'asana');
-      AnalyticsManager().actionItemExported(actionItemId: item.id, appName: 'Asana', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Asana',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Asana bulk export failed for ${item.id}: $e');
@@ -86,7 +94,11 @@ class ActionItemExportService {
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'google_tasks');
-      AnalyticsManager().actionItemExported(actionItemId: item.id, appName: 'Google Tasks', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Google Tasks',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Google Tasks bulk export failed for ${item.id}: $e');
@@ -104,7 +116,11 @@ class ActionItemExportService {
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'clickup');
-      AnalyticsManager().actionItemExported(actionItemId: item.id, appName: 'ClickUp', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'ClickUp',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('ClickUp bulk export failed for ${item.id}: $e');
@@ -136,7 +152,11 @@ class ActionItemExportService {
         exportPlatform: 'apple_reminders',
         appleReminderId: calendarItemId,
       );
-      AnalyticsManager().actionItemExported(actionItemId: item.id, appName: 'Apple Reminders', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Apple Reminders',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Apple Reminders bulk export failed for ${item.id}: $e');

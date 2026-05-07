@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,7 +7,6 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ActiveCallPage extends StatefulWidget {
@@ -46,13 +46,13 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   }
 
   void _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) {
-    AnalyticsManager().phoneCallDialpadOpened();
+    PlatformManager.instance.analytics.phoneCallDialpadOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _DtmfDialpadSheet(
         onDigitPressed: (digit) {
-          AnalyticsManager().phoneCallDialpadDigitPressed(digit);
+          PlatformManager.instance.analytics.phoneCallDialpadDigitPressed(digit);
           provider.sendDtmf(digit);
         },
       ),
@@ -98,7 +98,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                       if (isCallInProgress)
                         IconButton(
                           onPressed: () {
-                            AnalyticsManager().track('Phone Call Minimized');
+                            PlatformManager.instance.analytics.track('Phone Call Minimized');
                             Navigator.of(context).popUntil((route) => route.isFirst);
                           },
                           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),

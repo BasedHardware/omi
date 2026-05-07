@@ -1,10 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class UsageProvider with ChangeNotifier {
@@ -119,7 +119,7 @@ class UsageProvider with ChangeNotifier {
     try {
       _subscription = await getUserSubscription();
       if (_subscription != null) {
-        AnalyticsManager().setSubscriptionTier(_subscription!.subscription.plan.name);
+        PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
       }
     } catch (e) {
       _error = 'Failed to load subscription data. Please try again later.';

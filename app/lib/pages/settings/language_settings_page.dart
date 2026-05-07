@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -7,7 +8,6 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LanguageSettingsPage extends StatefulWidget {
@@ -322,7 +322,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                                       );
                                       if (success) {
                                         captureProvider.onRecordProfileSettingChanged();
-                                        AnalyticsManager().languageChanged(entry.value);
+                                        PlatformManager.instance.analytics.languageChanged(entry.value);
                                       }
                                     } finally {
                                       if (mounted) {
@@ -348,7 +348,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    AnalyticsManager().pageOpened('Language Settings');
+    PlatformManager.instance.analytics.pageOpened('Language Settings');
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),

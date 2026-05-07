@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,7 +25,6 @@ import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -115,7 +115,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (enabled) {
       prefs.enableApp(app.id);
-      AnalyticsManager().appEnabled(app.id);
+      PlatformManager.instance.analytics.appEnabled(app.id);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -159,7 +159,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
         // Track subscription cancellation
-        AnalyticsManager().appDetailSubscriptionCancelled(appId: widget.app.id, appName: widget.app.name);
+        PlatformManager.instance.analytics.appDetailSubscriptionCancelled(
+          appId: widget.app.id,
+          appName: widget.app.name,
+        );
 
         await _loadSubscriptionData();
 
@@ -201,7 +204,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
 
     // Track app detail page viewed
-    AnalyticsManager().appDetailViewed(
+    PlatformManager.instance.analytics.appDetailViewed(
       appId: app.id,
       appName: app.name,
       category: app.category,
@@ -289,7 +292,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future _checkPaymentStatus(String appId) async {
-    AnalyticsManager().appPurchaseStarted(appId);
+    PlatformManager.instance.analytics.appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
       if (mounted) {
@@ -300,9 +303,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);
         if (enabled) {
-          AnalyticsManager().appPurchaseCompleted(appId);
+          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
-          AnalyticsManager().appEnabled(appId);
+          PlatformManager.instance.analytics.appEnabled(appId);
 
           if (!mounted) {
             timer.cancel();
@@ -614,7 +617,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               }
 
                               // Track chat button clicked
-                              AnalyticsManager().appDetailChatClicked(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
 
                               // Navigate directly to chat page
                               if (mounted) {
@@ -672,10 +675,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              AnalyticsManager().track('App Shared', properties: {'appId': app.id});
+                              PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
 
                               // Track share button clicked
-                              AnalyticsManager().appDetailShared(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
@@ -851,7 +854,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                             text: "Subscribe",
                                             onPressed: () async {
                                               // Track subscribe button clicked
-                                              AnalyticsManager().appDetailSubscribeClicked(
+                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
                                                 appId: app.id,
                                                 appName: app.name,
                                               );
@@ -1192,7 +1195,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           return GestureDetector(
                             onTap: () {
                               // Track preview image viewed
-                              AnalyticsManager().appDetailPreviewImageViewed(appId: app.id, imageIndex: index);
+                              PlatformManager.instance.analytics.appDetailPreviewImageViewed(
+                                appId: app.id,
+                                imageIndex: index,
+                              );
 
                               Navigator.push(
                                 context,
@@ -1341,7 +1347,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               onTap: () {
                                 if (app.reviews.isNotEmpty) {
                                   // Track reviews page opened
-                                  AnalyticsManager().appDetailReviewsOpened(
+                                  PlatformManager.instance.analytics.appDetailReviewsOpened(
                                     appId: app.id,
                                     reviewCount: app.reviews.length,
                                   );
@@ -1523,7 +1529,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       prefs.enableApp(appId);
-      AnalyticsManager().appEnabled(appId);
+      PlatformManager.instance.analytics.appEnabled(appId);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -1546,7 +1552,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);
       print(res);
-      AnalyticsManager().appDisabled(appId);
+      PlatformManager.instance.analytics.appDisabled(appId);
 
       if (!mounted) return;
 
@@ -1715,7 +1721,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           SharedPreferencesUtil().appsList = appsList;
         }
 
-        AnalyticsManager().appRated(widget.app.id, editRating);
+        PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

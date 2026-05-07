@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -9,7 +10,6 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -93,7 +93,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
 
                   // enable apps
                   if (val == 'enable') {
-                    AnalyticsManager().pageOpened('Chat Apps');
+                    PlatformManager.instance.analytics.pageOpened('Chat Apps');
                     context.read<HomeProvider>().setIndex(4);
                     controller?.animateToPage(4, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
                     return;

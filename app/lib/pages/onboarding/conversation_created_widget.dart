@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
@@ -9,7 +10,6 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/other/temp.dart';
 
 Future updateConvoDetailProvider(BuildContext context, ServerConversation conversation) {
@@ -88,7 +88,7 @@ class _ConversationCreatedWidgetState extends State<ConversationCreatedWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   onPressed: () {
                     // updateMemoryDetailProvider(context, provider.memory!);
-                    AnalyticsManager().conversationListItemClicked(provider.conversation!, 0);
+                    PlatformManager.instance.analytics.conversationListItemClicked(provider.conversation!, 0);
                     routeToPage(
                       context,
                       ConversationDetailPage(conversation: provider.conversation!, isFromOnboarding: true),

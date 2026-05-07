@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -11,7 +12,6 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -287,7 +287,7 @@ class MemoriesProvider extends ChangeNotifier {
     await deleteAllMemoriesServer();
     _memories.clear();
     if (countBeforeDeletion > 0) {
-      AnalyticsManager().memoriesAllDeleted(countBeforeDeletion);
+      PlatformManager.instance.analytics.memoriesAllDeleted(countBeforeDeletion);
     }
     _setCategories();
   }
@@ -345,7 +345,7 @@ class MemoriesProvider extends ChangeNotifier {
       memoryToUpdate.visibility = visibility;
       _memories[idx] = memoryToUpdate;
 
-      AnalyticsManager().memoryVisibilityChanged(memoryToUpdate, visibility);
+      PlatformManager.instance.analytics.memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
     }
   }
@@ -393,7 +393,7 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     if (updatedCount > 0) {
-      AnalyticsManager().memoriesAllVisibilityChanged(visibility, updatedCount);
+      PlatformManager.instance.analytics.memoriesAllVisibilityChanged(visibility, updatedCount);
     }
 
     _setCategories();

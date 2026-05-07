@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -8,7 +9,6 @@ import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -99,7 +99,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().integrationsPageOpened();
+    PlatformManager.instance.analytics.integrationsPageOpened();
     WidgetsBinding.instance.addObserver(this);
     // Schedule loading for after the first frame to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -131,7 +131,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (!app.isAvailable) {
       return;
     }
-    AnalyticsManager().integrationConnectAttempted(integrationName: app.displayName);
+    PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
 
     if (app == IntegrationApp.googleCalendar) {
       final service = GoogleCalendarService();
@@ -173,7 +173,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
       final success = await authenticate();
       if (success) {
-        AnalyticsManager().integrationConnectSucceeded(integrationName: app.displayName);
+        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(content: Text(context.l10n.completeAuthInBrowser), duration: const Duration(seconds: 5)),
@@ -182,7 +182,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         await _loadFromBackend();
         Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       } else {
-        AnalyticsManager().integrationConnectFailed(integrationName: app.displayName);
+        PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -235,7 +235,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
         final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
         if (success) {
-          AnalyticsManager().integrationDisconnected(integrationName: 'Apple Health');
+          PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
           if (mounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(
@@ -266,7 +266,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final success = await disconnect();
     if (success) {
-      AnalyticsManager().integrationDisconnected(integrationName: app.displayName);
+      PlatformManager.instance.analytics.integrationDisconnected(integrationName: app.displayName);
       if (mounted) {
         await integrationProvider.deleteConnection(app.key);
       }

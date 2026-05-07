@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -15,7 +16,6 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class CreateTemplateBottomSheet extends StatefulWidget {
@@ -137,7 +137,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
       if (submitResult.$1) {
         // Success
-        AnalyticsManager().quickTemplateCreated(
+        PlatformManager.instance.analytics.quickTemplateCreated(
           conversationId: widget.conversationId ?? '',
           appName: name,
           isPublic: _isPublic,

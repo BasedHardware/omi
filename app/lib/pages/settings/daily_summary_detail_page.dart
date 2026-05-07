@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
@@ -50,7 +50,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       });
       _animationController.forward();
       // Track page view
-      AnalyticsManager().dailySummaryDetailViewed(
+      PlatformManager.instance.analytics.dailySummaryDetailViewed(
         summaryId: widget.summaryId,
         date: widget.summary!.date,
         source: 'direct',
@@ -67,7 +67,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       _animationController.forward();
       // Track page view
       if (summary != null) {
-        AnalyticsManager().dailySummaryDetailViewed(
+        PlatformManager.instance.analytics.dailySummaryDetailViewed(
           summaryId: widget.summaryId,
           date: summary.date,
           source: 'api_fetch',
@@ -93,7 +93,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
     // Track conversation click
     if (_summary != null) {
-      AnalyticsManager().dailySummaryConversationClicked(
+      PlatformManager.instance.analytics.dailySummaryConversationClicked(
         summaryId: widget.summaryId,
         conversationId: conversationId,
         source: 'daily_summary_detail',

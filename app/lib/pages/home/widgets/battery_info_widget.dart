@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,7 +15,6 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -55,11 +55,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     if (captureProvider.recordingState == RecordingState.record) {
       await captureProvider.stopStreamRecording();
       captureProvider.forceProcessingCurrentConversation();
-      AnalyticsManager().phoneMicRecordingStopped();
+      PlatformManager.instance.analytics.phoneMicRecordingStopped();
       return;
     }
     await captureProvider.streamRecording();
-    AnalyticsManager().phoneMicRecordingStarted();
+    PlatformManager.instance.analytics.phoneMicRecordingStarted();
     if (context.mounted) {
       final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
           ? captureProvider.conversationProvider!.conversations.first.id
@@ -92,7 +92,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final batteryPill = GestureDetector(
                 onTap: () {
                   routeToPage(context, const ConnectedDevice());
-                  AnalyticsManager().batteryIndicatorClicked();
+                  PlatformManager.instance.analytics.batteryIndicatorClicked();
                 },
                 child: Container(
                   height: 36,
@@ -209,7 +209,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     onTap: () async {
                       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
                         routeToPage(context, const ConnectDevicePage());
-                        AnalyticsManager().connectFriendClicked();
+                        PlatformManager.instance.analytics.connectFriendClicked();
                       } else {
                         await routeToPage(context, const ConnectedDevice());
                       }

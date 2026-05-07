@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -6,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Full-screen 3-step cancellation flow shown as a page (not a sheet).
@@ -31,7 +31,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().subscriptionCancelFlowStarted();
+    PlatformManager.instance.analytics.subscriptionCancelFlowStarted();
   }
 
   static const _reasons = [
@@ -74,7 +74,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
       _pageController.previousPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       setState(() => _page--);
     } else {
-      AnalyticsManager().subscriptionCancelAbandoned(step: _page + 1, reason: _selectedReason);
+      PlatformManager.instance.analytics.subscriptionCancelAbandoned(step: _page + 1, reason: _selectedReason);
       Navigator.of(context).pop(false);
     }
   }
@@ -83,7 +83,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     setState(() => _isCancelling = true);
     final provider = context.read<UsageProvider>();
     final details = _detailsController.text.trim().isNotEmpty ? _detailsController.text.trim() : null;
-    AnalyticsManager().subscriptionCancelConfirmed(reason: _selectedReason!, details: details);
+    PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _selectedReason!, details: details);
 
     try {
       final success = await provider.cancelUserSubscription(reason: _selectedReason, reasonDetails: details);
@@ -193,7 +193,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
               child: ElevatedButton(
                 onPressed: canContinue
                     ? () {
-                        AnalyticsManager().subscriptionCancelReasonSelected(reason: _selectedReason!);
+                        PlatformManager.instance.analytics.subscriptionCancelReasonSelected(reason: _selectedReason!);
                         _next();
                       }
                     : null,
@@ -455,7 +455,10 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
                     onPressed: _isCancelling
                         ? null
                         : () {
-                            AnalyticsManager().subscriptionCancelKeptPlan(step: 3, reason: _selectedReason);
+                            PlatformManager.instance.analytics.subscriptionCancelKeptPlan(
+                              step: 3,
+                              reason: _selectedReason,
+                            );
                             Navigator.of(context).pop(false);
                           },
                     style: ElevatedButton.styleFrom(

@@ -1,8 +1,8 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Shows the phone calls upsell bottom sheet.
@@ -136,7 +136,7 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
-                  AnalyticsManager().phoneCallUpsellUpgradeTapped();
+                  PlatformManager.instance.analytics.phoneCallUpsellUpgradeTapped();
                   final navigator = Navigator.of(context);
                   navigator.pop();
                   showModalBottomSheet(
@@ -162,7 +162,7 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
               // Dismiss
               GestureDetector(
                 onTap: () {
-                  AnalyticsManager().phoneCallUpsellDismissed();
+                  PlatformManager.instance.analytics.phoneCallUpsellDismissed();
                   Navigator.of(context).pop();
                 },
                 child: Padding(

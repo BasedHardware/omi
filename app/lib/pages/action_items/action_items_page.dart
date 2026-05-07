@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,7 +13,6 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -76,7 +76,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      AnalyticsManager().actionItemsPageOpened();
+      PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
@@ -152,7 +152,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Future<void> _onActionItemCompleted() async {
-    AnalyticsManager().actionItemCompleted(fromTab: 'Tasks');
+    PlatformManager.instance.analytics.actionItemCompleted(fromTab: 'Tasks');
 
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
@@ -190,7 +190,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             currentValue: current,
           );
           if (created != null) {
-            AnalyticsManager().goalCreated(
+            PlatformManager.instance.analytics.goalCreated(
               goalId: created.id,
               titleLength: title.length,
               targetValue: target,
@@ -805,7 +805,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         GestureDetector(
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            AnalyticsManager().track('Add Goal Clicked from Tasks Page');
+                            PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
                             _showCreateGoalSheet();
                           },
                           child: Container(
@@ -837,7 +837,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onWillAcceptWithDetails: (details) => goal != null,
       onAcceptWithDetails: (details) {
         if (goal == null) return;
-        AnalyticsManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
+        PlatformManager.instance.analytics.taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
         _attachTaskToGoal(details.data.id, goal.id);
       },
       builder: (context, candidateData, rejectedData) {
@@ -1560,7 +1560,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Goals are not part of selection mode — selection only applies to
         // tasks (the action bar's Export action acts on tasks only).
         if (provider.isSelectionMode) return;
-        AnalyticsManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+        PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
         _showEditGoalSheet(goal);
       },
       child: Container(
@@ -1630,7 +1630,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
-        AnalyticsManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
         await _deleteGoal(goal);
       },
       background: Container(
@@ -1656,10 +1656,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           // Update goal via provider
           final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
           await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-          AnalyticsManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
+          PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
         },
         onDelete: () {
-          AnalyticsManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+          PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
           _deleteGoal(goal);
         },
       ),

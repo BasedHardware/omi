@@ -1,7 +1,7 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/speech_profile/page.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class SetupQuestionsPage extends StatefulWidget {
@@ -95,7 +95,11 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
               child: MaterialButton(
                 onPressed: () {
                   if (selectedProfession != null && selectedUsage != null && selectedAge != null) {
-                    AnalyticsManager().setUserProperties(selectedProfession!, selectedUsage!, selectedAge!);
+                    PlatformManager.instance.analytics.setUserProperties(
+                      selectedProfession!,
+                      selectedUsage!,
+                      selectedAge!,
+                    );
                     Navigator.of(
                       context,
                     ).pushReplacement(MaterialPageRoute(builder: (c) => const SpeechProfilePage(onbording: true)));

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +11,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -30,7 +30,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().importHistoryPageOpened();
+    PlatformManager.instance.analytics.importHistoryPageOpened();
     _loadJobs();
   }
 
@@ -92,7 +92,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   Future<void> _startLimitlessImport() async {
     try {
       if (!mounted) return;
-      AnalyticsManager().importStarted(source: 'limitless');
+      PlatformManager.instance.analytics.importStarted(source: 'limitless');
       setState(() => _isUploading = true);
 
       // Pick ZIP file

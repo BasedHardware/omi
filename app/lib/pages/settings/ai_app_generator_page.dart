@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,7 +9,6 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -37,7 +37,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   @override
   void initState() {
     super.initState();
-    AnalyticsManager().aiAppGeneratorPageOpened();
+    PlatformManager.instance.analytics.aiAppGeneratorPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AiAppGeneratorProvider>();
       provider.setAppProvider(context.read<AppProvider>());
@@ -1103,9 +1103,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Future<void> _generateApp(AiAppGeneratorProvider provider) async {
     FocusScope.of(context).unfocus();
-    AnalyticsManager().aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
+    PlatformManager.instance.analytics.aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
     await provider.generateApp(_promptController.text);
-    AnalyticsManager().aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
+    PlatformManager.instance.analytics.aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
   }
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {

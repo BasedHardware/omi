@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PermissionsPage extends StatefulWidget {
@@ -83,7 +83,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         await openAppSettings();
       }
       await _checkPermissions();
-      AnalyticsManager().permissionChanged(permission: name, granted: status.isGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: name, granted: status.isGranted);
     }
   }
 
@@ -104,7 +104,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         }
       }
       await _checkPermissions();
-      AnalyticsManager().permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
     }
   }
 
@@ -114,7 +114,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
     } else {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       await _checkPermissions();
-      AnalyticsManager().permissionChanged(permission: 'background', granted: _backgroundGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'background', granted: _backgroundGranted);
     }
   }
 
@@ -125,7 +125,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
       if (await Permission.location.serviceStatus.isDisabled) {
         await openAppSettings();
         await _checkPermissions();
-        AnalyticsManager().permissionChanged(permission: 'location', granted: _locationGranted);
+        PlatformManager.instance.analytics.permissionChanged(permission: 'location', granted: _locationGranted);
         return;
       }
       final status = await Permission.locationWhenInUse.request();
@@ -136,7 +136,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         await openAppSettings();
       }
       await _checkPermissions();
-      AnalyticsManager().permissionChanged(permission: 'location', granted: _locationGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'location', granted: _locationGranted);
     }
   }
 
