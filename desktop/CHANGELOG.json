@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Reduced AI processing costs with thinking budget controls"
+  ],
   "releases": [
     {
       "version": "0.11.378",
