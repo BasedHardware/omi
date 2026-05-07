@@ -79,21 +79,21 @@ class _TrashPageState extends State<TrashPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _conversations.isEmpty
-          ? _EmptyTrashState()
-          : RefreshIndicator(
-              onRefresh: _loadConversations,
-              child: ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemBuilder: (context, index) => _TrashRow(
-                  conversation: _conversations[index],
-                  daysRemaining: _daysRemaining(_conversations[index]),
-                  onRestore: () => _restore(_conversations[index]),
-                  onDeleteForever: () => _deleteForever(_conversations[index]),
+              ? _EmptyTrashState()
+              : RefreshIndicator(
+                  onRefresh: _loadConversations,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemBuilder: (context, index) => _TrashRow(
+                      conversation: _conversations[index],
+                      daysRemaining: _daysRemaining(_conversations[index]),
+                      onRestore: () => _restore(_conversations[index]),
+                      onDeleteForever: () => _deleteForever(_conversations[index]),
+                    ),
+                    separatorBuilder: (context, index) => const SizedBox(height: 10),
+                    itemCount: _conversations.length,
+                  ),
                 ),
-                separatorBuilder: (context, index) => const SizedBox(height: 10),
-                itemCount: _conversations.length,
-              ),
-            ),
     );
   }
 }
@@ -141,9 +141,8 @@ class _TrashRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = conversation.discarded
-        ? conversation.getTranscript(maxCount: 100)
-        : conversation.structured.title.decodeString;
+    final title =
+        conversation.discarded ? conversation.getTranscript(maxCount: 100) : conversation.structured.title.decodeString;
 
     return Container(
       padding: const EdgeInsets.all(16),
