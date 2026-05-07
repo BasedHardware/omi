@@ -111,9 +111,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       return Image.asset(Assets.images.speaker0Icon.path, width: 24, height: 24);
     }
     // Always modulo by speakerImagePath.length to prevent index out of bounds
-    final imageIndex = person != null
-        ? person.colorIdx! % speakerImagePath.length
-        : speakerId % speakerImagePath.length;
+    final imageIndex =
+        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
     return Image.asset(speakerImagePath[imageIndex], width: 24, height: 24);
   }
 
@@ -322,13 +321,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       _isAutoScrolling = true;
       _scrollController
           .animateTo(
-            targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeInOutCubic,
-          )
+        targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+      )
           .then((_) {
-            _isAutoScrolling = false;
-          });
+        _isAutoScrolling = false;
+      });
     }
   }
 
@@ -508,9 +507,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               data.speakerId == omiSpeakerId
                                   ? 'omi'
                                   : (person?.name ??
-                                        context.l10n.speakerWithId(
-                                          '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
-                                        )),
+                                      context.l10n.speakerWithId(
+                                        '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}',
+                                      )),
                               style: TextStyle(
                                 color: data.speakerId == omiSpeakerId || person != null
                                     ? Colors.grey.shade300
@@ -551,8 +550,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 isUser
                                     ? 18
                                     : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                    ? 6
-                                    : 18,
+                                        ? 6
+                                        : 18,
                               ),
                               topRight: Radius.circular(isUser ? 18 : 18),
                               bottomLeft: Radius.circular(18),
@@ -615,9 +614,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           Text(
                                             SttProviderConfig.getDisplayName(data.sttProvider),
                                             style: TextStyle(
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.5)
-                                                  : Colors.grey.shade500,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                               fontSize: 10,
                                               fontStyle: FontStyle.italic,
                                             ),
@@ -626,9 +624,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             Text(
                                               ' · ',
                                               style: TextStyle(
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.5)
-                                                    : Colors.grey.shade500,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
                                               ),
                                             ),
@@ -644,9 +641,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             child: Icon(
                                               Icons.play_circle_outline,
                                               size: 16,
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.7)
-                                                  : Colors.grey.shade400,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
                                             ),
                                           ),
                                           const SizedBox(width: 6),
@@ -655,9 +651,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                           Text(
                                             data.getTimestampString(),
                                             style: TextStyle(
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.7)
-                                                  : Colors.grey.shade400,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
                                               fontSize: 11,
                                             ),
                                           ),

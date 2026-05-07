@@ -143,9 +143,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess = appProvider.apps
-                          .where((app) => app.enabled && app.worksExternally())
-                          .toList();
+                      final appsWithDataAccess =
+                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

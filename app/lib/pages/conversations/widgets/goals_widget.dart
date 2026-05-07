@@ -287,9 +287,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 decoration: BoxDecoration(
                                   color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: isSelected
-                                      ? Border.all(color: Colors.white.withOpacity(0.3), width: 2)
-                                      : null,
+                                  border:
+                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
                                 ),
                                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
                               ),

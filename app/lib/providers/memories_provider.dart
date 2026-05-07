@@ -56,7 +56,8 @@ class MemoriesProvider extends ChangeNotifier {
       }
 
       return matchesSearch && categoryMatch;
-    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setShowOnlyManual(bool showOnly) {

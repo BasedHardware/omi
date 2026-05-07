@@ -151,12 +151,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                                   provider.selectedCountryId?.isEmpty ?? true
                                                       ? context.l10n.selectYourCountry
                                                       : ((provider.filteredCountries.firstWhereOrNull(
-                                                                      (country) =>
-                                                                          country['id'] == provider.selectedCountryId,
-                                                                    )?['name']
-                                                                    as String?)
-                                                                ?.decodeString ??
-                                                            context.l10n.selectYourCountry),
+                                                            (country) => country['id'] == provider.selectedCountryId,
+                                                          )?['name'] as String?)
+                                                              ?.decodeString ??
+                                                          context.l10n.selectYourCountry),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
                                               ],
@@ -209,8 +207,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             AnimatedLoadingButton(
                               text: context.l10n.connectNow,
                               loaderColor: Colors.black,
-                              onPressed:
-                                  provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                              onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                       provider.selectedCountryId != null
                                   ? () async {
                                       PlatformManager.instance.analytics.track('Stripe Connect Started');
@@ -223,15 +220,13 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       }
                                     }
                                   : () async {},
-                              color:
-                                  provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                              color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                       provider.selectedCountryId != null
                                   ? Colors.white
                                   : Colors.grey,
                               textStyle: TextStyle(
                                 fontSize: 16,
-                                color:
-                                    provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                                color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                         provider.selectedCountryId != null
                                     ? Colors.black
                                     : Colors.grey[600],

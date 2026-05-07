@@ -437,9 +437,8 @@ class PhoneCallProvider extends ChangeNotifier {
     _transcriptionStatus = TranscriptionStatus.connecting;
     notifyListeners();
 
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : 'multi';
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,

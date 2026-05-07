@@ -816,9 +816,8 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage = context != null
-          ? context.l10n.errorUpdatingAppStatus
-          : 'An error occurred while updating the app status.';
+      errorMessage =
+          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {

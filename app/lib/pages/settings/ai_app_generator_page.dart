@@ -336,27 +336,27 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                ? const Color(0xFF6366F1).withOpacity(0.2)
-                                : const Color(0xFF2A2A2E),
+                                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                                    : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
                           child: Center(
                             child: isCompleted
                                 ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                    ),
-                                  )
-                                : Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
-                                  ),
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
+                                      ),
                           ),
                         ),
                         const SizedBox(width: 14),

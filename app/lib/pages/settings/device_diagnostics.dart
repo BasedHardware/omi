@@ -547,9 +547,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             return touchedSpots.map((spot) {
               final level = spot.y.toInt();
               final hoursAgo = spot.x.abs();
-              final timeLabel = hoursAgo < 1
-                  ? '${(hoursAgo * 60).toInt()}m ago'
-                  : '${hoursAgo.toStringAsFixed(1)}h ago';
+              final timeLabel =
+                  hoursAgo < 1 ? '${(hoursAgo * 60).toInt()}m ago' : '${hoursAgo.toStringAsFixed(1)}h ago';
               return LineTooltipItem(
                 '$level%\n$timeLabel',
                 TextStyle(color: _batteryColor(level), fontWeight: FontWeight.w600, fontSize: 13),

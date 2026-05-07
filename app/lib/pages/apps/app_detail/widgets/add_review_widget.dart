@@ -139,10 +139,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                        ? (MediaQuery.sizeOf(context).height < 680
-                              ? MediaQuery.sizeOf(context).height * 0.28
-                              : MediaQuery.sizeOf(context).height * 0.2)
-                        : MediaQuery.sizeOf(context).height * 0.132)
+                      ? (MediaQuery.sizeOf(context).height < 680
+                          ? MediaQuery.sizeOf(context).height * 0.28
+                          : MediaQuery.sizeOf(context).height * 0.2)
+                      : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null
