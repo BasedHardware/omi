@@ -238,6 +238,9 @@ def get_conversations_count(
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if not include_trashed:
+        # Legacy conversations may not have trashed_at populated, so this remains
+        # an O(n) client-side filter until backfill makes `trashed_at == None`
+        # safe to enforce server-side.
         count = 0
         for doc in conversations_ref.stream():
             if _is_not_trashed(doc.to_dict()):

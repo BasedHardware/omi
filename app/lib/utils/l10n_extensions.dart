@@ -27,7 +27,6 @@ extension TrashLocalizationExtension on AppLocalizations {
   String get trashEmpty => 'Trash is empty';
   String get trashDescription => 'Conversations in Trash are permanently deleted after 30 days.';
   String get moveToTrash => 'Move to Trash';
-  String get restoreConversation => 'Restore';
   String get deleteForever => 'Delete forever';
   String daysRemaining(int days) => '$days days remaining';
   String get trashConfirmTitle => 'Move conversation to Trash?';
