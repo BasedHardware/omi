@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Sentry
 
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
@@ -259,13 +260,18 @@ class AnalyticsManager {
     databaseInitFailed: Bool
   ) {
     guard !Self.isDevBuild else { return }
-    let properties: [String: Any] = [
+    // Routed to Sentry as a breadcrumb (perf telemetry, not product analytics) so the data
+    // is attached to any same-session crash report without creating a per-launch analytics
+    // event. If we ever need real perf metrics, wire up SentrySDK.startTransaction here.
+    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
+    breadcrumb.message = "App Startup Timing"
+    breadcrumb.data = [
       "db_init_ms": round(dbInitMs),
       "time_to_interactive_ms": round(timeToInteractiveMs),
       "had_unclean_shutdown": hadUncleanShutdown,
       "database_init_failed": databaseInitFailed,
     ]
-    PostHogManager.shared.track("App Startup Timing", properties: properties)
+    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   /// Track first launch with comprehensive system diagnostics
