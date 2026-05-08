@@ -82,3 +82,130 @@ Future<List<AudioFileUrlInfo>> getConversationAudioSignedUrls(String conversatio
     return [];
   }
 }
+
+/// Status of an async audio-share job. Mirrors the backend status field
+/// (queued | processing | completed | failed). Synthetic shortcut: when
+/// every audio file is already cached, the backend skips the job entirely
+/// and returns `completed` directly.
+enum AudioShareJobStatus { queued, processing, completed, failed }
+
+AudioShareJobStatus _parseShareStatus(String? raw) {
+  switch (raw) {
+    case 'queued':
+      return AudioShareJobStatus.queued;
+    case 'processing':
+      return AudioShareJobStatus.processing;
+    case 'completed':
+      return AudioShareJobStatus.completed;
+    case 'failed':
+      return AudioShareJobStatus.failed;
+    default:
+      return AudioShareJobStatus.queued;
+  }
+}
+
+/// One snapshot of an audio-share job. Returned by both the POST /share
+/// kickoff and each GET /share/{job_id} poll.
+class AudioShareJob {
+  /// `null` only when the backend short-circuited on a fully-cached conversation.
+  final String? jobId;
+  final AudioShareJobStatus status;
+  final double progressPct;
+  final List<AudioFileUrlInfo> audioFiles;
+  final String? error;
+  final int pollAfterMs;
+
+  AudioShareJob({
+    required this.jobId,
+    required this.status,
+    required this.progressPct,
+    required this.audioFiles,
+    this.error,
+    required this.pollAfterMs,
+  });
+
+  factory AudioShareJob.fromJson(Map<String, dynamic> json) {
+    final files = (json['audio_files'] as List<dynamic>? ?? [])
+        .map((af) => AudioFileUrlInfo.fromJson(af as Map<String, dynamic>))
+        .toList();
+    return AudioShareJob(
+      jobId: json['job_id'] as String?,
+      status: _parseShareStatus(json['status'] as String?),
+      progressPct: (json['progress_pct'] ?? 0).toDouble(),
+      audioFiles: files,
+      error: json['error'] as String?,
+      pollAfterMs: (json['poll_after_ms'] ?? 3000) as int,
+    );
+  }
+
+  bool get isTerminal => status == AudioShareJobStatus.completed || status == AudioShareJobStatus.failed;
+}
+
+/// Kick off (or rejoin) an async share-audio merge. Returns immediately:
+/// either `completed` (cache hit, signed URLs populated) or `queued/processing`
+/// with a job_id to poll via [getAudioShareJob].
+Future<AudioShareJob?> requestAudioShare(String conversationId) async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/share',
+      headers: headers,
+      method: 'POST',
+      body: '',
+    );
+
+    if (response == null) {
+      return null;
+    }
+    // 200 (cache hit, completed) and 202 (job started/rejoined) both have a body
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      Logger.debug('requestAudioShare: unexpected status ${response.statusCode}');
+      return null;
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return AudioShareJob.fromJson(decoded);
+  } catch (e) {
+    Logger.debug('Error requesting audio share: $e');
+    return null;
+  }
+}
+
+/// Poll an audio-share job by id. Returns `null` only on transport failure;
+/// terminal failures (404, expired, error) come back as a populated [AudioShareJob]
+/// with `status == failed`.
+Future<AudioShareJob?> getAudioShareJob(String conversationId, String jobId) async {
+  try {
+    final headers = await buildHeaders(requireAuthCheck: true);
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/sync/audio/$conversationId/share/$jobId',
+      headers: headers,
+      method: 'GET',
+      body: '',
+    );
+
+    if (response == null) {
+      return null;
+    }
+    if (response.statusCode == 404) {
+      return AudioShareJob(
+        jobId: jobId,
+        status: AudioShareJobStatus.failed,
+        progressPct: 0.0,
+        audioFiles: const [],
+        error: 'Job not found or expired',
+        pollAfterMs: 0,
+      );
+    }
+    if (response.statusCode != 200) {
+      Logger.debug('getAudioShareJob: unexpected status ${response.statusCode}');
+      return null;
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return AudioShareJob.fromJson(decoded);
+  } catch (e) {
+    Logger.debug('Error polling audio share job: $e');
+    return null;
+  }
+}
