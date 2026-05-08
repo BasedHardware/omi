@@ -10,6 +10,17 @@ import 'package:omi/utils/logger.dart';
 
 enum AudioDownloadStage { preparing, downloading, processing }
 
+/// Total wallclock allowed for the merge phase before we give up. Backend
+/// stale-job detection kicks in at 25 min; client gives one extra minute of
+/// slack to account for poll cadence + network jitter.
+const Duration _shareMergeMaxWait = Duration(minutes: 26);
+
+/// Floor and ceiling for the server-suggested poll interval — even if the
+/// backend asks for something silly, the client never busy-loops or sleeps so
+/// long that progress goes stale.
+const Duration _shareMergePollFloor = Duration(seconds: 1);
+const Duration _shareMergePollCeiling = Duration(seconds: 10);
+
 class AudioDownloadService {
   final http.Client _client = http.Client();
   final List<File> _tempFiles = [];
@@ -27,17 +38,55 @@ class AudioDownloadService {
 
       onStageChange?.call(AudioDownloadStage.preparing);
 
-      final audioFileInfos = await getConversationAudioSignedUrls(conversation.id);
-
-      if (audioFileInfos.isEmpty) {
-        Logger.debug('No audio file URLs available');
+      // POST /share kicks off (or rejoins) the merge job. For a fully-cached
+      // conversation the response is already `completed` with signed URLs.
+      AudioShareJob? job = await requestAudioShare(conversation.id);
+      if (job == null) {
+        Logger.debug('Failed to start audio share job');
         return null;
       }
 
-      final cachedFiles = audioFileInfos.where((info) => info.isCached).toList();
+      // Poll the job until it reaches a terminal state, surfacing server-side
+      // merge progress through onProgress so the UI stops showing an
+      // indeterminate spinner.
+      final mergeDeadline = DateTime.now().add(_shareMergeMaxWait);
+      while (!job!.isTerminal) {
+        // Bound the poll cadence regardless of what the server suggested.
+        // .clamp on int returns num in some Dart positions, so .toInt() avoids
+        // an implicit downcast warning when passed to Duration.
+        final ms =
+            job.pollAfterMs.clamp(_shareMergePollFloor.inMilliseconds, _shareMergePollCeiling.inMilliseconds).toInt();
+        await Future.delayed(Duration(milliseconds: ms));
+
+        if (DateTime.now().isAfter(mergeDeadline)) {
+          throw Exception('Audio share timed out waiting for merge to complete');
+        }
+        // Surface "merge progress" inside the preparing stage. The downloader
+        // will overwrite onProgress once the cache is ready.
+        onProgress?.call(job.progressPct / 100.0);
+
+        if (job.jobId == null) {
+          // No job_id but not terminal — should only happen on a malformed
+          // server response. Bail rather than tight-loop.
+          break;
+        }
+
+        final next = await getAudioShareJob(conversation.id, job.jobId!);
+        if (next == null) {
+          // Transient network failure: keep the previous snapshot and retry.
+          continue;
+        }
+        job = next;
+      }
+
+      if (job.status == AudioShareJobStatus.failed) {
+        throw Exception('Audio share failed: ${job.error ?? "unknown error"}');
+      }
+
+      final cachedFiles = job.audioFiles.where((info) => info.isCached).toList();
 
       if (cachedFiles.isEmpty) {
-        Logger.debug('No cached audio files available');
+        Logger.debug('Audio share completed but no cached files returned');
         return null;
       }
 
