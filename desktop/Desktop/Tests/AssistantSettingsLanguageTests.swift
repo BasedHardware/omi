@@ -4,14 +4,17 @@ import XCTest
 @MainActor
 final class AssistantSettingsLanguageTests: XCTestCase {
     private let languageKey = "transcriptionLanguage"
+    private let autoDetectKey = "transcriptionAutoDetect"
 
     override func setUp() {
         super.setUp()
         UserDefaults.standard.removeObject(forKey: languageKey)
+        UserDefaults.standard.removeObject(forKey: autoDetectKey)
     }
 
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: languageKey)
+        UserDefaults.standard.removeObject(forKey: autoDetectKey)
         super.tearDown()
     }
 
