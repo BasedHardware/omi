@@ -8907,6 +8907,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcriptionUnavailable => 'Транскрипція недоступна';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Аудіовихід';
 
   @override

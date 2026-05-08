@@ -8917,6 +8917,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcriptionUnavailable => 'Transkribovanje nije dostupno';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Zvučni izlaz';
 
   @override

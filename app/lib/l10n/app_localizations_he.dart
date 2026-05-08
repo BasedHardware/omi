@@ -8822,6 +8822,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionUnavailable => 'תמלול לא זמין';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'פלט אודיו';
 
   @override

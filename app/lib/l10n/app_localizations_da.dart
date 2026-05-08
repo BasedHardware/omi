@@ -8879,6 +8879,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptionUnavailable => 'Transskription ikke tilgængelig';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Lydudgang';
 
   @override

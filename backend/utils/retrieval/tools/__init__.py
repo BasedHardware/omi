@@ -53,6 +53,10 @@ from .screen_activity_tools import (
 from .preference_tools import (
     save_user_preference_tool,
 )
+from .genui_tools import (
+    create_map_ui,
+    create_action_buttons_ui,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -79,4 +83,6 @@ __all__ = [
     'get_screen_activity_tool',
     'search_screen_activity_tool',
     'save_user_preference_tool',
+    'create_map_ui',
+    'create_action_buttons_ui',
 ]

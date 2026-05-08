@@ -5,11 +5,11 @@ import 'package:map_launcher/map_launcher.dart';
 import 'package:omi/env/env.dart';
 
 class MapsUtil {
-  static String getMapImageUrl(double lat, double lng) {
+  static String getMapImageUrl(double lat, double lng, {int zoom = 15}) {
     // Dark theme Google Maps with minimal labels
     const String baseUrl = "https://maps.googleapis.com/maps/api/staticmap";
     final String center = "center=$lat,$lng";
-    const String zoom = "zoom=15";
+    final String zoomParam = "zoom=$zoom";
     const String size = "size=800x500";
     const String scale = "scale=2";
     const String format = "format=png";
@@ -63,14 +63,14 @@ class MapsUtil {
 
     final String key = "key=${Env.googleMapsApiKey}";
 
-    return "$baseUrl?$center&$zoom&$size&$scale&$format&$marker&$styles&$key";
+    return "$baseUrl?$center&$zoomParam&$size&$scale&$format&$marker&$styles&$key";
   }
 
   static String getGoogleMapsPlaceUrl(String googlePlaceId) {
     return "https://www.google.com/maps/place/?q=place_id=$googlePlaceId";
   }
 
-  static void launchMap(double lat, double lng) async {
+  static Future<void> launchMap(double lat, double lng) async {
     if (Platform.isIOS) {
       await MapLauncher.showMarker(mapType: MapType.apple, coords: Coords(lat, lng), title: '');
     } else {

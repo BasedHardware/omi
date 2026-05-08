@@ -8941,6 +8941,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get transcriptionUnavailable => 'Транскрипција недостапна';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Звучен излез';
 
   @override

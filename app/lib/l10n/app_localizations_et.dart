@@ -8890,6 +8890,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcriptionUnavailable => 'Transkriptsioon pole saadaval';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Heliväljund';
 
   @override

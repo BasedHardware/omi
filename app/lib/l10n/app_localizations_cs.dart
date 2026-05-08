@@ -8889,6 +8889,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcriptionUnavailable => 'Přepis není dostupný';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Zvukový výstup';
 
   @override

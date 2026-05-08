@@ -8921,6 +8921,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcriptionUnavailable => 'Transcriptie niet beschikbaar';
 
   @override
+  String get tapToOpenInMaps => 'Tap to open in Maps';
+
+  @override
   String get audioOutput => 'Audio-uitvoer';
 
   @override
