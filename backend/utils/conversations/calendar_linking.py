@@ -107,8 +107,7 @@ async def get_overlapping_calendar_event(
         # from spuriously linking to a multi-hour all-day block.
         meets_time_criteria = overlap_duration >= MIN_OVERLAP_SECONDS
         meets_percentage_criteria = (
-            overlap_pct_of_event >= MIN_OVERLAP_PERCENTAGE or
-            overlap_pct_of_conversation >= MIN_OVERLAP_PERCENTAGE
+            overlap_pct_of_event >= MIN_OVERLAP_PERCENTAGE or overlap_pct_of_conversation >= MIN_OVERLAP_PERCENTAGE
         )
 
         if meets_time_criteria and meets_percentage_criteria and overlap_duration > best_overlap_seconds:
