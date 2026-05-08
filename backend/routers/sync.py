@@ -33,6 +33,15 @@ from database.sync_jobs import (
     mark_job_completed,
     mark_job_failed,
 )
+from database.audio_share_jobs import (
+    create_audio_share_job,
+    get_audio_share_job,
+    get_active_job_id as get_active_audio_share_job_id,
+    mark_processing as mark_audio_share_processing,
+    update_audio_file_url,
+    mark_completed as mark_audio_share_completed,
+    mark_failed as mark_audio_share_failed,
+)
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from utils.conversations.factory import deserialize_conversation
@@ -301,6 +310,213 @@ def get_audio_signed_urls_endpoint(
         critical_executor.submit(_cache_uncached_parallel)
 
     return {"audio_files": result}
+
+
+# **********************************************
+# ******** AUDIO SHARE (ASYNC JOB) *************
+# **********************************************
+# v1 GET /v1/sync/audio/{conv}/urls runs the chunk-merge inline. For long
+# conversations the merge takes 4-10+ minutes; Cloud Run kills the request
+# at 600s and the share UI ends up stuck or shows "Failed to download audio"
+# (issue #4586). The endpoints below replace that with a job-model: POST
+# returns immediately with a job_id, the merge runs in the background, and
+# the app polls GET /share/{job_id} until terminal.
+#
+# Modeled on the existing v2 sync-local-files pattern (Redis job state,
+# loop.run_in_executor with default executor to avoid nested-pool deadlock,
+# heartbeat updates so the staleness safety-net doesn't kill long merges).
+# **********************************************
+
+
+def _share_audio_background(job_id: str, uid: str, conversation_id: str, audio_files: list):
+    """Background worker for /share. Merges each audio_file synchronously, persists the
+    cache blob, generates a signed URL, and updates the job per file as a heartbeat."""
+    try:
+        mark_audio_share_processing(job_id)
+
+        total = len(audio_files)
+        if total == 0:
+            mark_audio_share_completed(job_id)
+            return
+
+        completed = 0
+        last_error: Optional[str] = None
+
+        for af in audio_files:
+            audio_file_id = af.get('id')
+            timestamps = af.get('chunk_timestamps')
+            if not audio_file_id or not timestamps:
+                logger.warning(f'audio_share: skipping audio_file with missing id or timestamps in job {job_id}')
+                completed += 1
+                continue
+
+            try:
+                # await_upload=True closes the race that broke /urls: cache blob is
+                # guaranteed to exist by the time get_merged_audio_signed_url runs.
+                get_or_create_merged_audio(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    audio_file_id=audio_file_id,
+                    timestamps=timestamps,
+                    pcm_to_wav_func=pcm_to_wav,
+                    fill_gaps=True,
+                    sample_rate=AUDIO_SAMPLE_RATE,
+                    await_upload=True,
+                )
+                signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+                if not signed_url:
+                    raise RuntimeError(f'cache upload reported success but blob missing for {audio_file_id}')
+                completed += 1
+                progress_pct = (completed / total) * 100.0
+                update_audio_file_url(job_id, audio_file_id, signed_url, progress_pct)
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f'audio_share: error merging audio_file {audio_file_id} in job {job_id}: {e}')
+
+        # Finalize: completed if every file got a signed URL, failed otherwise.
+        # Use the freshest job state to avoid clobbering a per-file update.
+        final_job = get_audio_share_job(job_id)
+        if not final_job:
+            return
+        ready = sum(1 for af in final_job.get('audio_files', []) if af.get('signed_url'))
+        if ready == total:
+            mark_audio_share_completed(job_id)
+        else:
+            mark_audio_share_failed(job_id, last_error or f'Only {ready}/{total} audio files merged successfully')
+    except Exception as e:
+        logger.error(f'audio_share: background worker crashed for job {job_id}: {e}')
+        try:
+            mark_audio_share_failed(job_id, str(e))
+        except Exception:
+            pass
+
+
+@router.post("/v1/sync/audio/{conversation_id}/share", tags=['v1'])
+async def request_audio_share_endpoint(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Kick off (or rejoin) an async audio-share merge job for a conversation.
+
+    Returns 202 with `{job_id, status, poll_after_ms}`. The app should poll
+    GET /v1/sync/audio/{conversation_id}/share/{job_id} until status is terminal
+    (`completed` or `failed`).
+
+    Idempotent: if there's already an active job for this (uid, conversation), its
+    job_id is returned. If every audio file is already cached, a synthetic
+    `completed` job is returned with the signed URLs inline.
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
+    audio_files = conversation.get('audio_files', [])
+    if not audio_files:
+        raise HTTPException(status_code=404, detail="No audio files in conversation")
+
+    # Fast path: if every file is already cached and unexpired, return URLs synchronously.
+    cached_urls = []
+    all_cached = True
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        if not audio_file_id:
+            all_cached = False
+            break
+        signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+        if not signed_url:
+            all_cached = False
+            break
+        cached_urls.append(
+            {
+                'id': audio_file_id,
+                'status': 'cached',
+                'signed_url': signed_url,
+                'duration': af.get('duration', 0),
+            }
+        )
+
+    if all_cached and cached_urls:
+        return JSONResponse(
+            status_code=200,
+            content={
+                'job_id': None,
+                'status': 'completed',
+                'progress_pct': 100.0,
+                'audio_files': cached_urls,
+                'poll_after_ms': 0,
+            },
+        )
+
+    # Idempotency: rejoin an in-flight job for this (uid, conv) instead of starting a new one.
+    existing_job_id = get_active_audio_share_job_id(uid, conversation_id)
+    if existing_job_id:
+        existing = get_audio_share_job(existing_job_id)
+        # `existing` may be None if it just expired between the active-pointer lookup
+        # and the job-key lookup, or if get_audio_share_job auto-failed it. In either
+        # case fall through to start a new one.
+        if existing and existing.get('status') not in ('completed', 'failed'):
+            return JSONResponse(
+                status_code=202,
+                content={
+                    'job_id': existing['job_id'],
+                    'status': existing['status'],
+                    'progress_pct': existing.get('progress_pct', 0.0),
+                    'audio_files': existing.get('audio_files', []),
+                    'poll_after_ms': 3000,
+                },
+            )
+
+    job = create_audio_share_job(uid, conversation_id, audio_files)
+    job_id = job['job_id']
+
+    # Run on the default executor (NOT critical_executor / storage_executor): the worker
+    # itself dispatches chunk downloads back to storage_executor, so nesting both in the
+    # same pool risks deadlock under concurrent load — same constraint sync_v2 documents.
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _share_audio_background, job_id, uid, conversation_id, audio_files)
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            'job_id': job_id,
+            'status': 'queued',
+            'progress_pct': 0.0,
+            'audio_files': job['audio_files'],
+            'poll_after_ms': 3000,
+        },
+    )
+
+
+@router.get("/v1/sync/audio/{conversation_id}/share/{job_id}", tags=['v1'])
+def get_audio_share_status_endpoint(
+    conversation_id: str,
+    job_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Poll the status of an audio-share job started via POST /share.
+
+    Returns `{job_id, status, progress_pct, audio_files, error?, poll_after_ms}`.
+    Status is one of: queued, processing, completed, failed.
+    """
+    job = get_audio_share_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Audio share job not found or expired")
+    if job.get('uid') != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to view this job")
+    if job.get('conversation_id') != conversation_id:
+        raise HTTPException(status_code=400, detail="Job does not belong to this conversation")
+
+    poll_after_ms = 0 if job['status'] in ('completed', 'failed') else 3000
+    return {
+        'job_id': job['job_id'],
+        'status': job['status'],
+        'progress_pct': job.get('progress_pct', 0.0),
+        'audio_files': job.get('audio_files', []),
+        'error': job.get('error'),
+        'poll_after_ms': poll_after_ms,
+    }
 
 
 # **********************************************
