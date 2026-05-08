@@ -87,6 +87,8 @@ pytest tests/unit/test_memories_create.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_sync_record_usage.py -v
+pytest tests/unit/test_audio_share_jobs.py -v
+pytest tests/unit/test_audio_share_endpoints.py -v
 pytest tests/unit/test_vision_stream_async.py -v
 pytest tests/unit/test_desktop_transcribe.py -v
 pytest tests/unit/test_desktop_migration.py -v
