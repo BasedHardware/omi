@@ -1,7 +1,6 @@
 #include "storage.h"
 
 #include <errno.h>
-#include <stdio.h>
 #include <string.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -11,47 +10,44 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
 
+#include "rtc.h"
 #include "sd_card.h"
 #include "transport.h"
 #include "utils.h"
 
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 
-/* Current file being read for transfer */
-static char current_read_filename[MAX_FILENAME_LEN] = {0};
-static uint32_t current_read_offset = 0;
-
-#define MAX_PACKET_LENGTH 256
-#define OPUS_ENTRY_LENGTH 80
-#define FRAME_PREFIX_LENGTH 3
-
-/* Control commands */
 #define CMD_STOP_SYNC      0x03
+#define CMD_RING_INFO      0x10
+#define CMD_RING_READ      0x11
+#define CMD_RING_ADVANCE   0x12
+#define CMD_RING_CLEAR     0x13
 
-/* New multi-file sync commands */
-#define CMD_LIST_FILES      0x10   // Get list of audio files
-#define CMD_READ_FILE       0x11   // Read specific file: [cmd][file_index][offset:4]
-#define CMD_DELETE_FILE     0x12   // Delete specific file: [cmd][file_index]
+#define STORAGE_DEFERRED 0xFF
 
 #define INVALID_COMMAND 6
-#define FILE_NOT_FOUND 7
-#define FILE_INDEX_OUT_OF_RANGE 8
 #define STORAGE_NOT_READY 9
-#define STORAGE_LIST_MAX_FILES_PER_RESPONSE 50
-#define STORAGE_FILE_LIST_ENTRY_SIZE 8
+#define SEQ_OUT_OF_RANGE 10
 
-#define MAX_HEARTBEAT_FRAMES 100
+#define NOTIFY_ACK        0x01
+#define NOTIFY_INFO       0x02
+#define NOTIFY_DATA       0x03
+#define NOTIFY_DONE       0x04
+#define NOTIFY_READ_BEGIN 0x05
+
 #define HEARTBEAT 50
 
-/* Multi-file sync state */
-static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
-static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
-static int sync_file_count = 0;
-static int current_sync_file_index = -1;
-static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
-static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
-static uint8_t transfer_end_status = 0;
+#define STORAGE_IDLE_POLL_MS_OFFLINE 2000
+#define STORAGE_IDLE_POLL_MS_CONNECTED 1
+#define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
+
+#define STORAGE_CHUNK_COUNT 20
+#define STORAGE_BUFFER_SIZE (RAW_AUDIO_PACKET_BYTES * STORAGE_CHUNK_COUNT)
+#define STORAGE_CONTROL_NOTIFY_SIZE 32
+
+#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
@@ -60,6 +56,11 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
                                      uint16_t len,
                                      uint16_t offset,
                                      uint8_t flags);
+static ssize_t storage_read_characteristic(struct bt_conn *conn,
+                                           const struct bt_gatt_attr *attr,
+                                           void *buf,
+                                           uint16_t len,
+                                           uint16_t offset);
 
 static struct bt_uuid_128 storage_service_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295780, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
@@ -67,16 +68,9 @@ static struct bt_uuid_128 storage_write_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295781, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
 static struct bt_uuid_128 storage_read_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x30295782, 0x4301, 0xEABD, 0x2904, 0x2849ADFEAE43));
-static ssize_t storage_read_characteristic(struct bt_conn *conn,
-                                           const struct bt_gatt_attr *attr,
-                                           void *buf,
-                                           uint16_t len,
-                                           uint16_t offset);
 
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
-
-void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&storage_service_uuid),
@@ -98,15 +92,64 @@ static struct bt_gatt_attr storage_service_attr[] = {
 
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
-#define STORAGE_IDLE_POLL_MS_OFFLINE 2000
-#define STORAGE_IDLE_POLL_MS_CONNECTED 1
-
-#define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
+static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
+static uint8_t data_notify_buf[1 + STORAGE_BUFFER_SIZE];
+static uint8_t control_notify_buf[STORAGE_CONTROL_NOTIFY_SIZE];
 
 bool storage_is_on = false;
-static uint32_t cached_file_count = 0;
-static uint64_t cached_total_size = 0;
-static int64_t storage_stats_next_refresh_ms = 0;
+
+static uint8_t info_requested;
+static uint8_t clear_requested;
+static uint8_t read_request_pending;
+static uint8_t advance_request_pending;
+static uint8_t stop_requested;
+static uint8_t heartbeat_count;
+
+static uint64_t pending_start_seq;
+static uint32_t pending_packet_count;
+static uint64_t pending_advance_seq;
+
+static bool transfer_active;
+static bool read_begin_sent;
+static bool done_pending;
+static uint64_t transfer_start_seq;
+static uint64_t current_read_seq;
+static uint32_t remaining_packets;
+static uint8_t transfer_end_status;
+
+typedef enum {
+    SYNC_SPEED_MODE_NONE = 0,
+    SYNC_SPEED_MODE_BLE,
+} sync_speed_mode_t;
+
+static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
+static int64_t sync_speed_window_start_ms;
+static uint64_t sync_speed_window_bytes;
+
+static void sync_speed_reset(sync_speed_mode_t mode)
+{
+    sync_speed_mode = mode;
+    sync_speed_window_start_ms = k_uptime_get();
+    sync_speed_window_bytes = 0;
+}
+
+static void sync_speed_add_bytes(uint32_t bytes)
+{
+    if (sync_speed_mode == SYNC_SPEED_MODE_NONE || bytes == 0U) {
+        return;
+    }
+
+    sync_speed_window_bytes += bytes;
+    int64_t now = k_uptime_get();
+    int64_t elapsed_ms = now - sync_speed_window_start_ms;
+
+    if (elapsed_ms >= SYNC_SPEED_LOG_INTERVAL_MS) {
+        uint64_t kbps = (sync_speed_window_bytes * 1000U) / (elapsed_ms * 1024U);
+        LOG_INF("Sync speed (BLE): %u KB/s", (uint32_t)kbps);
+        sync_speed_window_start_ms = now;
+        sync_speed_window_bytes = 0;
+    }
+}
 
 static bool storage_notify_ready(struct bt_conn *conn)
 {
@@ -126,101 +169,23 @@ static int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
 {
+    ARG_UNUSED(attr);
 
     storage_is_on = true;
     if (value == BT_GATT_CCC_NOTIFY) {
-        LOG_INF("Client subscribed for notifications");
+        LOG_INF("Client subscribed for storage notifications");
     } else if (value == 0) {
-        LOG_INF("Client unsubscribed from notifications");
+        LOG_INF("Client unsubscribed from storage notifications");
     } else {
-        LOG_ERR("Invalid CCC value: %u", value);
-    }
-}
-
-static ssize_t storage_read_characteristic(struct bt_conn *conn,
-                                           const struct bt_gatt_attr *attr,
-                                           void *buf,
-                                           uint16_t len,
-                                           uint16_t offset)
-{
-    int64_t now = k_uptime_get();
-    if (now >= storage_stats_next_refresh_ms) {
-        uint32_t file_count = 0;
-        uint64_t total_size = 0;
-        if (get_audio_file_stats(&file_count, &total_size) == 0) {
-            cached_file_count = file_count;
-            cached_total_size = total_size;
-            storage_stats_next_refresh_ms = now + 2000;
-        } else {
-            storage_stats_next_refresh_ms = now + 500;
-        }
-    }
-    
-    /* Phone app expects (little-endian):
-     *   [0..3]  total_used_bytes  (uint32)
-     *   [4..7]  file_count        (uint32)
-     *   [8..11] free_bytes        (uint32)  — optional, newer firmware
-     *   [12..15] status_flags     (uint32)  — optional, newer firmware
-     */
-    uint32_t payload[4] = {0};
-    payload[0] = (uint32_t)cached_total_size;   /* total used bytes */
-    payload[1] = cached_file_count;             /* number of audio files */
-    payload[2] = 0;                      /* free_bytes — TODO: implement disk_access_ioctl */
-    payload[3] = 0;                      /* status_flags: bit0=charging, bit1=warning, bit2=error */
-    
-    LOG_INF("Storage read: used=%u bytes, files=%u", payload[0], payload[1]);
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, payload, sizeof(payload));
-}
-
-uint8_t transport_started = 0;
-#define SD_BLE_SIZE 440
-#define STORAGE_CHUNK_COUNT 20
-#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * STORAGE_CHUNK_COUNT + 5 * STORAGE_CHUNK_COUNT)  /* ~8.9KB */
-static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
-static uint8_t stop_started = 0;
-uint32_t remaining_length = 0;
-
-#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
-
-typedef enum {
-    SYNC_SPEED_MODE_NONE = 0,
-    SYNC_SPEED_MODE_BLE,
-} sync_speed_mode_t;
-
-static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
-static int64_t sync_speed_window_start_ms = 0;
-static uint64_t sync_speed_window_bytes = 0;
-
-static void sync_speed_reset(sync_speed_mode_t mode)
-{
-    sync_speed_mode = mode;
-    sync_speed_window_start_ms = k_uptime_get();
-    sync_speed_window_bytes = 0;
-}
-
-static void sync_speed_add_bytes(uint32_t bytes)
-{
-    if (sync_speed_mode == SYNC_SPEED_MODE_NONE || bytes == 0) {
-        return;
-    }
-
-    sync_speed_window_bytes += bytes;
-    int64_t now = k_uptime_get();
-    int64_t elapsed_ms = now - sync_speed_window_start_ms;
-
-    if (elapsed_ms >= SYNC_SPEED_LOG_INTERVAL_MS) {
-        uint64_t kbps = (sync_speed_window_bytes * 1000U) / (elapsed_ms * 1024U);
-        const char *mode_str = "BLE";
-        LOG_INF("Sync speed (%s): %u KB/s", mode_str, (uint32_t)kbps);
-
-        sync_speed_window_start_ms = now;
-        sync_speed_window_bytes = 0;
+        LOG_ERR("Invalid storage CCC value: %u", value);
     }
 }
 
 static uint8_t storage_status_from_error(int err, uint8_t fallback_status)
 {
     switch (err) {
+    case -ERANGE:
+        return SEQ_OUT_OF_RANGE;
     case -ETIMEDOUT:
     case -EBUSY:
     case -ECANCELED:
@@ -231,73 +196,10 @@ static uint8_t storage_status_from_error(int err, uint8_t fallback_status)
     }
 }
 
-static uint16_t get_ble_chunk_size(struct bt_conn *conn, uint8_t include_timestamp)
+static uint16_t get_ble_data_chunk_size(struct bt_conn *conn)
 {
-    if (!conn) {
-        return SD_BLE_SIZE;
-    }
-
-    uint16_t mtu = bt_gatt_get_mtu(conn);
-    if (mtu <= 3) {
-        return 20;
-    }
-
-    uint16_t att_payload = mtu - 3;
-    uint16_t protocol_overhead = include_timestamp ? 4 : 0;
-
-    if (att_payload <= protocol_overhead + 8) {
-        return 20;
-    }
-
-    uint16_t chunk = att_payload - protocol_overhead;
-    return MIN(chunk, (uint16_t)SD_BLE_SIZE);
-}
-
-static uint8_t heartbeat_count = 0;
-
-/**
- * @brief Refresh file list cache for multi-file sync
- */
-static int refresh_file_list_cache(void)
-{
-    int ret = get_audio_file_list_with_sizes(sync_file_list, sync_file_sizes,
-                                             MAX_AUDIO_FILES, &sync_file_count);
-    if (ret < 0) {
-        LOG_ERR("Failed to get file list: %d", ret);
-        sync_file_count = 0;
-        return ret;
-    }
-    
-    LOG_INF("File list refreshed: %d files", sync_file_count);
-    return sync_file_count;
-}
-
-/**
- * @brief Send file list response
- * Format: [count:1][ts1:4][sz1:4][ts2:4][sz2:4]...
- *
- * Assumes the file list cache (sync_file_list/sync_file_sizes/sync_file_count)
- * has already been populated by the caller via refresh_file_list_cache().
- * Refreshes only when the cache is empty (sync_file_count == 0).
- */
-static int send_file_list_response(struct bt_conn *conn)
-{
-    if (sync_file_count == 0) {
-        int ret = refresh_file_list_cache();
-        if (ret < 0) {
-            uint8_t error_resp[1] = {storage_status_from_error(ret, STORAGE_NOT_READY)};
-            storage_notify(conn, error_resp, 1);
-            return ret;
-        }
-    }
-
-    if (sync_file_count == 0) {
-        uint8_t empty_resp[1] = {0};
-        storage_notify(conn, empty_resp, 1);
-        return 0;
-    }
-
     uint16_t att_payload = 20;
+
     if (conn) {
         uint16_t mtu = bt_gatt_get_mtu(conn);
         if (mtu > 3U) {
@@ -305,159 +207,257 @@ static int send_file_list_response(struct bt_conn *conn)
         }
     }
 
-    int max_files_by_payload = (att_payload > 1U) ? ((att_payload - 1U) / STORAGE_FILE_LIST_ENTRY_SIZE) : 0;
-    int response_file_count = MIN(sync_file_count, STORAGE_LIST_MAX_FILES_PER_RESPONSE);
-    response_file_count = MIN(response_file_count, max_files_by_payload);
+    if (att_payload <= 1U) {
+        return 20;
+    }
 
-    if (response_file_count < 0) {
-        response_file_count = 0;
-    }
-    
-    /* Use storage_buffer to build response (max 4440 bytes) */
-    /* Each file: ts(4) + size(4) = 8 bytes, max ~550 files */
-    int resp_len = 0;
-    
-    storage_buffer[resp_len++] = (uint8_t)response_file_count;
-    
-    for (int i = 0; i < response_file_count && resp_len + STORAGE_FILE_LIST_ENTRY_SIZE <= STORAGE_BUFFER_SIZE; i++) {
-        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
-        uint32_t size = sync_file_sizes[i];
-        
-        storage_buffer[resp_len++] = (timestamp >> 24) & 0xFF;
-        storage_buffer[resp_len++] = (timestamp >> 16) & 0xFF;
-        storage_buffer[resp_len++] = (timestamp >> 8) & 0xFF;
-        storage_buffer[resp_len++] = timestamp & 0xFF;
-        
-        storage_buffer[resp_len++] = (size >> 24) & 0xFF;
-        storage_buffer[resp_len++] = (size >> 16) & 0xFF;
-        storage_buffer[resp_len++] = (size >> 8) & 0xFF;
-        storage_buffer[resp_len++] = size & 0xFF;
-    }
-    
-    LOG_INF("Sending file list: %d/%d files, %d bytes (att_payload=%u)",
-            response_file_count,
-            sync_file_count,
-            resp_len,
-            att_payload);
-    return storage_notify(conn, storage_buffer, resp_len);
+    return att_payload - 1U;
 }
 
-/**
- * @brief Setup transfer for specific file by index
- */
-static int setup_file_transfer(int file_index, uint32_t start_offset)
+static int send_ack(struct bt_conn *conn, uint8_t status)
 {
-    if (file_index < 0 || file_index >= sync_file_count) {
-        LOG_ERR("File index out of range: %d", file_index);
-        return -1;
-    }
-    
-    strncpy(current_read_filename, sync_file_list[file_index], MAX_FILENAME_LEN - 1);
-    current_read_offset = start_offset;
-    current_sync_file_index = file_index;
-    transfer_end_status = 0;
-    
-    if (current_read_offset < sync_file_sizes[file_index]) {
-        remaining_length = sync_file_sizes[file_index] - current_read_offset;
-    } else {
-        remaining_length = 0;
-    }
-    
-    LOG_INF("Setup transfer: file[%d]=%s, offset=%u, remaining=%u", 
-            file_index, current_read_filename, current_read_offset, remaining_length);
-    return 0;
+    control_notify_buf[0] = NOTIFY_ACK;
+    control_notify_buf[1] = status;
+    return storage_notify(conn, control_notify_buf, 2);
 }
 
-/**
- * @brief Delete specific file by index
- */
-static int delete_file_by_index(int file_index)
+static int send_done(struct bt_conn *conn, uint8_t status, uint64_t next_seq)
 {
-    if (file_index < 0 || file_index >= sync_file_count) {
-        return -1;
-    }
-    /* Copy target filename so we are robust to list refreshes */
-    char target_name[MAX_FILENAME_LEN] = {0};
-    strncpy(target_name, sync_file_list[file_index], MAX_FILENAME_LEN - 1);
+    control_notify_buf[0] = NOTIFY_DONE;
+    control_notify_buf[1] = status;
+    sys_put_be64(next_seq, control_notify_buf + 2);
+    return storage_notify(conn, control_notify_buf, 10);
+}
 
-    /* Delegate deletion to SD worker so it can safely handle
-     * the case where this is the currently-recording file. */
-    int ret = delete_audio_file(target_name);
+static int send_ring_info_response(struct bt_conn *conn)
+{
+    sd_ring_info_t info;
+    int ret = sd_ring_get_info(&info);
     if (ret < 0) {
-        LOG_ERR("Failed to delete file[%d]: %s (err=%d)", file_index, target_name, ret);
-        return ret;
+        return send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
     }
 
-    LOG_INF("Deleted file[%d]: %s", file_index, target_name);
-    refresh_file_list_cache();
+    control_notify_buf[0] = NOTIFY_INFO;
+    sys_put_be64(info.read_seq, control_notify_buf + 1);
+    sys_put_be64(info.write_seq, control_notify_buf + 9);
+    sys_put_be32(info.capacity_packets, control_notify_buf + 17);
+    sys_put_be64(info.dropped_packets, control_notify_buf + 21);
+    sys_put_be16(RAW_AUDIO_PACKET_BYTES, control_notify_buf + 29);
+    return storage_notify(conn, control_notify_buf, 31);
+}
+
+static void reset_transfer_state(void)
+{
+    transfer_active = false;
+    read_begin_sent = false;
+    done_pending = false;
+    transfer_start_seq = 0;
+    current_read_seq = 0;
+    remaining_packets = 0;
+    transfer_end_status = 0;
+}
+
+void storage_stop_transfer(void)
+{
+    reset_transfer_state();
+}
+
+bool storage_transfer_active(void)
+{
+    return transfer_active;
+}
+
+static int start_pending_read(struct bt_conn *conn)
+{
+    sd_ring_info_t info;
+    int ret = sd_ring_get_info(&info);
+    if (ret < 0) {
+        return send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+    }
+
+    if (pending_start_seq < info.read_seq || pending_start_seq > info.write_seq) {
+        return send_ack(conn, SEQ_OUT_OF_RANGE);
+    }
+
+    uint64_t available_packets = info.write_seq - pending_start_seq;
+    uint32_t requested_packets = pending_packet_count;
+    if (requested_packets == 0U || (uint64_t)requested_packets > available_packets) {
+        requested_packets = (available_packets > UINT32_MAX) ? UINT32_MAX : (uint32_t)available_packets;
+    }
+
+    transfer_active = true;
+    read_begin_sent = false;
+    done_pending = false;
+    transfer_start_seq = pending_start_seq;
+    current_read_seq = pending_start_seq;
+    remaining_packets = requested_packets;
+    transfer_end_status = 0;
+    heartbeat_count = 0;
+    sync_speed_mode = SYNC_SPEED_MODE_NONE;
+    sync_speed_window_bytes = 0;
+    sync_speed_window_start_ms = 0;
+
     return 0;
 }
 
-static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *conn)
+static void write_to_gatt(struct bt_conn *conn)
 {
-    if (len < 1) {
+    if (!transfer_active || done_pending) {
+        return;
+    }
+
+    if (!read_begin_sent) {
+        control_notify_buf[0] = NOTIFY_READ_BEGIN;
+        sys_put_be64(transfer_start_seq, control_notify_buf + 1);
+        sys_put_be32(remaining_packets, control_notify_buf + 9);
+
+        int err = storage_notify(conn, control_notify_buf, 13);
+        if (err == -ENOMEM) {
+            k_yield();
+            return;
+        }
+        if (err == -EAGAIN) {
+            return;
+        }
+        if (err) {
+            transfer_end_status = storage_status_from_error(err, STORAGE_NOT_READY);
+            done_pending = true;
+            remaining_packets = 0;
+            return;
+        }
+
+        read_begin_sent = true;
+    }
+
+    if (remaining_packets == 0U) {
+        done_pending = true;
+        return;
+    }
+
+    if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
+        sync_speed_reset(SYNC_SPEED_MODE_BLE);
+    }
+
+    uint16_t ble_chunk = get_ble_data_chunk_size(conn);
+
+    while (remaining_packets > 0U) {
+        uint32_t packets_to_read = MIN(remaining_packets, (uint32_t)STORAGE_CHUNK_COUNT);
+        uint32_t bytes_read = 0;
+        uint32_t packets_read = 0;
+        int ret = sd_ring_read(current_read_seq,
+                               storage_buffer,
+                               packets_to_read * RAW_AUDIO_PACKET_BYTES,
+                               &bytes_read,
+                               &packets_read);
+        if (ret < 0) {
+            transfer_end_status = storage_status_from_error(ret, STORAGE_NOT_READY);
+            done_pending = true;
+            remaining_packets = 0;
+            return;
+        }
+        if (packets_read == 0U || bytes_read == 0U) {
+            done_pending = true;
+            remaining_packets = 0;
+            return;
+        }
+
+        uint32_t bytes_sent = 0;
+        while (bytes_sent < bytes_read) {
+            uint32_t payload = MIN(bytes_read - bytes_sent, (uint32_t)ble_chunk);
+            data_notify_buf[0] = NOTIFY_DATA;
+            memcpy(data_notify_buf + 1, storage_buffer + bytes_sent, payload);
+
+            int err = storage_notify(conn, data_notify_buf, payload + 1U);
+            if (err == -ENOMEM) {
+                k_yield();
+                continue;
+            }
+            if (err == -EAGAIN) {
+                return;
+            }
+            if (err) {
+                transfer_end_status = storage_status_from_error(err, STORAGE_NOT_READY);
+                done_pending = true;
+                remaining_packets = 0;
+                return;
+            }
+
+            bytes_sent += payload;
+            sync_speed_add_bytes(payload);
+        }
+
+        current_read_seq += packets_read;
+        remaining_packets -= packets_read;
+    }
+
+    done_pending = true;
+}
+
+static ssize_t storage_read_characteristic(struct bt_conn *conn,
+                                           const struct bt_gatt_attr *attr,
+                                           void *buf,
+                                           uint16_t len,
+                                           uint16_t offset)
+{
+    uint32_t payload[4] = {0};
+    sd_ring_info_t info;
+
+    if (sd_ring_get_info(&info) == 0) {
+        uint64_t unread_packets = info.write_seq - info.read_seq;
+        uint64_t used_bytes = unread_packets * RAW_AUDIO_PACKET_BYTES;
+        uint64_t free_bytes = ((uint64_t)info.capacity_packets - unread_packets) * RAW_AUDIO_PACKET_BYTES;
+
+        payload[0] = (used_bytes > UINT32_MAX) ? UINT32_MAX : (uint32_t)used_bytes;
+        payload[1] = (unread_packets > UINT32_MAX) ? UINT32_MAX : (uint32_t)unread_packets;
+        payload[2] = (free_bytes > UINT32_MAX) ? UINT32_MAX : (uint32_t)free_bytes;
+        payload[3] = rtc_is_valid() ? 1U : 0U;
+    }
+
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, payload, sizeof(payload));
+}
+
+static uint8_t parse_storage_command(void *buf, uint16_t len)
+{
+    if (len < 1U) {
         return INVALID_COMMAND;
     }
-    
-    const uint8_t command = ((uint8_t *) buf)[0];
-    LOG_INF("Storage command: 0x%02X, len=%d", command, len);
-    
-    /* ===== NEW MULTI-FILE COMMANDS ===== */
-    
-    if (command == CMD_LIST_FILES) {
-        list_files_requested = 1;  /* Defer to storage thread to avoid stack overflow */
-        return 0xFF;  /* Will be processed in storage thread */
-    }
-    
-    if (command == CMD_READ_FILE) {
-        if (len < 2) return INVALID_COMMAND;
-        
-        uint8_t file_index = ((uint8_t *) buf)[1];
-        uint32_t request_offset = 0;
-        if (len >= 6) {
-            request_offset = ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | 
-                            ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
-        }
-        
-        if (sync_file_count == 0) {
-            int ret = refresh_file_list_cache();
-            if (ret < 0) {
-                return storage_status_from_error(ret, STORAGE_NOT_READY);
-            }
-        }
-        
-        if (file_index >= sync_file_count) {
-            return FILE_INDEX_OUT_OF_RANGE;
-        }
-        
-        if (setup_file_transfer(file_index, request_offset) < 0) {
-            return FILE_NOT_FOUND;
-        }
-        
-        transport_started = 1;
-        return 0;
-    }
-    
-    if (command == CMD_DELETE_FILE) {
-        if (len < 2) return INVALID_COMMAND;
-        
-        uint8_t file_index = ((uint8_t *) buf)[1];
-        if (sync_file_count == 0) {
-            /* File list not cached, defer refresh + delete to storage thread */
-            delete_file_index = file_index;
-            return 0xFF;
-        }
-        if (file_index >= sync_file_count) {
-            return FILE_INDEX_OUT_OF_RANGE;
-        }
-        
-        delete_file_index = file_index;  /* Defer to storage thread */
-        return 0xFF;
+
+    const uint8_t *bytes = buf;
+    const uint8_t command = bytes[0];
+
+    if (command == CMD_RING_INFO) {
+        info_requested = 1;
+        return STORAGE_DEFERRED;
     }
 
-    /* Control commands */
+    if (command == CMD_RING_READ) {
+        if (len != 9U && len != 13U) {
+            return INVALID_COMMAND;
+        }
+
+        pending_start_seq = sys_get_be64(bytes + 1);
+        pending_packet_count = (len == 13U) ? sys_get_be32(bytes + 9) : 0U;
+        read_request_pending = 1;
+        return STORAGE_DEFERRED;
+    }
+
+    if (command == CMD_RING_ADVANCE) {
+        if (len != 9U) {
+            return INVALID_COMMAND;
+        }
+
+        pending_advance_seq = sys_get_be64(bytes + 1);
+        advance_request_pending = 1;
+        return STORAGE_DEFERRED;
+    }
+
+    if (command == CMD_RING_CLEAR) {
+        clear_requested = 1;
+        return STORAGE_DEFERRED;
+    }
+
     if (command == CMD_STOP_SYNC) {
-        storage_stop_transfer();
+        stop_requested = 1;
         return 0;
     }
 
@@ -466,7 +466,6 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
         return 0;
     }
 
-    /* Accept only multi-file protocol commands above. */
     return INVALID_COMMAND;
 }
 
@@ -477,270 +476,86 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
                                      uint16_t offset,
                                      uint8_t flags)
 {
-    if (len < 1) {
-        uint8_t result_buffer[1] = {INVALID_COMMAND};
-        LOG_WRN("storage write with empty payload");
-        storage_notify(conn, &result_buffer, 1);
+    ARG_UNUSED(attr);
+    ARG_UNUSED(offset);
+    ARG_UNUSED(flags);
+
+    if (len < 1U) {
+        (void)send_ack(conn, INVALID_COMMAND);
         return len;
     }
 
-    LOG_INF("about to schedule the storage");
-    LOG_INF("was sent %d  ", ((uint8_t *) buf)[0]);
-
-    uint8_t result = parse_storage_command((void *)buf, len, conn);
-    
-    /* 0xFF means response was already sent */
-    if (result != 0xFF) {
-        uint8_t result_buffer[1] = {result};
-        LOG_INF("length of storage write: %d, result: %d", len, result);
-        storage_notify(conn, &result_buffer, 1);
+    uint8_t result = parse_storage_command((void *)buf, len);
+    if (result != STORAGE_DEFERRED) {
+        (void)send_ack(conn, result);
     }
-    
+
     return len;
 }
 
-/*
- * Batch-read buffer for BLE sync: reuse storage_buffer (4450 bytes).
- * Only need a small separate buffer for building BLE notifications.
- */
-#define BLE_BATCH_PACKETS 20
-static uint8_t ble_notify_buf[4 + SD_BLE_SIZE];
-
-static void write_to_gatt(struct bt_conn *conn)
+static void storage_write(void)
 {
-    int err;
-    if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
-        sync_speed_reset(SYNC_SPEED_MODE_BLE);
-    }
-    uint16_t ble_chunk = get_ble_chunk_size(conn, current_sync_file_index >= 0);
-    
-    if (current_sync_file_index < 0) {
-        LOG_ERR("write_to_gatt called without active multi-file transfer");
-        remaining_length = 0;
-        return;
-    }
-
-    /* New protocol: add 4-byte timestamp prefix */
-    uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
-        
-        /* Build timestamp header once */
-        ble_notify_buf[0] = (timestamp >> 24) & 0xFF;
-        ble_notify_buf[1] = (timestamp >> 16) & 0xFF;
-        ble_notify_buf[2] = (timestamp >> 8) & 0xFF;
-        ble_notify_buf[3] = timestamp & 0xFF;
-
-        /*
-         * Multi-batch send loop: keep reading+sending until BLE TX buffers
-         * saturate or we run out of data.  Previously we did ONE batch per
-         * call (~4.4 KB) then returned to the main loop, which limited
-         * throughput to 10-15 KB/s.  Now we keep going until -ENOMEM
-         * persists, which lets BLE run at full connection-event throughput.
-         */
-        while (remaining_length > 0) {
-            if (stop_started) {
-                remaining_length = 0;
-                return;
-            }
-
-            uint32_t batch_audio_size = MIN(remaining_length, (uint32_t)(ble_chunk * BLE_BATCH_PACKETS));
-            if (batch_audio_size > STORAGE_BUFFER_SIZE) {
-                batch_audio_size = STORAGE_BUFFER_SIZE;
-            }
-
-            int r = read_audio_data(current_read_filename, storage_buffer, batch_audio_size, current_read_offset);
-            if (r <= 0) {
-                LOG_ERR("Failed to read audio data: %d", r);
-                transfer_end_status = storage_status_from_error(r, FILE_NOT_FOUND);
-                remaining_length = 0;
-                return;
-            }
-            uint32_t bytes_read = (uint32_t)r;
-            uint32_t bytes_sent = 0;
-
-            while (bytes_sent < bytes_read && remaining_length > 0) {
-                if (stop_started) {
-                    remaining_length = 0;
-                    return;
-                }
-
-                uint32_t chunk = MIN(bytes_read - bytes_sent, ble_chunk);
-                memcpy(ble_notify_buf + 4, storage_buffer + bytes_sent, chunk);
-
-                err = storage_notify(conn, ble_notify_buf, 4 + chunk);
-                if (err == -ENOMEM) {
-                    if (stop_started) {
-                        remaining_length = 0;
-                        return;
-                    }
-                    k_yield();
-                    continue;
-                }
-                if (err == -EAGAIN) {
-                    return;
-                }
-                if (err && err != -ENOMEM) {
-                    LOG_ERR("GATT notify error: %d", err);
-                    return;
-                }
-
-                bytes_sent += chunk;
-                sync_speed_add_bytes(chunk);
-                current_read_offset += chunk;
-                remaining_length -= chunk;
-            }
-        }
-}
-
-void storage_stop_transfer()
-{
-    remaining_length = 0;
-    stop_started = 1;
-}
-
-bool storage_transfer_active(void)
-{
-    return (remaining_length > 0) || (transport_started != 0);
-}
-
-void storage_write(void)
-{
-    uint32_t total_sent = 0;
-    uint32_t consecutive_errors = 0;
-
     while (1) {
         struct bt_conn *conn = get_current_connection();
 
-        if (transport_started) {
-            LOG_INF("transport started in side : %d", transport_started);
-            sync_speed_mode = SYNC_SPEED_MODE_NONE;
-            sync_speed_window_bytes = 0;
-            sync_speed_window_start_ms = 0;
-            if (current_sync_file_index < 0) {
-                LOG_ERR("Transfer start requested without CMD_READ_FILE setup");
-                remaining_length = 0;
-            }
-            transport_started = 0;  /* Clear flag after setup */
-        }
-        if (list_files_requested) {
-            list_files_requested = 0;
-            /* Always refresh cache so the response is up-to-date, then send.
-             * send_file_list_response() will not re-refresh if count > 0. */
-            if (conn) {
-                int ret = refresh_file_list_cache();
-                if (ret < 0) {
-                    uint8_t result = storage_status_from_error(ret, STORAGE_NOT_READY);
-                    storage_notify(conn, &result, 1);
-                } else {
-                    send_file_list_response(conn);
-                }
-            }
-        }
-        if (delete_file_index >= 0) {
-            int8_t idx = delete_file_index;
-            delete_file_index = -1;
-            uint8_t result = 0;
-            
-            /* Ensure file list is cached */
-            if (sync_file_count == 0) {
-                int ret = refresh_file_list_cache();
-                if (ret < 0) {
-                    result = storage_status_from_error(ret, STORAGE_NOT_READY);
-                }
-            }
-            
-            if (result == 0 && idx >= sync_file_count) {
-                result = FILE_INDEX_OUT_OF_RANGE;
-            } else if (result == 0) {
-                int delete_ret = delete_file_by_index(idx);
-                if (delete_ret < 0) {
-                    result = storage_status_from_error(delete_ret, FILE_NOT_FOUND);
-                }
-            }
-            
-            if (conn) {
-                storage_notify(conn, &result, 1);
-            }
-            LOG_INF("Delete file[%d] result: %d", idx, result);
-        }
-        if (stop_started) {
-            remaining_length = 0;
-            stop_started = 0;
-            save_offset(current_read_filename, current_read_offset);
-        }
-        if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
-            LOG_INF("no heartbeat sent");
-            save_offset(current_read_filename, current_read_offset);
-            // ensure heartbeat count resets
-            heartbeat_count = 0;
+        if (stop_requested) {
+            stop_requested = 0;
+            storage_stop_transfer();
         }
 
-        if (remaining_length > 0) {
+        if (info_requested) {
+            info_requested = 0;
+            if (conn) {
+                (void)send_ring_info_response(conn);
+            }
+        }
+
+        if (clear_requested) {
+            clear_requested = 0;
+            if (conn) {
+                int ret = sd_ring_clear();
+                (void)send_ack(conn, ret < 0 ? storage_status_from_error(ret, STORAGE_NOT_READY) : 0);
+            }
+        }
+
+        if (advance_request_pending) {
+            advance_request_pending = 0;
+            if (conn) {
+                int ret = sd_ring_advance(pending_advance_seq);
+                (void)send_ack(conn, ret < 0 ? storage_status_from_error(ret, SEQ_OUT_OF_RANGE) : 0);
+            }
+        }
+
+        if (read_request_pending) {
+            read_request_pending = 0;
+            if (conn) {
+                int ret = start_pending_read(conn);
+                if (ret < 0) {
+                    (void)send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+                }
+            }
+        }
+
+        if (transfer_active) {
             if (conn == NULL) {
-                LOG_ERR("invalid connection");
-                remaining_length = 0;
-                save_offset(current_read_filename, current_read_offset);
-                // save offset to flash
-                continue;
-                // k_yield();
-            }
-
-            write_to_gatt(conn);
-            heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
-
-            transport_started = 0;
-            if (remaining_length == 0) {
-                if (stop_started) {
-                    stop_started = 0;
-                    transfer_end_status = 0;
-                    current_sync_file_index = -1;
-                } else if (transfer_end_status != 0) {
-                    uint8_t result = transfer_end_status;
-                    save_offset(current_read_filename, current_read_offset);
-                    LOG_WRN("Transfer aborted for %s with status %u", current_read_filename, result);
-                    transfer_end_status = 0;
-                    current_sync_file_index = -1;
-                    if (conn) {
-                        (void)storage_notify(conn, &result, 1);
-                    }
+                storage_stop_transfer();
+            } else if (done_pending) {
+                int err = send_done(conn, transfer_end_status, current_read_seq);
+                if (err == -ENOMEM) {
+                    k_yield();
+                } else if (err == -EAGAIN) {
+                    /* wait for subscription/connection to recover */
                 } else {
-                    save_offset(current_read_filename, current_read_offset);
-                    LOG_INF("File done: %s", current_read_filename);
-
-                    /* Auto-delete after successful multi-file sync. */
-                    {
-                        char recording_name[MAX_FILENAME_LEN] = {0};
-                        get_current_filename(recording_name, sizeof(recording_name));
-                        bool is_recording_file = (recording_name[0] != '\0' &&
-                            strcmp(current_read_filename, recording_name) == 0);
-
-                        if (!is_recording_file && current_read_filename[0] != '\0') {
-                            LOG_INF("Auto-delete synced file: %s", current_read_filename);
-                            int del_ret = delete_audio_file(current_read_filename);
-                            if (del_ret < 0) {
-                                LOG_ERR("Failed to auto-delete %s: %d", current_read_filename, del_ret);
-                            }
-                            /* Clear saved offset since deleted file is gone */
-                            save_offset("", 0);
-                        } else if (is_recording_file) {
-                            LOG_INF("Skipping delete of active recording file: %s", current_read_filename);
-                        }
-                    }
-
-                    /* BLE: notify completion */
-                    LOG_PRINTK("done. attempting to download more files\n");
-                    uint8_t stop_result[1] = {100};
-                    (void)storage_notify(get_current_connection(), &stop_result, 1);
-                    current_sync_file_index = -1;
-                    k_msleep(10);
+                    reset_transfer_state();
                 }
+            } else {
+                write_to_gatt(conn);
+                heartbeat_count = (heartbeat_count + 1U) % 101U;
             }
         }
 
-        // Sleep when there's no work
-        if (remaining_length == 0 && !stop_started) {
-            uint32_t idle_sleep_ms = get_current_connection()
-                ? STORAGE_IDLE_POLL_MS_CONNECTED
-                : STORAGE_IDLE_POLL_MS_OFFLINE;
+        if (!transfer_active) {
+            uint32_t idle_sleep_ms = conn ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
             k_msleep(idle_sleep_ms);
         } else {
             k_yield();
@@ -753,7 +568,7 @@ int storage_init()
     k_thread_create(&storage_thread,
                     storage_stack,
                     K_THREAD_STACK_SIZEOF(storage_stack),
-                    (k_thread_entry_t) storage_write,
+                    (k_thread_entry_t)storage_write,
                     NULL,
                     NULL,
                     NULL,
