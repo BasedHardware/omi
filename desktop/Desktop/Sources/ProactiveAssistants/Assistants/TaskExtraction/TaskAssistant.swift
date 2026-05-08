@@ -778,7 +778,8 @@ actor TaskAssistant: ProactiveAssistant {
                 contents: contents,
                 systemPrompt: currentSystemPrompt,
                 tools: [tools],
-                forceToolCall: iteration == 0
+                forceToolCall: iteration == 0,
+                thinkingBudget: 1024
             )
 
             guard let toolCall = result.toolCalls.first else {

@@ -990,20 +990,8 @@ class FloatingControlBarManager {
 
         barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
-            // Route action-like queries to an agent pill (no inline chat). Quick
-            // questions still flow through the inline conversation.
-            if AgentPillsManager.looksLikeAction(message) {
-                let model = ShortcutSettings.shared.selectedModel.isEmpty
-                    ? "claude-sonnet-4-6"
-                    : ShortcutSettings.shared.selectedModel
-                _ = AgentPillsManager.shared.spawnFromUserQuery(message, model: model)
-                // Collapse the input so the pill is the only visible result.
-                barWindow.state.aiInputText = ""
-                barWindow.closeAIConversation()
-                return
-            }
             Task { @MainActor in
-                await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+                await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
             }
         }
 
@@ -1285,20 +1273,12 @@ class FloatingControlBarManager {
 
         guard let provider = activeFloatingProvider() else { return }
 
-        // Re-wire the onSendQuery to use the isolated floating-bar provider
+        // Re-wire the onSendQuery to use the isolated floating-bar provider.
+        // Subsequent typed messages also go through the AI router.
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
-            if AgentPillsManager.looksLikeAction(message) {
-                let model = ShortcutSettings.shared.selectedModel.isEmpty
-                    ? "claude-sonnet-4-6"
-                    : ShortcutSettings.shared.selectedModel
-                _ = AgentPillsManager.shared.spawnFromUserQuery(message, model: model)
-                window.state.aiInputText = ""
-                window.closeAIConversation()
-                return
-            }
             Task { @MainActor in
-                await self.sendAIQuery(message, barWindow: window, provider: provider)
+                await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
             }
         }
 
@@ -1323,19 +1303,47 @@ class FloatingControlBarManager {
         window.orderFrontRegardless()
 
         // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
-        // we need to apply the same pill-routing rule here ourselves.
-        if AgentPillsManager.looksLikeAction(query) {
+        // we need to apply the same router rule here ourselves.
+        Task { @MainActor in
+            await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+        }
+    }
+
+    /// Ask the router (Haiku) whether this query should stay in the inline
+    /// chat or get hoisted into a background agent pill, then dispatch to
+    /// whichever path it chose. The router call is ~300-500ms; we show the
+    /// inline "thinking" UI immediately so the user knows the message landed.
+    private func routeQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        fromVoice: Bool
+    ) async {
+        // Show the thinking state immediately so there's no perceptible lag
+        // while the router thinks. If the router decides "agent" we'll tear
+        // this down before the chat actually streams anything.
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+
+        let decision = await AgentPillsManager.classify(message)
+        if decision.route == .agent {
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6"
                 : ShortcutSettings.shared.selectedModel
-            _ = AgentPillsManager.shared.spawnFromUserQuery(query, model: model, fromVoice: fromVoice)
-            window.state.aiInputText = ""
-            window.closeAIConversation()
+            _ = AgentPillsManager.shared.spawnFromUserQuery(
+                message,
+                model: model,
+                fromVoice: fromVoice,
+                preFetchedTitle: decision.title,
+                preFetchedAck: decision.ack
+            )
+            // Tear down the inline state we set up for the thinking spinner.
+            barWindow.state.aiInputText = ""
+            barWindow.closeAIConversation()
             return
         }
-        Task { @MainActor in
-            await self.sendAIQuery(query, barWindow: window, provider: provider)
-        }
+        // Chat route: continue with the normal inline flow. sendAIQuery will
+        // re-prepare the visible state, which is idempotent.
+        await sendAIQuery(message, barWindow: barWindow, provider: provider)
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).

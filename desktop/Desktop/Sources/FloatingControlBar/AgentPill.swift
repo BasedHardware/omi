@@ -91,33 +91,110 @@ final class AgentPillsManager: ObservableObject {
 
     private init() {}
 
-    /// Whether a piece of user input looks like an "action" the agent should
-    /// execute, vs. a quick conversational question.
-    static func looksLikeAction(_ text: String) -> Bool {
-        let lower = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        guard !lower.isEmpty else { return false }
-        // Anything containing "agent", "pill", or "background" is intentional
-        // demo invocation — always promote.
-        let demoSignals = ["agent", "pill", "background", "in parallel"]
-        if demoSignals.contains(where: { lower.contains($0) }) { return true }
-        let actionPrefixes = [
-            "open ", "do ", "go ", "send ", "make ", "find ", "search ",
-            "build ", "fix ", "create ", "click ", "buy ", "book ",
-            "schedule ", "draft ", "write ", "reply ", "compose ", "start ",
-            "spawn ", "kick off ", "kickoff ", "launch ", "trigger ", "queue ",
-            "deploy ", "merge ", "push ", "pull ", "checkout ", "commit ",
-            "close ", "delete ", "remove ", "add ", "install ", "update ",
-            "edit ", "rename ", "move ", "copy ", "show me ", "help me ",
-            "can you ", "please ", "summarize ", "summarise ", "research ",
-            "look up ", "look at ", "fill ", "submit ", "post ", "tweet ",
-            "dm ", "email ", "call ", "navigate ", "visit ", "test ",
+    /// Routing decision for an Ask Omi message — does it stay inline in the
+    /// floating bar, or get hoisted into a background agent pill?
+    enum Route: String { case chat, agent }
+
+    /// Combined router result. Title/ack are pre-computed alongside the route
+    /// so we don't need a second Haiku call when the answer is "agent".
+    struct RouterDecision {
+        let route: Route
+        let title: String?
+        let ack: String?
+    }
+
+    /// Ask Claude Haiku whether the message is a quick info question (→ chat)
+    /// or a background task (→ agent). Falls back to `.chat` on error/timeout
+    /// so we never accidentally hijack a question into a long-running pill.
+    /// ~300-500ms via the desktop-backend's OpenAI-compatible proxy.
+    static func classify(_ query: String) async -> RouterDecision {
+        guard let result = await runRouterCall(for: query) else {
+            return RouterDecision(route: .chat, title: nil, ack: nil)
+        }
+        return result
+    }
+
+    private static func runRouterCall(for query: String) async -> RouterDecision? {
+        let baseURL = await APIClient.shared.rustBackendURL
+        guard !baseURL.isEmpty else {
+            log("AgentPill: router skipped — rustBackendURL empty, defaulting to chat")
+            return nil
+        }
+        let normalized = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
+        guard let url = URL(string: normalized + "v2/chat/completions") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 4
+        do {
+            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
+            for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        } catch {
+            log("AgentPill: router skipped — auth header unavailable (\(error.localizedDescription))")
+            return nil
+        }
+
+        let prompt = """
+        The user just sent this message in the Omi floating bar:
+
+        "\(query)"
+
+        Decide whether to (a) answer it inline in the chat bar, or (b) spawn a background agent that will do work on the user's computer/apps/browser.
+
+        Reply with ONLY a single-line JSON object, no prose, no markdown:
+        {"route":"chat"|"agent","title":"<3-5 word imperative title in Title Case, no trailing punctuation>","ack":"<one short spoken acknowledgement, max 7 words, friendly tone>"}
+
+        Use "agent" ONLY when the request requires the assistant to take real actions on the user's computer/browser/apps that will plausibly take more than ~10 seconds — building/coding something, sending/posting a message, editing or creating files, multi-step browser navigation, generating a long document.
+        Use "chat" for everything else: questions, lookups (even if the user uses words like "search"/"find"/"look up"), definitions, single facts, explanations, short summaries, opinions, conversation. When in doubt, choose "chat".
+        """
+
+        let body: [String: Any] = [
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 120,
+            "messages": [["role": "user", "content": prompt]],
+            "stream": false,
         ]
-        if actionPrefixes.contains(where: { lower.hasPrefix($0) }) { return true }
-        // Long, detailed instructions are almost always actions.
-        if lower.count >= 70 { return true }
-        return false
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                log("AgentPill: router failed — no HTTP response, defaulting to chat")
+                return nil
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let bodyText = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+                log("AgentPill: router HTTP \(http.statusCode) — \(bodyText), defaulting to chat")
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let choices = json["choices"] as? [[String: Any]],
+                let message = choices.first?["message"] as? [String: Any],
+                let text = message["content"] as? String
+            else {
+                log("AgentPill: router response shape unexpected, defaulting to chat")
+                return nil
+            }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let payloadData = trimmed.data(using: .utf8),
+                let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+                let routeStr = (payload["route"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            else {
+                log("AgentPill: router JSON parse failed — raw: \(String(trimmed.prefix(200))), defaulting to chat")
+                return nil
+            }
+            let route = Route(rawValue: routeStr) ?? .chat
+            let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let ack = (payload["ack"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            log("AgentPill: router decided route=\(route.rawValue) title=\"\(title ?? "")\"")
+            return RouterDecision(
+                route: route,
+                title: (title?.isEmpty == false) ? String(title!.prefix(40)) : nil,
+                ack: (ack?.isEmpty == false) ? String(ack!.prefix(120)) : nil
+            )
+        } catch {
+            log("AgentPill: router threw — \(error.localizedDescription), defaulting to chat")
+            return nil
+        }
     }
 
     /// Parse phrases like "spawn 3 agents", "5 tasks", "two agents working in
@@ -160,17 +237,38 @@ final class AgentPillsManager: ObservableObject {
     /// agents" we create 3 pills (each runs the same task on the shared
     /// queue). Returns the first pill so callers can inspect it.
     @discardableResult
-    func spawnFromUserQuery(_ query: String, model: String, fromVoice: Bool = false) -> AgentPill {
+    func spawnFromUserQuery(
+        _ query: String,
+        model: String,
+        fromVoice: Bool = false,
+        preFetchedTitle: String? = nil,
+        preFetchedAck: String? = nil
+    ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
-            return spawn(query: query, model: model, fromVoice: fromVoice)
+            return spawn(
+                query: query,
+                model: model,
+                fromVoice: fromVoice,
+                preFetchedTitle: preFetchedTitle,
+                preFetchedAck: preFetchedAck
+            )
         }
         var first: AgentPill?
         for i in 1...count {
             let labelled = "[\(i)/\(count)] \(query)"
             // Only the first pill speaks the acknowledgement when N > 1,
-            // otherwise we'd hear N overlapping voices.
-            let pill = spawn(query: labelled, model: model, fromVoice: fromVoice && first == nil)
+            // otherwise we'd hear N overlapping voices. Only the first pill
+            // gets the pre-fetched title/ack — the others fall back to their
+            // own title generation since their query text differs (the
+            // [i/N] prefix changes the model's output).
+            let pill = spawn(
+                query: labelled,
+                model: model,
+                fromVoice: fromVoice && first == nil,
+                preFetchedTitle: first == nil ? preFetchedTitle : nil,
+                preFetchedAck: first == nil ? preFetchedAck : nil
+            )
             if first == nil { first = pill }
         }
         return first ?? spawn(query: query, model: model, fromVoice: fromVoice)
@@ -181,8 +279,17 @@ final class AgentPillsManager: ObservableObject {
     /// `bootChain` so we never race ACP startup; once a pill's bridge is
     /// warmed it sends concurrently with everything else.
     @discardableResult
-    func spawn(query: String, model: String, fromVoice: Bool = false) -> AgentPill {
+    func spawn(
+        query: String,
+        model: String,
+        fromVoice: Bool = false,
+        preFetchedTitle: String? = nil,
+        preFetchedAck: String? = nil
+    ) -> AgentPill {
         let pill = AgentPill(query: query, model: model)
+        if let preFetchedTitle, !preFetchedTitle.isEmpty {
+            pill.title = preFetchedTitle
+        }
 
         // Trim if we're at the cap — drop the oldest finished pill first.
         if pills.count >= maxPills {
@@ -222,23 +329,32 @@ final class AgentPillsManager: ObservableObject {
         bootChain = myBoot
 
         pill.status = .starting
-        pill.latestActivity = "Warming up…"
-
-        // For voice queries, speak an instant deterministic acknowledgement
-        // BEFORE waiting for any API call so the user always gets audible
-        // feedback that we heard them. The smart title is fetched in parallel
-        // and updates the pill silently when it arrives.
-        if fromVoice {
-            FloatingBarVoicePlaybackService.shared.speakOneShot(AgentPillsManager.randomAck())
+        if let preFetchedAck, !preFetchedAck.isEmpty {
+            pill.latestActivity = preFetchedAck
+        } else {
+            pill.latestActivity = "Warming up…"
         }
 
-        Task { [weak pill] in
-            guard let pill else { return }
-            guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
-            await MainActor.run {
-                pill.title = result.title
-                if pill.latestActivity == "Warming up…" || pill.latestActivity == "Starting…" {
-                    pill.latestActivity = result.ack
+        // For voice queries, speak the pre-fetched ack from the router (or a
+        // random instant ack) BEFORE waiting for the bridge so the user
+        // always hears confirmation that we heard them.
+        if fromVoice {
+            let phrase = (preFetchedAck?.isEmpty == false) ? preFetchedAck! : AgentPillsManager.randomAck()
+            FloatingBarVoicePlaybackService.shared.speakOneShot(phrase)
+        }
+
+        // If the router already returned a title we don't need a second
+        // Haiku call for title generation. Otherwise kick one off in the
+        // background to upgrade the heuristic title.
+        if preFetchedTitle == nil {
+            Task { [weak pill] in
+                guard let pill else { return }
+                guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
+                await MainActor.run {
+                    pill.title = result.title
+                    if pill.latestActivity == "Warming up…" || pill.latestActivity == "Starting…" {
+                        pill.latestActivity = result.ack
+                    }
                 }
             }
         }

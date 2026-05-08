@@ -64,6 +64,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get copySummary => 'Salin ringkasan';
 
   @override
+  String get copyConversationId => 'Salin ID perbualan';
+
+  @override
+  String get conversationIdCopied => 'ID perbualan disalin ke papan klip';
+
+  @override
   String get testPrompt => 'Uji Gesaan';
 
   @override
@@ -4539,12 +4545,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Pelan anda tamat pada $date.\\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.';
+    return 'Pelan anda tamat pada $date.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+    return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
 
   @override
@@ -6560,7 +6566,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Tetapkan $appName sebagai aplikasi ringkasan lalai anda?\\n\\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.';
+    return 'Tetapkan $appName sebagai aplikasi ringkasan lalai anda?\n\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.';
   }
 
   @override
@@ -9179,11 +9185,83 @@ class AppLocalizationsMs extends AppLocalizations {
   String get agreeAndContinue => 'Setuju & Teruskan';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Mula rakaman suara';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Mula rakaman panggilan';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mod Suara';
+
+  @override
+  String get quickActionAskOmi => 'Tanya Omi apa sahaja';
+
+  @override
+  String get record => 'Rakam';
+
+  @override
+  String get stop => 'Hentikan';
+
+  @override
+  String get recordWithPhoneMic => 'Rakam dengan mikrofon telefon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tangkap audio di sekeliling anda';
+
+  @override
+  String get phoneCall => 'Panggilan telefon';
+
+  @override
+  String get phoneCallSubtitle => 'Rakam panggilan dengan transkripsi langsung';
+
+  @override
+  String get searchActionItems => 'Cari item tindakan';
+
+  @override
+  String get selectActionItems => 'Pilih beberapa';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksport $count item ke…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Mengeksport…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Dieksport $count ke $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Dieksport $success daripada $total ke $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Tunjukkan selesai';
+
+  @override
+  String get hideCompletedTasks => 'Sembunyikan selesai';
+
+  @override
+  String get selectAllTasksMenu => 'Pilih semua';
+
+  @override
+  String get connectTaskAppToExport => 'Sambungkan aplikasi tugas dalam Tetapan untuk mengeksport';
+
+  @override
+  String get connectAction => 'Sambung';
+
+  @override
+  String get deselectAllTasksMenu => 'Nyahpilih semua';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

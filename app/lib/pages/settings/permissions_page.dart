@@ -129,7 +129,8 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         return;
       }
       final status = await Permission.locationWhenInUse.request();
-      if (status.isGranted) {
+      if (status.isGranted && Platform.isIOS) {
+        // iOS-only: chain Always so background location updates work.
         await Permission.locationAlways.request();
       } else if (status.isPermanentlyDenied) {
         await openAppSettings();
@@ -156,10 +157,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
                     child: Column(
                       children: [
                         _buildPermissionRow(
@@ -207,10 +205,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       context.l10n.permissionsPageDescription,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
                     ),
                   ),
                 ],
@@ -232,11 +227,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         child: Row(
           children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
-            ),
+            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
@@ -246,10 +237,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
             ),
             Text(
               isGranted ? context.l10n.permissionEnabled : context.l10n.permissionEnable,
-              style: TextStyle(
-                color: isGranted ? Colors.white.withValues(alpha: 0.5) : Colors.white,
-                fontSize: 15,
-              ),
+              style: TextStyle(color: isGranted ? Colors.white.withValues(alpha: 0.5) : Colors.white, fontSize: 15),
             ),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),

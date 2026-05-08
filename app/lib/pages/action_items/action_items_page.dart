@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
 
 // Re-export Goal from goals.dart for use in this file
@@ -38,15 +41,24 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // Track the item being hovered over during drag
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
+  int _hoverIndent = 0; // target indent_level for the drop slot
 
   // Whether the current long-press drag has actually moved (reorder) or stayed still (select)
   bool _dragHasMoved = false;
 
-  // Overdue section collapsed by default
-  bool _overdueExpanded = false;
+  // Horizontal anchor for the active long-press drag — the feedback widget's
+  // top-left X at first onMove. Indent target = origin indent + round(deltaX / step).
+  static const double _indentStep = 28.0;
+  double? _dragStartX;
 
-  // Selected goal IDs (used alongside task selection mode)
-  final Set<String> _selectedGoalIds = {};
+  // Overdue section expanded by default — missed deadlines are the most
+  // important thing to surface, hiding them behind a tap caused regret.
+  bool _overdueExpanded = true;
+
+  // Search header lifecycle objects.
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final Debouncer _searchDebouncer = Debouncer(delay: const Duration(milliseconds: 400));
 
   @override
   bool get wantKeepAlive => true;
@@ -124,6 +136,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _searchDebouncer.cancel();
     super.dispose();
   }
 
@@ -190,9 +205,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Widget _buildFab() {
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, _) {
-        if (provider.isSelectionMode) {
-          return _buildSelectionToolbar(provider);
-        }
+        // The selection action bar is mounted at the bottom of the Stack —
+        // when selection is active we suppress the FAB so the two don't
+        // visually compete.
+        if (provider.isSelectionMode) return const SizedBox.shrink();
         return Positioned(
           right: 20,
           bottom: 100,
@@ -210,88 +226,126 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildSelectionToolbar(ActionItemsProvider provider) {
-    final hasAnything = provider.hasSelection || _selectedGoalIds.isNotEmpty;
-    return Positioned(
-      left: 16,
-      right: 16,
-      bottom: 100,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Cancel
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                setState(() => _selectedGoalIds.clear());
-                provider.endSelection();
+  Widget _buildPageHeader(ActionItemsProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              onChanged: (value) {
+                _searchDebouncer.run(() {
+                  if (!mounted) return;
+                  provider.setSearchQuery(value);
+                });
               },
-              child: const Icon(Icons.close, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 12),
-            // Count (tasks + goals)
-            Expanded(
-              child: Text(
-                context.l10n.selectedCount(
-                  provider.selectedCount + _selectedGoalIds.length,
-                  provider.selectedCount + _selectedGoalIds.length,
+              decoration: InputDecoration(
+                hintText: context.l10n.searchActionItems,
+                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+                filled: true,
+                fillColor: const Color(0xFF1F1F25),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                prefixIcon: const Icon(Icons.search, color: Colors.white60),
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (_, val, __) => val.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            _searchDebouncer.cancel();
+                            provider.clearSearchQuery();
+                          },
+                          child: const Icon(Icons.close, color: Colors.white),
+                        )
+                      : const SizedBox.shrink(),
                 ),
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
               ),
+              style: const TextStyle(color: Colors.white),
             ),
-            // Select All
-            TextButton(
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                provider.selectAllItems();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.deepPurple[300],
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 36),
-              ),
-              child: Text(context.l10n.tasksSelectAll, style: const TextStyle(fontSize: 14)),
-            ),
-            const SizedBox(width: 4),
-            // Delete
-            GestureDetector(
-              onTap: hasAnything
-                  ? () async {
-                      HapticFeedback.mediumImpact();
-                      final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-                      for (final goalId in List<String>.from(_selectedGoalIds)) {
-                        await goalsProvider.deleteGoal(goalId);
-                      }
-                      setState(() => _selectedGoalIds.clear());
-                      await provider.deleteSelectedItems();
-                    }
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: hasAnything ? Colors.red : Colors.grey[700],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  context.l10n.delete,
-                  style: TextStyle(
-                    color: hasAnything ? Colors.white : Colors.grey[500],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          _buildOverflowMenu(provider),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverflowMenu(ActionItemsProvider provider) {
+    final showingCompleted = provider.showCompletedView;
+    final hasItems = provider.actionItems.isNotEmpty;
+    final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
+
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.selectActionItems,
+          iconWidget: const Icon(Icons.check_box_outlined, size: 18),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _searchFocusNode.unfocus();
+            provider.startSelection();
+          },
         ),
+        PullDownMenuItem(
+          title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
+          iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _searchFocusNode.unfocus();
+            if (allSelected) {
+              provider.clearSelection();
+            } else {
+              if (!provider.isSelectionMode) provider.startSelection();
+              provider.selectAllItems();
+            }
+          },
+        ),
+        PullDownMenuItem(
+          title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+          iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            provider.toggleShowCompletedView();
+          },
+        ),
+      ],
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          showMenu();
+        },
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+          child: const Center(
+            child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoSearchResultsContent() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search_off_rounded, size: 48, color: Colors.grey[600]),
+          const SizedBox(height: 12),
+          Text(
+            context.l10n.noResultsFound,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }
@@ -535,6 +589,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // shows its own "Create Action Item" pill — otherwise we
               // render two competing add buttons on top of each other.
               if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
+              // Selection-mode action bar is mounted at the home page's outer
+              // Stack so it paints above the BottomNavBar (mirrors the
+              // conversations merge bar). Don't mount it here.
             ],
           ),
         );
@@ -687,30 +744,61 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
     ActionItemsProvider provider,
   ) {
+    final isSearching = provider.isSearching;
+    final filteredItems = isSearching ? provider.filteredActionItems : const <ActionItemWithMetadata>[];
+
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 12)),
-        SliverToBoxAdapter(child: _buildGoalsRow()),
-        const SliverPadding(padding: EdgeInsets.only(top: 6)),
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        SliverToBoxAdapter(child: _buildPageHeader(provider)),
 
-        // Build each category section (skip empty ones, skip overdue — rendered separately below)
-        for (final category in TaskCategory.values)
-          if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildCategorySection(
-                category: category,
-                items: categorizedItems[category] ?? [],
-                provider: provider,
+        if (isSearching) ...[
+          if (filteredItems.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: _buildNoSearchResultsContent()),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final item = filteredItems[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildTaskItem(
+                      item,
+                      provider,
+                      category: _getCategoryForItem(item),
+                      categoryItems: filteredItems,
+                    ),
+                  );
+                },
+                childCount: filteredItems.length,
               ),
             ),
+        ] else ...[
+          SliverToBoxAdapter(child: _buildGoalsRow()),
+          const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-        // Overdue section — collapsible, collapsed by default
-        if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-          SliverToBoxAdapter(
-            child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-          ),
+          // Build each category section (skip empty ones, skip overdue — rendered separately below)
+          for (final category in TaskCategory.values)
+            if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
+              SliverToBoxAdapter(
+                child: _buildCategorySection(
+                  category: category,
+                  items: categorizedItems[category] ?? [],
+                  provider: provider,
+                ),
+              ),
+
+          // Overdue section — expanded by default
+          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
+            ),
+        ],
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -842,30 +930,36 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
+                // Section header — quieter than the page title; reads as a label,
+                // not a heading.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
                   child: Row(
                     children: [
                       Text(
-                        title,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        title.toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                        ),
                       ),
                       const Spacer(),
                       if (provider.showCompletedView && orderedItems.isNotEmpty)
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                            Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () => _confirmClearCompleted(provider, orderedItems),
-                              child: Icon(Icons.close, size: 16, color: Colors.grey[600]),
+                              child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
                             ),
                           ],
                         )
                       else if (orderedItems.isNotEmpty)
-                        Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                        Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                     ],
                   ),
                 ),
@@ -874,13 +968,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 if (orderedItems.isNotEmpty)
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
-                // Task items
+                // Task items. Row padding alone carries the rhythm — no
+                // dividers between rows; matches Things 3 / Apple Reminders.
                 ...orderedItems.map(
                   (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
                 ),
 
                 // Spacing after section
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
               ],
             ),
           );
@@ -897,7 +992,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+            padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
             child: Row(
               children: [
                 GestureDetector(
@@ -909,14 +1004,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 20),
+                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        context.l10n.tasksOverdue,
-                        style: TextStyle(color: Colors.grey[500], fontSize: 16, fontWeight: FontWeight.w600),
+                        context.l10n.tasksOverdue.toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                      Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                     ],
                   ),
                 ),
@@ -929,7 +1029,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -1034,9 +1134,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       onAcceptWithDetails: (details) {
         final draggedItem = details.data;
+        final targetIndent = _hoverIndent;
 
         // Reorder within category
         _reorderItemInCategory(draggedItem, item.id, _hoverAbove, category, categoryItems);
+
+        // Apply indent change from the drag's horizontal travel.
+        if (draggedItem.indentLevel != targetIndent) {
+          Provider.of<ActionItemsProvider>(context, listen: false).updateItemIndentLevel(draggedItem.id, targetIndent);
+        }
 
         // Also update category if different
         final draggedCategory = _getCategoryForItem(draggedItem);
@@ -1052,10 +1158,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final localPosition = box.globalToLocal(details.offset);
         final isAbove = localPosition.dy < box.size.height / 2;
 
-        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+        // Anchor the horizontal drag origin on the first onMove; subsequent
+        // moves measure delta from there so the user has to consciously
+        // travel right/left to indent/outdent.
+        _dragStartX ??= details.offset.dx;
+        final deltaX = details.offset.dx - _dragStartX!;
+        final draggedItem = details.data;
+        final targetIdx = categoryItems.indexWhere((i) => i.id == item.id);
+        final maxIndent = _maxIndentForDrop(
+          draggedItem: draggedItem,
+          targetIdx: targetIdx,
+          isAbove: isAbove,
+          categoryItems: categoryItems,
+        );
+        final newIndent = (draggedItem.indentLevel + (deltaX / _indentStep).round()).clamp(0, maxIndent);
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove || _hoverIndent != newIndent) {
           setState(() {
             _hoveredItemId = item.id;
             _hoverAbove = isAbove;
+            _hoverIndent = newIndent;
           });
         }
       },
@@ -1068,6 +1190,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       builder: (ctx, candidateData, rejectedData) {
         itemContext = ctx;
+        // Drop bar mirrors the target indent so the user sees where the row
+        // will land before they release.
+        final barLeft = 4 + _hoverIndent * _indentStep;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1075,15 +1200,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             if (isHovered && _hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: EdgeInsets.only(left: barLeft, right: 4),
                 decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
-            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth),
+            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
             if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
               Container(
                 height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: EdgeInsets.only(left: barLeft, right: 4),
                 decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
               ),
           ],
@@ -1092,13 +1217,51 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// Walks the displayed [categoryItems] forward from [parent] and returns
+  /// every contiguous descendant — rows with strictly greater indent_level,
+  /// stopping at the first sibling/ancestor. The data model is flat (no
+  /// parent_id), so the page is the right layer to compute this: it owns the
+  /// category-grouped display order; the provider does not.
+  List<String> _visibleDescendantIds(
+    ActionItemWithMetadata parent,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    final idx = categoryItems.indexWhere((i) => i.id == parent.id);
+    if (idx < 0) return const [];
+    final ids = <String>[];
+    for (int i = idx + 1; i < categoryItems.length; i++) {
+      if (categoryItems[i].indentLevel <= parent.indentLevel) break;
+      ids.add(categoryItems[i].id);
+    }
+    return ids;
+  }
+
+  /// Caps the drop indent at one level deeper than the row immediately
+  /// preceding the drop slot (skipping the dragged row itself). Without this,
+  /// a user could indent past a parent that doesn't exist yet.
+  int _maxIndentForDrop({
+    required ActionItemWithMetadata draggedItem,
+    required int targetIdx,
+    required bool isAbove,
+    required List<ActionItemWithMetadata> categoryItems,
+  }) {
+    if (targetIdx < 0) return 3;
+    int idx = isAbove ? targetIdx - 1 : targetIdx;
+    while (idx >= 0 && categoryItems[idx].id == draggedItem.id) {
+      idx--;
+    }
+    if (idx < 0) return 0;
+    return (categoryItems[idx].indentLevel + 1).clamp(0, 3);
+  }
+
   Widget _buildDraggableTaskItem(
     ActionItemWithMetadata item,
     ActionItemsProvider provider,
     int indentLevel,
     double indentWidth,
+    List<ActionItemWithMetadata> categoryItems,
   ) {
-    final taskContent = _buildTaskItemContent(item, provider, indentWidth);
+    final taskContent = _buildTaskItemContent(item, provider, indentWidth, categoryItems);
 
     // In selection mode: no drag, no swipe — just tappable content.
     if (provider.isSelectionMode) {
@@ -1112,6 +1275,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         hapticFeedbackOnStart: true,
         onDragStarted: () {
           _dragHasMoved = false;
+          _dragStartX = null;
+          _hoverIndent = item.indentLevel;
           HapticFeedback.mediumImpact();
         },
         onDragUpdate: (_) {
@@ -1126,6 +1291,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           setState(() {
             _hoveredItemId = null;
             _dragHasMoved = false;
+            _hoverIndent = 0;
+            _dragStartX = null;
           });
         },
         feedback: Material(
@@ -1242,7 +1409,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  Widget _buildTaskItemContent(ActionItemWithMetadata item, ActionItemsProvider provider, double indentWidth) {
+  Widget _buildTaskItemContent(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    double indentWidth,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
@@ -1252,7 +1424,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () {
         if (provider.isSelectionMode) {
           HapticFeedback.selectionClick();
-          provider.toggleItemSelection(item.id);
+          provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
         } else {
           _showEditSheet(item);
         }
@@ -1279,48 +1451,71 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(1)),
                   ),
                 ),
-              // Checkbox — 44×44 tap target
+              // Completion circle — always shown. Read-only in selection mode
+              // (the row tap drives selection there); tappable otherwise.
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () async {
-                  if (provider.isSelectionMode) {
-                    HapticFeedback.selectionClick();
-                    provider.toggleItemSelection(item.id);
-                  } else {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  }
-                },
+                onTap: provider.isSelectionMode
+                    ? null
+                    : () async {
+                        HapticFeedback.lightImpact();
+                        await provider.updateActionItemState(item, !item.completed);
+                        if (!item.completed) _onActionItemCompleted();
+                      },
                 child: SizedBox(
                   width: 44,
-                  height: 44,
-                  child: Center(
-                    child:
-                        provider.isSelectionMode ? _buildSelectionCheckbox(isSelected) : _buildCheckbox(item.completed),
-                  ),
+                  height: 48,
+                  child: Center(child: _buildCheckbox(item.completed)),
                 ),
               ),
               // Task text
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.description,
-                      style: TextStyle(
-                        color: item.completed ? Colors.grey[600] : Colors.white,
-                        fontSize: 15,
-                        decoration: item.completed ? TextDecoration.lineThrough : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.description,
+                        style: TextStyle(
+                          color: item.completed ? Colors.grey[500] : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -0.2,
+                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          decorationColor: Colors.grey[600],
+                        ),
                       ),
-                    ),
-                    if (goalTitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(goalTitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      if (goalTitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(goalTitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      ],
+                      if (item.exported && item.exportPlatform != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.check_circle_outline, size: 12, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Exported to ${_exportPlatformLabel(item.exportPlatform!)}',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
+              // Trailing square selection box — only in selection mode.
+              // Different shape + position from the leading completion circle
+              // so completion vs. selection cannot be confused.
+              if (provider.isSelectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8),
+                  child: _buildSelectionSquare(isSelected),
+                ),
             ],
           ),
         ),
@@ -1328,31 +1523,55 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildSelectionCheckbox(bool isSelected) {
+  Widget _buildCheckbox(bool isCompleted) {
+    if (isCompleted) {
+      return Container(
+        width: 22,
+        height: 22,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.amber),
+        child: const Icon(Icons.check, size: 14, color: Colors.black),
+      );
+    }
+    // Incomplete: dashed outline circle (Joi-inspired). Quieter than a solid
+    // gray ring so the task title carries the visual weight.
+    return CustomPaint(
+      size: const Size(22, 22),
+      painter: _DashedCirclePainter(color: Colors.grey[500]!, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
+    );
+  }
+
+  /// Trailing selection box rendered only in selection mode. Rounded **square**
+  /// — different shape from the leading completion circle so users can't
+  /// confuse "selected for bulk action" with "marked as done".
+  Widget _buildSelectionSquare(bool isSelected) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       width: 22,
       height: 22,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: isSelected ? Colors.deepPurple : Colors.grey[500]!, width: 2),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: isSelected ? Colors.deepPurple : Colors.grey[600]!, width: 2),
         color: isSelected ? Colors.deepPurple : Colors.transparent,
       ),
-      child: isSelected ? const Icon(Icons.check, size: 13, color: Colors.white) : null,
+      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
     );
   }
 
-  Widget _buildCheckbox(bool isCompleted) {
-    return Container(
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: isCompleted ? Colors.amber : Colors.grey[600]!, width: 2),
-        color: isCompleted ? Colors.amber : Colors.transparent,
-      ),
-      child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
-    );
+  String _exportPlatformLabel(String platform) {
+    switch (platform) {
+      case 'todoist':
+        return 'Todoist';
+      case 'asana':
+        return 'Asana';
+      case 'google_tasks':
+        return 'Google Tasks';
+      case 'clickup':
+        return 'ClickUp';
+      case 'apple_reminders':
+        return 'Reminders';
+      default:
+        return platform;
+    }
   }
 
   Future<void> _deleteGoal(Goal goal) async {
@@ -1373,28 +1592,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
     final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
     final displayTitle = '${goal.title} $progressText';
-    final isSelected = _selectedGoalIds.contains(goal.id);
 
     final goalContent = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        if (provider.isSelectionMode) {
-          HapticFeedback.selectionClick();
-          setState(() {
-            if (isSelected) {
-              _selectedGoalIds.remove(goal.id);
-            } else {
-              _selectedGoalIds.add(goal.id);
-            }
-          });
-        } else {
-          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
-          _showEditGoalSheet(goal);
-        }
+        // Goals are not part of selection mode — selection only applies to
+        // tasks (the action bar's Export action acts on tasks only).
+        if (provider.isSelectionMode) return;
+        MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+        _showEditGoalSheet(goal);
       },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        color: isSelected ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.transparent,
+      child: Container(
         padding: const EdgeInsets.symmetric(vertical: 0),
         margin: const EdgeInsets.only(left: 4),
         child: Row(
@@ -1404,18 +1612,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               width: 44,
               height: 44,
               child: Center(
-                child: provider.isSelectionMode
-                    ? _buildSelectionCheckbox(isSelected)
-                    : SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CustomPaint(
-                          painter: _CircularProgressPainter(
-                            progress: progress.clamp(0.0, 1.0),
-                            color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
-                          ),
-                        ),
-                      ),
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CustomPaint(
+                    painter: _CircularProgressPainter(
+                      progress: progress.clamp(0.0, 1.0),
+                      color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -1926,4 +2132,56 @@ class _CircularProgressPainter extends CustomPainter {
   bool shouldRepaint(_CircularProgressPainter oldDelegate) {
     return oldDelegate.progress != progress || oldDelegate.color != color;
   }
+}
+
+/// Paints a dashed circle outline. Used for incomplete-task indicators —
+/// signals "open" without competing with the title for visual weight.
+class _DashedCirclePainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double dashLength;
+  final double gapLength;
+
+  _DashedCirclePainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.dashLength,
+    required this.gapLength,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width / 2) - (strokeWidth / 2);
+    final circumference = 2 * 3.141592653589793 * radius;
+    final segmentLength = dashLength + gapLength;
+    final segments = (circumference / segmentLength).floor();
+    final adjustedSegment = circumference / segments;
+    final dashAngle = (dashLength / adjustedSegment) * (2 * 3.141592653589793 / segments);
+    final stepAngle = 2 * 3.141592653589793 / segments;
+
+    for (var i = 0; i < segments; i++) {
+      final startAngle = i * stepAngle;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        dashAngle,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedCirclePainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashLength != dashLength ||
+      oldDelegate.gapLength != gapLength;
 }

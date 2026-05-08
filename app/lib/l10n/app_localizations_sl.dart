@@ -64,6 +64,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get copySummary => 'Kopiraj povzetek';
 
   @override
+  String get copyConversationId => 'Kopiraj ID pogovora';
+
+  @override
+  String get conversationIdCopied => 'ID pogovora je bil kopiran v odložišče';
+
+  @override
   String get testPrompt => 'Testiraj poziv';
 
   @override
@@ -4530,12 +4536,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Vaš načrt se je končal $date.\\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.';
+    return 'Vaš načrt se je končal $date.\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Vaš načrt je nastavljen na preklic $date.\\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
+    return 'Vaš načrt je nastavljen na preklic $date.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
   }
 
   @override
@@ -5107,7 +5113,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\\nTapnite + za ročno ustvarjanje.';
+      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.';
 
   @override
   String get clearChatAction => 'Počistite klepet';
@@ -5140,14 +5146,14 @@ class AppLocalizationsSl extends AppLocalizations {
   String get checkingAppleWatch => 'Preverjanje Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Namestite Omi na vaš\\nApple Watch';
+  String get installOmiOnAppleWatch => 'Namestite Omi na vaš\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Za uporabo vašega Apple Watch z Omijem morali najprej namestiti aplikacijo Omi na uro.';
 
   @override
-  String get openOmiOnAppleWatch => 'Odprite Omi na vašem\\nApple Watch';
+  String get openOmiOnAppleWatch => 'Odprite Omi na vašem\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5402,10 +5408,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get wrappedProcessingDefault => 'Obdelava...';
 
   @override
-  String get wrappedCreatingYourStory => 'Ustvarjanje vaše\\n2025 zgodbe...';
+  String get wrappedCreatingYourStory => 'Ustvarjanje vaše\n2025 zgodbe...';
 
   @override
-  String get wrappedSomethingWentWrong => 'Nekaj\\nje šlo narobe';
+  String get wrappedSomethingWentWrong => 'Nekaj\nje šlo narobe';
 
   @override
   String get wrappedAnErrorOccurred => 'Prišlo je do napake';
@@ -6552,7 +6558,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Nastavite $appName kot privzeto aplikacijo za povzemanje?\\n\\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.';
+    return 'Nastavite $appName kot privzeto aplikacijo za povzemanje?\n\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.';
   }
 
   @override
@@ -9179,11 +9185,83 @@ class AppLocalizationsSl extends AppLocalizations {
   String get agreeAndContinue => 'Strinjam se in nadaljuj';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Začni glasovno snemanje';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Začni snemanje klica';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Glasovni način';
+
+  @override
+  String get quickActionAskOmi => 'Vprašajte Omi karkoli';
+
+  @override
+  String get record => 'Posnemi';
+
+  @override
+  String get stop => 'Ustavi';
+
+  @override
+  String get recordWithPhoneMic => 'Snemaj s telefonskim mikrofonom';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Posnemite zvok okoli sebe';
+
+  @override
+  String get phoneCall => 'Telefonski klic';
+
+  @override
+  String get phoneCallSubtitle => 'Posnemite klic s prepisom v živo';
+
+  @override
+  String get searchActionItems => 'Iskanje akcijskih elementov';
+
+  @override
+  String get selectActionItems => 'Izberi več';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Izvozi $count element(ov) v…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Izvažanje…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Izvoženo $count v $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Izvoženo $success od $total v $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Prikaži dokončane';
+
+  @override
+  String get hideCompletedTasks => 'Skrij dokončane';
+
+  @override
+  String get selectAllTasksMenu => 'Izberi vse';
+
+  @override
+  String get connectTaskAppToExport => 'Povežite aplikacijo za naloge v Nastavitvah za izvoz';
+
+  @override
+  String get connectAction => 'Poveži';
+
+  @override
+  String get deselectAllTasksMenu => 'Prekliči izbor vseh';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

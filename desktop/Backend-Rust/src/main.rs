@@ -29,6 +29,7 @@ mod llm;
 mod models;
 mod routes;
 mod services;
+mod vertex;
 
 use auth::{firebase_auth_extension, FirebaseAuth};
 use config::Config;
@@ -51,6 +52,8 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
     pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
+    /// Vertex AI auth provider (present when USE_VERTEX_AI=true)
+    pub vertex_auth: Option<vertex::VertexAuth>,
 }
 
 #[tokio::main]
@@ -180,6 +183,39 @@ async fn main() {
         None
     };
 
+    // Initialize Vertex AI auth (when USE_VERTEX_AI=true)
+    let vertex_auth = if config.use_vertex_ai {
+        match (config.vertex_project_id.as_ref(), &config.vertex_location) {
+            (Some(project_id), location) => {
+                match vertex::VertexAuth::new(project_id.clone(), location.clone()).await {
+                    Ok(auth) => {
+                        // Verify we can get a token at startup
+                        match auth.token().await {
+                            Ok(_) => {
+                                tracing::info!("Vertex AI auth initialized (project={}, location={})", project_id, location);
+                                Some(auth)
+                            }
+                            Err(e) => {
+                                tracing::error!("Vertex AI token fetch failed: {} — falling back to API key", e);
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Vertex AI init failed: {} — falling back to API key", e);
+                        None
+                    }
+                }
+            }
+            _ => {
+                tracing::warn!("USE_VERTEX_AI=true but no project ID — falling back to API key");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Create app state
     let gemini_rate_limiter = routes::rate_limit::GeminiRateLimiter::new();
 
@@ -201,6 +237,7 @@ async fn main() {
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
         gemini_rate_limiter,
+        vertex_auth,
     };
 
     // Build CORS layer

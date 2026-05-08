@@ -1,5 +1,4 @@
-import 'package:mixpanel_analytics/mixpanel_analytics.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:posthog_flutter/posthog_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -9,32 +8,22 @@ import 'package:omi/utils/platform/platform_service.dart';
 
 class MixpanelManager {
   static final MixpanelManager _instance = MixpanelManager._internal();
-  static Mixpanel? _mixpanel; // For mobile platforms
-  static MixpanelAnalytics? _mixpanelAnalytics; // For desktop platforms
+  static const String _posthogHost = 'https://us.i.posthog.com';
+  static bool _initialized = false;
   static final SharedPreferencesUtil _preferences = SharedPreferencesUtil();
+  static final Map<String, DateTime> _pendingTimedEvents = {};
+  static const Duration _pendingTimedEventTtl = Duration(hours: 1);
 
   static Future<void> init() async {
-    if (Env.mixpanelProjectToken == null) return;
+    if (Env.posthogApiKey == null) return;
     return PlatformService.executeIfSupportedAsync(PlatformService.isMixpanelSupported, () async {
-      if (PlatformService.isMixpanelNativelySupported) {
-        if (_mixpanel == null) {
-          _mixpanel = await Mixpanel.init(
-            Env.mixpanelProjectToken!,
-            optOutTrackingDefault: false,
-            trackAutomaticEvents: true,
-          );
-          _mixpanel?.setLoggingEnabled(false);
-        }
-      } else {
-        // Use mixpanel_analytics for desktop platforms
-        _mixpanelAnalytics ??= MixpanelAnalytics.batch(
-          token: Env.mixpanelProjectToken!,
-          uploadInterval: const Duration(seconds: 3),
-          userId$: Stream.value(_preferences.uid),
-          useIp: true,
-          verbose: false,
-        );
-      }
+      if (_initialized) return;
+      final config = PostHogConfig(Env.posthogApiKey!);
+      config.host = _posthogHost;
+      config.captureApplicationLifecycleEvents = true;
+      config.debug = false;
+      await Posthog().setup(config);
+      _initialized = true;
     });
   }
 
@@ -61,43 +50,36 @@ class MixpanelManager {
 
   setUserProperty(String key, dynamic value) =>
       PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.getPeople().set(key, value);
-        } else {
-          _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$set, value: {key: value});
-        }
+        if (!_initialized) return;
+        final uid = _preferences.uid;
+        if (uid.isEmpty) return;
+        final coerced = _coerceProperty(value);
+        if (coerced == null) return;
+        Posthog().identify(userId: uid, userProperties: {key: coerced});
       });
 
   void optInTracking() {
     PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-      if (PlatformService.isMixpanelNativelySupported) {
-        _mixpanel?.optInTracking();
-      }
-      // Note: mixpanel_analytics doesn't have built-in opt-in/opt-out, but we can still identify
+      if (!_initialized) return;
+      Posthog().enable();
       identify();
     });
   }
 
   void optOutTracking() {
     PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-      if (PlatformService.isMixpanelNativelySupported) {
-        _mixpanel?.optOutTracking();
-        _mixpanel?.reset();
-      } else {
-        // Note: mixpanel_analytics doesn't have built-in opt-out,
-        // but we can set userId to null to stop tracking
-        _mixpanelAnalytics?.userId = null;
-      }
+      if (!_initialized) return;
+      Posthog().disable();
+      Posthog().reset();
     });
   }
 
   void identify() {
     PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-      if (PlatformService.isMixpanelNativelySupported) {
-        _mixpanel?.identify(_preferences.uid);
-      } else {
-        _mixpanelAnalytics?.userId = _preferences.uid;
-      }
+      if (!_initialized) return;
+      final uid = _preferences.uid;
+      if (uid.isEmpty) return;
+      Posthog().identify(userId: uid);
       _instance.setPeopleValues();
       setNameAndEmail();
     });
@@ -105,14 +87,9 @@ class MixpanelManager {
 
   void migrateUser(String newUid) {
     PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-      if (PlatformService.isMixpanelNativelySupported) {
-        _mixpanel?.alias(newUid, _preferences.uid);
-        _mixpanel?.identify(newUid);
-      } else {
-        // Note: mixpanel_analytics doesn't have built-in alias,
-        // but we can just set the new userId
-        _mixpanelAnalytics?.userId = newUid;
-      }
+      if (!_initialized) return;
+      Posthog().alias(alias: newUid);
+      Posthog().identify(userId: newUid);
       setNameAndEmail();
     });
   }
@@ -124,26 +101,36 @@ class MixpanelManager {
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.track(eventName, properties: properties);
-        } else {
-          _mixpanelAnalytics?.track(event: eventName, properties: properties ?? {});
+        if (!_initialized) return;
+        final props = <String, Object>{};
+        if (properties != null) {
+          properties.forEach((k, v) {
+            final coerced = _coerceProperty(v);
+            if (coerced != null) props[k] = coerced;
+          });
         }
+        _evictStaleTimedEvents();
+        final start = _pendingTimedEvents.remove(eventName);
+        if (start != null) {
+          props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
+        }
+        Posthog().capture(eventName: eventName, properties: props);
       });
 
   void startTimingEvent(String eventName) =>
       PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.timeEvent(eventName);
-        } else {
-          // Note: mixpanel_analytics doesn't have built-in timing events,
-          // but we can track the start time manually in properties
-          _mixpanelAnalytics?.track(
-            event: eventName,
-            properties: {'event_start_time': DateTime.now().millisecondsSinceEpoch},
-          );
-        }
+        if (!_initialized) return;
+        _evictStaleTimedEvents();
+        _pendingTimedEvents[eventName] = DateTime.now();
       });
+
+  // Drop pending starts that exceeded the TTL — guards against unbounded growth
+  // when a startTimingEvent has no matching track() (navigation away, crash, short-circuit).
+  static void _evictStaleTimedEvents() {
+    if (_pendingTimedEvents.isEmpty) return;
+    final cutoff = DateTime.now().subtract(_pendingTimedEventTtl);
+    _pendingTimedEvents.removeWhere((_, started) => started.isBefore(cutoff));
+  }
 
   void onboardingDeviceConnected() => track('Onboarding Device Connected');
 
@@ -155,12 +142,12 @@ class MixpanelManager {
       track('User Acquisition Source', properties: {'source': source});
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+    'Developer Settings Saved',
+    properties: {
+      'has_webhook_memory_created': hasWebhookConversationCreated,
+      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+    },
+  );
 
   void pageOpened(String name) => track('$name Opened');
 
@@ -368,19 +355,18 @@ class MixpanelManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) =>
-      track(
-        'Chat Message Sent',
-        properties: {
-          'message_length': message.length,
-          'message_word_count': message.split(' ').length,
-          'includes_files': includesFiles,
-          'number_of_files': numberOfFiles,
-          'chat_target_id': chatTargetId,
-          'is_persona_chat': isPersonaChat,
-          'is_voice_input': isVoiceInput,
-        },
-      );
+  }) => track(
+    'Chat Message Sent',
+    properties: {
+      'message_length': message.length,
+      'message_word_count': message.split(' ').length,
+      'includes_files': includesFiles,
+      'number_of_files': numberOfFiles,
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+      'is_voice_input': isVoiceInput,
+    },
+  );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -401,9 +387,9 @@ class MixpanelManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-      );
+    'Short Conversation Threshold Changed',
+    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  );
 
   void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
 
@@ -418,28 +404,28 @@ class MixpanelManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-        'Conversation Selected For Merge',
-        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-      );
+    'Conversation Selected For Merge',
+    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+  );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-        'Conversation Merge Initiated',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Initiated',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-        'Conversation Merge Completed',
-        properties: {
-          'merged_conversation_id': mergedConversationId,
-          'removed_count': removedConversationIds.length,
-          'removed_conversation_ids': removedConversationIds,
-        },
-      );
+    'Conversation Merge Completed',
+    properties: {
+      'merged_conversation_id': mergedConversationId,
+      'removed_count': removedConversationIds.length,
+      'removed_conversation_ids': removedConversationIds,
+    },
+  );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-        'Conversation Merge Failed',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Failed',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -449,14 +435,14 @@ class MixpanelManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-        'Share To Contacts Selected',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts Selected',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-        'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts SMS Opened',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -564,6 +550,12 @@ class MixpanelManager {
 
   void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
 
+  void editSummaryStarted() => track('Edit Summary Started');
+
+  void editSummarySaved() => track('Edit Summary Saved');
+
+  void editSummaryCancelled() => track('Edit Summary Cancelled');
+
   void deleteAccountClicked() => track('Delete Account Clicked');
 
   void deleteAccountConfirmed() => track('Delete Account Confirmed');
@@ -585,12 +577,10 @@ class MixpanelManager {
       track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isMixpanelSupported, () {
-        if (PlatformService.isMixpanelNativelySupported) {
-          _mixpanel?.getPeople().deleteUser();
-        } else {
-          _mixpanelAnalytics?.engage(operation: MixpanelUpdateOperations.$delete, value: {});
-        }
-      });
+    if (!_initialized) return;
+    Posthog().capture(eventName: 'User Deleted');
+    Posthog().reset();
+  });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -1624,5 +1614,22 @@ class MixpanelManager {
 
   void notificationFrequencyChanged({required int oldFrequency, required int newFrequency}) {
     track('Notification Frequency Changed', properties: {'old_frequency': oldFrequency, 'new_frequency': newFrequency});
+  }
+
+  static Object? _coerceProperty(dynamic value) {
+    if (value == null) return null;
+    if (value is bool || value is num || value is String) return value;
+    if (value is List) {
+      return value.map(_coerceProperty).where((e) => e != null).cast<Object>().toList();
+    }
+    if (value is Map) {
+      final out = <String, Object>{};
+      value.forEach((k, v) {
+        final coerced = _coerceProperty(v);
+        if (coerced != null) out[k.toString()] = coerced;
+      });
+      return out;
+    }
+    return value.toString();
   }
 }

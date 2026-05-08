@@ -64,6 +64,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get copySummary => 'Copiar resum';
 
   @override
+  String get copyConversationId => 'Copia l\'ID de la conversa';
+
+  @override
+  String get conversationIdCopied => 'ID de la conversa copiat al porta-retalls';
+
+  @override
   String get testPrompt => 'Provar indicació';
 
   @override
@@ -4549,12 +4555,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'El teu pla va acabar el $date.\\nTorna a subscriure\'t ara - se\'t cobrarà immediatament per un nou període de facturació.';
+    return 'El teu pla va acabar el $date.\nTorna a subscriure\'t ara - se\'t cobrarà immediatament per un nou període de facturació.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'El teu pla està configurat per cancel·lar-se el $date.\\nTorna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
+    return 'El teu pla està configurat per cancel·lar-se el $date.\nTorna a subscriure\'t ara per mantenir els teus beneficis - sense càrrec fins $date.';
   }
 
   @override
@@ -6575,7 +6581,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Establir $appName com la teva aplicació de resum predeterminada?\\n\\nAquesta aplicació s\'utilitzarà automàticament per a tots els resums de converses futures.';
+    return 'Establir $appName com la teva aplicació de resum predeterminada?\n\nAquesta aplicació s\'utilitzarà automàticament per a tots els resums de converses futures.';
   }
 
   @override
@@ -9209,11 +9215,83 @@ class AppLocalizationsCa extends AppLocalizations {
   String get agreeAndContinue => 'Accepto i continuo';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Inicia l\'enregistrament de veu';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Inicia l\'enregistrament de trucada';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode de veu';
+
+  @override
+  String get quickActionAskOmi => 'Pregunta-li qualsevol cosa a l\'Omi';
+
+  @override
+  String get record => 'Grava';
+
+  @override
+  String get stop => 'Atura';
+
+  @override
+  String get recordWithPhoneMic => 'Grava amb el micròfon del telèfon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Captura l\'àudio que t\'envolta';
+
+  @override
+  String get phoneCall => 'Trucada';
+
+  @override
+  String get phoneCallSubtitle => 'Enregistra una trucada amb transcripció en directe';
+
+  @override
+  String get searchActionItems => 'Cerca elements d\'acció';
+
+  @override
+  String get selectActionItems => 'Selecció múltiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exporta $count element(s) a…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'S\'està exportant…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'S\'han exportat $count a $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'S\'han exportat $success de $total a $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Mostra les completades';
+
+  @override
+  String get hideCompletedTasks => 'Amaga les completades';
+
+  @override
+  String get selectAllTasksMenu => 'Selecciona tot';
+
+  @override
+  String get connectTaskAppToExport => 'Connecta una aplicació de tasques a Configuració per exportar';
+
+  @override
+  String get connectAction => 'Connecta';
+
+  @override
+  String get deselectAllTasksMenu => 'Desselecciona tot';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

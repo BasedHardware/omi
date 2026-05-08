@@ -172,6 +172,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
+        final effectivelyMuted = _isMuted || provider.isCallActive;
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -196,7 +197,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Text(
                     provider.photos.isNotEmpty
                         ? "📸"
-                        : _isMuted
+                        : effectivelyMuted
                             ? "🔇"
                             : "🎙️",
                   ),
@@ -205,7 +206,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
+                          : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -223,6 +224,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Transcripts, photos + inline WAL safety indicator
                         Column(
                           children: [
+                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                             Expanded(
                               child: provider.segments.isEmpty && provider.photos.isEmpty
                                   ? Center(
@@ -290,7 +292,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           },
                                         ),
                             ),
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                           ],
                         ),
                         // Summary Tab
@@ -358,7 +359,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                            color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(

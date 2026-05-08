@@ -27,7 +27,7 @@ class OmiVoicePlaybackService {
   OmiVoicePlaybackService._();
   static final OmiVoicePlaybackService instance = OmiVoicePlaybackService._();
 
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _player = AudioPlayer(handleInterruptions: false);
   final FlutterTts _fallbackTts = FlutterTts();
 
   bool _initialized = false;
@@ -42,6 +42,7 @@ class OmiVoicePlaybackService {
   bool _synthesizing = false;
   bool _isPlayingQueue = false;
   bool _sessionActive = false;
+  bool _pausedByInterruption = false;
 
   bool get isSpeaking => _sessionActive && (_isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing);
 
@@ -51,15 +52,19 @@ class OmiVoicePlaybackService {
 
     try {
       final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.speech());
-      session.interruptionEventStream.listen((event) {
-        if (event.begin) {
-          _player.pause();
-        } else {
-          // Don't auto-resume — the reply is stale after an interruption.
-          interrupt();
-        }
-      });
+      await session.configure(
+        const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionMode: AVAudioSessionMode.voicePrompt,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.assistant,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: false,
+        ),
+      );
+      session.interruptionEventStream.listen(_onInterruption);
       // Stop immediately when headphones are unplugged mid-playback so the
       // reply doesn't suddenly blast out of the phone speaker in public.
       session.becomingNoisyEventStream.listen((_) {
@@ -102,8 +107,8 @@ class OmiVoicePlaybackService {
       }
     }
 
-    if (_activeMessageId == messageId) {
-      // Same response already in-flight; no-op.
+    if (_activeMessageId == messageId && isSpeaking) {
+      // Same response actively in-flight; no-op (rapid-double-call guard).
       return;
     }
 
@@ -145,15 +150,12 @@ class OmiVoicePlaybackService {
 
   /// Called on every streamed text update. [fullText] is the cumulative AI
   /// response so far. [isFinal] means this is the last chunk.
-  void updateStreamingResponse({
-    required String messageId,
-    required String fullText,
-    required bool isFinal,
-  }) {
+  void updateStreamingResponse({required String messageId, required String fullText, required bool isFinal}) {
     if (SharedPreferencesUtil().voiceResponseMode == 0) return;
     if (_activeMessageId != messageId) {
       Logger.log(
-          'OmiVoicePlayback: updateStreamingResponse skipped — activeId=$_activeMessageId != incoming=$messageId');
+        'OmiVoicePlayback: updateStreamingResponse skipped — activeId=$_activeMessageId != incoming=$messageId',
+      );
       return;
     }
     Logger.log('OmiVoicePlayback: updateStreamingResponse len=${fullText.length} isFinal=$isFinal spoken=$_spoken');
@@ -195,6 +197,7 @@ class OmiVoicePlaybackService {
     _audioQueue.clear();
     _synthesizing = false;
     _isPlayingQueue = false;
+    _pausedByInterruption = false;
     try {
       await _player.stop();
     } catch (_) {}
@@ -202,6 +205,41 @@ class OmiVoicePlaybackService {
       await _fallbackTts.stop();
     } catch (_) {}
     await _deactivateSession();
+  }
+
+  void _onInterruption(AudioInterruptionEvent event) {
+    debugPrint(
+      'OmiVoicePlayback: interruption begin=${event.begin} type=${event.type} '
+      'activeId=$_activeMessageId isSpeaking=$isSpeaking pausedByInt=$_pausedByInterruption',
+    );
+    if (event.begin) {
+      switch (event.type) {
+        case AudioInterruptionType.duck:
+          break;
+        case AudioInterruptionType.pause:
+          if (_player.playing) {
+            _pausedByInterruption = true;
+            _player.pause();
+          }
+          break;
+        case AudioInterruptionType.unknown:
+          interrupt();
+          break;
+      }
+    } else {
+      switch (event.type) {
+        case AudioInterruptionType.duck:
+          break;
+        case AudioInterruptionType.pause:
+          if (_pausedByInterruption) {
+            _pausedByInterruption = false;
+            _player.play();
+          }
+          break;
+        case AudioInterruptionType.unknown:
+          break;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -213,6 +251,7 @@ class OmiVoicePlaybackService {
     _audioQueue.clear();
     _synthesizing = false;
     _isPlayingQueue = false;
+    _pausedByInterruption = false;
     try {
       await _player.stop();
     } catch (_) {}
@@ -347,12 +386,7 @@ class OmiVoicePlaybackService {
 
   /// Returns the index at which to cut the next chunk, or null if we should
   /// wait for more text. Mirrors `FloatingBarVoicePlaybackService.nextChunkBoundary`.
-  int? _nextChunkBoundary(
-    String text, {
-    required int start,
-    required bool isFirstChunk,
-    required bool isFinal,
-  }) {
+  int? _nextChunkBoundary(String text, {required int start, required bool isFirstChunk, required bool isFinal}) {
     final remaining = text.length - start;
     final minChars = isFirstChunk ? _firstChunkMinChars : _chunkMinChars;
     final idealChars = isFirstChunk ? _firstChunkIdealChars : _chunkIdealChars;

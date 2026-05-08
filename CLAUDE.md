@@ -12,9 +12,11 @@
 
 ## Setup
 
-### Pre-commit Hook (required)
+### Pre-commit Hook (required — install before first commit)
+Formatting is enforced by CI. **Verify the hook exists before your first commit:**
 ```bash
-ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+# Check if installed:
+test -f .git/hooks/pre-commit && echo "OK" || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
 ### Mobile App
@@ -186,6 +188,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 <!-- Maintainers: @AaravGarg (original, Feb 2), @NikShevchenko (push rules, Mar 3) -->
 
 ### Rules
+- **Before your first commit**, verify the pre-commit hook is installed: `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
 - Always commit to the current branch — never switch branches.
 - Never push directly to `main`. Land changes through PRs only.
 - Never squash merge PRs — use regular merge.

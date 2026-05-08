@@ -3,10 +3,20 @@ name: Deploy Plugins to Cloud RUN
 # TODO: determine if changes to backend folder before pushing
 
 on:
-  push:
-    branches: [ "main", "development" ]
-    paths:
-      - 'plugins/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment to deploy to'
+        required: true
+        default: 'development'
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: plugins
@@ -14,15 +24,30 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
       id-token: 'write'
 
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Environment Input
+        env:
+          INPUT_ENV: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "$INPUT_ENV" != "development" && "$INPUT_ENV" != "prod" ]]; then
+            echo "Invalid environment: $INPUT_ENV. Must be 'development' or 'prod'."
+            exit 1
+          fi
+
+      # To workaround "no space left on device" issue of GitHub-hosted runner
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Google Auth
         id: auth
@@ -48,3 +73,14 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Generate deployment summary
+        if: always() # Ensure this step runs even if previous steps fail
+        uses: ./.github/actions/deployment-summary
+        with:
+          workflow_name: ${{ github.workflow }}
+          environment: ${{ github.event.inputs.environment }}
+          branch: ${{ github.event.inputs.branch }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}

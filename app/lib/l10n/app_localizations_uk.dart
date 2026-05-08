@@ -64,6 +64,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get copySummary => 'Копіювати підсумок';
 
   @override
+  String get copyConversationId => 'Копіювати ID розмови';
+
+  @override
+  String get conversationIdCopied => 'ID розмови скопійовано в буфер обміну';
+
+  @override
   String get testPrompt => 'Тестовий запит';
 
   @override
@@ -4528,12 +4534,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Ваш план закінчився $date.\\nПідпишіться знову зараз - з вас буде негайно списано за новий розрахунковий період.';
+    return 'Ваш план закінчився $date.\nПідпишіться знову зараз - з вас буде негайно списано за новий розрахунковий період.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Ваш план налаштовано на скасування $date.\\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
+    return 'Ваш план налаштовано на скасування $date.\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
   }
 
   @override
@@ -6547,7 +6553,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Встановити $appName як додаток для підсумків за замовчуванням?\\n\\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.';
+    return 'Встановити $appName як додаток для підсумків за замовчуванням?\n\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.';
   }
 
   @override
@@ -9169,11 +9175,83 @@ class AppLocalizationsUk extends AppLocalizations {
   String get agreeAndContinue => 'Прийняти та продовжити';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Почати голосовий запис';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Почати запис дзвінка';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Голосовий режим';
+
+  @override
+  String get quickActionAskOmi => 'Запитайте Omi що завгодно';
+
+  @override
+  String get record => 'Запис';
+
+  @override
+  String get stop => 'Стоп';
+
+  @override
+  String get recordWithPhoneMic => 'Запис мікрофоном телефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Записуйте звук навколо вас';
+
+  @override
+  String get phoneCall => 'Телефонний дзвінок';
+
+  @override
+  String get phoneCallSubtitle => 'Запис дзвінка з живою транскрипцією';
+
+  @override
+  String get searchActionItems => 'Шукати дії';
+
+  @override
+  String get selectActionItems => 'Вибрати кілька';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Експортувати $count елемент(ів) до…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Експорт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Експортовано $count до $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Експортовано $success з $total до $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Показати завершені';
+
+  @override
+  String get hideCompletedTasks => 'Приховати завершені';
+
+  @override
+  String get selectAllTasksMenu => 'Вибрати все';
+
+  @override
+  String get connectTaskAppToExport => 'Підключіть додаток завдань у Налаштуваннях для експорту';
+
+  @override
+  String get connectAction => 'Підключити';
+
+  @override
+  String get deselectAllTasksMenu => 'Зняти виділення з усіх';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

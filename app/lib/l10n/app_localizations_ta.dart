@@ -64,6 +64,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get copySummary => 'சாரம் நகலெடுக்கவும்';
 
   @override
+  String get copyConversationId => 'உரையாடல் ID நகலெடு';
+
+  @override
+  String get conversationIdCopied => 'உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது';
+
+  @override
   String get testPrompt => 'தேர்வு கேட்டுகோள்';
 
   @override
@@ -4555,12 +4561,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் முடிந்துவிட்டது।\\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.';
+    return 'உங்கள் திட்டம் $date இல் முடிந்துவிட்டது।\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
+    return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
   }
 
   @override
@@ -5132,7 +5138,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
+      'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
 
   @override
   String get clearChatAction => 'உரையாடலைத் தெளிக்கவும்';
@@ -5426,10 +5432,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get wrappedProcessingDefault => 'செயலாக்கம் செய்யப்படுகிறது...';
 
   @override
-  String get wrappedCreatingYourStory => 'உங்கள் உருவாக்கம்\\n2025 கதை...';
+  String get wrappedCreatingYourStory => 'உங்கள் உருவாக்கம்\n2025 கதை...';
 
   @override
-  String get wrappedSomethingWentWrong => 'ஏதோ\\nத் தவறாக நடந்தது';
+  String get wrappedSomethingWentWrong => 'ஏதோ\nத் தவறாக நடந்தது';
 
   @override
   String get wrappedAnErrorOccurred => 'ஒரு பிழை ஏற்பட்டது';
@@ -6583,7 +6589,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\\n\\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.';
+    return '$appName ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\n\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.';
   }
 
   @override
@@ -9224,11 +9230,83 @@ class AppLocalizationsTa extends AppLocalizations {
   String get agreeAndContinue => 'ஒப்புக்கொள் & தொடரவும்';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'குரல் பதிவைத் தொடங்கு';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'அழைப்பு பதிவைத் தொடங்கு';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'குரல் பயன்முறை';
+
+  @override
+  String get quickActionAskOmi => 'Omi ஐ எதையும் கேளுங்கள்';
+
+  @override
+  String get record => 'பதிவு';
+
+  @override
+  String get stop => 'நிறுத்து';
+
+  @override
+  String get recordWithPhoneMic => 'போன் மைக்கில் பதிவு செய்யவும்';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'உங்களைச் சுற்றியுள்ள ஒலியைப் பதிவு செய்யவும்';
+
+  @override
+  String get phoneCall => 'தொலைபேசி அழைப்பு';
+
+  @override
+  String get phoneCallSubtitle => 'நேரடி படியெடுத்தலுடன் அழைப்பைப் பதிவு செய்யவும்';
+
+  @override
+  String get searchActionItems => 'செயல் உருப்படிகளைத் தேடு';
+
+  @override
+  String get selectActionItems => 'பலவற்றைத் தேர்ந்தெடு';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count உருப்படி(களை) ஏற்றுமதி செய்…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ஏற்றுமதி செய்கிறது…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count ஐ $platform க்கு ஏற்றுமதி செய்யப்பட்டது';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total இல் $success ஐ $platform க்கு ஏற்றுமதி செய்யப்பட்டது';
+  }
+
+  @override
+  String get showCompletedTasks => 'முடிந்தவற்றைக் காட்டு';
+
+  @override
+  String get hideCompletedTasks => 'முடிந்தவற்றை மறை';
+
+  @override
+  String get selectAllTasksMenu => 'அனைத்தையும் தேர்ந்தெடு';
+
+  @override
+  String get connectTaskAppToExport => 'ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்';
+
+  @override
+  String get connectAction => 'இணைக்கவும்';
+
+  @override
+  String get deselectAllTasksMenu => 'அனைத்தையும் தேர்வு நீக்கு';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

@@ -64,6 +64,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get copySummary => 'Copiază rezumatul';
 
   @override
+  String get copyConversationId => 'Copiază ID-ul conversației';
+
+  @override
+  String get conversationIdCopied => 'ID-ul conversației a fost copiat în clipboard';
+
+  @override
   String get testPrompt => 'Testează promptul';
 
   @override
@@ -4547,12 +4553,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Planul dvs. s-a încheiat pe $date.\\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
+    return 'Planul dvs. s-a încheiat pe $date.\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Planul dvs. este setat să fie anulat pe $date.\\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+    return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
@@ -6570,7 +6576,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Setați $appName ca aplicație implicită de rezumat?\\n\\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
+    return 'Setați $appName ca aplicație implicită de rezumat?\n\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
   }
 
   @override
@@ -9198,11 +9204,83 @@ class AppLocalizationsRo extends AppLocalizations {
   String get agreeAndContinue => 'Accept și continuă';
 
   @override
-  String get startVoiceRecording => 'Start voice recording';
+  String get startVoiceRecording => 'Porniți înregistrarea vocală';
 
   @override
-  String get startCallRecording => 'Start call recording';
+  String get startCallRecording => 'Porniți înregistrarea apelului';
 
   @override
   String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mod voce';
+
+  @override
+  String get quickActionAskOmi => 'Întrebați Omi orice';
+
+  @override
+  String get record => 'Înregistrează';
+
+  @override
+  String get stop => 'Oprește';
+
+  @override
+  String get recordWithPhoneMic => 'Înregistrează cu microfonul telefonului';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capturează sunetul din jurul tău';
+
+  @override
+  String get phoneCall => 'Apel telefonic';
+
+  @override
+  String get phoneCallSubtitle => 'Înregistrează un apel cu transcriere în direct';
+
+  @override
+  String get searchActionItems => 'Căutați elemente de acțiune';
+
+  @override
+  String get selectActionItems => 'Selectare multiplă';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportă $count element(e) în…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Se exportă…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportate $count în $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportate $success din $total în $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Afișați finalizate';
+
+  @override
+  String get hideCompletedTasks => 'Ascundeți finalizate';
+
+  @override
+  String get selectAllTasksMenu => 'Selectați tot';
+
+  @override
+  String get connectTaskAppToExport => 'Conectați o aplicație de sarcini în Setări pentru a exporta';
+
+  @override
+  String get connectAction => 'Conectare';
+
+  @override
+  String get deselectAllTasksMenu => 'Deselectați tot';
+
+  @override
+  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+
+  @override
+  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
 }

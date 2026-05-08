@@ -79,6 +79,8 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: USE_VERTEX_AI
+    value: "true"
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
