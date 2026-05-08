@@ -842,7 +842,12 @@ def get_or_create_merged_audio(
 ) -> tuple[bytes, bool]:
     """
     Get merged audio from cache or create it.
-    Cached files are stored in GCS with 1-day TTL (via lifecycle policy).
+    Cached files are stored in GCS with a 30-day TTL via the bucket lifecycle
+    policy (prefix `merged/`). Issue #4586 — the previous 1-day lifecycle deleted
+    cached audio faster than the share flow could reuse it, causing every share
+    to re-merge from chunks (and time out on long convs). The application-level
+    expires_at metadata mirrors the bucket lifecycle so we don't serve stale
+    cache after the bucket cleans it up.
 
     Args:
         uid: User ID
@@ -896,7 +901,8 @@ def get_or_create_merged_audio(
     wav_data = pcm_to_wav_func(pcm_data)
     del pcm_data  # Free PCM data immediately after WAV conversion
 
-    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+    # 30-day expiry to match the bucket lifecycle policy (see docstring + issue #4586).
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=30)
     cache_metadata = {
         'expires_at': expires_at.isoformat(),
         'audio_file_id': audio_file_id,
