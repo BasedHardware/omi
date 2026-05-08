@@ -9232,8 +9232,8 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deselectAllTasksMenu => 'Zrušit výběr všech';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Všechny vybrané úkoly už byly exportovány';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Úkoly se nepodařilo smazat. Zkuste to prosím znovu.';
 }

@@ -9233,8 +9233,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deselectAllTasksMenu => 'Tühista kõigi valik';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Kõik valitud ülesanded on juba eksporditud';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
 }

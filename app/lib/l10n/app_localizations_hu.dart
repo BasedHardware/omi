@@ -9275,8 +9275,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deselectAllTasksMenu => 'Összes kijelölés törlése';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Az összes kiválasztott feladat már exportálva van';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
 }

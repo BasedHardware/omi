@@ -9313,8 +9313,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deselectAllTasksMenu => 'Alle abwählen';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Alle ausgewählten Aufgaben wurden bereits exportiert';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen.';
 }

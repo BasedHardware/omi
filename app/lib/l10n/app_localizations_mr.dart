@@ -9247,8 +9247,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deselectAllTasksMenu => 'सर्वांची निवड रद्द करा';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'निवडलेली सर्व कार्ये आधीच निर्यात केली आहेत';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा.';
 }

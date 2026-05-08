@@ -9290,8 +9290,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deselectAllTasksMenu => 'Desselecciona tot';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Totes les tasques seleccionades ja s\'han exportat';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'No s\'han pogut eliminar les tasques. Torna-ho a provar.';
 }

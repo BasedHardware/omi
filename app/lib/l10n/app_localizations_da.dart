@@ -9222,8 +9222,8 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deselectAllTasksMenu => 'Fravælg alle';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Alle valgte opgaver er allerede eksporteret';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
 }
