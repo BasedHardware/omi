@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -15,7 +16,6 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/services/phone_call_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 enum TranscriptionStatus { idle, connecting, active, reconnecting, failed }
@@ -134,7 +134,7 @@ class PhoneCallProvider extends ChangeNotifier {
     _verificationStatus = null;
     notifyListeners();
 
-    MixpanelManager().phoneCallVerificationStarted();
+    PlatformManager.instance.analytics.phoneCallVerificationStarted();
 
     var result = await api.verifyPhoneNumber(phoneNumber);
     _isLoading = false;
@@ -163,7 +163,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
     bool verified = result['verified'] == true;
     if (verified) {
-      MixpanelManager().phoneCallVerificationCompleted();
+      PlatformManager.instance.analytics.phoneCallVerificationCompleted();
       await loadVerifiedNumbers();
     }
     return verified;
@@ -243,13 +243,13 @@ class PhoneCallProvider extends ChangeNotifier {
     if (!callStarted) {
       _callState = PhoneCallState.idle;
       _error = 'Failed to start call';
-      MixpanelManager().phoneCallFailed(error: 'Failed to start call');
+      PlatformManager.instance.analytics.phoneCallFailed(error: 'Failed to start call');
       _disconnectTranscriptionSocket();
       notifyListeners();
       return false;
     }
 
-    MixpanelManager().phoneCallStarted(contactName: _contactName);
+    PlatformManager.instance.analytics.phoneCallStarted(contactName: _contactName);
     return true;
   }
 
@@ -307,7 +307,7 @@ class PhoneCallProvider extends ChangeNotifier {
       _callStartTime = DateTime.now();
       _startDurationTimer();
       _connectTranscriptionSocket();
-      MixpanelManager().phoneCallConnected();
+      PlatformManager.instance.analytics.phoneCallConnected();
     } else if (state == PhoneCallState.ended || state == PhoneCallState.failed) {
       _onCallEnded();
     }
@@ -347,7 +347,7 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _onCallEnded() {
-    MixpanelManager().phoneCallEnded(durationSeconds: _callDuration.inSeconds);
+    PlatformManager.instance.analytics.phoneCallEnded(durationSeconds: _callDuration.inSeconds);
     _callState = PhoneCallState.ended;
     _stopDurationTimer();
     _disconnectTranscriptionSocket();

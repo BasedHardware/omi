@@ -9,11 +9,9 @@ class PlatformService {
   static bool get isIOS => Platform.isIOS;
   static bool get isMobile => isAndroid || isIOS;
   static bool get isApple => isIOS;
-  static bool get isAnalyticsSupported => true;
+  static bool get isAnalyticsSupported => !(kIsWeb);
   static bool get isNotificationSupported => true;
   static bool get isIntercomSupported => true;
-  static bool get isMixpanelSupported => !(kIsWeb);
-  static bool get isMixpanelNativelySupported => isAndroid || isIOS;
   static bool get isCrashlyticsSupported => true;
 
   /// Execute a function only if the platform supports it

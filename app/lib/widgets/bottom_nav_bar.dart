@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,7 +6,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({super.key, required this.onTabTap});
@@ -49,19 +49,13 @@ class BottomNavBar extends StatelessWidget {
       child: InkWell(
         onTap: () {
           HapticFeedback.mediumImpact();
-          MixpanelManager().bottomNavigationTabClicked(label);
+          PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
           primaryFocus?.unfocus();
           onTabTap(index, home.selectedIndex == index);
         },
         child: SizedBox(
           height: 90,
-          child: Center(
-            child: Icon(
-              icon,
-              color: home.selectedIndex == index ? Colors.white : Colors.grey,
-              size: 26,
-            ),
-          ),
+          child: Center(child: Icon(icon, color: home.selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +19,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -68,7 +68,7 @@ class _PlansSheetState extends State<PlansSheet> {
       await userProvider.optInForTrainingData();
 
       // Track the opt-in submission
-      MixpanelManager().trainingDataOptInSubmitted();
+      PlatformManager.instance.analytics.trainingDataOptInSubmitted();
 
       if (mounted) {
         AppSnackbar.showSnackbar(context.l10n.thankYouRequestUnderReview);
@@ -260,7 +260,7 @@ class _PlansSheetState extends State<PlansSheet> {
     setState(() => _isSwitchingToFree = true);
 
     try {
-      MixpanelManager().track('Free Plan Selected', properties: {'source': 'plans_sheet'});
+      PlatformManager.instance.analytics.track('Free Plan Selected', properties: {'source': 'plans_sheet'});
 
       final freemiumService = FreemiumTranscriptionService();
       final readiness = await freemiumService.checkReadiness();
@@ -478,7 +478,7 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     }
 
-    MixpanelManager().upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+    PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
 
     await _handleUpgrade(priceId);
   }
@@ -552,7 +552,7 @@ class _PlansSheetState extends State<PlansSheet> {
             // Quick reactivation - no charge now
             final message = sessionData['message'] as String? ?? context.l10n.subscriptionReactivatedDefault;
             AppSnackbar.showSnackbar(message);
-            MixpanelManager().upgradeSucceeded();
+            PlatformManager.instance.analytics.upgradeSucceeded();
             await provider.fetchSubscription();
           }
           // Otherwise, this is a new subscription requiring checkout
@@ -563,9 +563,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
             if (checkoutResult == true) {
               AppSnackbar.showSnackbar(context.l10n.subscriptionSuccessfulCharged);
-              MixpanelManager().upgradeSucceeded();
+              PlatformManager.instance.analytics.upgradeSucceeded();
             } else {
-              MixpanelManager().upgradeCancelled();
+              PlatformManager.instance.analytics.upgradeCancelled();
             }
           } else {
             AppSnackbar.showSnackbarError(context.l10n.couldNotProcessSubscription);
@@ -1466,9 +1466,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     // Auto-select current plan's tier, or first tier if none selected
     if (selectedTierId == null) {
-      final activeTier = sortedTierIds.firstWhereOrNull(
-        (tid) => grouped[tid]!.any((p) => p['is_active'] == true),
-      );
+      final activeTier = sortedTierIds.firstWhereOrNull((tid) => grouped[tid]!.any((p) => p['is_active'] == true));
       selectedTierId = activeTier ?? sortedTierIds.first;
     }
 
@@ -1506,10 +1504,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade800,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
                         child: Text(
                           context.l10n.savePercent,
                           style: const TextStyle(
@@ -1557,9 +1552,7 @@ class _PlansSheetState extends State<PlansSheet> {
         // Tier cards — reuse the existing _buildDynamicPlanOption card style
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
-          final planForPeriod = tierPlans.firstWhereOrNull(
-            (p) => p['interval'] == (isYearly ? 'year' : 'month'),
-          );
+          final planForPeriod = tierPlans.firstWhereOrNull((p) => p['interval'] == (isYearly ? 'year' : 'month'));
           if (planForPeriod == null) return const SizedBox.shrink();
 
           final isSelected = selectedTierId == tierId;
@@ -1761,8 +1754,10 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration:
-                                BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade800,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: Text(
                               saveTag,
                               style: const TextStyle(
@@ -1778,8 +1773,10 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration:
-                                BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade800,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: Text(
                               'Ends on $endsOnDate',
                               style: const TextStyle(
@@ -1794,8 +1791,10 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration:
-                                BoxDecoration(color: Colors.red.shade800, borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade800,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             child: const Text(
                               'Active',
                               style: TextStyle(
@@ -1844,22 +1843,21 @@ class _PlansSheetState extends State<PlansSheet> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Column(
                   children: features
-                      .map((f) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(Icons.check, color: Colors.green[400], size: 14),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    f,
-                                    style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ))
+                      .map(
+                        (f) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.check, color: Colors.green[400], size: 14),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(f, style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
               ),

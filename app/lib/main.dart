@@ -172,7 +172,7 @@ Future _init() async {
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
   print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
-    PlatformManager.instance.mixpanel.identify();
+    PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {

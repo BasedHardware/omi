@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/agents.dart';
@@ -7,7 +8,6 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
@@ -229,7 +229,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.showDailyScoreEnabled = showDailyScoreEnabled;
     prefs.showTasksEnabled = showTasksEnabled;
 
-    MixpanelManager().settingsSaved(
+    PlatformManager.instance.analytics.settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
       hasWebhookTranscriptReceived: transcriptsToggled,
     );
