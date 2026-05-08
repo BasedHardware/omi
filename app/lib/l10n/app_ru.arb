@@ -3050,5 +3050,7 @@
     "selectAllTasksMenu": "Выбрать все",
     "showCompletedTasks": "Показать завершённые",
     "startCallRecording": "Начать запись звонка",
-    "startVoiceRecording": "Начать голосовую запись"
+    "startVoiceRecording": "Начать голосовую запись",
+    "bulkExportAlreadyExported": "Все выбранные задачи уже экспортированы",
+    "bulkDeleteFailed": "Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз."
 }

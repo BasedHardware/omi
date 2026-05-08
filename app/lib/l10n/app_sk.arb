@@ -3020,5 +3020,7 @@
     "selectAllTasksMenu": "Vybrať všetko",
     "showCompletedTasks": "Zobraziť dokončené",
     "startCallRecording": "Spustiť nahrávanie hovoru",
-    "startVoiceRecording": "Spustiť hlasový záznam"
+    "startVoiceRecording": "Spustiť hlasový záznam",
+    "bulkExportAlreadyExported": "Všetky vybrané úlohy už boli exportované",
+    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova."
 }

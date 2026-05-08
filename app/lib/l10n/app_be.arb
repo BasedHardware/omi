@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "Выбраць усе",
     "showCompletedTasks": "Паказаць завершаныя",
     "startCallRecording": "Пачаць запіс званка",
-    "startVoiceRecording": "Пачаць галасавы запіс"
+    "startVoiceRecording": "Пачаць галасавы запіс",
+    "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
 }

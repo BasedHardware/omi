@@ -3024,5 +3024,7 @@
     "selectAllTasksMenu": "Vælg alle",
     "showCompletedTasks": "Vis fuldførte",
     "startCallRecording": "Start opkaldsoptagelse",
-    "startVoiceRecording": "Start stemmeoptagelse"
+    "startVoiceRecording": "Start stemmeoptagelse",
+    "bulkExportAlreadyExported": "Alle valgte opgaver er allerede eksporteret",
+    "bulkDeleteFailed": "Opgaverne kunne ikke slettes. Prøv igen."
 }

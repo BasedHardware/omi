@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Välj alla",
     "showCompletedTasks": "Visa slutförda",
     "startCallRecording": "Starta samtalsinspelning",
-    "startVoiceRecording": "Starta röstinspelning"
+    "startVoiceRecording": "Starta röstinspelning",
+    "bulkExportAlreadyExported": "Alla valda uppgifter är redan exporterade",
+    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen."
 }

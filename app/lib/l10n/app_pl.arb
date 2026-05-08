@@ -3050,5 +3050,7 @@
     "selectAllTasksMenu": "Zaznacz wszystkie",
     "showCompletedTasks": "Pokaż ukończone",
     "startCallRecording": "Rozpocznij nagrywanie rozmowy",
-    "startVoiceRecording": "Rozpocznij nagrywanie głosu"
+    "startVoiceRecording": "Rozpocznij nagrywanie głosu",
+    "bulkExportAlreadyExported": "Wszystkie wybrane zadania zostały już wyeksportowane",
+    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie."
 }

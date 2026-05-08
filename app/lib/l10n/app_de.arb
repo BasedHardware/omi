@@ -2983,5 +2983,7 @@
     "selectAllTasksMenu": "Alle auswählen",
     "showCompletedTasks": "Erledigte anzeigen",
     "startCallRecording": "Anrufaufnahme starten",
-    "startVoiceRecording": "Sprachaufnahme starten"
+    "startVoiceRecording": "Sprachaufnahme starten",
+    "bulkExportAlreadyExported": "Alle ausgewählten Aufgaben wurden bereits exportiert",
+    "bulkDeleteFailed": "Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen."
 }

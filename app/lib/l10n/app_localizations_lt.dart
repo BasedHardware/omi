@@ -9245,8 +9245,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deselectAllTasksMenu => 'Atžymėti viską';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Visos pasirinktos užduotys jau eksportuotos';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
 }

@@ -2982,5 +2982,7 @@
     "selectAllTasksMenu": "تحديد الكل",
     "showCompletedTasks": "إظهار المكتملة",
     "startCallRecording": "بدء تسجيل المكالمة",
-    "startVoiceRecording": "بدء التسجيل الصوتي"
+    "startVoiceRecording": "بدء التسجيل الصوتي",
+    "bulkExportAlreadyExported": "تم تصدير جميع المهام المحددة بالفعل",
+    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى."
 }

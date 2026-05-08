@@ -9262,8 +9262,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deselectAllTasksMenu => 'Зняць выбар усіх';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Усе выбраныя задачы ўжо экспартаваны';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.';
 }

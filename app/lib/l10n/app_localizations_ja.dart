@@ -9087,8 +9087,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deselectAllTasksMenu => 'すべて選択解除';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => '選択したタスクはすべてエクスポート済みです';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
 }

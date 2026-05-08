@@ -2984,5 +2984,7 @@
     "selectAllTasksMenu": "Vybrat vše",
     "showCompletedTasks": "Zobrazit dokončené",
     "startCallRecording": "Zahájit nahrávání hovoru",
-    "startVoiceRecording": "Zahájit hlasový záznam"
+    "startVoiceRecording": "Zahájit hlasový záznam",
+    "bulkExportAlreadyExported": "Všechny vybrané úkoly už byly exportovány",
+    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu."
 }

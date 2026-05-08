@@ -9286,8 +9286,8 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deselectAllTasksMenu => 'అన్ని ఎంపికలు తొలగించు';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
 }

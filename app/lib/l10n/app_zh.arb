@@ -3037,5 +3037,7 @@
     "selectAllTasksMenu": "全选",
     "showCompletedTasks": "显示已完成",
     "startCallRecording": "开始通话录音",
-    "startVoiceRecording": "开始语音录音"
+    "startVoiceRecording": "开始语音录音",
+    "bulkExportAlreadyExported": "所选任务已全部导出",
+    "bulkDeleteFailed": "无法删除任务，请重试。"
 }

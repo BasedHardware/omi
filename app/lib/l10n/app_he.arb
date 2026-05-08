@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "בחר הכל",
     "showCompletedTasks": "הצג הושלמו",
     "startCallRecording": "התחל הקלטת שיחה",
-    "startVoiceRecording": "התחל הקלטה קולית"
+    "startVoiceRecording": "התחל הקלטה קולית",
+    "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
 }

@@ -2984,5 +2984,7 @@
     "selectAllTasksMenu": "Selecciona tot",
     "showCompletedTasks": "Mostra les completades",
     "startCallRecording": "Inicia l'enregistrament de trucada",
-    "startVoiceRecording": "Inicia l'enregistrament de veu"
+    "startVoiceRecording": "Inicia l'enregistrament de veu",
+    "bulkExportAlreadyExported": "Totes les tasques seleccionades ja s'han exportat",
+    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar."
 }

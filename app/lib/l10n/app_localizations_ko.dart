@@ -9088,8 +9088,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deselectAllTasksMenu => '모두 선택 해제';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => '선택한 모든 작업이 이미 내보내졌습니다';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => '작업을 삭제할 수 없습니다. 다시 시도해 주세요.';
 }

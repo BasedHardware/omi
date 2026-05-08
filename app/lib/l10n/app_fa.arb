@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "انتخاب همه",
     "showCompletedTasks": "نمایش انجام‌شده‌ها",
     "startCallRecording": "شروع ضبط تماس",
-    "startVoiceRecording": "شروع ضبط صدا"
+    "startVoiceRecording": "شروع ضبط صدا",
+    "bulkExportAlreadyExported": "همهٔ کارهای انتخاب‌شده قبلاً صادر شده‌اند",
+    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید."
 }

@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Вибрати все",
     "showCompletedTasks": "Показати завершені",
     "startCallRecording": "Почати запис дзвінка",
-    "startVoiceRecording": "Почати голосовий запис"
+    "startVoiceRecording": "Почати голосовий запис",
+    "bulkExportAlreadyExported": "Усі вибрані завдання вже експортовано",
+    "bulkDeleteFailed": "Не вдалося видалити завдання. Спробуйте ще раз."
 }

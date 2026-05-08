@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "सर्व निवडा",
     "showCompletedTasks": "पूर्ण झालेले दाखवा",
     "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
-    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा"
+    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
+    "bulkExportAlreadyExported": "निवडलेली सर्व कार्ये आधीच निर्यात केली आहेत",
+    "bulkDeleteFailed": "कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा."
 }

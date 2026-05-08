@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Valitse kaikki",
     "showCompletedTasks": "Näytä valmiit",
     "startCallRecording": "Aloita puhelun nauhoitus",
-    "startVoiceRecording": "Aloita ääninauhoitus"
+    "startVoiceRecording": "Aloita ääninauhoitus",
+    "bulkExportAlreadyExported": "Kaikki valitut tehtävät on jo viety",
+    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen."
 }
