@@ -52,6 +52,8 @@ enum DesktopConversationMatchPolicy {
   ) -> Bool {
     guard let memory else { return false }
 
+    // Older backend lifecycle events may omit source; accept missing source for
+    // compatibility, but reject an explicit non-desktop source.
     if let source = memory["source"] as? String, source != "desktop" {
       return false
     }
@@ -2875,15 +2877,18 @@ class AppState: ObservableObject {
       } else {
         didBindLocalSession = false
         if memoryId != "?" {
-          if let startTime = targetStartTime,
-             let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
+          if targetSessionId == nil || targetStartTime == nil {
+            log("Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding")
+          } else if let sessionId = targetSessionId, let startTime = targetStartTime {
+            if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
               memory?["started_at"] ?? memory?["startedAt"]) {
-            let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
-            if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
-              log("Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance")
+              let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
+              if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
+                log("Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance")
+              }
             }
+            log("Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)")
           }
-          log("Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to a local session")
         }
       }
 

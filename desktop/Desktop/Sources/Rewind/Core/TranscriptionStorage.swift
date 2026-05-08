@@ -74,23 +74,26 @@ actor TranscriptionStorage {
     func finishSession(id: Int64) async throws {
         let db = try await ensureInitialized()
 
-        try await db.write { database in
+        let didFinish = try await db.write { database -> Bool in
             guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
             guard !record.hasSyncedBackendIdentity else {
                 log("TranscriptionStorage: Skipping finishSession for backend-synced session \(id)")
-                return
+                return false
             }
 
             record.finishedAt = Date()
             record.status = .pendingUpload
             record.updatedAt = Date()
             try record.update(database)
+            return true
         }
 
-        log("TranscriptionStorage: Finished session \(id)")
+        if didFinish {
+            log("TranscriptionStorage: Finished session \(id)")
+        }
     }
 
     /// Mark session as pending upload
