@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "Избери ги сите",
     "showCompletedTasks": "Прикажи завршени",
     "startCallRecording": "Започни снимање повик",
-    "startVoiceRecording": "Започни гласовно снимање"
+    "startVoiceRecording": "Започни гласовно снимање",
+    "bulkExportAlreadyExported": "Сите избрани задачи се веќе извезени",
+    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно."
 }

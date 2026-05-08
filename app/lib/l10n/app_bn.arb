@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "সমস্ত নির্বাচন",
     "showCompletedTasks": "সম্পন্ন দেখান",
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
-    "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন"
+    "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
+    "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
 }

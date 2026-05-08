@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Επιλογή όλων",
     "showCompletedTasks": "Εμφάνιση ολοκληρωμένων",
     "startCallRecording": "Έναρξη εγγραφής κλήσης",
-    "startVoiceRecording": "Έναρξη ηχογράφησης"
+    "startVoiceRecording": "Έναρξη ηχογράφησης",
+    "bulkExportAlreadyExported": "Όλες οι επιλεγμένες εργασίες έχουν ήδη εξαχθεί",
+    "bulkDeleteFailed": "Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά."
 }

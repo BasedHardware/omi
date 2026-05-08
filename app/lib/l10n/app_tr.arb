@@ -3050,5 +3050,7 @@
     "selectAllTasksMenu": "Tümünü seç",
     "showCompletedTasks": "Tamamlananları göster",
     "startCallRecording": "Arama kaydını başlat",
-    "startVoiceRecording": "Ses kaydını başlat"
+    "startVoiceRecording": "Ses kaydını başlat",
+    "bulkExportAlreadyExported": "Seçilen tüm görevler zaten dışa aktarıldı",
+    "bulkDeleteFailed": "Görevler silinemedi. Lütfen tekrar deneyin."
 }

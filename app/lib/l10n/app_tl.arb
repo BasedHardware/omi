@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "Piliin lahat",
     "showCompletedTasks": "Ipakita ang tapos na",
     "startCallRecording": "Simulan ang pag-record ng tawag",
-    "startVoiceRecording": "Simulan ang voice recording"
+    "startVoiceRecording": "Simulan ang voice recording",
+    "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
 }

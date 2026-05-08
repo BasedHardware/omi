@@ -3111,5 +3111,7 @@
     "selectAllTasksMenu": "Összes kijelölése",
     "showCompletedTasks": "Befejezettek megjelenítése",
     "startCallRecording": "Hívásfelvétel indítása",
-    "startVoiceRecording": "Hangfelvétel indítása"
+    "startVoiceRecording": "Hangfelvétel indítása",
+    "bulkExportAlreadyExported": "Az összes kiválasztott feladat már exportálva van",
+    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra."
 }

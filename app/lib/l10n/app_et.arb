@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Vali kõik",
     "showCompletedTasks": "Kuva lõpetatud",
     "startCallRecording": "Alusta kõne salvestamist",
-    "startVoiceRecording": "Alusta häälsalvestust"
+    "startVoiceRecording": "Alusta häälsalvestust",
+    "bulkExportAlreadyExported": "Kõik valitud ülesanded on juba eksporditud",
+    "bulkDeleteFailed": "Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti."
 }

@@ -3016,5 +3016,7 @@
     "selectAllTasksMenu": "सभी चुनें",
     "showCompletedTasks": "पूर्ण दिखाएं",
     "startCallRecording": "कॉल रिकॉर्डिंग शुरू करें",
-    "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें"
+    "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें",
+    "bulkExportAlreadyExported": "सभी चयनित कार्य पहले ही निर्यात किए जा चुके हैं",
+    "bulkDeleteFailed": "कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।"
 }

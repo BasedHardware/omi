@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "모두 선택",
     "showCompletedTasks": "완료 보기",
     "startCallRecording": "통화 녹음 시작",
-    "startVoiceRecording": "음성 녹음 시작"
+    "startVoiceRecording": "음성 녹음 시작",
+    "bulkExportAlreadyExported": "선택한 모든 작업이 이미 내보내졌습니다",
+    "bulkDeleteFailed": "작업을 삭제할 수 없습니다. 다시 시도해 주세요."
 }

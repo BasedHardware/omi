@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Pilih semua",
     "showCompletedTasks": "Tunjukkan selesai",
     "startCallRecording": "Mula rakaman panggilan",
-    "startVoiceRecording": "Mula rakaman suara"
+    "startVoiceRecording": "Mula rakaman suara",
+    "bulkExportAlreadyExported": "Semua tugasan yang dipilih telah dieksport",
+    "bulkDeleteFailed": "Tidak dapat memadam tugasan. Sila cuba lagi."
 }

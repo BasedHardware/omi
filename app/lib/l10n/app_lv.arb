@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Atlasīt visus",
     "showCompletedTasks": "Rādīt pabeigtās",
     "startCallRecording": "Sākt zvana ierakstīšanu",
-    "startVoiceRecording": "Sākt balss ierakstīšanu"
+    "startVoiceRecording": "Sākt balss ierakstīšanu",
+    "bulkExportAlreadyExported": "Visi atlasītie uzdevumi jau ir eksportēti",
+    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz."
 }

@@ -3016,5 +3016,7 @@
     "selectAllTasksMenu": "すべて選択",
     "showCompletedTasks": "完了を表示",
     "startCallRecording": "通話録音を開始",
-    "startVoiceRecording": "音声録音を開始"
+    "startVoiceRecording": "音声録音を開始",
+    "bulkExportAlreadyExported": "選択したタスクはすべてエクスポート済みです",
+    "bulkDeleteFailed": "タスクを削除できませんでした。もう一度お試しください。"
 }

@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "เลือกทั้งหมด",
     "showCompletedTasks": "แสดงที่เสร็จแล้ว",
     "startCallRecording": "เริ่มบันทึกการโทร",
-    "startVoiceRecording": "เริ่มบันทึกเสียง"
+    "startVoiceRecording": "เริ่มบันทึกเสียง",
+    "bulkExportAlreadyExported": "งานที่เลือกทั้งหมดถูกส่งออกแล้ว",
+    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง"
 }
