@@ -1,9 +1,9 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
@@ -27,7 +27,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
-    MixpanelManager().dailySummarySettingsOpened();
+    PlatformManager.instance.analytics.dailySummarySettingsOpened();
   }
 
   Future<void> _loadSettings() async {
@@ -58,7 +58,10 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateNotificationFrequency(int value) async {
-    MixpanelManager().notificationFrequencyChanged(oldFrequency: _notificationFrequency, newFrequency: value);
+    PlatformManager.instance.analytics.notificationFrequencyChanged(
+      oldFrequency: _notificationFrequency,
+      newFrequency: value,
+    );
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
     await setMentorNotificationSettings(value);
@@ -111,13 +114,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _updateDailySummaryEnabled(bool value) async {
     setState(() => _dailySummaryEnabled = value);
     await setDailySummarySettings(enabled: value);
-    MixpanelManager().dailySummaryToggled(enabled: value);
+    PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
     setState(() => _dailySummaryHour = hour);
     await setDailySummarySettings(hour: hour);
-    MixpanelManager().dailySummaryTimeChanged(hour: hour);
+    PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 
   Future<void> _showHourPicker() async {

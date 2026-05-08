@@ -64,6 +64,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get copySummary => 'सारांश कॉपी करें';
 
   @override
+  String get copyConversationId => 'बातचीत ID कॉपी करें';
+
+  @override
+  String get conversationIdCopied => 'बातचीत ID क्लिपबोर्ड पर कॉपी हो गई';
+
+  @override
   String get testPrompt => 'टेस्ट प्रॉम्प्ट';
 
   @override
@@ -2342,6 +2348,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get batteryLevel => 'बैटरी स्तर';
 
   @override
+  String get charging => 'चार्ज हो रहा है';
+
+  @override
   String get productUpdate => 'उत्पाद अपडेट';
 
   @override
@@ -4494,12 +4503,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'आपकी योजना $date को समाप्त हो गई।\\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।';
+    return 'आपकी योजना $date को समाप्त हो गई।\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'आपकी योजना $date को रद्द होने के लिए सेट है।\\nअपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - $date तक कोई शुल्क नहीं।';
+    return 'आपकी योजना $date को रद्द होने के लिए सेट है।\nअपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - $date तक कोई शुल्क नहीं।';
   }
 
   @override
@@ -6512,7 +6521,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'क्या $appName को आपके डिफ़ॉल्ट सारांश ऐप के रूप में सेट करें?\\n\\nइस ऐप का उपयोग स्वचालित रूप से सभी भविष्य की बातचीत के सारांश के लिए किया जाएगा।';
+    return 'क्या $appName को आपके डिफ़ॉल्ट सारांश ऐप के रूप में सेट करें?\n\nइस ऐप का उपयोग स्वचालित रूप से सभी भविष्य की बातचीत के सारांश के लिए किया जाएगा।';
   }
 
   @override
@@ -8265,6 +8274,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'कॉल सेटिंग्स';
 
   @override
+  String get showPhoneCallButtonTitle => 'फ़ोन कॉल बटन दिखाएं';
+
+  @override
+  String get showPhoneCallButtonDesc => 'होम स्क्रीन पर फ़ोन कॉल बटन प्रदर्शित करें';
+
+  @override
   String get yourVerifiedNumbers => 'आपके सत्यापित नंबर';
 
   @override
@@ -9103,4 +9118,106 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'आपने अपनी मासिक सीमा पूरी कर ली है। बिना प्रतिबंध के Omi से चैट जारी रखने के लिए अपग्रेड करें।';
+
+  @override
+  String get voiceResponseAudio => 'Omi का जवाब ज़ोर से पढ़ें';
+
+  @override
+  String get voiceResponseMode => 'वॉइस प्रतिक्रिया';
+
+  @override
+  String get voiceResponseModeTitle => 'उत्तर कब बोले जाएं';
+
+  @override
+  String get voiceResponseOff => 'बंद';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'केवल हेडफ़ोन';
+
+  @override
+  String get voiceResponseAlways => 'हमेशा';
+
+  @override
+  String get agreeAndContinue => 'सहमत हूँ और जारी रखें';
+
+  @override
+  String get startVoiceRecording => 'वॉइस रिकॉर्डिंग शुरू करें';
+
+  @override
+  String get startCallRecording => 'कॉल रिकॉर्डिंग शुरू करें';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'वॉयस मोड';
+
+  @override
+  String get quickActionAskOmi => 'Omi से कुछ भी पूछें';
+
+  @override
+  String get record => 'रिकॉर्ड करें';
+
+  @override
+  String get stop => 'रोकें';
+
+  @override
+  String get recordWithPhoneMic => 'फ़ोन माइक से रिकॉर्ड करें';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'अपने आस-पास की आवाज़ रिकॉर्ड करें';
+
+  @override
+  String get phoneCall => 'फ़ोन कॉल';
+
+  @override
+  String get phoneCallSubtitle => 'लाइव ट्रांसक्रिप्शन के साथ कॉल रिकॉर्ड करें';
+
+  @override
+  String get searchActionItems => 'कार्य आइटम खोजें';
+
+  @override
+  String get selectActionItems => 'एकाधिक चुनें';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count आइटम निर्यात करें…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'निर्यात हो रहा है…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count को $platform में निर्यात किया गया';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total में से $success को $platform में निर्यात किया गया';
+  }
+
+  @override
+  String get showCompletedTasks => 'पूर्ण दिखाएं';
+
+  @override
+  String get hideCompletedTasks => 'पूर्ण छिपाएं';
+
+  @override
+  String get selectAllTasksMenu => 'सभी चुनें';
+
+  @override
+  String get connectTaskAppToExport => 'निर्यात करने के लिए सेटिंग्स में एक टास्क ऐप कनेक्ट करें';
+
+  @override
+  String get connectAction => 'कनेक्ट करें';
+
+  @override
+  String get deselectAllTasksMenu => 'सभी का चयन हटाएं';
+
+  @override
+  String get bulkExportAlreadyExported => 'सभी चयनित कार्य पहले ही निर्यात किए जा चुके हैं';
+
+  @override
+  String get bulkDeleteFailed => 'कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।';
 }

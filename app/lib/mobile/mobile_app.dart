@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -8,7 +9,6 @@ import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 
 class MobileApp extends StatelessWidget {
   const MobileApp({super.key});
@@ -18,6 +18,14 @@ class MobileApp extends StatelessWidget {
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isSignedIn()) {
+          // Returning users who haven't yet given consent under the new
+          // model must see the consent screen before any AI processing
+          // begins, even if the server says they completed onboarding
+          // previously. OnboardingWrapper renders the consent step in
+          // that case and routes them straight to home after Continue.
+          if (!SharedPreferencesUtil().aiConsentGiven) {
+            return const OnboardingWrapper();
+          }
           if (SharedPreferencesUtil().onboardingCompleted) {
             if (!SharedPreferencesUtil().permissionsCompleted) {
               return const _PermissionsGate();
@@ -73,7 +81,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
     if (_permissionsGranted!) {
       return const HomePageWrapper();
     }
-    MixpanelManager().permissionsInterstitialShown();
+    PlatformManager.instance.analytics.permissionsInterstitialShown();
     return const PermissionsInterstitialPage();
   }
 }

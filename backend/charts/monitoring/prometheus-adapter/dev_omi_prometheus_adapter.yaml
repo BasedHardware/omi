@@ -17,6 +17,22 @@ rules:
       resources:
         overrides:
           namespace: { resource: "namespace" }
+    # p99 VAD request latency from the internal HTTPS LB histogram for HPA
+    - name:
+        as: "vad_request_latency_p99"
+      seriesQuery: 'stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-ffeea2fe-dev-omi-backend-dev-omi-vad-8080-b32ae1f2"}'
+      metricsQuery: 'histogram_quantile(0.99, sum by (le) (rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-ffeea2fe-dev-omi-backend-dev-omi-vad-8080-b32ae1f2"}[5m])))'
+      resources:
+        overrides:
+          namespace: { resource: "namespace" }
+    # p99 Diarizer request latency from the internal HTTPS LB histogram for HPA
+    - name:
+        as: "diarizer_request_latency_p99"
+      seriesQuery: 'stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-ffeea2fe-dev-omi-backend-dev-omi-diarizer-8080-48c29aca"}'
+      metricsQuery: 'histogram_quantile(0.99, sum by (le) (rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{backend_target_name="k8s1-ffeea2fe-dev-omi-backend-dev-omi-diarizer-8080-48c29aca"}[5m])))'
+      resources:
+        overrides:
+          namespace: { resource: "namespace" }
     - name:
         as: "backend_listen_response_code_500"
       seriesQuery: 'stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count{backend_target_name="dev-backend-listen"}'

@@ -1,9 +1,8 @@
 import AppKit
 import Foundation
-import Mixpanel
 
-/// Unified analytics manager that sends events to both Mixpanel and PostHog
-/// Use this instead of calling MixpanelManager and PostHogManager directly
+/// Unified analytics manager that sends events to PostHog.
+/// Use this instead of calling PostHogManager directly
 @MainActor
 class AnalyticsManager {
   static let shared = AnalyticsManager()
@@ -25,77 +24,56 @@ class AnalyticsManager {
       log("Analytics: Skipping initialization (development build)")
       return
     }
-    MixpanelManager.shared.initialize()
     PostHogManager.shared.initialize()
-    HeapManager.shared.initialize()
   }
 
   // MARK: - User Identification
 
   func identify() {
-    MixpanelManager.shared.identify()
     PostHogManager.shared.identify()
-    HeapManager.shared.identify()
   }
 
   func reset() {
-    MixpanelManager.shared.reset()
     PostHogManager.shared.reset()
-    HeapManager.shared.reset()
   }
 
   // MARK: - Opt In/Out
 
   func optInTracking() {
-    MixpanelManager.shared.optInTracking()
     PostHogManager.shared.optIn()
   }
 
   func optOutTracking() {
-    MixpanelManager.shared.optOutTracking()
     PostHogManager.shared.optOut()
   }
 
   // MARK: - Onboarding Events
 
   func onboardingStepCompleted(step: Int, stepName: String) {
-    MixpanelManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
     PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
-    HeapManager.shared.track(
-      "Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
   }
 
   func onboardingHowDidYouHear(source: String) {
     let props: [String: Any] = ["source": source, "is_referral": source == "Friend"]
-    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.track("Onboarding How Did You Hear", properties: mixpanelProps)
     PostHogManager.shared.track("Onboarding How Did You Hear", properties: props)
-    HeapManager.shared.track("Onboarding How Did You Hear", properties: ["source": source, "is_referral": "\(source == "Friend")"])
   }
 
   func onboardingCompleted() {
-    MixpanelManager.shared.onboardingCompleted()
     PostHogManager.shared.onboardingCompleted()
-    HeapManager.shared.track("Onboarding Completed")
   }
 
   func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
     var props = properties
     props["tool"] = tool
-    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.track("Onboarding Chat Tool Used", properties: mixpanelProps)
     PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
   }
 
   func onboardingChatMessage(role: String, step: String) {
     let props: [String: Any] = ["role": role, "step": step]
-    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.track("Onboarding Chat Message", properties: mixpanelProps)
     PostHogManager.shared.track("Onboarding Chat Message", properties: props)
   }
 
   /// Track full onboarding chat message content for debugging user issues.
-  /// Sent only to PostHog (not Mixpanel) to avoid event size limits.
   func onboardingChatMessageDetailed(role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil) {
     var props: [String: Any] = [
       "role": role,
@@ -114,48 +92,36 @@ class AnalyticsManager {
   // MARK: - Authentication Events
 
   func signInStarted(provider: String) {
-    MixpanelManager.shared.signInStarted(provider: provider)
     PostHogManager.shared.signInStarted(provider: provider)
-    HeapManager.shared.track("Sign In Started", properties: ["provider": provider])
   }
 
   func signInCompleted(provider: String) {
-    MixpanelManager.shared.signInCompleted(provider: provider)
     PostHogManager.shared.signInCompleted(provider: provider)
-    HeapManager.shared.track("Sign In Completed", properties: ["provider": provider])
   }
 
   func signInFailed(provider: String, error: String) {
-    MixpanelManager.shared.signInFailed(provider: provider, error: error)
     PostHogManager.shared.signInFailed(provider: provider, error: error)
-    HeapManager.shared.track("Sign In Failed", properties: ["provider": provider, "error": error])
   }
 
   func signedOut() {
-    MixpanelManager.shared.signedOut()
     PostHogManager.shared.signedOut()
-    HeapManager.shared.track("Signed Out")
   }
 
   // MARK: - Monitoring Events
 
   func monitoringStarted() {
-    MixpanelManager.shared.monitoringStarted()
     PostHogManager.shared.monitoringStarted()
   }
 
   func monitoringStopped() {
-    MixpanelManager.shared.monitoringStopped()
     PostHogManager.shared.monitoringStopped()
   }
 
   func distractionDetected(app: String, windowTitle: String?) {
-    MixpanelManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
     PostHogManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
   }
 
   func focusRestored(app: String) {
-    MixpanelManager.shared.focusRestored(app: app)
     PostHogManager.shared.focusRestored(app: app)
   }
 
@@ -167,46 +133,34 @@ class AnalyticsManager {
       return
     }
     lastTranscriptionStartedAt = Date()
-    MixpanelManager.shared.transcriptionStarted()
     PostHogManager.shared.transcriptionStarted()
   }
 
   func transcriptionStopped(wordCount: Int) {
-    MixpanelManager.shared.transcriptionStopped(wordCount: wordCount)
     PostHogManager.shared.transcriptionStopped(wordCount: wordCount)
   }
 
   func recordingError(error: String) {
-    MixpanelManager.shared.recordingError(error: error)
     PostHogManager.shared.recordingError(error: error)
   }
 
   // MARK: - Permission Events
 
   func permissionRequested(permission: String, extraProperties: [String: Any] = [:]) {
-    let mixpanelProps = extraProperties.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.permissionRequested(
-      permission: permission, extraProperties: mixpanelProps)
     PostHogManager.shared.permissionRequested(
       permission: permission, extraProperties: extraProperties)
   }
 
   func permissionGranted(permission: String, extraProperties: [String: Any] = [:]) {
-    let mixpanelProps = extraProperties.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.permissionGranted(permission: permission, extraProperties: mixpanelProps)
     PostHogManager.shared.permissionGranted(
       permission: permission, extraProperties: extraProperties)
   }
 
   func permissionDenied(permission: String, extraProperties: [String: Any] = [:]) {
-    let mixpanelProps = extraProperties.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.permissionDenied(permission: permission, extraProperties: mixpanelProps)
     PostHogManager.shared.permissionDenied(permission: permission, extraProperties: extraProperties)
   }
 
   func permissionSkipped(permission: String, extraProperties: [String: Any] = [:]) {
-    let mixpanelProps = extraProperties.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.permissionSkipped(permission: permission, extraProperties: mixpanelProps)
     PostHogManager.shared.permissionSkipped(
       permission: permission, extraProperties: extraProperties)
   }
@@ -216,7 +170,7 @@ class AnalyticsManager {
     oldState: String, newState: String, oldStateRaw: Int, newStateRaw: Int, authorization: String,
     authorizationRaw: Int
   ) {
-    let properties: [String: MixpanelType] = [
+    let properties: [String: Any] = [
       "old_state": oldState,
       "new_state": newState,
       "old_state_raw": oldStateRaw,
@@ -224,32 +178,26 @@ class AnalyticsManager {
       "authorization": authorization,
       "authorization_raw": authorizationRaw,
     ]
-    MixpanelManager.shared.track("Bluetooth State Changed", properties: properties)
-    PostHogManager.shared.track("Bluetooth State Changed", properties: properties as [String: Any])
+    PostHogManager.shared.track("Bluetooth State Changed", properties: properties)
   }
 
   /// Track when ScreenCaptureKit broken state is detected (TCC granted but capture failing)
   func screenCaptureBrokenDetected() {
-    MixpanelManager.shared.screenCaptureBrokenDetected()
     PostHogManager.shared.screenCaptureBrokenDetected()
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
   func screenCaptureResetClicked(source: String) {
-    MixpanelManager.shared.screenCaptureResetClicked(source: source)
     PostHogManager.shared.screenCaptureResetClicked(source: source)
   }
 
   /// Track when screen capture reset completes (success or failure)
   func screenCaptureResetCompleted(success: Bool) {
-    MixpanelManager.shared.screenCaptureResetCompleted(success: success)
     PostHogManager.shared.screenCaptureResetCompleted(success: success)
   }
 
   /// Track when notification repair is triggered (auto-repair or error-triggered)
   func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
-    MixpanelManager.shared.notificationRepairTriggered(
-      reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
     PostHogManager.shared.notificationRepairTriggered(
       reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
   }
@@ -262,13 +210,6 @@ class AnalyticsManager {
     badgeEnabled: Bool,
     bannersDisabled: Bool
   ) {
-    MixpanelManager.shared.notificationSettingsChecked(
-      authStatus: authStatus,
-      alertStyle: alertStyle,
-      soundEnabled: soundEnabled,
-      badgeEnabled: badgeEnabled,
-      bannersDisabled: bannersDisabled
-    )
     PostHogManager.shared.notificationSettingsChecked(
       authStatus: authStatus,
       alertStyle: alertStyle,
@@ -310,9 +251,7 @@ class AnalyticsManager {
   // MARK: - App Lifecycle Events
 
   func appLaunched() {
-    MixpanelManager.shared.appLaunched()
     PostHogManager.shared.appLaunched()
-    HeapManager.shared.track("App Launched")
   }
 
   func trackStartupTiming(
@@ -327,8 +266,6 @@ class AnalyticsManager {
       "database_init_failed": databaseInitFailed,
     ]
     PostHogManager.shared.track("App Startup Timing", properties: properties)
-    MixpanelManager.shared.track(
-      "App Startup Timing", properties: properties.compactMapValues { $0 as? MixpanelType })
   }
 
   /// Track first launch with comprehensive system diagnostics
@@ -352,9 +289,7 @@ class AnalyticsManager {
     let diagnostics = collectSystemDiagnostics()
 
     // Track in all analytics systems
-    MixpanelManager.shared.firstLaunch(diagnostics: diagnostics)
     PostHogManager.shared.firstLaunch(diagnostics: diagnostics)
-    HeapManager.shared.track("First Launch")
 
     log("Analytics: First launch diagnostics tracked")
   }
@@ -422,12 +357,10 @@ class AnalyticsManager {
   }
 
   func appBecameActive() {
-    MixpanelManager.shared.appBecameActive()
     PostHogManager.shared.appBecameActive()
   }
 
   func appResignedActive() {
-    MixpanelManager.shared.appResignedActive()
     PostHogManager.shared.appResignedActive()
   }
 
@@ -436,43 +369,31 @@ class AnalyticsManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
 
   func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
-    MixpanelManager.shared.conversationCreated(
-      conversationId: conversationId, source: source, durationSeconds: durationSeconds)
     PostHogManager.shared.conversationCreated(
       conversationId: conversationId, source: source, durationSeconds: durationSeconds)
-    // Flush immediately to ensure this important event is sent
-    MixpanelManager.shared.flush()
   }
 
   func memoryDeleted(conversationId: String) {
-    MixpanelManager.shared.memoryDeleted(conversationId: conversationId)
     PostHogManager.shared.memoryDeleted(conversationId: conversationId)
   }
 
   func memoryShareButtonClicked(conversationId: String) {
-    MixpanelManager.shared.memoryShareButtonClicked(conversationId: conversationId)
     PostHogManager.shared.memoryShareButtonClicked(conversationId: conversationId)
   }
 
   func shareAction(category: String, properties: [String: Any] = [:]) {
     var props = properties
     props["category"] = category
-    let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
-    MixpanelManager.shared.track("Share Action", properties: mixpanelProps)
     PostHogManager.shared.track("Share Action", properties: props)
-    HeapManager.shared.track("Share Action", properties: ["category": category])
   }
 
   func memoryListItemClicked(conversationId: String) {
-    MixpanelManager.shared.memoryListItemClicked(conversationId: conversationId)
     PostHogManager.shared.memoryListItemClicked(conversationId: conversationId)
   }
 
   // MARK: - Chat Events
 
   func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
-    MixpanelManager.shared.chatMessageSent(
-      messageLength: messageLength, hasContext: hasContext, source: source)
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasContext: hasContext, source: source)
   }
@@ -480,19 +401,16 @@ class AnalyticsManager {
   // MARK: - Search Events
 
   func searchQueryEntered(query: String) {
-    MixpanelManager.shared.searchQueryEntered(query: query)
     PostHogManager.shared.searchQueryEntered(query: query)
   }
 
   func searchBarFocused() {
-    MixpanelManager.shared.searchBarFocused()
     PostHogManager.shared.searchBarFocused()
   }
 
   // MARK: - Settings Events
 
   func settingsPageOpened() {
-    MixpanelManager.shared.settingsPageOpened()
     PostHogManager.shared.settingsPageOpened()
   }
 
@@ -500,85 +418,68 @@ class AnalyticsManager {
 
   func pageViewed(_ pageName: String) {
     PostHogManager.shared.pageViewed(pageName)
-    // Mixpanel doesn't have a dedicated screen view, but we track as an event
-    MixpanelManager.shared.track("Page Viewed", properties: ["page": pageName])
   }
 
   // MARK: - Account Events
 
   func deleteAccountClicked() {
-    MixpanelManager.shared.deleteAccountClicked()
     PostHogManager.shared.deleteAccountClicked()
   }
 
   func deleteAccountConfirmed() {
-    MixpanelManager.shared.deleteAccountConfirmed()
     PostHogManager.shared.deleteAccountConfirmed()
-    HeapManager.shared.track("Delete Account Confirmed")
   }
 
   func deleteAccountCancelled() {
-    MixpanelManager.shared.deleteAccountCancelled()
     PostHogManager.shared.deleteAccountCancelled()
   }
 
   // MARK: - Navigation Events
 
   func tabChanged(tabName: String) {
-    MixpanelManager.shared.tabChanged(tabName: tabName)
     PostHogManager.shared.tabChanged(tabName: tabName)
   }
 
   func conversationDetailOpened(conversationId: String) {
-    MixpanelManager.shared.conversationDetailOpened(conversationId: conversationId)
     PostHogManager.shared.conversationDetailOpened(conversationId: conversationId)
   }
 
   // MARK: - Chat Events (Additional)
 
   func chatAppSelected(appId: String?, appName: String?) {
-    MixpanelManager.shared.chatAppSelected(appId: appId, appName: appName)
     PostHogManager.shared.chatAppSelected(appId: appId, appName: appName)
   }
 
   func chatCleared() {
-    MixpanelManager.shared.chatCleared()
     PostHogManager.shared.chatCleared()
   }
 
   func chatSessionCreated() {
-    MixpanelManager.shared.track("Chat Session Created", properties: [:])
     PostHogManager.shared.track("chat_session_created", properties: [:])
   }
 
   func chatSessionDeleted() {
-    MixpanelManager.shared.track("Chat Session Deleted", properties: [:])
     PostHogManager.shared.track("chat_session_deleted", properties: [:])
   }
 
   func messageRated(rating: Int) {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
-    MixpanelManager.shared.track("Message Rated", properties: ["rating": ratingString])
     PostHogManager.shared.track("message_rated", properties: ["rating": ratingString])
   }
 
   func initialMessageGenerated(hasApp: Bool) {
-    MixpanelManager.shared.track("Initial Message Generated", properties: ["has_app": hasApp])
     PostHogManager.shared.track("initial_message_generated", properties: ["has_app": hasApp])
   }
 
   func sessionTitleGenerated() {
-    MixpanelManager.shared.track("Session Title Generated", properties: [:])
     PostHogManager.shared.track("session_title_generated", properties: [:])
   }
 
   func chatStarredFilterToggled(enabled: Bool) {
-    MixpanelManager.shared.track("Chat Starred Filter Toggled", properties: ["enabled": enabled])
     PostHogManager.shared.track("chat_starred_filter_toggled", properties: ["enabled": enabled])
   }
 
   func sessionRenamed() {
-    MixpanelManager.shared.track("Session Renamed", properties: [:])
     PostHogManager.shared.track("session_renamed", properties: [:])
   }
 
@@ -599,8 +500,6 @@ class AnalyticsManager {
       "cost_usd": costUsd,
       "response_length": messageLength,
     ]
-    MixpanelManager.shared.track(
-      "Chat Agent Query Completed", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("chat_agent_query_completed", properties: props)
   }
 
@@ -616,8 +515,6 @@ class AnalyticsManager {
       "tool_name": cleanName,
       "duration_ms": durationMs,
     ]
-    MixpanelManager.shared.track(
-      "Chat Tool Call Completed", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("chat_tool_call_completed", properties: props)
   }
 
@@ -627,27 +524,22 @@ class AnalyticsManager {
     if let raw = rawError, raw != error {
       props["raw_error"] = String(raw.prefix(500))
     }
-    MixpanelManager.shared.track(
-      "Chat Agent Error", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("chat_agent_error", properties: props)
   }
 
   // MARK: - Conversation Events (Additional)
 
   func conversationReprocessed(conversationId: String, appId: String) {
-    MixpanelManager.shared.conversationReprocessed(conversationId: conversationId, appId: appId)
     PostHogManager.shared.conversationReprocessed(conversationId: conversationId, appId: appId)
   }
 
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {
-    MixpanelManager.shared.settingToggled(setting: setting, enabled: enabled)
     PostHogManager.shared.settingToggled(setting: setting, enabled: enabled)
   }
 
   func languageChanged(language: String) {
-    MixpanelManager.shared.languageChanged(language: language)
     PostHogManager.shared.languageChanged(language: language)
   }
 
@@ -655,7 +547,6 @@ class AnalyticsManager {
 
   /// Track launch at login status once per app launch (not continuously)
   func launchAtLoginStatusChecked(enabled: Bool) {
-    MixpanelManager.shared.launchAtLoginStatusChecked(enabled: enabled)
     PostHogManager.shared.launchAtLoginStatusChecked(enabled: enabled)
   }
 
@@ -664,122 +555,100 @@ class AnalyticsManager {
   ///   - enabled: New state
   ///   - source: What triggered the change (user, migration, onboarding)
   func launchAtLoginChanged(enabled: Bool, source: String) {
-    MixpanelManager.shared.launchAtLoginChanged(enabled: enabled, source: source)
     PostHogManager.shared.launchAtLoginChanged(enabled: enabled, source: source)
   }
 
   // MARK: - Feedback Events
 
   func feedbackOpened() {
-    MixpanelManager.shared.feedbackOpened()
     PostHogManager.shared.feedbackOpened()
   }
 
   func feedbackSubmitted(feedbackLength: Int) {
-    MixpanelManager.shared.feedbackSubmitted(feedbackLength: feedbackLength)
     PostHogManager.shared.feedbackSubmitted(feedbackLength: feedbackLength)
   }
 
   // MARK: - Rewind Events (Desktop-specific)
 
   func rewindSearchPerformed(queryLength: Int) {
-    MixpanelManager.shared.rewindSearchPerformed(queryLength: queryLength)
     PostHogManager.shared.rewindSearchPerformed(queryLength: queryLength)
   }
 
   func rewindScreenshotViewed(timestamp: Date) {
-    MixpanelManager.shared.rewindScreenshotViewed(timestamp: timestamp)
     PostHogManager.shared.rewindScreenshotViewed(timestamp: timestamp)
   }
 
   func rewindTimelineNavigated(direction: String) {
-    MixpanelManager.shared.rewindTimelineNavigated(direction: direction)
     PostHogManager.shared.rewindTimelineNavigated(direction: direction)
   }
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
   func focusAlertShown(app: String) {
-    MixpanelManager.shared.focusAlertShown(app: app)
     PostHogManager.shared.focusAlertShown(app: app)
   }
 
   func focusAlertDismissed(app: String, action: String) {
-    MixpanelManager.shared.focusAlertDismissed(app: app, action: action)
     PostHogManager.shared.focusAlertDismissed(app: app, action: action)
   }
 
   func taskExtracted(taskCount: Int) {
-    MixpanelManager.shared.taskExtracted(taskCount: taskCount)
     PostHogManager.shared.taskExtracted(taskCount: taskCount)
   }
 
   func taskPromoted(taskCount: Int) {
-    MixpanelManager.shared.taskPromoted(taskCount: taskCount)
     PostHogManager.shared.taskPromoted(taskCount: taskCount)
   }
 
   func taskCompleted(source: String?) {
-    MixpanelManager.shared.taskCompleted(source: source)
     PostHogManager.shared.taskCompleted(source: source)
   }
 
   func taskDeleted(source: String?) {
-    MixpanelManager.shared.taskDeleted(source: source)
     PostHogManager.shared.taskDeleted(source: source)
   }
 
   func taskAdded() {
-    MixpanelManager.shared.taskAdded()
     PostHogManager.shared.taskAdded()
   }
 
   func memoryExtracted(memoryCount: Int) {
-    MixpanelManager.shared.memoryExtracted(memoryCount: memoryCount)
     PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
   }
 
   func insightGenerated(category: String?) {
-    MixpanelManager.shared.insightGenerated(category: category)
     PostHogManager.shared.insightGenerated(category: category)
   }
 
   // MARK: - Apps Events
 
   func appEnabled(appId: String, appName: String) {
-    MixpanelManager.shared.appEnabled(appId: appId, appName: appName)
     PostHogManager.shared.appEnabled(appId: appId, appName: appName)
   }
 
   func appDisabled(appId: String, appName: String) {
-    MixpanelManager.shared.appDisabled(appId: appId, appName: appName)
     PostHogManager.shared.appDisabled(appId: appId, appName: appName)
   }
 
   func appDetailViewed(appId: String, appName: String) {
-    MixpanelManager.shared.appDetailViewed(appId: appId, appName: appName)
     PostHogManager.shared.appDetailViewed(appId: appId, appName: appName)
   }
 
   // MARK: - Update Events
 
   func updateCheckStarted() {
-    MixpanelManager.shared.updateCheckStarted()
     PostHogManager.shared.updateCheckStarted()
   }
 
   func updateAvailable(version: String) {
-    MixpanelManager.shared.updateAvailable(version: version)
     PostHogManager.shared.updateAvailable(version: version)
   }
 
   func updateInstalled(version: String) {
-    MixpanelManager.shared.updateInstalled(version: version)
     PostHogManager.shared.updateInstalled(version: version)
   }
 
   func updateNotFound() {
-    MixpanelManager.shared.updateNotFound()
     PostHogManager.shared.updateNotFound()
   }
 
@@ -787,10 +656,6 @@ class AnalyticsManager {
     error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil,
     underlyingDomain: String? = nil, underlyingCode: Int? = nil
   ) {
-    MixpanelManager.shared.updateCheckFailed(
-      error: error, errorDomain: errorDomain, errorCode: errorCode,
-      underlyingError: underlyingError, underlyingDomain: underlyingDomain,
-      underlyingCode: underlyingCode)
     PostHogManager.shared.updateCheckFailed(
       error: error, errorDomain: errorDomain, errorCode: errorCode,
       underlyingError: underlyingError, underlyingDomain: underlyingDomain,
@@ -800,33 +665,25 @@ class AnalyticsManager {
   // MARK: - Notification Events
 
   func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
-    MixpanelManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationSent(
       notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
   func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
-    MixpanelManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationClicked(
       notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
   func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
-    MixpanelManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
     PostHogManager.shared.notificationDismissed(
       notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
-    MixpanelManager.shared.notificationWillPresent(notificationId: notificationId, title: title)
     PostHogManager.shared.notificationWillPresent(notificationId: notificationId, title: title)
   }
 
   func notificationDelegateReady() {
-    MixpanelManager.shared.notificationDelegateReady()
     PostHogManager.shared.notificationDelegateReady()
   }
 
@@ -834,25 +691,21 @@ class AnalyticsManager {
 
   /// Track when user opens the menu bar dropdown
   func menuBarOpened() {
-    MixpanelManager.shared.menuBarOpened()
     PostHogManager.shared.menuBarOpened()
   }
 
   /// Track when user clicks an action in the menu bar
   func menuBarActionClicked(action: String) {
-    MixpanelManager.shared.menuBarActionClicked(action: action)
     PostHogManager.shared.menuBarActionClicked(action: action)
   }
 
   // MARK: - Tier Events
 
   func tierChanged(tier: Int, reason: String) {
-    MixpanelManager.shared.tierChanged(tier: tier, reason: reason)
     PostHogManager.shared.tierChanged(tier: tier, reason: reason)
   }
 
   func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
-    MixpanelManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
     PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
   }
 
@@ -863,9 +716,6 @@ class AnalyticsManager {
   func trackSettingsState(
     screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool
   ) {
-    MixpanelManager.shared.settingsStateTracked(
-      screenshotsEnabled: screenshotsEnabled, memoryExtractionEnabled: memoryExtractionEnabled,
-      memoryNotificationsEnabled: memoryNotificationsEnabled)
     PostHogManager.shared.settingsStateTracked(
       screenshotsEnabled: screenshotsEnabled, memoryExtractionEnabled: memoryExtractionEnabled,
       memoryNotificationsEnabled: memoryNotificationsEnabled)
@@ -891,7 +741,6 @@ class AnalyticsManager {
 
     let properties = collectAllSettings()
 
-    MixpanelManager.shared.allSettingsStateTracked(properties: properties)
     PostHogManager.shared.allSettingsStateTracked(properties: properties)
 
     log("Analytics: All settings state reported (\(properties.count) properties)")
@@ -1005,22 +854,17 @@ class AnalyticsManager {
       "visible": visible,
       "source": source,
     ]
-    MixpanelManager.shared.track(
-      "Floating Bar Toggled", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("floating_bar_toggled", properties: props)
   }
 
   /// Track when Ask OMI is opened (AI input panel shown)
   func floatingBarAskOmiOpened(source: String) {
     let props: [String: Any] = ["source": source]
-    MixpanelManager.shared.track(
-      "Floating Bar Ask OMI Opened", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("floating_bar_ask_omi_opened", properties: props)
   }
 
   /// Track when the AI conversation is closed
   func floatingBarAskOmiClosed() {
-    MixpanelManager.shared.track("Floating Bar Ask OMI Closed")
     PostHogManager.shared.track("floating_bar_ask_omi_closed")
   }
 
@@ -1030,16 +874,12 @@ class AnalyticsManager {
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
     ]
-    MixpanelManager.shared.track(
-      "Floating Bar Query Sent", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
   }
 
   /// Track when push-to-talk starts listening
   func floatingBarPTTStarted(mode: String) {
     let props: [String: Any] = ["mode": mode]
-    MixpanelManager.shared.track(
-      "Floating Bar PTT Started", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
   }
 
@@ -1050,8 +890,6 @@ class AnalyticsManager {
       "had_transcript": hadTranscript,
       "transcript_length": transcriptLength,
     ]
-    MixpanelManager.shared.track(
-      "Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 
@@ -1063,8 +901,6 @@ class AnalyticsManager {
       "files_indexed": filesIndexed,
       "had_existing_graph": hadExistingGraph,
     ]
-    MixpanelManager.shared.track(
-      "Knowledge Graph Build Started", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("knowledge_graph_build_started", properties: props)
   }
 
@@ -1078,8 +914,6 @@ class AnalyticsManager {
       "poll_attempts": pollAttempts,
       "had_existing_graph": hadExistingGraph,
     ]
-    MixpanelManager.shared.track(
-      "Knowledge Graph Build Completed", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("knowledge_graph_build_completed", properties: props)
   }
 
@@ -1090,8 +924,6 @@ class AnalyticsManager {
       "poll_attempts": pollAttempts,
       "files_indexed": filesIndexed,
     ]
-    MixpanelManager.shared.track(
-      "Knowledge Graph Build Failed", properties: props.compactMapValues { $0 as? MixpanelType })
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
@@ -1121,7 +953,6 @@ class AnalyticsManager {
       "scale_factor": screen.backingScaleFactor,
     ]
 
-    MixpanelManager.shared.displayInfoTracked(info: displayInfo)
     PostHogManager.shared.displayInfoTracked(info: displayInfo)
   }
 }

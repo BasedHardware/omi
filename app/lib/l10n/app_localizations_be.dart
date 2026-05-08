@@ -64,6 +64,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get copySummary => 'Скапіяваць рэзюмэ';
 
   @override
+  String get copyConversationId => 'Скапіраваць ID размовы';
+
+  @override
+  String get conversationIdCopied => 'ID размовы скапіраваны ў буфер абмену';
+
+  @override
   String get testPrompt => 'Тэставаць запыт';
 
   @override
@@ -2377,6 +2383,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get batteryLevel => 'Узровень батарэі';
+
+  @override
+  String get charging => 'Зарадка';
 
   @override
   String get productUpdate => 'Абнаўленне прадукту';
@@ -8313,6 +8322,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Параметры тэлефонных вызваў';
 
   @override
+  String get showPhoneCallButtonTitle => 'Паказаць кнопку тэлефоннага выкліку';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране';
+
+  @override
   String get yourVerifiedNumbers => 'Ваш параўныя нумары';
 
   @override
@@ -9149,4 +9164,106 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Вы дасягнулі свайго месячнага ліміту. Абнавіце, каб працягваць размаўляць з Omi без абмежаванняў.';
+
+  @override
+  String get voiceResponseAudio => 'Чытаць адказ Omi уголас';
+
+  @override
+  String get voiceResponseMode => 'Галасавы адказ';
+
+  @override
+  String get voiceResponseModeTitle => 'Калі агучваць адказы';
+
+  @override
+  String get voiceResponseOff => 'Выкл';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Толькі навушнікі';
+
+  @override
+  String get voiceResponseAlways => 'Заўсёды';
+
+  @override
+  String get agreeAndContinue => 'Прыняць і працягнуць';
+
+  @override
+  String get startVoiceRecording => 'Пачаць галасавы запіс';
+
+  @override
+  String get startCallRecording => 'Пачаць запіс званка';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Галасавы рэжым';
+
+  @override
+  String get quickActionAskOmi => 'Спытайце ў Омі што заўгодна';
+
+  @override
+  String get record => 'Запісаць';
+
+  @override
+  String get stop => 'Спыніць';
+
+  @override
+  String get recordWithPhoneMic => 'Запіс мікрафонам тэлефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Запісвайце гук вакол сябе';
+
+  @override
+  String get phoneCall => 'Тэлефонны званок';
+
+  @override
+  String get phoneCallSubtitle => 'Запіс званка з жывой транскрыпцыяй';
+
+  @override
+  String get searchActionItems => 'Шукаць элементы дзеянняў';
+
+  @override
+  String get selectActionItems => 'Выбраць некалькі';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Экспартаваць $count элемент(аў) у…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Экспарт…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Экспартавана $count у $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Экспартавана $success з $total у $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Паказаць завершаныя';
+
+  @override
+  String get hideCompletedTasks => 'Схаваць завершаныя';
+
+  @override
+  String get selectAllTasksMenu => 'Выбраць усе';
+
+  @override
+  String get connectTaskAppToExport => 'Падключыце праграму задач у Наладах для экспарту';
+
+  @override
+  String get connectAction => 'Злучыць';
+
+  @override
+  String get deselectAllTasksMenu => 'Зняць выбар усіх';
+
+  @override
+  String get bulkExportAlreadyExported => 'Усе выбраныя задачы ўжо экспартаваны';
+
+  @override
+  String get bulkDeleteFailed => 'Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.';
 }

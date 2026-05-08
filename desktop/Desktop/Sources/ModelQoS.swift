@@ -65,17 +65,35 @@ struct ModelQoS {
         }
     }
 
-    // MARK: - Gemini Models
+    // MARK: - Gemini Models (tier-dependent, stable GA models)
+    //
+    // Provider routing (Vertex AI vs AI Studio) is handled by the Rust backend
+    // based on model_qos::is_vertex_available(). The Swift app just picks the model.
 
     struct Gemini {
         /// Proactive assistants (screenshot analysis, context detection)
-        static var proactive: String { "gemini-3-flash-preview" }
+        static var proactive: String {
+            switch activeTier {
+            case .premium: return "gemini-2.5-flash"
+            case .max:     return "gemini-2.5-pro"
+            }
+        }
 
         /// Task extraction
-        static var taskExtraction: String { "gemini-3-flash-preview" }
+        static var taskExtraction: String {
+            switch activeTier {
+            case .premium: return "gemini-2.5-flash"
+            case .max:     return "gemini-2.5-pro"
+            }
+        }
 
         /// Insight generation
-        static var insight: String { "gemini-3-flash-preview" }
+        static var insight: String {
+            switch activeTier {
+            case .premium: return "gemini-2.5-flash"
+            case .max:     return "gemini-2.5-pro"
+            }
+        }
 
         /// Embeddings (not tier-dependent, kept separate)
         static var embedding: String { "gemini-embedding-001" }

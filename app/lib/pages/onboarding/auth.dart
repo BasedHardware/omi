@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/widgets/consent_bottom_sheet.dart';
 
 class AuthComponent extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -78,13 +77,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         child: ElevatedButton(
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            ConsentBottomSheet.show(
-                              context,
-                              authMethod: 'apple',
-                              onContinue: () async {
-                                provider.onAppleSignIn(widget.onSignIn);
-                              },
-                            );
+                            provider.onAppleSignIn(widget.onSignIn);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
@@ -118,13 +111,7 @@ class _AuthComponentState extends State<AuthComponent> {
                       child: ElevatedButton(
                         onPressed: () {
                           HapticFeedback.mediumImpact();
-                          ConsentBottomSheet.show(
-                            context,
-                            authMethod: 'google',
-                            onContinue: () async {
-                              provider.onGoogleSignIn(widget.onSignIn);
-                            },
-                          );
+                          provider.onGoogleSignIn(widget.onSignIn);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,

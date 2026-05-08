@@ -79,6 +79,8 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: USE_VERTEX_AI
+    value: "true"
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
@@ -319,6 +321,31 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: METRICS_SECRET
+  - name: GROQ_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GROQ_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENROUTER_API_KEY
+  - name: RAPID_API_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RAPID_API_HOST
+  - name: RAPID_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RAPID_API_KEY
+  - name: CONVERSATION_SUMMARIZED_APP_IDS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: CONVERSATION_SUMMARIZED_APP_IDS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

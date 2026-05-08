@@ -64,6 +64,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get copySummary => 'Kopioi tiivistelmä';
 
   @override
+  String get copyConversationId => 'Kopioi keskustelun tunnus';
+
+  @override
+  String get conversationIdCopied => 'Keskustelun tunnus kopioitu leikepöydälle';
+
+  @override
   String get testPrompt => 'Testaa kehotetta';
 
   @override
@@ -2367,6 +2373,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get batteryLevel => 'Akun taso';
 
   @override
+  String get charging => 'Lataa';
+
+  @override
   String get productUpdate => 'Tuotepäivitys';
 
   @override
@@ -4520,12 +4529,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Tilauksesi päättyi $date.\\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.';
+    return 'Tilauksesi päättyi $date.\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Tilauksesi on asetettu peruuntumaan $date.\\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
+    return 'Tilauksesi on asetettu peruuntumaan $date.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
   }
 
   @override
@@ -6537,7 +6546,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Asetetaanko $appName oletusyhteenvetosovellukseksi?\\n\\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.';
+    return 'Asetetaanko $appName oletusyhteenvetosovellukseksi?\n\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.';
   }
 
   @override
@@ -8286,6 +8295,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Puheluasetukset';
 
   @override
+  String get showPhoneCallButtonTitle => 'Näytä puhelupainike';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Näytä puhelupainike aloitusnäytöllä';
+
+  @override
   String get yourVerifiedNumbers => 'Vahvistetut numerosi';
 
   @override
@@ -9122,4 +9137,106 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Olet saavuttanut kuukausittaisen rajasi. Päivitä jatkaaksesi keskustelua Omin kanssa ilman rajoituksia.';
+
+  @override
+  String get voiceResponseAudio => 'Lue Omin vastaus ääneen';
+
+  @override
+  String get voiceResponseMode => 'Äänivastaus';
+
+  @override
+  String get voiceResponseModeTitle => 'Milloin vastaukset luetaan';
+
+  @override
+  String get voiceResponseOff => 'Pois';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Vain kuulokkeet';
+
+  @override
+  String get voiceResponseAlways => 'Aina';
+
+  @override
+  String get agreeAndContinue => 'Hyväksy ja jatka';
+
+  @override
+  String get startVoiceRecording => 'Aloita ääninauhoitus';
+
+  @override
+  String get startCallRecording => 'Aloita puhelun nauhoitus';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Äänitila';
+
+  @override
+  String get quickActionAskOmi => 'Kysy Omilta mitä tahansa';
+
+  @override
+  String get record => 'Tallenna';
+
+  @override
+  String get stop => 'Pysäytä';
+
+  @override
+  String get recordWithPhoneMic => 'Tallenna puhelimen mikrofonilla';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tallenna ympärilläsi olevaa ääntä';
+
+  @override
+  String get phoneCall => 'Puhelu';
+
+  @override
+  String get phoneCallSubtitle => 'Tallenna puhelu reaaliaikaisella tekstityksellä';
+
+  @override
+  String get searchActionItems => 'Hae toimintakohteita';
+
+  @override
+  String get selectActionItems => 'Valitse useita';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Vie $count kohde(tta) kohteeseen…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Viedään…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Viety $count kohteeseen $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Viety $success/$total kohteeseen $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Näytä valmiit';
+
+  @override
+  String get hideCompletedTasks => 'Piilota valmiit';
+
+  @override
+  String get selectAllTasksMenu => 'Valitse kaikki';
+
+  @override
+  String get connectTaskAppToExport => 'Yhdistä tehtäväsovellus Asetuksissa vientiä varten';
+
+  @override
+  String get connectAction => 'Yhdistä';
+
+  @override
+  String get deselectAllTasksMenu => 'Poista kaikkien valinta';
+
+  @override
+  String get bulkExportAlreadyExported => 'Kaikki valitut tehtävät on jo viety';
+
+  @override
+  String get bulkDeleteFailed => 'Tehtävien poistaminen epäonnistui. Yritä uudelleen.';
 }

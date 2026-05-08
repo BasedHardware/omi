@@ -28,8 +28,10 @@ Map<String, dynamic> _$PlanLimitsToJson(PlanLimits instance) =>
     };
 
 Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
-      plan: $enumDecode(_$PlanTypeEnumMap, json['plan']),
-      status: $enumDecode(_$SubscriptionStatusEnumMap, json['status']),
+      plan: $enumDecode(_$PlanTypeEnumMap, json['plan'],
+          unknownValue: PlanType.basic),
+      status: $enumDecode(_$SubscriptionStatusEnumMap, json['status'],
+          unknownValue: SubscriptionStatus.inactive),
       currentPeriodEnd: (json['current_period_end'] as num?)?.toInt(),
       stripeSubscriptionId: json['stripe_subscription_id'] as String?,
       currentPriceId: json['current_price_id'] as String?,

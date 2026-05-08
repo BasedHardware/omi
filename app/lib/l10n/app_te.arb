@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "సంభాషణ ID కాపీ చేయండి",
+    "conversationIdCopied": "సంభాషణ ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "testPrompt": "ప్రాంప్ట్‌ను పరీక్షించండి",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "బ్యాటరీ స్థాయి",
+    "charging": "ఛార్జ్ అవుతోంది",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "మీ ప్లాన్ {date} న ముగిసింది.\\nఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - కొత్త బిల్లింగ్ వ్యవధి కోసం ఛార్జ్ చేయబడుతారు.",
+    "planEndedOn": "మీ ప్లాన్ {date} న ముగిసింది.\nఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - కొత్త బిల్లింగ్ వ్యవధి కోసం ఛార్జ్ చేయబడుతారు.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "మీ ప్లాన్ {date} న రద్దు చేయడానికి సెట్ చేయబడింది.\\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
+    "planSetToCancelOn": "మీ ప్లాన్ {date} న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - {date} వరకు ఛార్జ్ లేదు.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.",
+    "tasksEmptyStateMessage": "మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Omi ని మీ\\nApple Watch లో ఇన్‌స్టాల్ చేయండి",
+    "installOmiOnAppleWatch": "Omi ని మీ\nApple Watch లో ఇన్‌స్టాల్ చేయండి",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Omi ని మీ\\nApple Watch లో తెరవండి",
+    "openOmiOnAppleWatch": "Omi ని మీ\nApple Watch లో తెరవండి",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "మీ\\n2025 కథను సృష్టిస్తోంది...",
+    "wrappedCreatingYourStory": "మీ\n2025 కథను సృష్టిస్తోంది...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "ఏదో\\nపొరపాటు జరిగింది",
+    "wrappedSomethingWentWrong": "ఏదో\nపొరపాటు జరిగింది",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "డిఫాల్ట్",
     "lastUsedLabel": "చివరిగా ఉపయోగించిన",
     "setDefaultApp": "డిఫాల్ట్ ఆ్యాప్ సెట్ చేయండి",
-    "setDefaultAppContent": "{appName} ను మీ డిఫాల్ట్ సంక్షేపణ ఆ్యాప్‌గా సెట్ చేయాలా?\\n\\nఈ ఆ్యాప్ అన్ని భవిష్యత్ సంభాషణ సారాంశాల కోసం స్వయంచాలకంగా ఉపయోగించబడుతుంది.",
+    "setDefaultAppContent": "{appName} ను మీ డిఫాల్ట్ సంక్షేపణ ఆ్యాప్‌గా సెట్ చేయాలా?\n\nఈ ఆ్యాప్ అన్ని భవిష్యత్ సంభాషణ సారాంశాల కోసం స్వయంచాలకంగా ఉపయోగించబడుతుంది.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "స్పీకర్",
     "phoneEndCall": "ముగించు",
     "phoneCallSettingsTitle": "ఫోన్ కాల్ సెట్టింగ్‌లు",
+    "showPhoneCallButtonTitle": "ఫోన్ కాల్ బటన్ చూపించు",
+    "showPhoneCallButtonDesc": "హోమ్ స్క్రీన్‌లో ఫోన్ కాల్ బటన్ చూపించు",
     "yourVerifiedNumbers": "మీ ధృవీకరించిన సంఖ్యలు",
     "verifiedNumbersDescription": "మీరు ఎవరికైనా కాల్ చేసినప్పుడు, వారు తమ ఫోన్‌లో ఈ నంబర్‌ను చూస్తారు",
     "noVerifiedNumbers": "ధృవీకరించిన సంఖ్యలు లేవు",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "బ్యాటరీ",
     "day": "రోజు",
     "noBatteryDataYet": "ఇంకా బ్యాటరీ డేటా లేదు",
-    "week": "వారం"
+    "week": "వారం",
+    "voiceResponseAudio": "Omi ప్రతిస్పందనను బిగ్గరగా చదవండి",
+    "voiceResponseMode": "వాయిస్ ప్రతిస్పందన",
+    "voiceResponseModeTitle": "ప్రతిస్పందనలను ఎప్పుడు చదవాలి",
+    "voiceResponseOff": "ఆఫ్",
+    "voiceResponseHeadphonesOnly": "హెడ్‌ఫోన్‌లు మాత్రమే",
+    "voiceResponseAlways": "ఎల్లప్పుడూ",
+    "agreeAndContinue": "అంగీకరించి కొనసాగించండి",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "వాయిస్ మోడ్",
+    "quickActionAskOmi": "Omi ని ఏమైనా అడగండి",
+    "record": "రికార్డ్",
+    "stop": "ఆపు",
+    "recordWithPhoneMic": "ఫోన్ మైక్‌తో రికార్డ్ చేయండి",
+    "recordWithPhoneMicSubtitle": "మీ చుట్టూ ఉన్న ఆడియోను క్యాప్చర్ చేయండి",
+    "phoneCall": "ఫోన్ కాల్",
+    "phoneCallSubtitle": "లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి",
+    "bulkExportInProgress": "ఎగుమతి చేస్తోంది…",
+    "bulkExportPartial": "{total} లో {success} ని {platform} కు ఎగుమతి చేయబడింది",
+    "bulkExportSuccess": "{count} ని {platform} కు ఎగుమతి చేయబడింది",
+    "chooseExportDestination": "{count} అంశం(ాలను) ఎగుమతి చేయండి…",
+    "connectAction": "కనెక్ట్ చేయండి",
+    "connectTaskAppToExport": "ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి",
+    "deselectAllTasksMenu": "అన్ని ఎంపికలు తొలగించు",
+    "hideCompletedTasks": "పూర్తయినవి దాచు",
+    "searchActionItems": "చర్య అంశాలను వెతకండి",
+    "selectActionItems": "బహుళ ఎంపిక",
+    "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
+    "showCompletedTasks": "పూర్తయినవి చూపించు",
+    "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
+    "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
+    "bulkExportAlreadyExported": "ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి",
+    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి."
 }

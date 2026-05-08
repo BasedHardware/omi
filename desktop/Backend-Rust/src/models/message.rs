@@ -8,78 +8,9 @@ use serde::{Deserialize, Serialize};
 // REQUEST TYPES
 // =========================================================================
 
-/// Request to save a chat message
-#[derive(Debug, Clone, Deserialize)]
-pub struct SaveMessageRequest {
-    /// Message text content
-    pub text: String,
-    /// Sender: "human" or "ai"
-    pub sender: String,
-    /// Optional app ID for app-specific chats
-    #[serde(default)]
-    pub app_id: Option<String>,
-    /// Optional session ID for grouping messages
-    #[serde(default)]
-    pub session_id: Option<String>,
-    /// Optional JSON metadata (e.g. tool calls, screenshot context)
-    #[serde(default)]
-    pub metadata: Option<String>,
-}
-
-/// Query params for getting messages
-#[derive(Debug, Clone, Deserialize)]
-pub struct GetMessagesQuery {
-    /// Filter by app ID (null = main Omi chat)
-    #[serde(default)]
-    pub app_id: Option<String>,
-    /// Filter by session ID
-    #[serde(default)]
-    pub session_id: Option<String>,
-    /// Maximum number of messages to return
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    /// Offset for pagination
-    #[serde(default)]
-    pub offset: usize,
-}
-
-/// Query params for deleting messages
-#[derive(Debug, Clone, Deserialize)]
-pub struct DeleteMessagesQuery {
-    /// Filter by app ID (null = delete main Omi chat)
-    #[serde(default)]
-    pub app_id: Option<String>,
-}
-
-/// Request to rate a message
-#[derive(Debug, Clone, Deserialize)]
-pub struct RateMessageRequest {
-    /// Rating: 1 (thumbs up), -1 (thumbs down), null (clear rating)
-    pub rating: Option<i32>,
-}
-
-fn default_limit() -> usize {
-    100
-}
-
 // =========================================================================
 // RESPONSE TYPES
 // =========================================================================
-
-/// Response for successful message save
-#[derive(Debug, Clone, Serialize)]
-pub struct SaveMessageResponse {
-    pub id: String,
-    pub created_at: DateTime<Utc>,
-}
-
-/// Simple status response
-#[derive(Debug, Clone, Serialize)]
-pub struct MessageStatusResponse {
-    pub status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deleted_count: Option<usize>,
-}
 
 // =========================================================================
 // DATABASE MODEL

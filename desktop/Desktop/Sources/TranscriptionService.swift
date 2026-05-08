@@ -97,17 +97,48 @@ class TranscriptionService {
     private let encoding = "linear16"
     private let channels = 1  // Always mono for Python backend streaming
     private let streamingMode: StreamingMode
+    private let contextKeywords: [String]
 
     /// Python backend base URL for transcription endpoints.
-    /// Resolution order: OMI_PYTHON_API_URL → https://api.omi.me/
-    /// NOTE: Do NOT fall back to OMI_API_URL — that points to the Rust desktop-backend
+    /// Resolution order: beta release channel → OMI_PYTHON_API_URL → https://api.omi.me/
+    /// NOTE: Do NOT fall back to OMI_DESKTOP_API_URL — that points to the Rust desktop-backend
     /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
-    private static let pythonBackendBaseURL: String = {
-        if let cString = getenv("OMI_PYTHON_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-            return url.hasSuffix("/") ? url : url + "/"
+    private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
+
+    private static func sanitizedContextKeywords(_ keywords: [String]) -> [String] {
+        let stopWords: Set<String> = [
+            "about", "after", "again", "all", "also", "and", "app", "are", "ask", "back", "browser", "but", "can",
+            "chat", "code", "done", "each", "for", "from", "get", "has", "have", "help", "here", "home", "how",
+            "into", "just", "like", "means", "more", "next", "not", "now", "open", "question", "read", "right",
+            "said", "screen", "sent", "show", "some", "task", "test", "text", "that", "the", "this", "time",
+            "use", "user", "voice", "was", "what", "when", "window", "with", "you", "your"
+        ]
+        var seen = Set<String>()
+        var result: [String] = []
+        for keyword in ["Omi", "OMI"] + keywords {
+            let normalized = keyword
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let pattern = #"\b[A-Za-z][A-Za-z'\-]{1,31}\b"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let nsText = normalized as NSString
+            let matches = regex.matches(in: normalized, range: NSRange(location: 0, length: nsText.length))
+
+            for match in matches {
+                let term = nsText.substring(with: match.range)
+                let key = term.lowercased()
+                guard term.count >= 2 && term.count <= 32 else { continue }
+                guard !stopWords.contains(key), !seen.contains(key) else { continue }
+                seen.insert(key)
+                result.append(term)
+                if result.count >= 40 {
+                    return result
+                }
+            }
         }
-        return "https://api.omi.me/"
-    }()
+        return result
+    }
 
     // Reconnection (internal for @testable import)
     var reconnectAttempts = 0
@@ -131,11 +162,12 @@ class TranscriptionService {
     /// - Parameters:
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
-    init(language: String = "en", mode: StreamingMode = .conversation) throws {
+    init(language: String = "en", mode: StreamingMode = .conversation, contextKeywords: [String] = []) throws {
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
         self.streamingMode = mode
-        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language)")
+        self.contextKeywords = Self.sanitizedContextKeywords(contextKeywords)
+        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language), contextKeywords=\(self.contextKeywords.count)")
     }
 
     /// Initialize for batch (PTT) mode only — uses Python backend `/v2/voice-message/transcribe`
@@ -151,6 +183,7 @@ class TranscriptionService {
         self.apiKey = ""
         self.language = language
         self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
+        self.contextKeywords = []
         log("TranscriptionService: Initialized for batch (PTT) mode via Python backend")
     }
 
@@ -158,8 +191,8 @@ class TranscriptionService {
 
     /// Legacy init with channels parameter — used by PushToTalkManager for PTT live mode.
     /// Routes to `/v2/voice-message/transcribe-stream` (PTT-only transcription).
-    convenience init(language: String = "en", channels: Int) throws {
-        try self.init(language: language, mode: .ptt)
+    convenience init(language: String = "en", channels: Int, contextKeywords: [String] = []) throws {
+        try self.init(language: language, mode: .ptt, contextKeywords: contextKeywords)
     }
 
     /// Flush remaining audio and (for PTT mode) tell the backend to finalize transcription.
@@ -308,12 +341,16 @@ class TranscriptionService {
         case .ptt:
             // PTT-only transcription — no conversation lifecycle
             path = "/v2/voice-message/transcribe-stream"
-            queryItems = [
+            var items = [
                 URLQueryItem(name: "language", value: language),
                 URLQueryItem(name: "sample_rate", value: String(sampleRate)),
                 URLQueryItem(name: "codec", value: encoding),
                 URLQueryItem(name: "channels", value: String(channels)),
             ]
+            if !contextKeywords.isEmpty {
+                items.append(URLQueryItem(name: "keywords", value: contextKeywords.joined(separator: ",")))
+            }
+            queryItems = items
         }
 
         guard var components = URLComponents(string: "\(wsBase)\(path)") else {
@@ -541,7 +578,8 @@ extension TranscriptionService {
     static func batchTranscribe(
         audioData: Data,
         language: String = "en",
-        apiKey: String? = nil
+        apiKey: String? = nil,
+        contextKeywords: [String] = []
     ) async throws -> String? {
         // Always use Firebase auth + Python backend
         let authService = await MainActor.run { AuthService.shared }
@@ -551,12 +589,17 @@ extension TranscriptionService {
         guard var components = URLComponents(string: baseURLString) else {
             throw TranscriptionError.connectionFailed(NSError(domain: "Invalid backend URL", code: -1))
         }
-        components.queryItems = [
+        let sanitizedKeywords = sanitizedContextKeywords(contextKeywords)
+        var queryItems = [
             URLQueryItem(name: "language", value: language),
             URLQueryItem(name: "sample_rate", value: "16000"),
             URLQueryItem(name: "encoding", value: "linear16"),
             URLQueryItem(name: "channels", value: "1"),
         ]
+        if !sanitizedKeywords.isEmpty {
+            queryItems.append(URLQueryItem(name: "keywords", value: sanitizedKeywords.joined(separator: ",")))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else {
             throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
@@ -571,7 +614,7 @@ extension TranscriptionService {
         }
         request.httpBody = audioData
 
-        log("TranscriptionService: Batch transcribing \(audioData.count) bytes via Python backend")
+        log("TranscriptionService: Batch transcribing \(audioData.count) bytes via Python backend, contextKeywords=\(sanitizedKeywords.count)")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 

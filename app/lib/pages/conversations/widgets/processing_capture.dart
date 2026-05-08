@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,7 +14,6 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -54,7 +54,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         return GestureDetector(
           onTap: () async {
             if (provider.segments.isEmpty && provider.photos.isEmpty) return;
-            MixpanelManager().liveTranscriptCardClicked(
+            PlatformManager.instance.analytics.liveTranscriptCardClicked(
               hasSegments: provider.segments.isNotEmpty,
               hasPhotos: provider.photos.isNotEmpty,
               segmentCount: provider.segments.length,
@@ -108,14 +108,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           _isPhoneMicPaused = true;
         });
         await provider.stopStreamRecording();
-        MixpanelManager().phoneMicRecordingStopped();
+        PlatformManager.instance.analytics.phoneMicRecordingStopped();
       } else if (_isPhoneMicPaused) {
         // Resume recording
         setState(() {
           _isPhoneMicPaused = false;
         });
         await provider.streamRecording();
-        MixpanelManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
         Logger.debug('initialising, have to wait');
       } else {
@@ -123,7 +123,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           _isPhoneMicPaused = false;
         });
         await provider.streamRecording();
-        MixpanelManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
     }
   }
@@ -137,18 +137,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
     bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
 
-    bool isUsingPhoneMic =
-        captureProvider.recordingState == RecordingState.record ||
+    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause;
+        captureProvider.recordingState == RecordingState.pause ||
+        captureProvider.recordingState == RecordingState.interrupted;
 
-    // Check if any recording is active (phone mic, system audio, or device recording)
-    bool isAnyRecordingActive =
-        captureProvider.recordingState == RecordingState.record ||
+    // Check if any recording is active (phone mic, system audio, or device recording).
+    // `interrupted` is included so the in-session UI stays visible while the
+    // pipeline is transiently broken (e.g., iOS audio session interruption).
+    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
         captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause ||
+        captureProvider.recordingState == RecordingState.interrupted ||
         captureProvider.isPaused ||
         _isPhoneMicPaused;
 
@@ -216,7 +218,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     var stateText = "";
 
     // Always check pause state first with highest priority (both desktop and phone)
-    if (captureProvider.isPaused || _isPhoneMicPaused) {
+    if (captureProvider.recordingState == RecordingState.interrupted && captureProvider.isCallActive) {
+      stateText = context.l10n.paused;
+      statusIndicator = const PausedStatusIndicator();
+    } else if (captureProvider.isPaused || _isPhoneMicPaused) {
       stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
@@ -269,32 +274,35 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording =
-        provider.havingRecordingDevice &&
+    bool isDeviceRecording = provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
-    bool isPhoneRecording =
-        provider.recordingState == RecordingState.record ||
+    bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
+        provider.recordingState == RecordingState.interrupted ||
         _isPhoneMicPaused;
 
-    // Determine pause state based on recording type
+    // Determine pause state based on recording type.
+    // Call-active interruption is treated as paused for button/dot display.
+    bool isCallInterrupted = provider.recordingState == RecordingState.interrupted && provider.isCallActive;
     bool isPaused = false;
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = _isPhoneMicPaused || provider.isPaused;
+      isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
     }
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
     // Show "Listening" for all active recording states — WAL ensures audio is
     // saved locally regardless of transcription connection status.
-    String statusText = isPaused
-        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-        : hasPhotos
-        ? 'Capturing'
-        : context.l10n.listening;
+    String statusText = provider.recordingState == RecordingState.interrupted && provider.isCallActive
+        ? context.l10n.paused
+        : isPaused
+            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
+            : hasPhotos
+                ? 'Capturing'
+                : context.l10n.listening;
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -387,13 +395,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   HapticFeedback.heavyImpact();
                   await Future.delayed(const Duration(milliseconds: 80));
                   HapticFeedback.lightImpact();
-                  MixpanelManager().recordingMuteToggled(
+                  PlatformManager.instance.analytics.recordingMuteToggled(
                     isMuted: true,
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
                 } else {
                   HapticFeedback.mediumImpact();
-                  MixpanelManager().recordingMuteToggled(
+                  PlatformManager.instance.analytics.recordingMuteToggled(
                     isMuted: false,
                     recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                   );
@@ -406,22 +414,22 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 decoration: BoxDecoration(
                   color: isPaused
                       ? isDeviceRecording
-                            ? const Color(0xFFFE5D50)
-                            : const Color(0xFF7C3AED)
+                          ? const Color(0xFFFE5D50)
+                          : const Color(0xFF7C3AED)
                       : isDeviceRecording
-                      ? const Color(0xFF35343B)
-                      : const Color(0xFFFF9500),
+                          ? const Color(0xFF35343B)
+                          : const Color(0xFFFF9500),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
                   child: FaIcon(
                     isPaused
                         ? isDeviceRecording
-                              ? FontAwesomeIcons.microphoneSlash
-                              : FontAwesomeIcons.play
+                            ? FontAwesomeIcons.microphoneSlash
+                            : FontAwesomeIcons.play
                         : isDeviceRecording
-                        ? FontAwesomeIcons.microphone
-                        : FontAwesomeIcons.pause,
+                            ? FontAwesomeIcons.microphone
+                            : FontAwesomeIcons.pause,
                     color: Colors.white,
                     size: 12,
                   ),

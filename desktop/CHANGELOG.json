@@ -2,6 +2,141 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.379",
+      "date": "2026-05-07",
+      "changes": [
+        "Reduced AI processing costs with thinking budget controls"
+      ]
+    },
+    {
+      "version": "0.11.378",
+      "date": "2026-05-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.377",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.376",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.375",
+      "date": "2026-05-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.374",
+      "date": "2026-05-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.373",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.372",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.371",
+      "date": "2026-04-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.370",
+      "date": "2026-04-29",
+      "changes": [
+        "Improved Ask Omi routing: questions now stay in the floating bar chat instead of incorrectly spawning background agents \u2014 Claude Haiku decides whether each message is a quick answer or a real task"
+      ]
+    },
+    {
+      "version": "0.11.369",
+      "date": "2026-04-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.368",
+      "date": "2026-04-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.367",
+      "date": "2026-04-26",
+      "changes": [
+        "Stop creating up to 5 tasks (and notifications) on every app launch \u2014 task promotion now happens at the natural cadence (when you complete a task, or every 5 minutes at most one at a time)"
+      ]
+    },
+    {
+      "version": "0.11.366",
+      "date": "2026-04-26",
+      "changes": [
+        "Fixed beta build creating empty Firebase accounts on sign-in by routing back to production backend"
+      ]
+    },
+    {
+      "version": "0.11.365",
+      "date": "2026-04-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.364",
+      "date": "2026-04-26",
+      "changes": [
+        "Added agent pills: action-y Ask Omi requests (typed or voice) now spawn small floating-bar agents that run in parallel; hover any pill to see live progress and open in chat",
+        "Added Execute button on floating-bar notification cards and task rows \u2014 one click spawns an agent that handles the item end-to-end"
+      ]
+    },
+    {
+      "version": "0.11.363",
+      "date": "2026-04-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.362",
+      "date": "2026-04-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.361",
+      "date": "2026-04-26",
+      "changes": [
+        "Proactive notifications now only appear in the floating bar, not as macOS system banners",
+        "Made the entire floating bar notification clickable (previously only the text opened the chat)"
+      ]
+    },
+    {
       "version": "0.11.358",
       "date": "2026-04-23",
       "changes": [

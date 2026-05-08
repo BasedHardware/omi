@@ -12,9 +12,11 @@
 
 ## Setup
 
-### Pre-commit Hook (required)
+### Pre-commit Hook (required — install before first commit)
+Formatting is enforced by CI. **Verify the hook exists before your first commit:**
 ```bash
-ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+# Check if installed:
+test -f .git/hooks/pre-commit && echo "OK" || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
 ### Mobile App
@@ -72,7 +74,7 @@ See service descriptions in AGENTS.md. Update both files when service boundaries
 ### Localization
 - All user-facing strings must use l10n: `context.l10n.keyName` instead of hardcoded strings.
 - Add new keys via `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
-- **Translate all 33 locales** — no English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill.
+- **Translate all 48 non-English locales** — no English text in non-English ARB files. The exact list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`; don't hardcode a count from memory. After adding any key, run the `omi-add-missing-language-keys-l10n` skill to fill missing translations, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - Regenerate after changes: `cd app && flutter gen-l10n`
 
 ### Firebase Prod Config
@@ -186,6 +188,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 <!-- Maintainers: @AaravGarg (original, Feb 2), @NikShevchenko (push rules, Mar 3) -->
 
 ### Rules
+- **Before your first commit**, verify the pre-commit hook is installed: `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
 - Always commit to the current branch — never switch branches.
 - Never push directly to `main`. Land changes through PRs only.
 - Never squash merge PRs — use regular merge.
@@ -193,6 +196,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 - Always work in a git worktree for code changes. Use `EnterWorktree` to isolate work.
+- Before creating a worktree or branch, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 
 ### RELEASE Command
 Create branch from `main`, individual commits per file, push/create PR, merge without squash, switch back to `main` and pull.

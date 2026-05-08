@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "কথোপকথন আইডি কপি করুন",
+    "conversationIdCopied": "কথোপকথন আইডি ক্লিপবোর্ডে কপি হয়েছে",
     "testPrompt": "পরীক্ষা প্রম্পট",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "ব্যাটারি স্তর",
+    "charging": "চার্জ হচ্ছে",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "আপনার পরিকল্পনা {date} তে শেষ হয়েছে।\\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।",
+    "planEndedOn": "আপনার পরিকল্পনা {date} তে শেষ হয়েছে।\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "আপনার পরিকল্পনা {date} তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
+    "planSetToCancelOn": "আপনার পরিকল্পনা {date} তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনও চার্জ নেই।",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।",
+    "tasksEmptyStateMessage": "আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "আপনার তৈরি করা হচ্ছে\\n২০২৫ গল্প...",
+    "wrappedCreatingYourStory": "আপনার তৈরি করা হচ্ছে\n২০২৫ গল্প...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "কিছু\\nগলত হয়েছে",
+    "wrappedSomethingWentWrong": "কিছু\nগলত হয়েছে",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "ডিফল্ট",
     "lastUsedLabel": "সর্বশেষ ব্যবহৃত",
     "setDefaultApp": "ডিফল্ট অ্যাপ সেট করুন",
-    "setDefaultAppContent": "{appName} কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\\n\\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।",
+    "setDefaultAppContent": "{appName} কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\n\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "স্পিকার",
     "phoneEndCall": "শেষ করুন",
     "phoneCallSettingsTitle": "ফোন কল সেটিংস",
+    "showPhoneCallButtonTitle": "ফোন কল বাটন দেখান",
+    "showPhoneCallButtonDesc": "হোম স্ক্রিনে ফোন কল বাটন প্রদর্শন করুন",
     "yourVerifiedNumbers": "আপনার যাচাইকৃত নম্বর",
     "verifiedNumbersDescription": "যখন আপনি কাউকে কল করেন, তারা তাদের ফোনে এই নম্বর দেখবেন",
     "noVerifiedNumbers": "কোনো যাচাইকৃত নম্বর নেই",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "ব্যাটারি",
     "day": "দিন",
     "noBatteryDataYet": "এখনও কোনো ব্যাটারি ডেটা নেই",
-    "week": "সপ্তাহ"
+    "week": "সপ্তাহ",
+    "voiceResponseAudio": "Omi-র উত্তর জোরে পড়ুন",
+    "voiceResponseMode": "ভয়েস প্রতিক্রিয়া",
+    "voiceResponseModeTitle": "কখন উত্তর বলা হবে",
+    "voiceResponseOff": "বন্ধ",
+    "voiceResponseHeadphonesOnly": "শুধু হেডফোন",
+    "voiceResponseAlways": "সর্বদা",
+    "agreeAndContinue": "সম্মত হই এবং চালিয়ে যান",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "ভয়েস মোড",
+    "quickActionAskOmi": "Omi কে যেকোনো কিছু জিজ্ঞেস করুন",
+    "record": "রেকর্ড",
+    "stop": "থামান",
+    "recordWithPhoneMic": "ফোনের মাইক্রোফোন দিয়ে রেকর্ড করুন",
+    "recordWithPhoneMicSubtitle": "আপনার চারপাশের অডিও ক্যাপচার করুন",
+    "phoneCall": "ফোন কল",
+    "phoneCallSubtitle": "লাইভ ট্রান্সক্রিপশন সহ কল রেকর্ড করুন",
+    "bulkExportInProgress": "রপ্তানি হচ্ছে…",
+    "bulkExportPartial": "{total}-এর মধ্যে {success}টি {platform}-এ রপ্তানি হয়েছে",
+    "bulkExportSuccess": "{count}টি {platform}-এ রপ্তানি হয়েছে",
+    "chooseExportDestination": "{count}টি আইটেম রপ্তানি করুন…",
+    "connectAction": "সংযুক্ত করুন",
+    "connectTaskAppToExport": "রপ্তানি করতে সেটিংসে একটি টাস্ক অ্যাপ সংযুক্ত করুন",
+    "deselectAllTasksMenu": "সমস্ত নির্বাচন বাতিল",
+    "hideCompletedTasks": "সম্পন্ন লুকান",
+    "searchActionItems": "অ্যাকশন আইটেম অনুসন্ধান",
+    "selectActionItems": "একাধিক নির্বাচন",
+    "selectAllTasksMenu": "সমস্ত নির্বাচন",
+    "showCompletedTasks": "সম্পন্ন দেখান",
+    "startCallRecording": "কল রেকর্ডিং শুরু করুন",
+    "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
+    "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
 }

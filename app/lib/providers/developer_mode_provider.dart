@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/agents.dart';
@@ -7,7 +8,6 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
@@ -36,6 +36,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool showDailyScoreEnabled = true;
   bool showTasksEnabled = true;
+  bool showPhoneCallButton = true;
 
   // VAD Gate (experimental)
   bool vadGateEnabled = false;
@@ -117,6 +118,7 @@ class DeveloperModeProvider extends BaseProvider {
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     showDailyScoreEnabled = SharedPreferencesUtil().showDailyScoreEnabled;
     showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
+    showPhoneCallButton = SharedPreferencesUtil().showPhoneCallButton;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
@@ -227,7 +229,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.showDailyScoreEnabled = showDailyScoreEnabled;
     prefs.showTasksEnabled = showTasksEnabled;
 
-    MixpanelManager().settingsSaved(
+    PlatformManager.instance.analytics.settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
       hasWebhookTranscriptReceived: transcriptsToggled,
     );
@@ -271,6 +273,12 @@ class DeveloperModeProvider extends BaseProvider {
   void onShowTasksChanged(var value) {
     showTasksEnabled = value;
     SharedPreferencesUtil().showTasksEnabled = value;
+    notifyListeners();
+  }
+
+  void onShowPhoneCallButtonChanged(var value) {
+    showPhoneCallButton = value;
+    SharedPreferencesUtil().showPhoneCallButton = value;
     notifyListeners();
   }
 

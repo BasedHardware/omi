@@ -73,6 +73,14 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Copy Conversation ID",
+    "@copyConversationId": {
+        "description": "Menu item to copy conversation ID to clipboard"
+    },
+    "conversationIdCopied": "Conversation ID copied to clipboard",
+    "@conversationIdCopied": {
+        "description": "Snackbar message when conversation ID is copied"
+    },
     "testPrompt": "Test Prompt",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2515,6 +2523,7 @@
     "@batteryLevel": {
         "description": "Battery level label"
     },
+    "charging": "Charging",
     "productUpdate": "Product Update",
     "@productUpdate": {
         "description": "Menu item for product/firmware update"
@@ -5254,7 +5263,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Your plan ended on {date}.\\nResubscribe now - you'll be charged immediately for a new billing period.",
+    "planEndedOn": "Your plan ended on {date}.\nResubscribe now - you'll be charged immediately for a new billing period.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5273,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.",
+    "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6031,7 +6040,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services (including Deepgram for transcription and OpenAI for analysis) to provide you with AI-powered insights and enable all app features.",
+    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -7995,7 +8004,7 @@
     "defaultLabel": "Default",
     "lastUsedLabel": "Last Used",
     "setDefaultApp": "Set Default App",
-    "setDefaultAppContent": "Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.",
+    "setDefaultAppContent": "Set {appName} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9653,7 +9662,7 @@
     "capabilityChat": "Chat",
     "capabilityConversations": "Conversations",
     "capabilityExternalIntegration": "External Integration",
-    "capabilityNotification": "Notification",
+    "capabilityNotification": "Smart Notifications",
     "triggerAudioBytes": "Audio Bytes",
     "triggerConversationCreation": "Conversation Creation",
     "triggerTranscriptProcessed": "Transcript Processed",
@@ -9993,6 +10002,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "End",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Show Phone Call Button",
+    "showPhoneCallButtonDesc": "Display phone call button on home screen",
     "yourVerifiedNumbers": "Your Verified Numbers",
     "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
     "noVerifiedNumbers": "No verified numbers",
@@ -10861,5 +10872,153 @@
     "chatQuotaExceededReply": "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
     "@chatQuotaExceededReply": {
         "description": "AI reply message shown when user exceeds chat quota"
+    },
+    "voiceResponseAudio": "Speak Omi responses aloud",
+    "@voiceResponseAudio": {
+        "description": "Voice response audio feature title"
+    },
+    "voiceResponseMode": "Voice response",
+    "@voiceResponseMode": {
+        "description": "Voice response mode setting row title"
+    },
+    "voiceResponseModeTitle": "When to speak responses",
+    "@voiceResponseModeTitle": {
+        "description": "Bottom sheet title for voice response mode selector"
+    },
+    "voiceResponseOff": "Off",
+    "@voiceResponseOff": {
+        "description": "Voice response mode: off"
+    },
+    "voiceResponseHeadphonesOnly": "Headphones only",
+    "@voiceResponseHeadphonesOnly": {
+        "description": "Voice response mode: only when headphones connected"
+    },
+    "voiceResponseAlways": "Always",
+    "@voiceResponseAlways": {
+        "description": "Voice response mode: always, including phone speaker"
+    },
+    "agreeAndContinue": "Agree & Continue",
+    "@agreeAndContinue": {
+        "description": "Button label on the data and AI consent screen — explicit consent action."
+    },
+    "startVoiceRecording": "Start voice recording",
+    "@startVoiceRecording": {},
+    "startCallRecording": "Start call recording",
+    "@startCallRecording": {},
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Voice Mode",
+    "@voiceMode": {
+        "description": "iOS home screen quick action: opens chat in voice mode"
+    },
+    "quickActionAskOmi": "Ask Omi Anything",
+    "@quickActionAskOmi": {
+        "description": "iOS home screen quick action: opens chat page"
+    },
+    "record": "Record",
+    "@record": {
+        "description": "Label for the Record button on the home page app bar"
+    },
+    "stop": "Stop",
+    "@stop": {
+        "description": "Label shown on the Record button while a recording is in progress"
+    },
+    "recordWithPhoneMic": "Record with Phone Mic",
+    "@recordWithPhoneMic": {
+        "description": "Title of the phone-mic option in the record-options sheet"
+    },
+    "recordWithPhoneMicSubtitle": "Capture audio around you",
+    "@recordWithPhoneMicSubtitle": {
+        "description": "Subtitle for the phone-mic option in the record-options sheet"
+    },
+    "phoneCall": "Phone Call",
+    "@phoneCall": {
+        "description": "Title of the phone-call option in the record-options sheet"
+    },
+    "phoneCallSubtitle": "Record a call with live transcription",
+    "@phoneCallSubtitle": {
+        "description": "Subtitle for the phone-call option in the record-options sheet"
+    },
+    "searchActionItems": "Search action items",
+    "@searchActionItems": {
+        "description": "Hint text for the action items search field"
+    },
+    "selectActionItems": "Select multiple",
+    "@selectActionItems": {
+        "description": "Top-bar button to enter selection mode on the action items page"
+    },
+    "chooseExportDestination": "Export {count} item(s) to…",
+    "@chooseExportDestination": {
+        "description": "Title of the bottom sheet listing platforms to bulk-export selected action items to",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "bulkExportInProgress": "Exporting…",
+    "@bulkExportInProgress": {
+        "description": "Snackbar shown while a bulk export is running"
+    },
+    "bulkExportSuccess": "Exported {count} to {platform}",
+    "@bulkExportSuccess": {
+        "description": "Snackbar shown when a bulk export completes for all items",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "platform": {
+                "type": "String"
+            }
+        }
+    },
+    "bulkExportPartial": "Exported {success} of {total} to {platform}",
+    "@bulkExportPartial": {
+        "description": "Snackbar shown when only some items in a bulk export succeeded",
+        "placeholders": {
+            "success": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            },
+            "platform": {
+                "type": "String"
+            }
+        }
+    },
+    "showCompletedTasks": "Show completed",
+    "@showCompletedTasks": {
+        "description": "Action menu entry to reveal completed tasks on the action items page"
+    },
+    "hideCompletedTasks": "Hide completed",
+    "@hideCompletedTasks": {
+        "description": "Action menu entry to hide completed tasks on the action items page"
+    },
+    "selectAllTasksMenu": "Select all",
+    "@selectAllTasksMenu": {
+        "description": "Action menu entry to select every task in the action items list"
+    },
+    "connectTaskAppToExport": "Connect a task app in Settings to export",
+    "@connectTaskAppToExport": {
+        "description": "Snackbar shown when the user taps Export but no third-party task integration is connected"
+    },
+    "connectAction": "Connect",
+    "@connectAction": {
+        "description": "Snackbar action label that opens the Task Integrations settings page"
+    },
+    "deselectAllTasksMenu": "Deselect all",
+    "@deselectAllTasksMenu": {
+        "description": "Action menu entry that clears any current task selection while staying in selection mode"
+    },
+    "bulkExportAlreadyExported": "All selected tasks already exported",
+    "@bulkExportAlreadyExported": {
+        "description": "Snackbar shown when every selected task is already exported and Export is tapped"
+    },
+    "bulkDeleteFailed": "Could not delete tasks. Please try again.",
+    "@bulkDeleteFailed": {
+        "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
     }
 }

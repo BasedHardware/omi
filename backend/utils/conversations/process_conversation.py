@@ -26,6 +26,7 @@ from database.vector_db import (
     delete_memory_vector,
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
+    find_similar_action_items,
 )
 from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
@@ -83,6 +84,44 @@ from utils.other.storage import precache_conversation_audio
 logger = logging.getLogger(__name__)
 
 
+def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[dict]:
+    """
+    Fetch open action items semantically related to this conversation, active
+    in the past week, for the LLM extraction prompt to consider as potential
+    duplicates. Replaces the older time-windowed fetch (past 2 days, limit
+    50). Returns [] if Pinecone is down or there's no overview to query —
+    extraction then proceeds with no dedup context, same as for a new user.
+    """
+    if not structured or not structured.overview:
+        return []
+
+    try:
+        similar = find_similar_action_items(uid, structured.overview, threshold=0.6, limit=10)
+        if not similar:
+            return []
+
+        items = action_items_db.get_action_items_by_ids(uid, [s['action_item_id'] for s in similar])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+
+        eligible = []
+        for item in items:
+            if item.get('completed', False):
+                continue
+            last_active = item.get('updated_at') or item.get('created_at')
+            if last_active is None or last_active < cutoff:
+                continue
+            eligible.append(item)
+
+        logger.info(
+            f'dedup_candidates uid={uid} similar={len(similar)} '
+            f'eligible={len(eligible)} top_score={similar[0]["score"]}'
+        )
+        return eligible
+    except Exception as e:
+        logger.exception(f'_fetch_dedup_candidates failed uid={uid}: {e}')
+        return []
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -93,14 +132,6 @@ def _get_structured(
     try:
         tz = notification_db.get_user_time_zone(uid)
         user_language = users_db.get_user_language_preference(uid) or language_code
-
-        # Fetch existing action items from past 2 days for deduplication
-        existing_action_items = None
-        try:
-            two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
-            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
-        except Exception as e:
-            logger.error(f"Error fetching existing action items for deduplication: {e}")
 
         # Extract calendar context from external_data
         calendar_context = None
@@ -120,6 +151,7 @@ def _get_structured(
                         conversation.started_at,
                         language_code,
                         tz,
+                        uid,
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                     )
@@ -129,7 +161,7 @@ def _get_structured(
                         conversation.started_at,
                         language_code,
                         tz,
-                        existing_action_items=existing_action_items,
+                        existing_action_items=_fetch_dedup_candidates(uid, structured),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                     )
@@ -177,7 +209,7 @@ def _get_structured(
                     language_code,
                     tz,
                     photos=conversation.photos,
-                    existing_action_items=existing_action_items,
+                    existing_action_items=_fetch_dedup_candidates(uid, structured),
                     output_language_code=user_language,
                 )
             return structured, False
@@ -200,6 +232,7 @@ def _get_structured(
                 conversation.started_at,
                 language_code,
                 tz,
+                uid,
                 photos=conversation.photos,
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
@@ -211,7 +244,7 @@ def _get_structured(
                 language_code,
                 tz,
                 photos=conversation.photos,
-                existing_action_items=existing_action_items,
+                existing_action_items=_fetch_dedup_candidates(uid, structured),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
             )

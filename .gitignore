@@ -209,6 +209,7 @@ CLAUDE.md
 web/app/next-env.d.ts
 .claude/settings.local.json
 .claude/worktrees/
+.mcp.json
 LOCAL_DEV_SETUP.md
 app/macos/Config/Prod/GoogleService-Info.plist
 app/.metadata

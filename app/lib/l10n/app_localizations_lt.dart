@@ -64,6 +64,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get copySummary => 'Kopijuoti santrauką';
 
   @override
+  String get copyConversationId => 'Kopijuoti pokalbio ID';
+
+  @override
+  String get conversationIdCopied => 'Pokalbio ID nukopijuotas į mainų sritį';
+
+  @override
   String get testPrompt => 'Testuoti užklausą';
 
   @override
@@ -2368,6 +2374,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get batteryLevel => 'Baterijos lygis';
 
   @override
+  String get charging => 'Kraunama';
+
+  @override
   String get productUpdate => 'Produkto atnaujinimas';
 
   @override
@@ -4519,12 +4528,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Jūsų planas baigėsi $date.\\nPersiregistruokite dabar - jums bus nedelsiant apmokestinta už naują atsiskaitymo laikotarpį.';
+    return 'Jūsų planas baigėsi $date.\nPersiregistruokite dabar - jums bus nedelsiant apmokestinta už naują atsiskaitymo laikotarpį.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Jūsų planas nustatytas atšaukti $date.\\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+    return 'Jūsų planas nustatytas atšaukti $date.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
   }
 
   @override
@@ -6539,7 +6548,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Ar nustatyti $appName kaip numatytąją santraukų programą?\\n\\nŠi programa bus automatiškai naudojama visoms būsimoms pokalbių santraukoms.';
+    return 'Ar nustatyti $appName kaip numatytąją santraukų programą?\n\nŠi programa bus automatiškai naudojama visoms būsimoms pokalbių santraukoms.';
   }
 
   @override
@@ -8296,6 +8305,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Skambuciu nustatymai';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rodyti skambučio mygtuką';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rodyti telefono skambučio mygtuką pradiniame ekrane';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu patvirtinti numeriai';
 
   @override
@@ -9132,4 +9147,106 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Pasiekėte savo mėnesinį limitą. Atnaujinkite, kad galėtumėte toliau bendrauti su Omi be apribojimų.';
+
+  @override
+  String get voiceResponseAudio => 'Skaityti Omi atsakymą garsiai';
+
+  @override
+  String get voiceResponseMode => 'Balso atsakymas';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada įgarsinti atsakymus';
+
+  @override
+  String get voiceResponseOff => 'Išjungta';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Tik ausinėmis';
+
+  @override
+  String get voiceResponseAlways => 'Visada';
+
+  @override
+  String get agreeAndContinue => 'Sutinku ir tęsti';
+
+  @override
+  String get startVoiceRecording => 'Pradėti balso įrašymą';
+
+  @override
+  String get startCallRecording => 'Pradėti skambučio įrašymą';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Balso režimas';
+
+  @override
+  String get quickActionAskOmi => 'Paklauskite Omi bet ko';
+
+  @override
+  String get record => 'Įrašyti';
+
+  @override
+  String get stop => 'Sustabdyti';
+
+  @override
+  String get recordWithPhoneMic => 'Įrašyti telefono mikrofonu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Užfiksuokite garsą aplink jus';
+
+  @override
+  String get phoneCall => 'Telefono skambutis';
+
+  @override
+  String get phoneCallSubtitle => 'Įrašykite skambutį su tiesiogine transkripcija';
+
+  @override
+  String get searchActionItems => 'Ieškoti veiksmų elementų';
+
+  @override
+  String get selectActionItems => 'Pasirinkti kelis';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksportuoti $count elementą(-us) į…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportuojama…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksportuota $count į $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksportuota $success iš $total į $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Rodyti užbaigtas';
+
+  @override
+  String get hideCompletedTasks => 'Slėpti užbaigtas';
+
+  @override
+  String get selectAllTasksMenu => 'Pasirinkti viską';
+
+  @override
+  String get connectTaskAppToExport => 'Prijunkite užduočių programą Nustatymuose, kad galėtumėte eksportuoti';
+
+  @override
+  String get connectAction => 'Prijungti';
+
+  @override
+  String get deselectAllTasksMenu => 'Atžymėti viską';
+
+  @override
+  String get bulkExportAlreadyExported => 'Visos pasirinktos užduotys jau eksportuotos';
+
+  @override
+  String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
 }

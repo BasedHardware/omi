@@ -64,6 +64,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get copySummary => 'Kopyahin ang Buod';
 
   @override
+  String get copyConversationId => 'Kopyahin ang ID ng usapan';
+
+  @override
+  String get conversationIdCopied => 'Nakopya na ang ID ng usapan sa clipboard';
+
+  @override
   String get testPrompt => 'Subukan ang Prompt';
 
   @override
@@ -2389,6 +2395,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get batteryLevel => 'Antas ng Baterya';
 
   @override
+  String get charging => 'Nagcha-charge';
+
+  @override
   String get productUpdate => 'Product Update';
 
   @override
@@ -4559,12 +4568,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Ang iyong plano ay nagtapos noong $date.\\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.';
+    return 'Ang iyong plano ay nagtapos noong $date.\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+    return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
 
   @override
@@ -5136,7 +5145,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\\nI-tap ang + upang lumikha ng isa nang manual.';
+      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -5169,14 +5178,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get checkingAppleWatch => 'Kumikita ng Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'I-install ang Omi sa iyong\\nApple Watch';
+  String get installOmiOnAppleWatch => 'I-install ang Omi sa iyong\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Upang gamitin ang iyong Apple Watch kasama ang Omi, kailangan mo munang i-install ang Omi app sa iyong watch.';
 
   @override
-  String get openOmiOnAppleWatch => 'Buksan ang Omi sa iyong\\nApple Watch';
+  String get openOmiOnAppleWatch => 'Buksan ang Omi sa iyong\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5432,10 +5441,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wrappedProcessingDefault => 'Processing...';
 
   @override
-  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\\n2025 story...';
+  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\n2025 story...';
 
   @override
-  String get wrappedSomethingWentWrong => 'Isang bagay\\nay nagkamali';
+  String get wrappedSomethingWentWrong => 'Isang bagay\nay nagkamali';
 
   @override
   String get wrappedAnErrorOccurred => 'Isang error ang nangyari';
@@ -6591,7 +6600,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Itakda ang $appName bilang iyong default na summarization app?\\n\\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.';
+    return 'Itakda ang $appName bilang iyong default na summarization app?\n\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.';
   }
 
   @override
@@ -8363,6 +8372,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Phone Call Settings';
 
   @override
+  String get showPhoneCallButtonTitle => 'Ipakita ang button ng tawag';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Ipakita ang button ng tawag sa home screen';
+
+  @override
   String get yourVerifiedNumbers => 'Ang Iyong Na-verify na Mga Numero';
 
   @override
@@ -9208,4 +9223,106 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Naabot mo na ang iyong buwanang limitasyon. Mag-upgrade para magpatuloy ng chat sa Omi nang walang limitasyon.';
+
+  @override
+  String get voiceResponseAudio => 'Basahin nang malakas ang sagot ng Omi';
+
+  @override
+  String get voiceResponseMode => 'Tugon sa boses';
+
+  @override
+  String get voiceResponseModeTitle => 'Kailan bibigkasin ang tugon';
+
+  @override
+  String get voiceResponseOff => 'Naka-off';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Headphones lang';
+
+  @override
+  String get voiceResponseAlways => 'Palagi';
+
+  @override
+  String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
+
+  @override
+  String get startVoiceRecording => 'Simulan ang voice recording';
+
+  @override
+  String get startCallRecording => 'Simulan ang pag-record ng tawag';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Voice Mode';
+
+  @override
+  String get quickActionAskOmi => 'Tanungin si Omi ng kahit ano';
+
+  @override
+  String get record => 'Mag-record';
+
+  @override
+  String get stop => 'Itigil';
+
+  @override
+  String get recordWithPhoneMic => 'Mag-record gamit ang mikropono ng telepono';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Kunan ang audio sa paligid mo';
+
+  @override
+  String get phoneCall => 'Tawag sa telepono';
+
+  @override
+  String get phoneCallSubtitle => 'Mag-record ng tawag na may live na transkripsyon';
+
+  @override
+  String get searchActionItems => 'Maghanap ng mga action item';
+
+  @override
+  String get selectActionItems => 'Pumili ng marami';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'I-export ang $count item sa…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Nag-e-export…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Na-export ang $count sa $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Na-export ang $success sa $total sa $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Ipakita ang tapos na';
+
+  @override
+  String get hideCompletedTasks => 'Itago ang tapos na';
+
+  @override
+  String get selectAllTasksMenu => 'Piliin lahat';
+
+  @override
+  String get connectTaskAppToExport => 'Ikonekta ang isang task app sa Settings para mag-export';
+
+  @override
+  String get connectAction => 'Ikonekta';
+
+  @override
+  String get deselectAllTasksMenu => 'I-deselect lahat';
+
+  @override
+  String get bulkExportAlreadyExported => 'Lahat ng napiling gawain ay na-export na';
+
+  @override
+  String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
 }

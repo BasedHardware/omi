@@ -34,14 +34,19 @@ from utils.llm.clients import (
     _CACHE_KEY_MODELS,
     _PERPLEXITY_ONLY_FEATURES,
     _PINNED_FEATURES,
+    _STRUCTURED_OUTPUT_FEATURES,
     _active_profile,
     _active_profile_name,
-    _classify_provider,
+    _byok_profile,
+    _byok_profile_name,
+    _effective_byok_provider,
+    _get_or_create_gemini_llm,
     _get_or_create_openai_llm,
     _get_or_create_openrouter_llm,
     _llm_cache,
     get_llm,
     get_model,
+    get_provider,
     get_qos_info,
 )
 
@@ -53,13 +58,14 @@ from utils.llm.clients import (
 class TestModelQosProfiles:
     """Verify profile structure and completeness."""
 
-    def test_two_profiles_exist(self):
-        assert set(MODEL_QOS_PROFILES.keys()) == {'premium', 'max'}
+    def test_three_profiles_exist(self):
+        assert set(MODEL_QOS_PROFILES.keys()) == {'premium', 'max', 'byok'}
 
     def test_all_profiles_have_same_features(self):
-        premium_features = set(MODEL_QOS_PROFILES['premium'].keys())
-        max_features = set(MODEL_QOS_PROFILES['max'].keys())
-        assert premium_features == max_features
+        feature_sets = {name: set(profile.keys()) for name, profile in MODEL_QOS_PROFILES.items()}
+        reference = feature_sets['premium']
+        for name, features in feature_sets.items():
+            assert features == reference, f'{name} features differ from premium: {features ^ reference}'
 
     def test_premium_profile_is_default(self):
         assert _active_profile_name == 'premium'
@@ -67,72 +73,84 @@ class TestModelQosProfiles:
     def test_profiles_cover_expected_providers(self):
         """Each profile should have features across expected providers."""
         for profile_name, profile in MODEL_QOS_PROFILES.items():
-            providers = {_classify_provider(model) for model in profile.values()}
-            assert 'openai' in providers, f'{profile_name} missing OpenAI models'
+            providers = {provider for _model, provider in profile.values()}
             assert 'anthropic' in providers, f'{profile_name} missing Anthropic models'
             assert 'perplexity' in providers, f'{profile_name} missing Perplexity models'
-        # Both profiles keep OpenRouter for wrapped_analysis
-        for profile_name in MODEL_QOS_PROFILES:
-            providers = {_classify_provider(m) for m in MODEL_QOS_PROFILES[profile_name].values()}
             assert 'openrouter' in providers, f'{profile_name} should have OpenRouter (wrapped_analysis)'
+        # OpenAI-based profiles must have OpenAI provider
+        for name in ('premium', 'max', 'byok'):
+            providers = {p for _m, p in MODEL_QOS_PROFILES[name].values()}
+            assert 'openai' in providers, f'{name} missing OpenAI models'
+        # Premium profile must have Gemini provider
+        providers = {p for _m, p in MODEL_QOS_PROFILES['premium'].values()}
+        assert 'gemini' in providers, 'premium should have Gemini direct models'
 
     def test_premium_profile_models(self):
-        """Premium uses gpt-5.4-mini for flagship, gpt-4.1-mini for quality-sensitive, gpt-4.1-nano for simple."""
+        """Premium uses gpt-5.4-mini for flagship, gpt-4.1-mini for quality-sensitive, gemini for free-text."""
         premium = MODEL_QOS_PROFILES['premium']
-        # Flagship features use gpt-5.4-mini
-        assert premium['conv_structure'] == 'gpt-5.4-mini'
-        assert premium['chat_responses'] == 'gpt-5.4-mini'
-        assert premium['goals_advice'] == 'gpt-5.4-mini'
-        # Quality-sensitive features use gpt-4.1-mini
-        assert premium['memories'] == 'gpt-4.1-mini'
-        assert premium['chat_extraction'] == 'gpt-4.1-mini'
-        assert premium['chat_graph'] == 'gpt-4.1-mini'
-        assert premium['external_structure'] == 'gpt-4.1-mini'
-        assert premium['memory_conflict'] == 'gpt-4.1-mini'
-        assert premium['knowledge_graph'] == 'gpt-4.1-mini'
-        assert premium['goals'] == 'gpt-4.1-mini'
-        assert premium['proactive_notification'] == 'gpt-4.1-mini'
-        # Simple features use gpt-4.1-nano
-        assert premium['conv_app_select'] == 'gpt-4.1-nano'
-        assert premium['session_titles'] == 'gpt-4.1-nano'
-        assert premium['followup'] == 'gpt-4.1-nano'
-        # Unchanged
-        assert premium['chat_agent'] == 'claude-sonnet-4-6'
-        assert premium['web_search'] == 'sonar-pro'
+        # Flagship features use gpt-5.4-mini on openai
+        assert premium['conv_structure'] == ('gpt-5.4-mini', 'openai')
+        assert premium['chat_responses'] == ('gpt-5.4-mini', 'openai')
+        assert premium['goals_advice'] == ('gpt-5.4-mini', 'openai')
+        # Quality-sensitive features use gpt-4.1-mini on openai
+        assert premium['memories'] == ('gpt-4.1-mini', 'openai')
+        assert premium['chat_extraction'] == ('gpt-4.1-mini', 'openai')
+        assert premium['chat_graph'] == ('gpt-4.1-mini', 'openai')
+        assert premium['external_structure'] == ('gpt-4.1-mini', 'openai')
+        assert premium['memory_conflict'] == ('gpt-4.1-mini', 'openai')
+        assert premium['knowledge_graph'] == ('gpt-4.1-mini', 'openai')
+        assert premium['goals'] == ('gpt-4.1-mini', 'openai')
+        assert premium['proactive_notification'] == ('gpt-4.1-mini', 'openai')
+        # Simple features use gpt-4.1-nano on openai
+        assert premium['conv_app_select'] == ('gpt-4.1-nano', 'openai')
+        # Vision features use gpt-4.1-mini on openai
+        assert premium['openglass'] == ('gpt-4.1-mini', 'openai')
+        # Free-text features use Gemini 2.5 Flash-Lite on gemini provider
+        assert premium['session_titles'] == ('gemini-2.5-flash-lite', 'gemini')
+        assert premium['followup'] == ('gemini-2.5-flash-lite', 'gemini')
+        assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
+        # Simple classification uses gpt-4.1-nano on openai
+        assert premium['memory_category'] == ('gpt-4.1-nano', 'openai')
+        assert premium['daily_summary_simple'] == ('gpt-4.1-nano', 'openai')
+        assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
+        assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
+        # Anthropic & Perplexity with explicit provider
+        assert premium['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        assert premium['web_search'] == ('sonar-pro', 'perplexity')
         # Persona uses direct OpenAI API
-        assert premium['persona_chat'] == 'gpt-4.1-nano'
-        assert premium['persona_chat_premium'] == 'gpt-5.4-mini'
+        assert premium['persona_chat'] == ('gpt-4.1-nano', 'openai')
+        assert premium['persona_chat_premium'] == ('gpt-5.4-mini', 'openai')
 
     def test_max_profile_models(self):
         """Max uses gpt-5.4 flagship, gpt-4.1-mini for cheap tasks, production-grade models."""
         max_prof = MODEL_QOS_PROFILES['max']
-        # Flagship uses gpt-5.4
-        assert max_prof['chat_responses'] == 'gpt-5.4'
-        assert max_prof['goals_advice'] == 'gpt-5.4'
-        assert max_prof['app_generator'] == 'gpt-5.4'
-        assert max_prof['conv_action_items'] == 'gpt-5.4'
-        assert max_prof['conv_structure'] == 'gpt-5.4'
-        assert max_prof['daily_summary'] == 'gpt-5.4'
-        assert max_prof['persona_clone'] == 'gpt-5.4'
-        assert max_prof['notifications'] == 'gpt-5.4'
-        # Cheap tasks use gpt-4.1-mini
-        assert max_prof['conv_app_select'] == 'gpt-4.1-mini'
-        assert max_prof['memories'] == 'gpt-4.1-mini'
-        assert max_prof['learnings'] == 'o4-mini'
-        assert max_prof['chat_graph'] == 'gpt-4.1'
+        # Flagship uses gpt-5.4 on openai
+        assert max_prof['chat_responses'] == ('gpt-5.4', 'openai')
+        assert max_prof['goals_advice'] == ('gpt-5.4', 'openai')
+        assert max_prof['app_generator'] == ('gpt-5.4', 'openai')
+        assert max_prof['conv_action_items'] == ('gpt-5.4', 'openai')
+        assert max_prof['conv_structure'] == ('gpt-5.4', 'openai')
+        assert max_prof['daily_summary'] == ('gpt-5.4', 'openai')
+        assert max_prof['persona_clone'] == ('gpt-5.4', 'openai')
+        assert max_prof['notifications'] == ('gpt-5.4', 'openai')
+        # Cheap tasks use gpt-4.1-mini on openai
+        assert max_prof['conv_app_select'] == ('gpt-4.1-mini', 'openai')
+        assert max_prof['memories'] == ('gpt-4.1-mini', 'openai')
+        assert max_prof['learnings'] == ('o4-mini', 'openai')
+        assert max_prof['chat_graph'] == ('gpt-4.1', 'openai')
         # Persona uses direct OpenAI API
-        assert max_prof['persona_chat'] == 'gpt-4.1-nano'
-        assert max_prof['persona_chat_premium'] == 'gpt-5.4-mini'
-        # OpenRouter for wrapped_analysis only
-        assert max_prof['wrapped_analysis'] == 'google/gemini-3-flash-preview'
-        # Anthropic & Perplexity unchanged
-        assert max_prof['chat_agent'] == 'claude-sonnet-4-6'
-        assert max_prof['web_search'] == 'sonar-pro'
+        assert max_prof['persona_chat'] == ('gpt-4.1-nano', 'openai')
+        assert max_prof['persona_chat_premium'] == ('gpt-5.4-mini', 'openai')
+        # OpenRouter for wrapped_analysis with explicit provider
+        assert max_prof['wrapped_analysis'] == ('gemini-3-flash-preview', 'openrouter')
+        # Anthropic & Perplexity with explicit provider
+        assert max_prof['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        assert max_prof['web_search'] == ('sonar-pro', 'perplexity')
 
     def test_max_profile_model_variants(self):
         """Max profile uses 9 distinct model IDs."""
         max_prof = MODEL_QOS_PROFILES['max']
-        distinct_models = set(max_prof.values())
+        distinct_models = {model for model, _provider in max_prof.values()}
         expected = {
             'gpt-5.4',
             'gpt-4.1-mini',
@@ -141,7 +159,7 @@ class TestModelQosProfiles:
             'gpt-4.1-nano',
             'gpt-5.4-mini',
             'claude-sonnet-4-6',
-            'google/gemini-3-flash-preview',
+            'gemini-3-flash-preview',
             'sonar-pro',
         }
         assert distinct_models == expected
@@ -166,28 +184,12 @@ class TestGetModel:
     """Verify get_model() resolution: pinned > env override > profile > fallback."""
 
     def test_returns_profile_default(self):
-        assert get_model('conv_action_items') == MODEL_QOS_PROFILES[_active_profile_name]['conv_action_items']
-
-    def test_env_override_takes_precedence(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'gpt-5.1')
-        assert get_model('conv_action_items') == 'gpt-5.1'
-
-    def test_env_override_with_anthropic_model(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CHAT_AGENT', 'claude-haiku-3.5')
-        assert get_model('chat_agent') == 'claude-haiku-3.5'
-
-    def test_empty_env_override_falls_back_to_profile(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', '')
-        assert get_model('conv_action_items') == _active_profile['conv_action_items']
+        assert get_model('conv_action_items') == MODEL_QOS_PROFILES[_active_profile_name]['conv_action_items'][0]
 
     def test_unknown_feature_falls_back_to_gpt41_mini(self):
         assert get_model('totally_unknown_feature') == 'gpt-4.1-mini'
 
     def test_pinned_feature_ignores_profile(self):
-        assert get_model('fair_use') == 'gpt-5.1'
-
-    def test_pinned_feature_ignores_env_override(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_FAIR_USE', 'gpt-4.1-nano')
         assert get_model('fair_use') == 'gpt-5.1'
 
     def test_anthropic_feature_returns_model_string(self):
@@ -244,17 +246,10 @@ class TestGetLlm:
         assert llm_with_key is not llm_without_key
         assert hasattr(llm_with_key, 'invoke')
 
-    def test_cache_key_ignored_for_non_cacheable_model(self, monkeypatch):
-        # Override to a model not in _CACHE_KEY_MODELS
-        monkeypatch.setenv('MODEL_QOS_MEMORIES', 'gpt-4.1-nano')
+    def test_cache_key_ignored_for_non_cacheable_model(self):
+        # memories uses gpt-4.1-mini which is not in _CACHE_KEY_MODELS
         llm_with_key = get_llm('memories', cache_key='omi-test-key')
         llm_without_key = get_llm('memories')
-        assert llm_with_key is llm_without_key
-
-    def test_cache_key_ignored_after_override_to_non_cacheable(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CONV_STRUCTURE', 'gpt-4.1-mini')
-        llm_with_key = get_llm('conv_structure', cache_key='omi-test-key')
-        llm_without_key = get_llm('conv_structure')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -424,18 +419,23 @@ class TestGetQosInfo:
         assert info['persona_chat']['provider'] == 'openai'
         # wrapped_analysis uses OpenRouter in both profiles
         assert info['wrapped_analysis']['provider'] == 'openrouter'
+        # Gemini features use gemini provider
+        assert info['followup']['provider'] == 'gemini'
 
-    def test_reflects_env_override(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'o4-mini')
-        info = get_qos_info()
-        assert info['conv_action_items']['model'] == 'o4-mini'
+    def test_get_provider_matches_profile(self):
+        """get_provider() returns the explicit provider from the profile."""
+        assert get_provider('conv_action_items') == 'openai'
+        assert get_provider('chat_agent') == 'anthropic'
+        assert get_provider('web_search') == 'perplexity'
+        assert get_provider('wrapped_analysis') == 'openrouter'
+        assert get_provider('followup') == 'gemini'
 
 
 class TestPinnedFeatures:
     """Verify pinned features are immutable."""
 
     def test_fair_use_pinned_to_gpt51(self):
-        assert _PINNED_FEATURES['fair_use'] == 'gpt-5.1'
+        assert _PINNED_FEATURES['fair_use'] == ('gpt-5.1', 'openai')
 
     def test_pinned_survives_profile_switch(self):
         # Even if profile doesn't list fair_use, it should resolve to pinned value
@@ -443,25 +443,7 @@ class TestPinnedFeatures:
 
 
 class TestProviderClassification:
-    """Verify provider detection from model name and feature routing."""
-
-    def test_classify_provider_openai(self):
-        assert _classify_provider('gpt-5.4') == 'openai'
-        assert _classify_provider('gpt-5.4-mini') == 'openai'
-        assert _classify_provider('gpt-4.1-nano') == 'openai'
-        assert _classify_provider('o4-mini') == 'openai'
-
-    def test_classify_provider_anthropic(self):
-        assert _classify_provider('claude-sonnet-4-6') == 'anthropic'
-        assert _classify_provider('claude-haiku-3.5') == 'anthropic'
-
-    def test_classify_provider_openrouter(self):
-        assert _classify_provider('google/gemini-flash-1.5-8b') == 'openrouter'
-        assert _classify_provider('anthropic/claude-3.5-sonnet') == 'openrouter'
-
-    def test_classify_provider_perplexity(self):
-        assert _classify_provider('sonar-pro') == 'perplexity'
-        assert _classify_provider('sonar') == 'perplexity'
+    """Verify provider routing from profile entries."""
 
     def test_chat_agent_is_anthropic_only(self):
         assert 'chat_agent' in _ANTHROPIC_ONLY_FEATURES
@@ -473,19 +455,19 @@ class TestProviderClassification:
         """Persona chat features use direct OpenAI API in both profiles."""
         for profile_name in ['max', 'premium']:
             prof = MODEL_QOS_PROFILES[profile_name]
-            assert _classify_provider(prof['persona_chat']) == 'openai', f'{profile_name} persona_chat'
-            assert _classify_provider(prof['persona_chat_premium']) == 'openai', f'{profile_name} persona_chat_premium'
+            assert prof['persona_chat'][1] == 'openai', f'{profile_name} persona_chat'
+            assert prof['persona_chat_premium'][1] == 'openai', f'{profile_name} persona_chat_premium'
 
     def test_wrapped_analysis_uses_openrouter_in_both_profiles(self):
         """wrapped_analysis uses OpenRouter (gemini-3-flash-preview) in both profiles."""
         for profile_name in ['max', 'premium']:
             prof = MODEL_QOS_PROFILES[profile_name]
-            assert _classify_provider(prof['wrapped_analysis']) == 'openrouter', f'{profile_name} wrapped_analysis'
+            assert prof['wrapped_analysis'][1] == 'openrouter', f'{profile_name} wrapped_analysis'
 
     def test_conv_features_are_openai(self):
         max_prof = MODEL_QOS_PROFILES['max']
         for feature in ['conv_action_items', 'conv_structure', 'conv_app_result', 'conv_app_select']:
-            assert _classify_provider(max_prof[feature]) == 'openai'
+            assert max_prof[feature][1] == 'openai'
 
 
 class TestProviderSafetyGuard:
@@ -498,18 +480,6 @@ class TestProviderSafetyGuard:
     def test_get_llm_rejects_perplexity_only_feature(self):
         with pytest.raises(ValueError, match='Perplexity'):
             get_llm('web_search')
-
-    def test_get_llm_rejects_claude_model_override(self, monkeypatch):
-        """Env override to a claude model is rejected — can't serve via ChatOpenAI."""
-        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'claude-haiku-3.5')
-        with pytest.raises(ValueError, match='Anthropic'):
-            get_llm('conv_action_items')
-
-    def test_get_llm_rejects_sonar_model_override(self, monkeypatch):
-        """Env override to a sonar model is rejected — can't serve via ChatOpenAI."""
-        monkeypatch.setenv('MODEL_QOS_CONV_STRUCTURE', 'sonar-pro')
-        with pytest.raises(ValueError, match='Perplexity'):
-            get_llm('conv_structure')
 
 
 class TestAnthropicModelExports:
@@ -525,22 +495,6 @@ class TestAnthropicModelExports:
 
         assert isinstance(ANTHROPIC_AGENT_MODEL, str)
         assert len(ANTHROPIC_AGENT_MODEL) > 0
-
-
-class TestRollbackScenario:
-    """Verify model can be switched via env var for rollback."""
-
-    def test_override_conv_action_items_to_gpt51(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'gpt-5.1')
-        assert get_model('conv_action_items') == 'gpt-5.1'
-
-    def test_override_chat_agent_to_haiku(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_CHAT_AGENT', 'claude-haiku-3.5')
-        assert get_model('chat_agent') == 'claude-haiku-3.5'
-
-    def test_override_persona_to_different_model(self, monkeypatch):
-        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'anthropic/claude-3.5-sonnet')
-        assert get_model('persona_chat') == 'anthropic/claude-3.5-sonnet'
 
 
 class TestProfileSelectionAtImportTime:
@@ -774,30 +728,6 @@ class TestExpandedCallsiteCoverage:
             assert 'llm_high.invoke' not in source, f"{path} still uses llm_high.invoke"
 
 
-class TestOverrideWarningLog:
-    """Verify override warnings fire when provider doesn't match."""
-
-    def test_warns_on_cross_provider_override(self, monkeypatch, caplog):
-        import logging
-
-        with caplog.at_level(logging.WARNING, logger='utils.llm.clients'):
-            monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'google/gemini-flash-1.5-8b')
-            result = get_model('conv_action_items')
-            assert result == 'google/gemini-flash-1.5-8b'
-        assert any('may be invalid' in r.message for r in caplog.records), "Expected cross-provider override warning"
-
-    def test_no_warning_on_same_provider_override(self, monkeypatch, caplog):
-        import logging
-
-        with caplog.at_level(logging.WARNING, logger='utils.llm.clients'):
-            monkeypatch.setenv('MODEL_QOS_CONV_ACTION_ITEMS', 'gpt-4.1-mini')
-            result = get_model('conv_action_items')
-            assert result == 'gpt-4.1-mini'
-        assert not any(
-            'may be invalid' in r.message for r in caplog.records
-        ), "No warning expected for same-provider override"
-
-
 class TestRuntimeProviderRouting:
     """Verify get_llm() routes to correct client factory based on resolved model."""
 
@@ -807,20 +737,199 @@ class TestRuntimeProviderRouting:
         base_url = getattr(llm, 'openai_api_base', None) or ''
         assert 'openrouter' not in base_url
 
-    def test_override_to_openrouter_model_routes_to_openrouter(self, monkeypatch):
-        """If an override sets an OpenRouter model, get_llm should route via OpenRouter."""
-        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'google/gemini-flash-1.5-8b')
-        llm = get_llm('persona_chat')
-        base_url = getattr(llm, 'openai_api_base', None) or ''
-        assert 'openrouter' in base_url
+    def test_gemini_feature_routes_correctly(self):
+        """Free-text features on gemini-2.5-flash-lite should route to Gemini (native SDK or fallback)."""
+        llm = get_llm('followup')
+        if os.environ.get('GEMINI_API_KEY'):
+            from langchain_google_genai import ChatGoogleGenerativeAI
 
-    def test_openrouter_temperature_applied_via_get_llm(self, monkeypatch):
+            assert isinstance(
+                llm, ChatGoogleGenerativeAI
+            ), f'followup should be ChatGoogleGenerativeAI, got {type(llm)}'
+        else:
+            # No key — falls back to ChatOpenAI placeholder pointing at Gemini endpoint
+            assert hasattr(llm, 'invoke')
+
+    def test_openglass_routes_to_openai(self):
+        """openglass (vision) should route to OpenAI gpt-4.1-mini."""
+        llm = get_llm('openglass')
+        # get_llm() eagerly resolves; result is a ChatOpenAI routed to OpenAI
+        base_url = getattr(llm, 'openai_api_base', None) or ''
+        assert 'openrouter' not in base_url
+        assert 'generativelanguage.googleapis.com' not in base_url
+
+    def test_openrouter_temperature_applied_via_get_llm(self):
         """When get_llm routes to OpenRouter, _OPENROUTER_TEMPERATURES config is applied."""
         from utils.llm.clients import _OPENROUTER_TEMPERATURES
 
-        # Override persona_chat to an OpenRouter model to test temperature routing
-        monkeypatch.setenv('MODEL_QOS_PERSONA_CHAT', 'google/gemini-flash-1.5-8b')
-        llm = get_llm('persona_chat')
-        expected_temp = _OPENROUTER_TEMPERATURES.get('persona_chat')
-        assert expected_temp == 0.8, "persona_chat should have temp 0.8 in config"
+        llm = get_llm('wrapped_analysis')
+        expected_temp = _OPENROUTER_TEMPERATURES.get('wrapped_analysis')
+        assert expected_temp == 0.7, "wrapped_analysis should have temp 0.7 in config"
         assert llm.temperature == expected_temp, "get_llm should apply _OPENROUTER_TEMPERATURES"
+
+    def test_openrouter_adds_vendor_prefix_for_gemini_models(self):
+        """Profile stores bare model name; OpenRouter factory must add google/ prefix for API calls."""
+        llm = get_llm('wrapped_analysis')
+        default = getattr(llm, '_default', llm)
+        assert default.model_name.startswith('google/'), f"Expected google/ prefix, got {default.model_name}"
+
+
+class TestBYOKWrapperArchitecture:
+    """Verify get_llm() eagerly resolves BYOK and returns proper ChatOpenAI instances."""
+
+    def test_get_llm_returns_base_chat_model(self):
+        """get_llm() must eagerly resolve BYOK and return a BaseChatModel (Runnable), not a wrapper."""
+        from langchain_core.language_models import BaseChatModel
+        from langchain_openai import ChatOpenAI
+
+        # OpenAI feature — always ChatOpenAI
+        llm_openai = get_llm('conv_structure')
+        assert isinstance(llm_openai, ChatOpenAI), 'OpenAI get_llm must return ChatOpenAI'
+
+        # Gemini feature — ChatGoogleGenerativeAI (with key) or ChatOpenAI fallback (no key)
+        llm_gemini = get_llm('followup')
+        assert isinstance(llm_gemini, BaseChatModel), 'Gemini get_llm must return BaseChatModel'
+
+        # OpenRouter feature — always ChatOpenAI
+        llm_or = get_llm('wrapped_analysis')
+        assert isinstance(llm_or, ChatOpenAI), 'OpenRouter get_llm must return ChatOpenAI'
+
+    def test_no_legacy_llm_medium_or_llm_large(self):
+        """Dead legacy instances must not exist in clients module."""
+        import utils.llm.clients as mod
+
+        for name in [
+            'llm_medium',
+            'llm_large',
+            'llm_high',
+            'llm_agent',
+            'llm_gemini_flash',
+            'llm_mini_stream',
+            'llm_medium_stream',
+            'llm_large_stream',
+            'llm_high_stream',
+            'llm_agent_stream',
+            'llm_medium_experiment',
+        ]:
+            assert not hasattr(mod, name), f'{name} should have been removed from clients.py'
+
+
+class TestBYOKProfile:
+    """Verify BYOK QoS profile structure and model selections."""
+
+    def test_byok_all_openai_except_special(self):
+        """byok routes all features to OpenAI except chat_agent/web_search/wrapped_analysis."""
+        bk = MODEL_QOS_PROFILES['byok']
+        for feature, (model, provider) in bk.items():
+            if feature in ('chat_agent', 'web_search', 'wrapped_analysis'):
+                continue
+            assert provider == 'openai', f'byok {feature} should be openai, got {provider}'
+
+    def test_byok_model_variants(self):
+        """byok uses same 9 distinct models as max."""
+        bk = MODEL_QOS_PROFILES['byok']
+        distinct = {model for model, _p in bk.values()}
+        expected = {
+            'gpt-5.4',
+            'gpt-5.4-mini',
+            'gpt-4.1',
+            'gpt-4.1-mini',
+            'gpt-4.1-nano',
+            'o4-mini',
+            'claude-sonnet-4-6',
+            'gemini-3-flash-preview',
+            'sonar-pro',
+        }
+        assert distinct == expected
+
+    def test_byok_has_same_features_as_premium(self):
+        """BYOK profile must cover the same feature set as premium."""
+        premium_features = set(MODEL_QOS_PROFILES['premium'].keys())
+        byok_features = set(MODEL_QOS_PROFILES['byok'].keys())
+        assert byok_features == premium_features, f'byok features differ: {byok_features ^ premium_features}'
+
+
+class TestBYOKProfileFixed:
+    """Verify BYOK QoS profile is always 'byok'."""
+
+    def test_byok_profile_is_byok(self):
+        assert _byok_profile_name == 'byok'
+
+    def test_byok_profile_exists(self):
+        assert _byok_profile is not None
+        assert _byok_profile is MODEL_QOS_PROFILES['byok']
+
+    def test_byok_profile_via_subprocess(self):
+        """Verify byok is set regardless of MODEL_QOS value."""
+        import subprocess
+
+        result = subprocess.run(
+            [
+                'python3',
+                '-c',
+                (
+                    "import sys; from unittest.mock import MagicMock; "
+                    "[sys.modules.setdefault(m, MagicMock()) for m in "
+                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
+                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
+                    "'database','database._client','database.llm_usage']]; "
+                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
+                    "os.environ['MODEL_QOS']='max'; "
+                    "from utils.llm.clients import _byok_profile_name, _byok_profile; "
+                    "assert _byok_profile_name == 'byok', f'Expected byok, got {_byok_profile_name}'; "
+                    "assert _byok_profile is not None"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+        )
+        assert result.returncode == 0, f"byok profile test failed: {result.stderr}"
+
+
+class TestEffectiveBYOKProvider:
+    """Verify _effective_byok_provider maps providers correctly."""
+
+    def test_openai_passthrough(self):
+        assert _effective_byok_provider('gpt-4.1-mini', 'openai') == 'openai'
+
+    def test_gemini_passthrough(self):
+        assert _effective_byok_provider('gemini-2.5-flash', 'gemini') == 'gemini'
+
+    def test_openrouter_gemini_maps_to_gemini(self):
+        assert _effective_byok_provider('gemini-3-flash-preview', 'openrouter') == 'gemini'
+
+    def test_openrouter_non_gemini_stays_openrouter(self):
+        assert _effective_byok_provider('anthropic/claude-3.5-sonnet', 'openrouter') == 'openrouter'
+
+    def test_anthropic_passthrough(self):
+        assert _effective_byok_provider('claude-sonnet-4-6', 'anthropic') == 'anthropic'
+
+    def test_perplexity_passthrough(self):
+        assert _effective_byok_provider('sonar-pro', 'perplexity') == 'perplexity'
+
+
+class TestStructuredOutputFeatureTracking:
+    """Verify structured output feature set matches actual usage."""
+
+    def test_expected_features_tracked(self):
+        expected = {'chat_extraction', 'proactive_notification', 'conv_app_select', 'external_structure', 'trends'}
+        assert _STRUCTURED_OUTPUT_FEATURES == expected
+
+    def test_tracked_features_exist_in_all_profiles(self):
+        for feature in _STRUCTURED_OUTPUT_FEATURES:
+            for profile_name, profile in MODEL_QOS_PROFILES.items():
+                assert feature in profile, f'{feature} missing from {profile_name}'
+
+    def test_premium_gemini_structured_output(self):
+        """In premium profile, only 'trends' uses structured_output on Gemini."""
+        premium = MODEL_QOS_PROFILES['premium']
+        gemini_so = {f for f in _STRUCTURED_OUTPUT_FEATURES if premium[f][1] == 'gemini'}
+        assert gemini_so == {'trends'}, f'Expected only trends on Gemini SO in premium, got {gemini_so}'
+
+    def test_byok_no_gemini_structured_output(self):
+        """BYOK profile routes all structured output features to OpenAI (no Gemini compat risk)."""
+        profile = MODEL_QOS_PROFILES['byok']
+        for feature in _STRUCTURED_OUTPUT_FEATURES:
+            assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'

@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "گفتگو کی ID کاپی کریں",
+    "conversationIdCopied": "گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی",
     "testPrompt": "ٹیسٹ پروپٹ",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "بیٹری کی سطح",
+    "charging": "چارج ہو رہا ہے",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "ڈیفالٹ",
     "lastUsedLabel": "آخری استعمال",
     "setDefaultApp": "ڈیفالٹ ایپ سیٹ کریں",
-    "setDefaultAppContent": "{appName} کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\\n\\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔",
+    "setDefaultAppContent": "{appName} کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\n\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "اسپیکر",
     "phoneEndCall": "ختم کریں",
     "phoneCallSettingsTitle": "فون کال کی ترتیبات",
+    "showPhoneCallButtonTitle": "فون کال بٹن دکھائیں",
+    "showPhoneCallButtonDesc": "ہوم اسکرین پر فون کال بٹن دکھائیں",
     "yourVerifiedNumbers": "آپ کے تصدیق شدہ نمبر",
     "verifiedNumbersDescription": "جب آپ کسی کو کال کریں گے، تو وہ اپنے فون پر یہ نمبر دیکھے گا",
     "noVerifiedNumbers": "کوئی تصدیق شدہ نمبر نہیں",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "بیٹری",
     "day": "دن",
     "noBatteryDataYet": "ابھی تک کوئی بیٹری ڈیٹا نہیں",
-    "week": "ہفتہ"
+    "week": "ہفتہ",
+    "voiceResponseAudio": "Omi کا جواب بلند آواز میں پڑھیں",
+    "voiceResponseMode": "آواز کا جواب",
+    "voiceResponseModeTitle": "جواب کب پڑھے جائیں",
+    "voiceResponseOff": "بند",
+    "voiceResponseHeadphonesOnly": "صرف ہیڈ فون",
+    "voiceResponseAlways": "ہمیشہ",
+    "agreeAndContinue": "اتفاق اور جاری رکھیں",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "آواز موڈ",
+    "quickActionAskOmi": "Omi سے کچھ بھی پوچھیں",
+    "record": "ریکارڈ کریں",
+    "stop": "روکیں",
+    "recordWithPhoneMic": "فون مائیک سے ریکارڈ کریں",
+    "recordWithPhoneMicSubtitle": "اپنے ارد گرد کی آواز ریکارڈ کریں",
+    "phoneCall": "فون کال",
+    "phoneCallSubtitle": "لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں",
+    "bulkExportInProgress": "ایکسپورٹ ہو رہا ہے…",
+    "bulkExportPartial": "{total} میں سے {success} کو {platform} میں ایکسپورٹ کیا گیا",
+    "bulkExportSuccess": "{count} کو {platform} میں ایکسپورٹ کیا گیا",
+    "chooseExportDestination": "{count} آئٹم ایکسپورٹ کریں…",
+    "connectAction": "جوڑیں",
+    "connectTaskAppToExport": "ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں",
+    "deselectAllTasksMenu": "تمام کا انتخاب ختم کریں",
+    "hideCompletedTasks": "مکمل شدہ چھپائیں",
+    "searchActionItems": "ایکشن آئٹمز تلاش کریں",
+    "selectActionItems": "متعدد منتخب کریں",
+    "selectAllTasksMenu": "سب منتخب کریں",
+    "showCompletedTasks": "مکمل شدہ دکھائیں",
+    "startCallRecording": "کال ریکارڈنگ شروع کریں",
+    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
+    "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
 }

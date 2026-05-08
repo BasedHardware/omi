@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Копирај ID разговора",
+    "conversationIdCopied": "ID разговора је копиран у клипборд",
     "testPrompt": "Тестирај подстицај",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "Ниво батерије",
+    "charging": "Пуњење",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Ваш план је завршио дана {date}.\\nПретплатите се поново - одмах ћемо вас наплатити за нов период наплате.",
+    "planEndedOn": "Ваш план је завршио дана {date}.\nПретплатите се поново - одмах ћемо вас наплатити за нов период наплате.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Ваш план је подешен да буде отказан дана {date}.\\nПретплатите се поново да бисте задржали своје предности - никаква наплата до {date}.",
+    "planSetToCancelOn": "Ваш план је подешен да буде отказан дана {date}.\nПретплатите се поново да бисте задржали своје предности - никаква наплата до {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Активне ставке из твоје разговора ће се појавити овде.\\nГаси + да направиш једну ручно.",
+    "tasksEmptyStateMessage": "Активне ставке из твоје разговора ће се појавити овде.\nГаси + да направиш једну ручно.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Инсталирај Omi на твој\\nApple Watch",
+    "installOmiOnAppleWatch": "Инсталирај Omi на твој\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Отвори Omi на твој\\nApple Watch",
+    "openOmiOnAppleWatch": "Отвори Omi на твој\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "Правим твој\\n2025 причу...",
+    "wrappedCreatingYourStory": "Правим твој\n2025 причу...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "Нешто\\nје пошло наниже",
+    "wrappedSomethingWentWrong": "Нешто\nје пошло наниже",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "Подразумевано",
     "lastUsedLabel": "Последњи пут коришћено",
     "setDefaultApp": "Постави подразумевану апликацију",
-    "setDefaultAppContent": "Поставите {appName} као подразумевану апликацију за сумирање?\\n\\nОва апликација ће аутоматски бити коришћена за сва будућа резимеа разговора.",
+    "setDefaultAppContent": "Поставите {appName} као подразумевану апликацију за сумирање?\n\nОва апликација ће аутоматски бити коришћена за сва будућа резимеа разговора.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "Звучник",
     "phoneEndCall": "Заврши",
     "phoneCallSettingsTitle": "Подешавања телефонског позива",
+    "showPhoneCallButtonTitle": "Прикажи дугме за позив",
+    "showPhoneCallButtonDesc": "Прикажи дугме за телефонски позив на почетном екрану",
     "yourVerifiedNumbers": "Твоји потврђени бројеви",
     "verifiedNumbersDescription": "Када позиваш неког, видећу овај број на телефону",
     "noVerifiedNumbers": "Нема потврђених бројева",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "Батерија",
     "day": "Дан",
     "noBatteryDataYet": "Још нема података о батерији",
-    "week": "Недеља"
+    "week": "Недеља",
+    "voiceResponseAudio": "Прочитај Omi одговор наглас",
+    "voiceResponseMode": "Гласовни одговор",
+    "voiceResponseModeTitle": "Када изговарати одговоре",
+    "voiceResponseOff": "Искључено",
+    "voiceResponseHeadphonesOnly": "Само слушалице",
+    "voiceResponseAlways": "Увек",
+    "agreeAndContinue": "Slažem se i nastavi",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Гласовни режим",
+    "quickActionAskOmi": "Питајте Omi bilo što",
+    "record": "Сними",
+    "stop": "Заустави",
+    "recordWithPhoneMic": "Снимај микрофоном телефона",
+    "recordWithPhoneMicSubtitle": "Снимите звук око вас",
+    "phoneCall": "Телефонски позив",
+    "phoneCallSubtitle": "Снимајте позив са транскрипцијом уживо",
+    "bulkExportInProgress": "Извоз…",
+    "bulkExportPartial": "Извезено {success} од {total} у {platform}",
+    "bulkExportSuccess": "Извезено {count} у {platform}",
+    "chooseExportDestination": "Извези {count} ставку/и у…",
+    "connectAction": "Повежи",
+    "connectTaskAppToExport": "Повежите апликацију за задатке у Подешавањима за извоз",
+    "deselectAllTasksMenu": "Поништи избор свих",
+    "hideCompletedTasks": "Сакриј завршене",
+    "searchActionItems": "Претражи акционе ставке",
+    "selectActionItems": "Изабери више",
+    "selectAllTasksMenu": "Изабери све",
+    "showCompletedTasks": "Прикажи завршене",
+    "startCallRecording": "Покрени снимање позива",
+    "startVoiceRecording": "Покрени гласовно снимање",
+    "bulkExportAlreadyExported": "Сви изабрани задаци су већ извезени",
+    "bulkDeleteFailed": "Задаци нису могли бити обрисани. Покушајте поново."
 }

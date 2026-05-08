@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "העתק מזהה שיחה",
+    "conversationIdCopied": "מזהה השיחה הועתק ללוח",
     "testPrompt": "בדוק הנושא",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "רמת הסוללה",
+    "charging": "טוען",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "התוכנית שלך הסתיימה ב-{date}.\\nהירשם מחדש כעת - תחויב מיד לתקופת חיוב חדשה.",
+    "planEndedOn": "התוכנית שלך הסתיימה ב-{date}.\nהירשם מחדש כעת - תחויב מיד לתקופת חיוב חדשה.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "התוכנית שלך מוגדרת להיות מבוטלת ב-{date}.\\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
+    "planSetToCancelOn": "התוכנית שלך מוגדרת להיות מבוטלת ב-{date}.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "משימות משיחותיך יופיעו כאן.\\nלחץ + כדי ליצור אחת ידנית.",
+    "tasksEmptyStateMessage": "משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "התקן Omi ב-\\nApple Watch",
+    "installOmiOnAppleWatch": "התקן Omi ב-\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "פתח Omi ב-\\nApple Watch",
+    "openOmiOnAppleWatch": "פתח Omi ב-\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "יצירת הסיפור שלך\\n2025...",
+    "wrappedCreatingYourStory": "יצירת הסיפור שלך\n2025...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "משהו\\nהלך לא בסדר",
+    "wrappedSomethingWentWrong": "משהו\nהלך לא בסדר",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "ברירת מחדל",
     "lastUsedLabel": "בשימוש לאחרונה",
     "setDefaultApp": "הגדר אפליקציה ברירת מחדל",
-    "setDefaultAppContent": "הגדר את {appName} כאפליקציית הסיכום ברירת המחדל שלך?\\n\\nאפליקציה זו תשמש באופן אוטומטי לכל סיכומי השיחות בעתיד.",
+    "setDefaultAppContent": "הגדר את {appName} כאפליקציית הסיכום ברירת המחדל שלך?\n\nאפליקציה זו תשמש באופן אוטומטי לכל סיכומי השיחות בעתיד.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "רמקול",
     "phoneEndCall": "סיים",
     "phoneCallSettingsTitle": "הגדרות שיחות טלפון",
+    "showPhoneCallButtonTitle": "הצג כפתור שיחת טלפון",
+    "showPhoneCallButtonDesc": "הצג כפתור שיחת טלפון במסך הבית",
     "yourVerifiedNumbers": "המספרים המאומתים שלך",
     "verifiedNumbersDescription": "כאשר אתה מתקשר למישהו, הם יראו את המספר הזה בטלפון שלהם",
     "noVerifiedNumbers": "אין מספרים מאומתים",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "סוללה",
     "day": "יום",
     "noBatteryDataYet": "אין עדיין נתוני סוללה",
-    "week": "שבוע"
+    "week": "שבוע",
+    "voiceResponseAudio": "קרא את תגובת Omi בקול",
+    "voiceResponseMode": "תגובה קולית",
+    "voiceResponseModeTitle": "מתי לקרוא תשובות",
+    "voiceResponseOff": "כבוי",
+    "voiceResponseHeadphonesOnly": "אוזניות בלבד",
+    "voiceResponseAlways": "תמיד",
+    "agreeAndContinue": "אני מסכים והמשך",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "מצב קולי",
+    "quickActionAskOmi": "שאל את Omi כל דבר",
+    "record": "הקלט",
+    "stop": "עצור",
+    "recordWithPhoneMic": "הקלט עם מיקרופון הטלפון",
+    "recordWithPhoneMicSubtitle": "הקלט שמע סביבך",
+    "phoneCall": "שיחת טלפון",
+    "phoneCallSubtitle": "הקלט שיחה עם תמלול חי",
+    "bulkExportInProgress": "מייצא…",
+    "bulkExportPartial": "יוצאו {success} מתוך {total} אל {platform}",
+    "bulkExportSuccess": "יוצאו {count} אל {platform}",
+    "chooseExportDestination": "ייצוא {count} פריט(ים) אל…",
+    "connectAction": "חיבור",
+    "connectTaskAppToExport": "חבר אפליקציית משימות בהגדרות כדי לייצא",
+    "deselectAllTasksMenu": "בטל בחירת הכל",
+    "hideCompletedTasks": "הסתר הושלמו",
+    "searchActionItems": "חפש פריטי פעולה",
+    "selectActionItems": "בחירה מרובה",
+    "selectAllTasksMenu": "בחר הכל",
+    "showCompletedTasks": "הצג הושלמו",
+    "startCallRecording": "התחל הקלטת שיחה",
+    "startVoiceRecording": "התחל הקלטה קולית",
+    "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
 }

@@ -64,6 +64,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get copySummary => 'Kopiraj sažetak';
 
   @override
+  String get copyConversationId => 'Kopiraj ID razgovora';
+
+  @override
+  String get conversationIdCopied => 'ID razgovora kopiran u međuspremnik';
+
+  @override
   String get testPrompt => 'Test upit';
 
   @override
@@ -2377,6 +2383,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get batteryLevel => 'Nivo baterije';
 
   @override
+  String get charging => 'Punjenje';
+
+  @override
   String get productUpdate => 'Ažuriranje proizvoda';
 
   @override
@@ -4530,12 +4539,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Vaš plan je završio $date.\\nPonovno se pretplatite sada - bit ćete odmah naplaćeni za novi period naplate.';
+    return 'Vaš plan je završio $date.\nPonovno se pretplatite sada - bit ćete odmah naplaćeni za novi period naplate.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Vaš plan je postavljen da se otkaže $date.\\nPonovno se pretplatite sada da zadržite svoje benefite - nema naknade do $date.';
+    return 'Vaš plan je postavljen da se otkaže $date.\nPonovno se pretplatite sada da zadržite svoje benefite - nema naknade do $date.';
   }
 
   @override
@@ -5106,7 +5115,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Zadaci iz vaših razgovora će se pojaviti ovdje.\\nDodirnite + da ga kreirate ručno.';
+      'Zadaci iz vaših razgovora će se pojaviti ovdje.\nDodirnite + da ga kreirate ručno.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -5139,14 +5148,14 @@ class AppLocalizationsBs extends AppLocalizations {
   String get checkingAppleWatch => 'Provjera Apple Watch-a...';
 
   @override
-  String get installOmiOnAppleWatch => 'Instalirajte Omi na vaš\\nApple Watch';
+  String get installOmiOnAppleWatch => 'Instalirajte Omi na vaš\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Kako biste koristili Apple Watch s Omijom, trebate prvo instalirati Omi aplikaciju na svoj satnici.';
 
   @override
-  String get openOmiOnAppleWatch => 'Otvorite Omi na vaš\\nApple Watch';
+  String get openOmiOnAppleWatch => 'Otvorite Omi na vaš\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5400,10 +5409,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get wrappedProcessingDefault => 'Obrada u tijeku...';
 
   @override
-  String get wrappedCreatingYourStory => 'Stvaranje vaše\\n2025 priče...';
+  String get wrappedCreatingYourStory => 'Stvaranje vaše\n2025 priče...';
 
   @override
-  String get wrappedSomethingWentWrong => 'Nešto je\\npoš pošlo naopako';
+  String get wrappedSomethingWentWrong => 'Nešto je\npoš pošlo naopako';
 
   @override
   String get wrappedAnErrorOccurred => 'Došlo je do greške';
@@ -8310,6 +8319,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Podešavanja telefonskih poziva';
 
   @override
+  String get showPhoneCallButtonTitle => 'Prikaži dugme za pozive';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Prikaži dugme za pozive na početnom ekranu';
+
+  @override
   String get yourVerifiedNumbers => 'Tvoji verifikovani brojevi';
 
   @override
@@ -9147,4 +9162,106 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Dosegli ste svoj mjesečni limit. Nadogradite da nastavite razgovarati s Omi bez ograničenja.';
+
+  @override
+  String get voiceResponseAudio => 'Pročitaj Omi odgovor naglas';
+
+  @override
+  String get voiceResponseMode => 'Glasovni odgovor';
+
+  @override
+  String get voiceResponseModeTitle => 'Kada izgovarati odgovore';
+
+  @override
+  String get voiceResponseOff => 'Isključeno';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Samo slušalice';
+
+  @override
+  String get voiceResponseAlways => 'Uvijek';
+
+  @override
+  String get agreeAndContinue => 'Slažem se i nastavi';
+
+  @override
+  String get startVoiceRecording => 'Pokreni glasovno snimanje';
+
+  @override
+  String get startCallRecording => 'Pokreni snimanje poziva';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Glasovni način';
+
+  @override
+  String get quickActionAskOmi => 'Pitajte Omi bilo što';
+
+  @override
+  String get record => 'Snimi';
+
+  @override
+  String get stop => 'Zaustavi';
+
+  @override
+  String get recordWithPhoneMic => 'Snimaj mikrofonom telefona';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Snimite zvuk oko vas';
+
+  @override
+  String get phoneCall => 'Telefonski poziv';
+
+  @override
+  String get phoneCallSubtitle => 'Snimajte poziv s transkripcijom uživo';
+
+  @override
+  String get searchActionItems => 'Pretraži akcione stavke';
+
+  @override
+  String get selectActionItems => 'Odaberi više';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Izvezi $count stavku/i u…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Izvoz u toku…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Izvezeno $count u $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Izvezeno $success od $total u $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Prikaži završene';
+
+  @override
+  String get hideCompletedTasks => 'Sakrij završene';
+
+  @override
+  String get selectAllTasksMenu => 'Odaberi sve';
+
+  @override
+  String get connectTaskAppToExport => 'Povežite aplikaciju za zadatke u Postavkama za izvoz';
+
+  @override
+  String get connectAction => 'Poveži';
+
+  @override
+  String get deselectAllTasksMenu => 'Poništi odabir svih';
+
+  @override
+  String get bulkExportAlreadyExported => 'Svi odabrani zadaci već su izvezeni';
+
+  @override
+  String get bulkDeleteFailed => 'Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo.';
 }

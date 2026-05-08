@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopyahin ang ID ng usapan",
+    "conversationIdCopied": "Nakopya na ang ID ng usapan sa clipboard",
     "testPrompt": "Subukan ang Prompt",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "Antas ng Baterya",
+    "charging": "Nagcha-charge",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Ang iyong plano ay nagtapos noong {date}.\\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.",
+    "planEndedOn": "Ang iyong plano ay nagtapos noong {date}.\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Ang iyong plano ay nakatakda na kanselahin sa {date}.\\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
+    "planSetToCancelOn": "Ang iyong plano ay nakatakda na kanselahin sa {date}.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\\nI-tap ang + upang lumikha ng isa nang manual.",
+    "tasksEmptyStateMessage": "Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "I-install ang Omi sa iyong\\nApple Watch",
+    "installOmiOnAppleWatch": "I-install ang Omi sa iyong\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Buksan ang Omi sa iyong\\nApple Watch",
+    "openOmiOnAppleWatch": "Buksan ang Omi sa iyong\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "Lumilikha ng iyong\\n2025 story...",
+    "wrappedCreatingYourStory": "Lumilikha ng iyong\n2025 story...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "Isang bagay\\nay nagkamali",
+    "wrappedSomethingWentWrong": "Isang bagay\nay nagkamali",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "Default",
     "lastUsedLabel": "Huling Ginamit",
     "setDefaultApp": "Itakda ang Default App",
-    "setDefaultAppContent": "Itakda ang {appName} bilang iyong default na summarization app?\\n\\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.",
+    "setDefaultAppContent": "Itakda ang {appName} bilang iyong default na summarization app?\n\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "Tapos",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Ipakita ang button ng tawag",
+    "showPhoneCallButtonDesc": "Ipakita ang button ng tawag sa home screen",
     "yourVerifiedNumbers": "Ang Iyong Na-verify na Mga Numero",
     "verifiedNumbersDescription": "Kapag tumatawag ka sa isang tao, makikita nila ang numerong ito sa kanilang phone",
     "noVerifiedNumbers": "Walang na-verify na mga numero",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "Baterya",
     "day": "Araw",
     "noBatteryDataYet": "Wala pang datos ng baterya",
-    "week": "Linggo"
+    "week": "Linggo",
+    "voiceResponseAudio": "Basahin nang malakas ang sagot ng Omi",
+    "voiceResponseMode": "Tugon sa boses",
+    "voiceResponseModeTitle": "Kailan bibigkasin ang tugon",
+    "voiceResponseOff": "Naka-off",
+    "voiceResponseHeadphonesOnly": "Headphones lang",
+    "voiceResponseAlways": "Palagi",
+    "agreeAndContinue": "Sumasang-ayon at Magpatuloy",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Voice Mode",
+    "quickActionAskOmi": "Tanungin si Omi ng kahit ano",
+    "record": "Mag-record",
+    "stop": "Itigil",
+    "recordWithPhoneMic": "Mag-record gamit ang mikropono ng telepono",
+    "recordWithPhoneMicSubtitle": "Kunan ang audio sa paligid mo",
+    "phoneCall": "Tawag sa telepono",
+    "phoneCallSubtitle": "Mag-record ng tawag na may live na transkripsyon",
+    "bulkExportInProgress": "Nag-e-export…",
+    "bulkExportPartial": "Na-export ang {success} sa {total} sa {platform}",
+    "bulkExportSuccess": "Na-export ang {count} sa {platform}",
+    "chooseExportDestination": "I-export ang {count} item sa…",
+    "connectAction": "Ikonekta",
+    "connectTaskAppToExport": "Ikonekta ang isang task app sa Settings para mag-export",
+    "deselectAllTasksMenu": "I-deselect lahat",
+    "hideCompletedTasks": "Itago ang tapos na",
+    "searchActionItems": "Maghanap ng mga action item",
+    "selectActionItems": "Pumili ng marami",
+    "selectAllTasksMenu": "Piliin lahat",
+    "showCompletedTasks": "Ipakita ang tapos na",
+    "startCallRecording": "Simulan ang pag-record ng tawag",
+    "startVoiceRecording": "Simulan ang voice recording",
+    "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
 }

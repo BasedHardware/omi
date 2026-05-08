@@ -53,6 +53,7 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    tts,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -72,6 +73,13 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
     firebase_admin.initialize_app(credentials)
 else:
     firebase_admin.initialize_app()
+
+# starlette 0.40 added a default 1 MB cap per multipart form part. Voice
+# messages, audio uploads, and persona/app images legitimately exceed that.
+# Match the existing per-request PCM ceiling.
+from starlette.formparsers import MultiPartParser
+
+MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 
 app = FastAPI()
 
@@ -122,6 +130,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(tts.router)
 
 
 methods_timeout = {

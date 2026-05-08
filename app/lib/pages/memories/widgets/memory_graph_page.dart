@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -40,9 +40,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  }) : position = initialPosition,
-       velocity = v.Vector3.zero(),
-       force = v.Vector3.zero();
+  })  : position = initialPosition,
+        velocity = v.Vector3.zero(),
+        force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -285,7 +285,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     if (widget.trackOpenEvent) {
-      MixpanelManager().brainMapOpened();
+      PlatformManager.instance.analytics.brainMapOpened();
     }
     _loadGraph();
   }
@@ -374,7 +374,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
-      MixpanelManager().brainMapRebuilt();
+      PlatformManager.instance.analytics.brainMapRebuilt();
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
@@ -524,7 +524,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   Future<void> _shareGraph() async {
-    MixpanelManager().brainMapShareClicked();
+    PlatformManager.instance.analytics.brainMapShareClicked();
     try {
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -644,42 +644,46 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
-              const SizedBox(height: 16),
-              Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-              const SizedBox(height: 12),
-              Text(
-                _isRebuilding
-                    ? context.l10n.buildingKnowledgeGraphFromMemories
-                    : context.l10n.knowledgeGraphWillBuildAutomatically,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white38, fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              if (_isRebuilding)
-                SizedBox(
-                  width: 200,
-                  child: LinearProgressIndicator(
-                    backgroundColor: Colors.white10,
-                    color: Colors.purpleAccent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                )
-              else if (!widget.hideRebuildButtonWhenEmpty)
-                ElevatedButton.icon(
-                  onPressed: _rebuildGraph,
-                  icon: const Icon(Icons.auto_fix_high),
-                  label: Text(context.l10n.buildGraphButton),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purpleAccent.withOpacity(0.2),
-                    foregroundColor: Colors.purpleAccent,
-                  ),
+          padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
+                const SizedBox(height: 16),
+                Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
+                const SizedBox(height: 12),
+                Text(
+                  _isRebuilding
+                      ? context.l10n.buildingKnowledgeGraphFromMemories
+                      : context.l10n.knowledgeGraphWillBuildAutomatically,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white38, fontSize: 14),
                 ),
-            ],
+                const SizedBox(height: 24),
+                if (_isRebuilding)
+                  SizedBox(
+                    width: 200,
+                    child: LinearProgressIndicator(
+                      backgroundColor: Colors.white10,
+                      color: Colors.purpleAccent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  )
+                else if (!widget.hideRebuildButtonWhenEmpty)
+                  ElevatedButton.icon(
+                    onPressed: _rebuildGraph,
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: Text(context.l10n.buildGraphButton),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purpleAccent.withOpacity(0.2),
+                      foregroundColor: Colors.purpleAccent,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       );
@@ -705,7 +709,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     _panY += delta.dy;
                     if (details.scale != 1.0) {
                       _zoom = _baseZoom * details.scale;
-                      _zoom = _zoom.clamp(0.2, 5.0);
+                      _zoom = _zoom.clamp(0.05, 5.0);
                     }
                   } else {
                     _rotationY -= delta.dx * 0.005;
@@ -817,7 +821,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
-          MixpanelManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
+          PlatformManager.instance.analytics.brainMapNodeClicked(node.id, node.label, node.nodeType);
         }
 
         // Find neighbors
@@ -943,7 +947,7 @@ class GraphPainter3D extends CustomPainter {
       final p2 = projectedMap[edge.targetId];
       if (p1 == null || p2 == null) continue;
 
-      final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.25).clamp(0.0, 1.0);
+      final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
       _edgePaint.color = Colors.white.withOpacity(alpha);

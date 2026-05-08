@@ -63,6 +63,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get copySummary => '요약 복사';
 
   @override
+  String get copyConversationId => '대화 ID 복사';
+
+  @override
+  String get conversationIdCopied => '대화 ID가 클립보드에 복사되었습니다';
+
+  @override
   String get testPrompt => '프롬프트 테스트';
 
   @override
@@ -2327,6 +2333,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryLevel => '배터리 수준';
 
   @override
+  String get charging => '충전 중';
+
+  @override
   String get productUpdate => '제품 업데이트';
 
   @override
@@ -4440,12 +4449,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return '플랜이 $date에 종료되었습니다.\\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
+    return '플랜이 $date에 종료되었습니다.\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return '플랜이 $date에 취소될 예정입니다.\\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+    return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
@@ -6423,7 +6432,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName을(를) 기본 요약 앱으로 설정하시겠습니까?\\n\\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.';
+    return '$appName을(를) 기본 요약 앱으로 설정하시겠습니까?\n\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.';
   }
 
   @override
@@ -8150,6 +8159,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSettingsTitle => '통화 설정';
 
   @override
+  String get showPhoneCallButtonTitle => '통화 버튼 표시';
+
+  @override
+  String get showPhoneCallButtonDesc => '홈 화면에 전화 통화 버튼 표시';
+
+  @override
   String get yourVerifiedNumbers => '인증된 번호';
 
   @override
@@ -8975,4 +8990,106 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '월간 한도에 도달했습니다. 제한 없이 Omi와 계속 채팅하려면 업그레이드하세요.';
+
+  @override
+  String get voiceResponseAudio => 'Omi의 응답 소리 내어 읽기';
+
+  @override
+  String get voiceResponseMode => '음성 응답';
+
+  @override
+  String get voiceResponseModeTitle => '응답을 말할 시점';
+
+  @override
+  String get voiceResponseOff => '끄기';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '헤드폰만';
+
+  @override
+  String get voiceResponseAlways => '항상';
+
+  @override
+  String get agreeAndContinue => '동의하고 계속';
+
+  @override
+  String get startVoiceRecording => '음성 녹음 시작';
+
+  @override
+  String get startCallRecording => '통화 녹음 시작';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '음성 모드';
+
+  @override
+  String get quickActionAskOmi => 'Omi에게 무엇이든 물어보세요';
+
+  @override
+  String get record => '녹음';
+
+  @override
+  String get stop => '중지';
+
+  @override
+  String get recordWithPhoneMic => '휴대폰 마이크로 녹음';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '주변 오디오를 캡처하세요';
+
+  @override
+  String get phoneCall => '전화 통화';
+
+  @override
+  String get phoneCallSubtitle => '실시간 전사로 통화 녹음';
+
+  @override
+  String get searchActionItems => '실행 항목 검색';
+
+  @override
+  String get selectActionItems => '여러 개 선택';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count개 항목 내보내기…';
+  }
+
+  @override
+  String get bulkExportInProgress => '내보내는 중…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count개를 $platform에 내보냈습니다';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total개 중 $success개를 $platform에 내보냈습니다';
+  }
+
+  @override
+  String get showCompletedTasks => '완료 보기';
+
+  @override
+  String get hideCompletedTasks => '완료 숨기기';
+
+  @override
+  String get selectAllTasksMenu => '모두 선택';
+
+  @override
+  String get connectTaskAppToExport => '내보내려면 설정에서 작업 앱을 연결하세요';
+
+  @override
+  String get connectAction => '연결';
+
+  @override
+  String get deselectAllTasksMenu => '모두 선택 해제';
+
+  @override
+  String get bulkExportAlreadyExported => '선택한 모든 작업이 이미 내보내졌습니다';
+
+  @override
+  String get bulkDeleteFailed => '작업을 삭제할 수 없습니다. 다시 시도해 주세요.';
 }

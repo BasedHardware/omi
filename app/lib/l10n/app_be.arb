@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Скапіраваць ID размовы",
+    "conversationIdCopied": "ID размовы скапіраваны ў буфер абмену",
     "testPrompt": "Тэставаць запыт",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "Узровень батарэі",
+    "charging": "Зарадка",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "Спікер",
     "phoneEndCall": "Завершыць",
     "phoneCallSettingsTitle": "Параметры тэлефонных вызваў",
+    "showPhoneCallButtonTitle": "Паказаць кнопку тэлефоннага выкліку",
+    "showPhoneCallButtonDesc": "Адлюстраваць кнопку тэлефоннага выкліку на галоўным экране",
     "yourVerifiedNumbers": "Ваш параўныя нумары",
     "verifiedNumbersDescription": "Калі вы звяжэцца з кім-небудзь, яны паўідяць гэты нумар на сваім тэлефоне",
     "noVerifiedNumbers": "Няма параўныш нумараў",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "Батарэя",
     "day": "Дзень",
     "noBatteryDataYet": "Даных пра батарэю яшчэ няма",
-    "week": "Тыдзень"
+    "week": "Тыдзень",
+    "voiceResponseAudio": "Чытаць адказ Omi уголас",
+    "voiceResponseMode": "Галасавы адказ",
+    "voiceResponseModeTitle": "Калі агучваць адказы",
+    "voiceResponseOff": "Выкл",
+    "voiceResponseHeadphonesOnly": "Толькі навушнікі",
+    "voiceResponseAlways": "Заўсёды",
+    "agreeAndContinue": "Прыняць і працягнуць",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Галасавы рэжым",
+    "quickActionAskOmi": "Спытайце ў Омі што заўгодна",
+    "record": "Запісаць",
+    "stop": "Спыніць",
+    "recordWithPhoneMic": "Запіс мікрафонам тэлефона",
+    "recordWithPhoneMicSubtitle": "Запісвайце гук вакол сябе",
+    "phoneCall": "Тэлефонны званок",
+    "phoneCallSubtitle": "Запіс званка з жывой транскрыпцыяй",
+    "bulkExportInProgress": "Экспарт…",
+    "bulkExportPartial": "Экспартавана {success} з {total} у {platform}",
+    "bulkExportSuccess": "Экспартавана {count} у {platform}",
+    "chooseExportDestination": "Экспартаваць {count} элемент(аў) у…",
+    "connectAction": "Злучыць",
+    "connectTaskAppToExport": "Падключыце праграму задач у Наладах для экспарту",
+    "deselectAllTasksMenu": "Зняць выбар усіх",
+    "hideCompletedTasks": "Схаваць завершаныя",
+    "searchActionItems": "Шукаць элементы дзеянняў",
+    "selectActionItems": "Выбраць некалькі",
+    "selectAllTasksMenu": "Выбраць усе",
+    "showCompletedTasks": "Паказаць завершаныя",
+    "startCallRecording": "Пачаць запіс званка",
+    "startVoiceRecording": "Пачаць галасавы запіс",
+    "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
 }

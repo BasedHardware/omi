@@ -64,6 +64,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get copySummary => 'Sao chép tóm tắt';
 
   @override
+  String get copyConversationId => 'Sao chép ID cuộc trò chuyện';
+
+  @override
+  String get conversationIdCopied => 'Đã sao chép ID cuộc trò chuyện vào clipboard';
+
+  @override
   String get testPrompt => 'Thử nghiệm';
 
   @override
@@ -2372,6 +2378,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get batteryLevel => 'Mức Pin';
 
   @override
+  String get charging => 'Đang sạc';
+
+  @override
   String get productUpdate => 'Cập Nhật Sản Phẩm';
 
   @override
@@ -4528,12 +4537,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Gói của bạn đã kết thúc vào $date.\\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.';
+    return 'Gói của bạn đã kết thúc vào $date.\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Gói của bạn được đặt để hủy vào $date.\\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+    return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override
@@ -6541,7 +6550,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Đặt $appName làm ứng dụng tóm tắt mặc định của bạn?\\n\\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.';
+    return 'Đặt $appName làm ứng dụng tóm tắt mặc định của bạn?\n\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.';
   }
 
   @override
@@ -8289,6 +8298,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Hiển thị nút gọi điện';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Hiển thị nút gọi điện trên màn hình chính';
+
+  @override
   String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
 
   @override
@@ -9123,4 +9138,106 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Bạn đã đạt giới hạn hàng tháng. Nâng cấp để tiếp tục trò chuyện với Omi không giới hạn.';
+
+  @override
+  String get voiceResponseAudio => 'Đọc to phản hồi của Omi';
+
+  @override
+  String get voiceResponseMode => 'Phản hồi bằng giọng nói';
+
+  @override
+  String get voiceResponseModeTitle => 'Khi nào đọc phản hồi';
+
+  @override
+  String get voiceResponseOff => 'Tắt';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Chỉ tai nghe';
+
+  @override
+  String get voiceResponseAlways => 'Luôn luôn';
+
+  @override
+  String get agreeAndContinue => 'Đồng ý và tiếp tục';
+
+  @override
+  String get startVoiceRecording => 'Bắt đầu ghi âm giọng nói';
+
+  @override
+  String get startCallRecording => 'Bắt đầu ghi âm cuộc gọi';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Chế độ giọng nói';
+
+  @override
+  String get quickActionAskOmi => 'Hỏi Omi bất cứ điều gì';
+
+  @override
+  String get record => 'Ghi âm';
+
+  @override
+  String get stop => 'Dừng';
+
+  @override
+  String get recordWithPhoneMic => 'Ghi âm bằng micro điện thoại';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Ghi lại âm thanh xung quanh bạn';
+
+  @override
+  String get phoneCall => 'Cuộc gọi điện thoại';
+
+  @override
+  String get phoneCallSubtitle => 'Ghi âm cuộc gọi với phiên âm trực tiếp';
+
+  @override
+  String get searchActionItems => 'Tìm kiếm mục hành động';
+
+  @override
+  String get selectActionItems => 'Chọn nhiều';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Xuất $count mục sang…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Đang xuất…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Đã xuất $count sang $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Đã xuất $success trong $total sang $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Hiện đã hoàn thành';
+
+  @override
+  String get hideCompletedTasks => 'Ẩn đã hoàn thành';
+
+  @override
+  String get selectAllTasksMenu => 'Chọn tất cả';
+
+  @override
+  String get connectTaskAppToExport => 'Kết nối ứng dụng tác vụ trong Cài đặt để xuất';
+
+  @override
+  String get connectAction => 'Kết nối';
+
+  @override
+  String get deselectAllTasksMenu => 'Bỏ chọn tất cả';
+
+  @override
+  String get bulkExportAlreadyExported => 'Tất cả các tác vụ đã chọn đều đã được xuất';
+
+  @override
+  String get bulkDeleteFailed => 'Không thể xóa các tác vụ. Vui lòng thử lại.';
 }

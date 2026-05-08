@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:permission_handler/permission_handler.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -133,6 +133,8 @@ class PermissionsInterstitialPage extends StatelessWidget {
                             } else {
                               bool wasGranted = permissionStatus.isGranted;
                               provider.updateLocationPermission(wasGranted);
+                              // iOS-only: chain Always so background location
+                              // updates work in BGTask windows.
                               await provider.alwaysAllowLocation();
                               if (wasGranted) {
                                 provider.updateLocationPermission(true);
@@ -177,20 +179,13 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                     }
                                     if (await Permission.location.serviceStatus.isEnabled) {
                                       var res = await Permission.locationWhenInUse.request();
-                                      if (res.isGranted) {
-                                        var alwaysRes = await Permission.locationAlways.request();
-                                        if (alwaysRes.isGranted) {
-                                          provider.updateLocationPermission(true);
-                                        } else {
-                                          await Future.delayed(const Duration(milliseconds: 2500));
-                                          if (await Permission.locationAlways.status.isGranted) {
-                                            provider.updateLocationPermission(true);
-                                          }
-                                        }
+                                      provider.updateLocationPermission(res.isGranted);
+                                      if (Platform.isIOS && res.isGranted) {
+                                        await provider.alwaysAllowLocation();
                                       }
                                     }
                                   });
-                                  MixpanelManager().permissionsInterstitialCompleted();
+                                  PlatformManager.instance.analytics.permissionsInterstitialCompleted();
                                   provider.setLoading(false);
                                   if (context.mounted) {
                                     _goHome(context);

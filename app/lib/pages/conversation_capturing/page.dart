@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,7 +16,6 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -63,7 +63,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.streamRecording();
-        MixpanelManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
     } else {
       // Mute - pause recording with interesting haptic
@@ -80,7 +80,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.stopStreamRecording();
-        MixpanelManager().phoneMicRecordingStopped();
+        PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     }
   }
@@ -172,6 +172,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
+        final effectivelyMuted = _isMuted || provider.isCallActive;
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -196,16 +197,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Text(
                     provider.photos.isNotEmpty
                         ? "📸"
-                        : _isMuted
-                        ? "🔇"
-                        : "🎙️",
+                        : effectivelyMuted
+                            ? "🔇"
+                            : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
+                          : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -223,6 +224,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                         // Transcripts, photos + inline WAL safety indicator
                         Column(
                           children: [
+                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                             Expanded(
                               child: provider.segments.isEmpty && provider.photos.isEmpty
                                   ? Center(
@@ -232,64 +234,64 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                  ? _buildChronologicalTimeline(provider)
-                                  : getTranscriptWidget(
-                                      false,
-                                      provider.segments,
-                                      provider.photos,
-                                      deviceProvider.connectedDevice,
-                                      bottomMargin: 150,
-                                      suggestions: provider.suggestionsBySegmentId,
-                                      taggingSegmentIds: provider.taggingSegmentIds,
-                                      onAcceptSuggestion: (suggestion) {
-                                        provider.assignSpeakerToConversation(
-                                          suggestion.speakerId,
-                                          suggestion.personId,
-                                          suggestion.personName,
-                                          [suggestion.segmentId],
-                                        );
-                                      },
-                                      editSegment: (segmentId, speakerId) {
-                                        final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                          context,
-                                          listen: false,
-                                        );
-                                        if (!connectivityProvider.isConnected) {
-                                          ConnectivityProvider.showNoInternetDialog(context);
-                                          return;
-                                        }
-                                        showModalBottomSheet(
-                                          context: context,
-                                          isScrollControlled: true,
-                                          backgroundColor: Colors.black,
-                                          shape: const RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                          ),
-                                          builder: (context) {
-                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                              (s) => s.speakerId == speakerId,
-                                              orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                      ? _buildChronologicalTimeline(provider)
+                                      : getTranscriptWidget(
+                                          false,
+                                          provider.segments,
+                                          provider.photos,
+                                          deviceProvider.connectedDevice,
+                                          bottomMargin: 150,
+                                          suggestions: provider.suggestionsBySegmentId,
+                                          taggingSegmentIds: provider.taggingSegmentIds,
+                                          onAcceptSuggestion: (suggestion) {
+                                            provider.assignSpeakerToConversation(
+                                              suggestion.speakerId,
+                                              suggestion.personId,
+                                              suggestion.personName,
+                                              [suggestion.segmentId],
                                             );
-                                            return NameSpeakerBottomSheet(
-                                              speakerId: speakerId,
-                                              segmentId: segmentId,
-                                              segments: provider.segments,
-                                              suggestion: suggestion,
-                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                                await provider.assignSpeakerToConversation(
-                                                  speakerId,
-                                                  personId,
-                                                  personName,
-                                                  segmentIds,
+                                          },
+                                          editSegment: (segmentId, speakerId) {
+                                            final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                              context,
+                                              listen: false,
+                                            );
+                                            if (!connectivityProvider.isConnected) {
+                                              ConnectivityProvider.showNoInternetDialog(context);
+                                              return;
+                                            }
+                                            showModalBottomSheet(
+                                              context: context,
+                                              isScrollControlled: true,
+                                              backgroundColor: Colors.black,
+                                              shape: const RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                              ),
+                                              builder: (context) {
+                                                final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                                  (s) => s.speakerId == speakerId,
+                                                  orElse: () => SpeakerLabelSuggestionEvent.empty(),
+                                                );
+                                                return NameSpeakerBottomSheet(
+                                                  speakerId: speakerId,
+                                                  segmentId: segmentId,
+                                                  segments: provider.segments,
+                                                  suggestion: suggestion,
+                                                  onSpeakerAssigned:
+                                                      (speakerId, personId, personName, segmentIds) async {
+                                                    await provider.assignSpeakerToConversation(
+                                                      speakerId,
+                                                      personId,
+                                                      personName,
+                                                      segmentIds,
+                                                    );
+                                                  },
                                                 );
                                               },
                                             );
                                           },
-                                        );
-                                      },
-                                    ),
+                                        ),
                             ),
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
                           ],
                         ),
                         // Summary Tab
@@ -357,7 +359,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                            color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(

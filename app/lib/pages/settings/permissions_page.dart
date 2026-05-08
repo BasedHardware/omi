@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PermissionsPage extends StatefulWidget {
@@ -83,7 +83,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         await openAppSettings();
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: name, granted: status.isGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: name, granted: status.isGranted);
     }
   }
 
@@ -104,7 +104,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         }
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'bluetooth', granted: _bluetoothGranted);
     }
   }
 
@@ -114,7 +114,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
     } else {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'background', granted: _backgroundGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'background', granted: _backgroundGranted);
     }
   }
 
@@ -125,17 +125,18 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
       if (await Permission.location.serviceStatus.isDisabled) {
         await openAppSettings();
         await _checkPermissions();
-        MixpanelManager().permissionChanged(permission: 'location', granted: _locationGranted);
+        PlatformManager.instance.analytics.permissionChanged(permission: 'location', granted: _locationGranted);
         return;
       }
       final status = await Permission.locationWhenInUse.request();
-      if (status.isGranted) {
+      if (status.isGranted && Platform.isIOS) {
+        // iOS-only: chain Always so background location updates work.
         await Permission.locationAlways.request();
       } else if (status.isPermanentlyDenied) {
         await openAppSettings();
       }
       await _checkPermissions();
-      MixpanelManager().permissionChanged(permission: 'location', granted: _locationGranted);
+      PlatformManager.instance.analytics.permissionChanged(permission: 'location', granted: _locationGranted);
     }
   }
 
@@ -156,10 +157,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
                     child: Column(
                       children: [
                         _buildPermissionRow(
@@ -207,10 +205,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       context.l10n.permissionsPageDescription,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
                     ),
                   ),
                 ],
@@ -232,11 +227,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         child: Row(
           children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
-            ),
+            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
@@ -246,10 +237,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
             ),
             Text(
               isGranted ? context.l10n.permissionEnabled : context.l10n.permissionEnable,
-              style: TextStyle(
-                color: isGranted ? Colors.white.withValues(alpha: 0.5) : Colors.white,
-                fontSize: 15,
-              ),
+              style: TextStyle(color: isGranted ? Colors.white.withValues(alpha: 0.5) : Colors.white, fontSize: 15),
             ),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),

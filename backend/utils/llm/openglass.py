@@ -2,7 +2,7 @@ from typing import List
 
 from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
-from utils.llm.clients import llm_mini
+from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 
 
@@ -28,6 +28,6 @@ async def describe_image(uid: str, base64_data: str) -> str:
     }
 
     with track_usage(uid, Features.OPENGLASS):
-        response = await llm_mini.ainvoke([message], config={"max_tokens": 150})
+        response = await get_llm('openglass').ainvoke([message], config={"max_tokens": 150})
     description = response.content
     return description.strip() if description is not None and description != '""' else ""

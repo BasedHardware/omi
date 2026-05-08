@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopiraj ID razgovora",
+    "conversationIdCopied": "ID razgovora kopiran u međuspremnik",
     "testPrompt": "Test upit",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "Nivo baterije",
+    "charging": "Punjenje",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Vaš plan je završio {date}.\\nPonovno se pretplatite sada - bit ćete odmah naplaćeni za novi period naplate.",
+    "planEndedOn": "Vaš plan je završio {date}.\nPonovno se pretplatite sada - bit ćete odmah naplaćeni za novi period naplate.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\\nPonovno se pretplatite sada da zadržite svoje benefite - nema naknade do {date}.",
+    "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\nPonovno se pretplatite sada da zadržite svoje benefite - nema naknade do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojaviti ovdje.\\nDodirnite + da ga kreirate ručno.",
+    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojaviti ovdje.\nDodirnite + da ga kreirate ručno.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Instalirajte Omi na vaš\\nApple Watch",
+    "installOmiOnAppleWatch": "Instalirajte Omi na vaš\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Otvorite Omi na vaš\\nApple Watch",
+    "openOmiOnAppleWatch": "Otvorite Omi na vaš\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "Stvaranje vaše\\n2025 priče...",
+    "wrappedCreatingYourStory": "Stvaranje vaše\n2025 priče...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "Nešto je\\npoš pošlo naopako",
+    "wrappedSomethingWentWrong": "Nešto je\npoš pošlo naopako",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "Zvučnik",
     "phoneEndCall": "Završi",
     "phoneCallSettingsTitle": "Podešavanja telefonskih poziva",
+    "showPhoneCallButtonTitle": "Prikaži dugme za pozive",
+    "showPhoneCallButtonDesc": "Prikaži dugme za pozive na početnom ekranu",
     "yourVerifiedNumbers": "Tvoji verifikovani brojevi",
     "verifiedNumbersDescription": "Kada pozoveš nekoga, oni će videti ovaj broj na svom telefonu",
     "noVerifiedNumbers": "Nema verifikovanih brojeva",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "Baterija",
     "day": "Dan",
     "noBatteryDataYet": "Još nema podataka o bateriji",
-    "week": "Sedmica"
+    "week": "Sedmica",
+    "voiceResponseAudio": "Pročitaj Omi odgovor naglas",
+    "voiceResponseMode": "Glasovni odgovor",
+    "voiceResponseModeTitle": "Kada izgovarati odgovore",
+    "voiceResponseOff": "Isključeno",
+    "voiceResponseHeadphonesOnly": "Samo slušalice",
+    "voiceResponseAlways": "Uvijek",
+    "agreeAndContinue": "Slažem se i nastavi",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Glasovni način",
+    "quickActionAskOmi": "Pitajte Omi bilo što",
+    "record": "Snimi",
+    "stop": "Zaustavi",
+    "recordWithPhoneMic": "Snimaj mikrofonom telefona",
+    "recordWithPhoneMicSubtitle": "Snimite zvuk oko vas",
+    "phoneCall": "Telefonski poziv",
+    "phoneCallSubtitle": "Snimajte poziv s transkripcijom uživo",
+    "bulkExportInProgress": "Izvoz u toku…",
+    "bulkExportPartial": "Izvezeno {success} od {total} u {platform}",
+    "bulkExportSuccess": "Izvezeno {count} u {platform}",
+    "chooseExportDestination": "Izvezi {count} stavku/i u…",
+    "connectAction": "Poveži",
+    "connectTaskAppToExport": "Povežite aplikaciju za zadatke u Postavkama za izvoz",
+    "deselectAllTasksMenu": "Poništi odabir svih",
+    "hideCompletedTasks": "Sakrij završene",
+    "searchActionItems": "Pretraži akcione stavke",
+    "selectActionItems": "Odaberi više",
+    "selectAllTasksMenu": "Odaberi sve",
+    "showCompletedTasks": "Prikaži završene",
+    "startCallRecording": "Pokreni snimanje poziva",
+    "startVoiceRecording": "Pokreni glasovno snimanje",
+    "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
+    "bulkDeleteFailed": "Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo."
 }

@@ -30,7 +30,9 @@ class PlanLimits {
 
 @JsonSerializable(fieldRename: FieldRename.snake)
 class Subscription {
+  @JsonKey(unknownEnumValue: PlanType.basic)
   final PlanType plan;
+  @JsonKey(unknownEnumValue: SubscriptionStatus.inactive)
   final SubscriptionStatus status;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;

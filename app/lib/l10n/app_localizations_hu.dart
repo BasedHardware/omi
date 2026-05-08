@@ -64,6 +64,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get copySummary => 'Összefoglaló másolása';
 
   @override
+  String get copyConversationId => 'Társalgás azonosítójának másolása';
+
+  @override
+  String get conversationIdCopied => 'A társalgás azonosítója vágólapra másolva';
+
+  @override
   String get testPrompt => 'Prompt tesztelése';
 
   @override
@@ -2383,6 +2389,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryLevel => 'Akkumulátor szint';
 
   @override
+  String get charging => 'Töltés';
+
+  @override
   String get productUpdate => 'Termékfrissítés';
 
   @override
@@ -4543,12 +4552,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'A csomagja $date-án lejárt.\\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.';
+    return 'A csomagja $date-án lejárt.\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'A csomagja $date-án törlésre van beállítva.\\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+    return 'A csomagja $date-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
   }
 
   @override
@@ -6566,7 +6575,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Beállítja a(z) $appName alkalmazást alapértelmezett összefoglaló alkalmazásként?\\n\\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.';
+    return 'Beállítja a(z) $appName alkalmazást alapértelmezett összefoglaló alkalmazásként?\n\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.';
   }
 
   @override
@@ -8324,6 +8333,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Hivasbeallitasok';
 
   @override
+  String get showPhoneCallButtonTitle => 'Telefonhívás gomb megjelenítése';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Telefonhívás gomb megjelenítése a főképernyőn';
+
+  @override
   String get yourVerifiedNumbers => 'Ellenorzott szamai';
 
   @override
@@ -9162,4 +9177,106 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Elérted a havi limitedet. Frissíts, hogy korlátozás nélkül folytasd a csevegést az Omival.';
+
+  @override
+  String get voiceResponseAudio => 'Omi válaszának felolvasása';
+
+  @override
+  String get voiceResponseMode => 'Hangválasz';
+
+  @override
+  String get voiceResponseModeTitle => 'Mikor szólaljon meg a válasz';
+
+  @override
+  String get voiceResponseOff => 'Ki';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Csak fülhallgató';
+
+  @override
+  String get voiceResponseAlways => 'Mindig';
+
+  @override
+  String get agreeAndContinue => 'Elfogadom és folytatom';
+
+  @override
+  String get startVoiceRecording => 'Hangfelvétel indítása';
+
+  @override
+  String get startCallRecording => 'Hívásfelvétel indítása';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Hangmód';
+
+  @override
+  String get quickActionAskOmi => 'Kérdezz meg bármit Omitól';
+
+  @override
+  String get record => 'Felvétel';
+
+  @override
+  String get stop => 'Leállítás';
+
+  @override
+  String get recordWithPhoneMic => 'Felvétel a telefon mikrofonjával';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Rögzítse a környezete hangját';
+
+  @override
+  String get phoneCall => 'Telefonhívás';
+
+  @override
+  String get phoneCallSubtitle => 'Hívás rögzítése élő átirattal';
+
+  @override
+  String get searchActionItems => 'Teendők keresése';
+
+  @override
+  String get selectActionItems => 'Több kijelölése';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count elem exportálása ide…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportálás…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count exportálva ide: $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success/$total exportálva ide: $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Befejezettek megjelenítése';
+
+  @override
+  String get hideCompletedTasks => 'Befejezettek elrejtése';
+
+  @override
+  String get selectAllTasksMenu => 'Összes kijelölése';
+
+  @override
+  String get connectTaskAppToExport => 'Csatlakoztasson egy feladatalkalmazást a Beállításokban az exportáláshoz';
+
+  @override
+  String get connectAction => 'Csatlakoztatás';
+
+  @override
+  String get deselectAllTasksMenu => 'Összes kijelölés törlése';
+
+  @override
+  String get bulkExportAlreadyExported => 'Az összes kiválasztott feladat már exportálva van';
+
+  @override
+  String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
 }

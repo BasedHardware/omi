@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.533+828
+version: 1.0.534+835
 
 
 environment:
@@ -50,14 +50,7 @@ dependencies:
 
   # Analytics and Support
   intercom_flutter: 9.4.22
-  mixpanel_flutter:
-    git:
-      url: https://github.com/beastoin/mixpanel-flutter.git
-      ref: f9234e9
-  mixpanel_analytics:
-    git:
-      url: https://github.com/mdmohsin7/mixpanel_analytics.git
-      ref: master
+  posthog_flutter: ^5.24.0
 
   # Logging
   talker_flutter: 5.0.0
@@ -122,6 +115,8 @@ dependencies:
   webview_flutter: 4.13.0
   flutter_sound: 9.25.1
   just_audio: ^0.9.39
+  audio_session: ^0.1.21
+  flutter_tts: ^4.2.0
   video_player: ^2.8.2
   web_socket_channel: ^3.0.3
   image_picker: ^1.1.2
@@ -143,6 +138,7 @@ dependencies:
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
+  quick_actions: ^1.0.0
 
 dependency_overrides:
   js: ^0.7.1

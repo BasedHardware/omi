@@ -849,11 +849,16 @@ class FloatingControlBarManager {
 
     private var window: FloatingControlBarWindow?
     private var snoozeTimer: Timer?
+    private var pillsWindow: AgentPillsWindow?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var historyChatProvider: ChatProvider?
     private var floatingChatProvider: ChatProvider?
+
+    /// Public read-only access to the floating bar's chat provider so the
+    /// agent pills manager can inherit the working directory / model.
+    var sharedFloatingProvider: ChatProvider? { floatingChatProvider }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -986,7 +991,7 @@ class FloatingControlBarManager {
         barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
             Task { @MainActor in
-                await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+                await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
             }
         }
 
@@ -1061,6 +1066,26 @@ class FloatingControlBarManager {
             scheduleSnoozeTimer()
         } else if snoozedUntil != nil {
             snoozedUntil = nil
+        }
+
+        // Create the agent pills overlay window and anchor it under the bar.
+        let pills = AgentPillsWindow()
+        pills.attach(to: barWindow)
+        self.pillsWindow = pills
+
+        // Listen for "open in chat" requests from a pill so the user can
+        // continue an agent's task inline if they want.
+        NotificationCenter.default.addObserver(
+            forName: .agentPillRequestedChat, object: nil, queue: .main
+        ) { [weak barWindow] note in
+            guard let barWindow = barWindow else { return }
+            Task { @MainActor in
+                let query = (note.userInfo?["query"] as? String) ?? ""
+                barWindow.showAIConversation()
+                if !query.isEmpty {
+                    barWindow.state.aiInputText = query
+                }
+            }
         }
     }
 
@@ -1248,11 +1273,12 @@ class FloatingControlBarManager {
 
         guard let provider = activeFloatingProvider() else { return }
 
-        // Re-wire the onSendQuery to use the isolated floating-bar provider
+        // Re-wire the onSendQuery to use the isolated floating-bar provider.
+        // Subsequent typed messages also go through the AI router.
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.sendAIQuery(message, barWindow: window, provider: provider)
+                await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
             }
         }
 
@@ -1276,10 +1302,48 @@ class FloatingControlBarManager {
         window.state.currentQueryFromVoice = fromVoice
         window.orderFrontRegardless()
 
-        // Auto-send the query
+        // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
+        // we need to apply the same router rule here ourselves.
         Task { @MainActor in
-            await self.sendAIQuery(query, barWindow: window, provider: provider)
+            await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
         }
+    }
+
+    /// Ask the router (Haiku) whether this query should stay in the inline
+    /// chat or get hoisted into a background agent pill, then dispatch to
+    /// whichever path it chose. The router call is ~300-500ms; we show the
+    /// inline "thinking" UI immediately so the user knows the message landed.
+    private func routeQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        fromVoice: Bool
+    ) async {
+        // Show the thinking state immediately so there's no perceptible lag
+        // while the router thinks. If the router decides "agent" we'll tear
+        // this down before the chat actually streams anything.
+        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+
+        let decision = await AgentPillsManager.classify(message)
+        if decision.route == .agent {
+            let model = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6"
+                : ShortcutSettings.shared.selectedModel
+            _ = AgentPillsManager.shared.spawnFromUserQuery(
+                message,
+                model: model,
+                fromVoice: fromVoice,
+                preFetchedTitle: decision.title,
+                preFetchedAck: decision.ack
+            )
+            // Tear down the inline state we set up for the thinking spinner.
+            barWindow.state.aiInputText = ""
+            barWindow.closeAIConversation()
+            return
+        }
+        // Chat route: continue with the normal inline flow. sendAIQuery will
+        // re-prepare the visible state, which is idempotent.
+        await sendAIQuery(message, barWindow: barWindow, provider: provider)
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
@@ -1553,24 +1617,26 @@ class FloatingControlBarManager {
 
         // Check monthly usage limit for free users (shared with main chat page).
         let limiter = FloatingBarUsageLimiter.shared
-        if limiter.isLimitReached {
-            guard isActiveQueryGeneration(generation) else { return }
-            barWindow.state.isAILoading = false
-            barWindow.state.showingAIResponse = true
-            barWindow.state.currentAIMessage = ChatMessage(
-                text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
-                sender: .ai
-            )
-            barWindow.resizeToResponseHeightPublic(animated: true)
-            NotificationCenter.default.post(
-                name: .showUsageLimitPopup,
-                object: nil,
-                userInfo: ["reason": "floating_bar"]
-            )
-            return
-        }
+        if provider.isUsingOmiAccountProvider {
+            if limiter.isLimitReached {
+                guard isActiveQueryGeneration(generation) else { return }
+                barWindow.state.isAILoading = false
+                barWindow.state.showingAIResponse = true
+                barWindow.state.currentAIMessage = ChatMessage(
+                    text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
+                    sender: .ai
+                )
+                barWindow.resizeToResponseHeightPublic(animated: true)
+                NotificationCenter.default.post(
+                    name: .showUsageLimitPopup,
+                    object: nil,
+                    userInfo: ["reason": "floating_bar"]
+                )
+                return
+            }
 
-        limiter.recordQuery()
+            limiter.recordQuery()
+        }
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
         let screenshotData = await Task.detached { () -> Data? in

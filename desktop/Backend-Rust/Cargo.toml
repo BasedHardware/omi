@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["ws"] }
+axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
@@ -16,16 +16,12 @@ serde_json = "1"
 # HTTP client (for LLM API calls)
 reqwest = { version = "0.11", features = ["json", "stream"] }
 
-# WebSocket proxy (Deepgram streaming)
-tokio-tungstenite = { version = "0.24.0", features = ["native-tls"] }
-
 # Authentication
 jsonwebtoken = "9"
 
 # Utilities
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.10"
 uuid = { version = "1", features = ["v4"] }
 ulid = "1.1"
 sha2 = "0.10"
@@ -56,5 +52,8 @@ urlencoding = "2.1"
 
 # Redis for conversation visibility
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# GCP authentication (Vertex AI service account tokens)
+gcp_auth = "0.12"
 
 # Note: Using Firestore REST API directly instead of gcloud-sdk for compatibility

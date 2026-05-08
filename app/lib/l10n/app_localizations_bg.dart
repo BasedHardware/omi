@@ -64,6 +64,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get copySummary => 'Копирай обобщение';
 
   @override
+  String get copyConversationId => 'Копиране на ID на разговора';
+
+  @override
+  String get conversationIdCopied => 'ID на разговора е копирано в клипборда';
+
+  @override
   String get testPrompt => 'Тествай подсказка';
 
   @override
@@ -2373,6 +2379,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get batteryLevel => 'Ниво на батерията';
 
   @override
+  String get charging => 'Зареждане';
+
+  @override
   String get productUpdate => 'Актуализация на продукта';
 
   @override
@@ -4533,12 +4542,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Планът ви приключи на $date.\\nАбонирайте се отново сега - ще бъдете таксувани незабавно за нов период на фактуриране.';
+    return 'Планът ви приключи на $date.\nАбонирайте се отново сега - ще бъдете таксувани незабавно за нов период на фактуриране.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Планът ви е настроен да се отмени на $date.\\nАбонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
+    return 'Планът ви е настроен да се отмени на $date.\nАбонирайте се отново сега, за да запазите предимствата си - без такса до $date.';
   }
 
   @override
@@ -6559,7 +6568,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Да зададем $appName като ваше приложение за обобщаване по подразбиране?\\n\\nТова приложение ще се използва автоматично за всички бъдещи резюмета на разговори.';
+    return 'Да зададем $appName като ваше приложение за обобщаване по подразбиране?\n\nТова приложение ще се използва автоматично за всички бъдещи резюмета на разговори.';
   }
 
   @override
@@ -8321,6 +8330,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
 
   @override
+  String get showPhoneCallButtonTitle => 'Показване на бутона за телефонно обаждане';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Показване на бутона за телефонно обаждане на началния екран';
+
+  @override
   String get yourVerifiedNumbers => 'Вашите потвърдени номера';
 
   @override
@@ -9158,4 +9173,106 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Достигнахте месечния си лимит. Надградете, за да продължите да чатите с Omi без ограничения.';
+
+  @override
+  String get voiceResponseAudio => 'Прочитай отговора на Omi на глас';
+
+  @override
+  String get voiceResponseMode => 'Гласов отговор';
+
+  @override
+  String get voiceResponseModeTitle => 'Кога да се произнасят отговорите';
+
+  @override
+  String get voiceResponseOff => 'Изкл';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Само слушалки';
+
+  @override
+  String get voiceResponseAlways => 'Винаги';
+
+  @override
+  String get agreeAndContinue => 'Приемам и продължавам';
+
+  @override
+  String get startVoiceRecording => 'Стартиране на гласов запис';
+
+  @override
+  String get startCallRecording => 'Стартиране на запис на разговор';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Гласов режим';
+
+  @override
+  String get quickActionAskOmi => 'Попитайте Omi всичко';
+
+  @override
+  String get record => 'Запис';
+
+  @override
+  String get stop => 'Спри';
+
+  @override
+  String get recordWithPhoneMic => 'Запис с микрофона на телефона';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Заснемайте звук около вас';
+
+  @override
+  String get phoneCall => 'Телефонно обаждане';
+
+  @override
+  String get phoneCallSubtitle => 'Записвайте обаждане с транскрипция в реално време';
+
+  @override
+  String get searchActionItems => 'Търсене на действия';
+
+  @override
+  String get selectActionItems => 'Избиране на няколко';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Експортиране на $count елемент(а) в…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Експортиране…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Експортирани $count в $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Експортирани $success от $total в $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Показване на завършените';
+
+  @override
+  String get hideCompletedTasks => 'Скриване на завършените';
+
+  @override
+  String get selectAllTasksMenu => 'Избиране на всички';
+
+  @override
+  String get connectTaskAppToExport => 'Свържете приложение за задачи в Настройки, за да експортирате';
+
+  @override
+  String get connectAction => 'Свързване';
+
+  @override
+  String get deselectAllTasksMenu => 'Премахване на избора';
+
+  @override
+  String get bulkExportAlreadyExported => 'Всички избрани задачи вече са експортирани';
+
+  @override
+  String get bulkDeleteFailed => 'Задачите не можаха да бъдат изтрити. Моля, опитайте отново.';
 }

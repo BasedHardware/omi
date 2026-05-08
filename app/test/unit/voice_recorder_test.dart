@@ -433,6 +433,17 @@ void main() {
       }
     });
 
+    Future<File> createPendingWav(String name) async {
+      final wavFile = File(path.join(tempDir.path, name));
+      final sink = wavFile.openWrite();
+      sink.add(WavBytesUtil.getWavHeader(32000, 16000));
+      sink.add(Uint8List(32000));
+      await sink.flush();
+      await sink.close();
+      await SharedPreferencesUtil().saveString('voice_recorder_pending_wav_path', wavFile.path);
+      return wavFile;
+    }
+
     test('transitions to pendingRecovery when WAV file exists', () async {
       // Create a WAV file and persist its path
       final wavFile = File(path.join(tempDir.path, 'pending.wav'));
@@ -475,6 +486,51 @@ void main() {
 
       expect(provider.state, equals(VoiceRecorderState.idle));
       expect(provider.hasPendingRecording, isFalse);
+    });
+
+    test('retry preserves pending WAV when transcription returns empty text', () async {
+      final wavFile = await createPendingWav('empty_retry.wav');
+      var transcriptCallbackCalled = false;
+
+      final provider = VoiceRecorderProvider(transcriber: (_) async => '');
+      provider.setCallbacks(onTranscriptReady: (_, __) => transcriptCallbackCalled = true);
+      await provider.checkPendingRecording();
+
+      await provider.retry();
+
+      expect(provider.state, equals(VoiceRecorderState.transcribeFailed));
+      expect(provider.isActive, isTrue);
+      expect(transcriptCallbackCalled, isFalse);
+      expect(wavFile.existsSync(), isTrue);
+      expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), equals(wavFile.path));
+    });
+
+    test('retry preserves pending WAV when transcription throws', () async {
+      final wavFile = await createPendingWav('failed_retry.wav');
+
+      final provider = VoiceRecorderProvider(transcriber: (_) async => throw Exception('transcription failed'));
+      await provider.checkPendingRecording();
+
+      await provider.retry();
+
+      expect(provider.state, equals(VoiceRecorderState.transcribeFailed));
+      expect(provider.isActive, isTrue);
+      expect(wavFile.existsSync(), isTrue);
+      expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), equals(wavFile.path));
+    });
+
+    test('close discards failed pending WAV only after explicit user removal', () async {
+      final wavFile = await createPendingWav('discard_retry.wav');
+      final provider = VoiceRecorderProvider(transcriber: (_) async => '');
+      await provider.checkPendingRecording();
+      await provider.retry();
+
+      provider.close();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(provider.state, equals(VoiceRecorderState.idle));
+      expect(wavFile.existsSync(), isFalse);
+      expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), isEmpty);
     });
   });
 }

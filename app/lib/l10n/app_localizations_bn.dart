@@ -64,6 +64,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get copySummary => 'সারসংক্ষেপ কপি করুন';
 
   @override
+  String get copyConversationId => 'কথোপকথন আইডি কপি করুন';
+
+  @override
+  String get conversationIdCopied => 'কথোপকথন আইডি ক্লিপবোর্ডে কপি হয়েছে';
+
+  @override
   String get testPrompt => 'পরীক্ষা প্রম্পট';
 
   @override
@@ -2375,6 +2381,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get batteryLevel => 'ব্যাটারি স্তর';
 
   @override
+  String get charging => 'চার্জ হচ্ছে';
+
+  @override
   String get productUpdate => 'পণ্য আপডেট';
 
   @override
@@ -4525,12 +4534,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'আপনার পরিকল্পনা $date তে শেষ হয়েছে।\\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।';
+    return 'আপনার পরিকল্পনা $date তে শেষ হয়েছে।\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'আপনার পরিকল্পনা $date তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
+    return 'আপনার পরিকল্পনা $date তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
   }
 
   @override
@@ -5100,7 +5109,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
+      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
 
   @override
   String get clearChatAction => 'চ্যাট সাফ করুন';
@@ -5395,10 +5404,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get wrappedProcessingDefault => 'প্রক্রিয়াজনীকরণ...';
 
   @override
-  String get wrappedCreatingYourStory => 'আপনার তৈরি করা হচ্ছে\\n২০২৫ গল্প...';
+  String get wrappedCreatingYourStory => 'আপনার তৈরি করা হচ্ছে\n২০২৫ গল্প...';
 
   @override
-  String get wrappedSomethingWentWrong => 'কিছু\\nগলত হয়েছে';
+  String get wrappedSomethingWentWrong => 'কিছু\nগলত হয়েছে';
 
   @override
   String get wrappedAnErrorOccurred => 'একটি ত্রুটি ঘটেছে';
@@ -6544,7 +6553,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\\n\\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।';
+    return '$appName কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\n\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।';
   }
 
   @override
@@ -8295,6 +8304,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ফোন কল সেটিংস';
 
   @override
+  String get showPhoneCallButtonTitle => 'ফোন কল বাটন দেখান';
+
+  @override
+  String get showPhoneCallButtonDesc => 'হোম স্ক্রিনে ফোন কল বাটন প্রদর্শন করুন';
+
+  @override
   String get yourVerifiedNumbers => 'আপনার যাচাইকৃত নম্বর';
 
   @override
@@ -9132,4 +9147,106 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'আপনি আপনার মাসিক সীমায় পৌঁছেছেন। বিনা সীমাবদ্ধতায় Omi-এর সাথে চ্যাট চালিয়ে যেতে আপগ্রেড করুন।';
+
+  @override
+  String get voiceResponseAudio => 'Omi-র উত্তর জোরে পড়ুন';
+
+  @override
+  String get voiceResponseMode => 'ভয়েস প্রতিক্রিয়া';
+
+  @override
+  String get voiceResponseModeTitle => 'কখন উত্তর বলা হবে';
+
+  @override
+  String get voiceResponseOff => 'বন্ধ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'শুধু হেডফোন';
+
+  @override
+  String get voiceResponseAlways => 'সর্বদা';
+
+  @override
+  String get agreeAndContinue => 'সম্মত হই এবং চালিয়ে যান';
+
+  @override
+  String get startVoiceRecording => 'ভয়েস রেকর্ডিং শুরু করুন';
+
+  @override
+  String get startCallRecording => 'কল রেকর্ডিং শুরু করুন';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'ভয়েস মোড';
+
+  @override
+  String get quickActionAskOmi => 'Omi কে যেকোনো কিছু জিজ্ঞেস করুন';
+
+  @override
+  String get record => 'রেকর্ড';
+
+  @override
+  String get stop => 'থামান';
+
+  @override
+  String get recordWithPhoneMic => 'ফোনের মাইক্রোফোন দিয়ে রেকর্ড করুন';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'আপনার চারপাশের অডিও ক্যাপচার করুন';
+
+  @override
+  String get phoneCall => 'ফোন কল';
+
+  @override
+  String get phoneCallSubtitle => 'লাইভ ট্রান্সক্রিপশন সহ কল রেকর্ড করুন';
+
+  @override
+  String get searchActionItems => 'অ্যাকশন আইটেম অনুসন্ধান';
+
+  @override
+  String get selectActionItems => 'একাধিক নির্বাচন';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$countটি আইটেম রপ্তানি করুন…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'রপ্তানি হচ্ছে…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$countটি $platform-এ রপ্তানি হয়েছে';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total-এর মধ্যে $successটি $platform-এ রপ্তানি হয়েছে';
+  }
+
+  @override
+  String get showCompletedTasks => 'সম্পন্ন দেখান';
+
+  @override
+  String get hideCompletedTasks => 'সম্পন্ন লুকান';
+
+  @override
+  String get selectAllTasksMenu => 'সমস্ত নির্বাচন';
+
+  @override
+  String get connectTaskAppToExport => 'রপ্তানি করতে সেটিংসে একটি টাস্ক অ্যাপ সংযুক্ত করুন';
+
+  @override
+  String get connectAction => 'সংযুক্ত করুন';
+
+  @override
+  String get deselectAllTasksMenu => 'সমস্ত নির্বাচন বাতিল';
+
+  @override
+  String get bulkExportAlreadyExported => 'নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে';
+
+  @override
+  String get bulkDeleteFailed => 'কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।';
 }

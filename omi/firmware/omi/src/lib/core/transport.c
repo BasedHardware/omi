@@ -17,7 +17,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
 #include <shell/shell_bt_nus.h>
-#include <zephyr/settings/settings.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
@@ -47,6 +46,9 @@ static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+extern bool is_charging;
+#endif
 static atomic_t pusher_stop_flag;
 
 struct bt_conn *current_connection = NULL;
@@ -94,6 +96,13 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               void *buf,
                                               uint16_t len,
                                               uint16_t offset);
+static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
+static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
+                                                     const struct bt_gatt_attr *attr,
+                                                     void *buf,
+                                                     uint16_t len,
+                                                     uint16_t offset);
+static int notify_charging_status(struct bt_conn *conn, bool force_notify);
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
@@ -168,6 +177,8 @@ static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_charging_status_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -183,6 +194,13 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
                            NULL),
+    BT_GATT_CHARACTERISTIC(&settings_charging_status_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ,
+                           settings_charging_status_read_handler,
+                           NULL,
+                           NULL),
+    BT_GATT_CCC(charging_status_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
 static struct bt_gatt_service settings_service = BT_GATT_SERVICE(settings_service_attr);
@@ -304,6 +322,22 @@ static void audio_ccc_config_changed_handler(const struct bt_gatt_attr *attr, ui
     }
 }
 
+static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    ARG_UNUSED(attr);
+
+    if (value == BT_GATT_CCC_NOTIFY) {
+        LOG_INF("Client subscribed for charging status notifications");
+        if (current_connection != NULL) {
+            (void) notify_charging_status(current_connection, true);
+        }
+    } else if (value == 0) {
+        LOG_INF("Client unsubscribed from charging status notifications");
+    } else {
+        LOG_INF("Invalid charging status CCC value: %u", value);
+    }
+}
+
 static ssize_t audio_data_read_characteristic(struct bt_conn *conn,
                                               const struct bt_gatt_attr *attr,
                                               void *buf,
@@ -417,6 +451,17 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_gain, sizeof(current_gain));
 }
 
+static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
+                                                     const struct bt_gatt_attr *attr,
+                                                     void *buf,
+                                                     uint16_t len,
+                                                     uint16_t offset)
+{
+    uint8_t charging_status = is_charging ? 1U : 0U;
+    LOG_INF("Reading charging status: %u", charging_status);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &charging_status, sizeof(charging_status));
+}
+
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
 {
@@ -470,14 +515,40 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 //
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_REFRESH_INTERVAL_CONNECTED   10000 // 10 seconds
-#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 30000 // 30 seconds
-#define BATTERY_RETRY_INTERVAL          1000  // 1 second - retry when BLE TX buffer unavailable
-#define BATTERY_RETRY_MAX               3     // Maximum retries before giving up for this cycle
+#define BATTERY_REFRESH_INTERVAL_CONNECTED   5000 // 5 seconds
+#define BATTERY_REFRESH_INTERVAL_DISCONNECTED 10000 // 10 seconds
 #define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
 uint8_t battery_percentage = 0;
-static uint8_t battery_retry_count = 0;
+static int8_t charging_status_last_notified = -1;
 void broadcast_battery_level(struct k_work *work_item);
+
+static int notify_charging_status(struct bt_conn *conn, bool force_notify)
+{
+    if (conn == NULL) {
+        return -ENOTCONN;
+    }
+
+    if (!bt_gatt_is_subscribed(
+            conn, &settings_service.attrs[6], BT_GATT_CCC_NOTIFY)) {
+        return 0;
+    }
+
+    uint8_t charging_status = is_charging ? 1U : 0U;
+    if (!force_notify && charging_status_last_notified == (int8_t) charging_status) {
+        return 0;
+    }
+
+    int err = bt_gatt_notify(
+        conn, &settings_service.attrs[6], &charging_status, sizeof(charging_status));
+    if (err) {
+        LOG_WRN("Charging status notify failed: %d", err);
+        return err;
+    }
+
+    charging_status_last_notified = (int8_t) charging_status;
+    LOG_INF("Charging status notified: %u", charging_status);
+    return 0;
+}
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
@@ -497,25 +568,17 @@ void broadcast_battery_level(struct k_work *work_item)
 
         if (is_connected && current_connection != NULL) {
             if (storage_transfer_active()) {
-                battery_retry_count = 0;
                 k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
                 return;
             }
+
+            (void) notify_charging_status(current_connection, false);
+
             // Use the Zephyr BAS function to set (and notify) the battery level
             int err = bt_bas_set_battery_level(battery_percentage);
             if (err) {
-                if (battery_retry_count < BATTERY_RETRY_MAX) {
-                    battery_retry_count++;
-                    LOG_WRN("Error updating battery level: %d, retrying in %d ms (attempt %d/%d)",
-                            err, BATTERY_RETRY_INTERVAL, battery_retry_count, BATTERY_RETRY_MAX);
-                    k_work_reschedule(&battery_work, K_MSEC(BATTERY_RETRY_INTERVAL));
-                    return;
-                }
-                LOG_ERR("Error updating battery level: %d (max retries reached)", err);
+                LOG_ERR("Error updating battery level: %d", err);
             }
-            battery_retry_count = 0;
-        } else {
-            battery_retry_count = 0;
         }
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
@@ -523,7 +586,6 @@ void broadcast_battery_level(struct k_work *work_item)
         }
     } else {
         LOG_ERR("Failed to read battery level");
-        battery_retry_count = 0;
     }
 
     k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
@@ -586,14 +648,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         shell_bt_nus_enable(conn);
     }
 
-#if defined(CONFIG_BT_SMP)
-    /* Request bonding so link keys are persisted by BT settings backend. */
-    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
-    if (sec_err && sec_err != -EALREADY) {
-        LOG_WRN("bt_conn_set_security failed (err %d)", sec_err);
-    }
-#endif
-
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
@@ -635,6 +689,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
         current_connection = NULL;
     }
     current_mtu = 0;
+    charging_status_last_notified = -1;
 
     // Reset the audio TX throttle semaphore so the pusher thread is not
     // left blocked forever if it was waiting for a slot when the connection dropped.
@@ -867,6 +922,56 @@ static void update_mtu(struct bt_conn *conn)
     }
 
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
+}
+
+static void log_local_ble_addresses(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+
+    if (count == 0U) {
+        LOG_WRN("No local BLE identity address found");
+        printk("BLE_ADDR: unavailable (count=0)\n");
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        char addr[BT_ADDR_LE_STR_LEN];
+
+        bt_addr_le_to_str(&addrs[i], addr, sizeof(addr));
+        LOG_INF("BLE identity[%u]: %s", (unsigned int)i, addr);
+        printk("BLE_ADDR[%u]: %s\n", (unsigned int)i, addr);
+    }
+}
+
+static int ensure_local_ble_identity(void)
+{
+#if defined(CONFIG_BT_SETTINGS)
+    int err = settings_load();
+    if (err && err != -ENOENT) {
+        LOG_ERR("Failed to load BT settings (err %d)", err);
+        return err;
+    }
+#endif
+
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+    if (count > 0U) {
+        return 0;
+    }
+
+    int id = bt_id_create(NULL, NULL);
+    if (id < 0) {
+        LOG_ERR("Failed to create local BLE identity (err %d)", id);
+        return id;
+    }
+
+    LOG_INF("Created local BLE identity %d", id);
+    return 0;
 }
 
 //
@@ -1221,22 +1326,15 @@ int transport_start()
         return err;
     }
 
-#if defined(CONFIG_BT_SETTINGS)
-    err = settings_load_subtree("bt");
-    if (err == -ENOENT) {
-        LOG_INF("No persisted BT bond keys yet");
-    } else if (err) {
-        LOG_WRN("Failed to load BT settings (err %d)", err);
-    }
-#endif
-
     LOG_INF("Transport bluetooth initialized");
 
-    // Load settings AFTER bt_enable so BLE identity address is available
-    err = settings_load();
+    err = ensure_local_ble_identity();
     if (err) {
-        LOG_WRN("BLE settings_load failed (err %d), advertising may fail", err);
+        LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
+
+    // Production-line helper: emit local BLE addresses on UART for fixture parsing.
+    log_local_ble_addresses();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();

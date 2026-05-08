@@ -64,6 +64,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get copySummary => 'Kopier opsummering';
 
   @override
+  String get copyConversationId => 'Kopiér samtale-ID';
+
+  @override
+  String get conversationIdCopied => 'Samtale-ID kopieret til udklipsholder';
+
+  @override
   String get testPrompt => 'Test prompt';
 
   @override
@@ -2350,6 +2356,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get batteryLevel => 'Batteriniveau';
 
   @override
+  String get charging => 'Oplader';
+
+  @override
   String get productUpdate => 'Produktopdatering';
 
   @override
@@ -4505,12 +4514,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Dit abonnement sluttede $date.\\nGentilmeld dig nu - du vil straks blive opkrævet for en ny faktureringsperiode.';
+    return 'Dit abonnement sluttede $date.\nGentilmeld dig nu - du vil straks blive opkrævet for en ny faktureringsperiode.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Dit abonnement er sat til at blive annulleret $date.\\nGentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
+    return 'Dit abonnement er sat til at blive annulleret $date.\nGentilmeld dig nu for at beholde dine fordele - ingen opkrævning indtil $date.';
   }
 
   @override
@@ -6520,7 +6529,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Angiv $appName som din standardapp til resuméer?\\n\\nDenne app vil automatisk blive brugt til alle fremtidige samtaleresuméer.';
+    return 'Angiv $appName som din standardapp til resuméer?\n\nDenne app vil automatisk blive brugt til alle fremtidige samtaleresuméer.';
   }
 
   @override
@@ -8270,6 +8279,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Opkaldsindstillinger';
 
   @override
+  String get showPhoneCallButtonTitle => 'Vis telefonopkaldsknap';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Vis knap til telefonopkald på startskærmen';
+
+  @override
   String get yourVerifiedNumbers => 'Dine verificerede numre';
 
   @override
@@ -9109,4 +9124,106 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du har nået din månedlige grænse. Opgrader for at fortsætte med at chatte med Omi uden begrænsninger.';
+
+  @override
+  String get voiceResponseAudio => 'Læs Omis svar højt';
+
+  @override
+  String get voiceResponseMode => 'Stemmesvar';
+
+  @override
+  String get voiceResponseModeTitle => 'Hvornår svar skal læses';
+
+  @override
+  String get voiceResponseOff => 'Fra';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Kun hovedtelefoner';
+
+  @override
+  String get voiceResponseAlways => 'Altid';
+
+  @override
+  String get agreeAndContinue => 'Accepter og fortsæt';
+
+  @override
+  String get startVoiceRecording => 'Start stemmeoptagelse';
+
+  @override
+  String get startCallRecording => 'Start opkaldsoptagelse';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Stemmemodus';
+
+  @override
+  String get quickActionAskOmi => 'Spørg Omi om alt';
+
+  @override
+  String get record => 'Optag';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get recordWithPhoneMic => 'Optag med telefonens mikrofon';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Optag lyden omkring dig';
+
+  @override
+  String get phoneCall => 'Telefonopkald';
+
+  @override
+  String get phoneCallSubtitle => 'Optag et opkald med live-transskription';
+
+  @override
+  String get searchActionItems => 'Søg i handlingspunkter';
+
+  @override
+  String get selectActionItems => 'Vælg flere';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksportér $count element(er) til…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksporterer…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksporterede $count til $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksporterede $success af $total til $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Vis fuldførte';
+
+  @override
+  String get hideCompletedTasks => 'Skjul fuldførte';
+
+  @override
+  String get selectAllTasksMenu => 'Vælg alle';
+
+  @override
+  String get connectTaskAppToExport => 'Forbind en opgaveapp i Indstillinger for at eksportere';
+
+  @override
+  String get connectAction => 'Forbind';
+
+  @override
+  String get deselectAllTasksMenu => 'Fravælg alle';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alle valgte opgaver er allerede eksporteret';
+
+  @override
+  String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
 }

@@ -24,8 +24,13 @@ export type UserGrowthResponse = {
 };
 
 const REDIS_KEY = "admin:stats:daily-new-users:v1";
-const REDIS_TTL_SECONDS = 30 * 60;
-const LOCAL_TTL_MS = 30 * 60 * 1000;
+// Keep the cache durable for 7 days. Anything older still gets served while a
+// background rebuild runs — the goal is to never block a request behind a
+// full Auth listUsers walk.
+const REDIS_TTL_SECONDS = 7 * 24 * 60 * 60;
+// A cached value newer than this is considered fresh; older values are still
+// returned but trigger a background refresh.
+const FRESH_TTL_MS = 30 * 60 * 1000;
 
 let cachedSeries: UserGrowthSeries | null = null;
 let pendingBuild: Promise<UserGrowthSeries> | null = null;
@@ -87,19 +92,7 @@ async function buildDailySeries(): Promise<UserGrowthSeries> {
   return { data, totalUsers: total, generatedAt: Date.now() };
 }
 
-export async function getUserGrowthSeries(): Promise<UserGrowthSeries> {
-  const now = Date.now();
-
-  if (cachedSeries && now - cachedSeries.generatedAt < LOCAL_TTL_MS) {
-    return cachedSeries;
-  }
-
-  const fromRedis = await getJsonCache<UserGrowthSeries>(REDIS_KEY);
-  if (fromRedis && now - fromRedis.generatedAt < LOCAL_TTL_MS) {
-    cachedSeries = fromRedis;
-    return fromRedis;
-  }
-
+function startBuild(): Promise<UserGrowthSeries> {
   if (pendingBuild) return pendingBuild;
   pendingBuild = buildDailySeries()
     .then(async (series) => {
@@ -111,6 +104,32 @@ export async function getUserGrowthSeries(): Promise<UserGrowthSeries> {
       pendingBuild = null;
     });
   return pendingBuild;
+}
+
+function refreshInBackground() {
+  void startBuild().catch((err) =>
+    console.error("user-growth background rebuild failed:", err),
+  );
+}
+
+export async function getUserGrowthSeries(): Promise<UserGrowthSeries> {
+  const now = Date.now();
+
+  if (cachedSeries) {
+    if (now - cachedSeries.generatedAt >= FRESH_TTL_MS) refreshInBackground();
+    return cachedSeries;
+  }
+
+  const fromRedis = await getJsonCache<UserGrowthSeries>(REDIS_KEY);
+  if (fromRedis) {
+    cachedSeries = fromRedis;
+    if (now - fromRedis.generatedAt >= FRESH_TTL_MS) refreshInBackground();
+    return fromRedis;
+  }
+
+  // No cache anywhere — only the very first request after a Redis flush
+  // pays the cost of a full listUsers walk.
+  return startBuild();
 }
 
 export function sliceSeries(

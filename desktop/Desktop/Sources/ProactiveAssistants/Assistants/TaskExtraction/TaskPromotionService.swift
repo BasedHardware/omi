@@ -55,7 +55,12 @@ actor TaskPromotionService {
         defer { isPromoting = false }
 
         var promotedTasks: [TaskActionItem] = []
-        let maxIterations = targetCount  // Safety cap
+        // Promote at most one task per trigger. Bursting up to targetCount
+        // promotions in a single fire posted up to 5 "New task" notifications
+        // back-to-back, which users perceived as spam. The 5-minute safety
+        // timer + on-complete/on-delete events naturally fill the user's
+        // task list one item at a time.
+        let maxIterations = 1
 
         for _ in 0..<maxIterations {
             do {
@@ -109,14 +114,6 @@ actor TaskPromotionService {
             }
         }
         return promotedTasks
-    }
-
-    /// App startup: ensure minimum tasks are present.
-    /// Returns promoted tasks so caller can insert them directly.
-    @discardableResult
-    func ensureMinimumOnStartup() async -> [TaskActionItem] {
-        log("TaskPromotion: Checking minimum on startup")
-        return await promoteIfNeeded(shouldNotify: false)
     }
 
     // MARK: - Notification Context

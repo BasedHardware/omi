@@ -539,6 +539,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
+    var isUsingOmiAccountProvider: Bool {
+        bridgeMode != BridgeMode.userClaude.rawValue
+    }
+
     /// Whether the agent bridge requires authentication (shown as sheet in UI)
     @Published var isClaudeAuthRequired = false
     /// Auth methods returned by agent bridge
@@ -2274,17 +2278,19 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
         // Block the send, surface the popup, and let the user upgrade.
         let usageLimiter = FloatingBarUsageLimiter.shared
-        if usageLimiter.isLimitReached {
-            log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
-            errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
-            NotificationCenter.default.post(
-                name: .showUsageLimitPopup,
-                object: nil,
-                userInfo: ["reason": "chat"]
-            )
-            return
+        if isUsingOmiAccountProvider {
+            if usageLimiter.isLimitReached {
+                log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
+                errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
+                NotificationCenter.default.post(
+                    name: .showUsageLimitPopup,
+                    object: nil,
+                    userInfo: ["reason": "chat"]
+                )
+                return
+            }
+            usageLimiter.recordQuery()
         }
-        usageLimiter.recordQuery()
 
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {

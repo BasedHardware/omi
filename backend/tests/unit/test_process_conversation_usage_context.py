@@ -57,6 +57,8 @@ for attr in [
     "delete_memory_vector",
     "upsert_vector2",
     "update_vector_metadata",
+    "upsert_action_item_vectors_batch",
+    "delete_action_item_vectors_batch",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 

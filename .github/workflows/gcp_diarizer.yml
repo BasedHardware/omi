@@ -15,6 +15,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: diarizer
@@ -66,3 +70,14 @@ jobs:
       - name: Deploy Diarizer to GKE cluster using Helm
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+
+      - name: Generate deployment summary
+        if: always() # Ensure this step runs even if previous steps fail
+        uses: ./.github/actions/deployment-summary
+        with:
+          workflow_name: ${{ github.workflow }}
+          environment: ${{ github.event.inputs.environment }}
+          branch: ${{ github.event.inputs.branch }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}

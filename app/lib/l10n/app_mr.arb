@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "संभाषण आयडी कॉपी करा",
+    "conversationIdCopied": "संभाषण आयडी क्लिपबोर्डवर कॉपी झाला",
     "testPrompt": "टेस्ट प्रॉम्प्ट",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "बॅटरी स्तर",
+    "charging": "चार्ज होत आहे",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "आपली योजना {date} ला संपली.\\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी आपला तात्काळ चार्ज होईल.",
+    "planEndedOn": "आपली योजना {date} ला संपली.\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी आपला तात्काळ चार्ज होईल.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "आपली योजना {date} ला रद्द होण्यासाठी सेट केली आहे.\\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
+    "planSetToCancelOn": "आपली योजना {date} ला रद्द होण्यासाठी सेट केली आहे.\nआपले फायदे कायम राखण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतीही शुल्क नाही.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "आपल्या संभाषणातील कार्य येथे दिसतील.\\n+ टॅप करून एक मॅन्युअल्ली तयार करा.",
+    "tasksEmptyStateMessage": "आपल्या संभाषणातील कार्य येथे दिसतील.\n+ टॅप करून एक मॅन्युअल्ली तयार करा.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Omi आपल्या\\nApple Watch वर स्थापित करा",
+    "installOmiOnAppleWatch": "Omi आपल्या\nApple Watch वर स्थापित करा",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Omi आपल्या\\nApple Watch वर उघडा",
+    "openOmiOnAppleWatch": "Omi आपल्या\nApple Watch वर उघडा",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "आपल्या\\n२०२५ कथा तयार करत आहे...",
+    "wrappedCreatingYourStory": "आपल्या\n२०२५ कथा तयार करत आहे...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "काहीतरी\\nचुकीचे झाले",
+    "wrappedSomethingWentWrong": "काहीतरी\nचुकीचे झाले",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "स्पीकर",
     "phoneEndCall": "संपला",
     "phoneCallSettingsTitle": "फोन कॉल सेटिंग्ज",
+    "showPhoneCallButtonTitle": "फोन कॉल बटण दाखवा",
+    "showPhoneCallButtonDesc": "मुख्य स्क्रीनवर फोन कॉल बटण प्रदर्शित करा",
     "yourVerifiedNumbers": "तुमचे सत्यापित नंबर",
     "verifiedNumbersDescription": "तू कोणाला कॉल करतोस तेव्हा त्यांना त्यांच्या फोनवर हा नंबर दिसेल",
     "noVerifiedNumbers": "कोणतेही सत्यापित नंबर नाही",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "बॅटरी",
     "day": "दिवस",
     "noBatteryDataYet": "अजून बॅटरी डेटा नाही",
-    "week": "आठवडा"
+    "week": "आठवडा",
+    "voiceResponseAudio": "Omi चे उत्तर मोठ्याने वाचा",
+    "voiceResponseMode": "व्हॉइस प्रतिसाद",
+    "voiceResponseModeTitle": "प्रतिसाद केव्हा बोलायचा",
+    "voiceResponseOff": "बंद",
+    "voiceResponseHeadphonesOnly": "फक्त हेडफोन",
+    "voiceResponseAlways": "नेहमी",
+    "agreeAndContinue": "सहमत व्हा आणि सुरू ठेवा",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "व्हॉइस मोड",
+    "quickActionAskOmi": "Omi ला काहीही विचारा",
+    "record": "रेकॉर्ड",
+    "stop": "थांबवा",
+    "recordWithPhoneMic": "फोन माइकने रेकॉर्ड करा",
+    "recordWithPhoneMicSubtitle": "तुमच्या आजूबाजूचा ऑडिओ कॅप्चर करा",
+    "phoneCall": "फोन कॉल",
+    "phoneCallSubtitle": "लाइव्ह ट्रान्स्क्रिप्शनसह कॉल रेकॉर्ड करा",
+    "bulkExportInProgress": "निर्यात होत आहे…",
+    "bulkExportPartial": "{total} पैकी {success} {platform} वर निर्यात केले",
+    "bulkExportSuccess": "{count} {platform} वर निर्यात केले",
+    "chooseExportDestination": "{count} आयटम निर्यात करा…",
+    "connectAction": "जोडा",
+    "connectTaskAppToExport": "निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा",
+    "deselectAllTasksMenu": "सर्वांची निवड रद्द करा",
+    "hideCompletedTasks": "पूर्ण झालेले लपवा",
+    "searchActionItems": "कृती आयटम शोधा",
+    "selectActionItems": "अनेक निवडा",
+    "selectAllTasksMenu": "सर्व निवडा",
+    "showCompletedTasks": "पूर्ण झालेले दाखवा",
+    "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
+    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
+    "bulkExportAlreadyExported": "निवडलेली सर्व कार्ये आधीच निर्यात केली आहेत",
+    "bulkDeleteFailed": "कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा."
 }

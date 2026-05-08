@@ -259,16 +259,15 @@ class TestPromptCacheRetention:
         clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
         return clients_path.read_text()
 
-    def test_llm_medium_experiment_has_cache_retention(self):
-        """llm_medium_experiment must have extra_body with prompt_cache_retention=24h."""
+    def test_qos_gpt51_has_cache_retention(self):
+        """QoS _get_or_create_openai_llm must set prompt_cache_retention=24h for gpt-5.1."""
         source = self._read_clients_source()
-        # Find the llm_medium_experiment definition block and check extra_body
         match = re.search(
-            r'llm_medium_experiment\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"',
+            r"_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h",
             source,
             re.DOTALL,
         )
-        assert match, "llm_medium_experiment missing extra_body with prompt_cache_retention='24h'"
+        assert match, "_get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
 
     def test_qos_tier_medium_gets_cache_retention(self):
         """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_openai_llm."""

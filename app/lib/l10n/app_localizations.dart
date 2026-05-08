@@ -297,6 +297,18 @@ abstract class AppLocalizations {
   /// **'Copy Summary'**
   String get copySummary;
 
+  /// Menu item to copy conversation ID to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Conversation ID'**
+  String get copyConversationId;
+
+  /// Snackbar message when conversation ID is copied
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation ID copied to clipboard'**
+  String get conversationIdCopied;
+
   /// Menu item for testing prompts
   ///
   /// In en, this message translates to:
@@ -4581,6 +4593,12 @@ abstract class AppLocalizations {
   /// **'Battery Level'**
   String get batteryLevel;
 
+  /// No description provided for @charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Charging'**
+  String get charging;
+
   /// Menu item for product/firmware update
   ///
   /// In en, this message translates to:
@@ -8616,13 +8634,13 @@ abstract class AppLocalizations {
   /// Message when plan has ended
   ///
   /// In en, this message translates to:
-  /// **'Your plan ended on {date}.\\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
+  /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
-  /// **'Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.'**
+  /// **'Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.'**
   String planSetToCancelOn(String date);
 
   /// Info that annual plan starts automatically
@@ -9648,7 +9666,7 @@ abstract class AppLocalizations {
   /// Consent message explaining how user data will be stored and used
   ///
   /// In en, this message translates to:
-  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services (including Deepgram for transcription and OpenAI for analysis) to provide you with AI-powered insights and enable all app features.'**
+  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
   String get consentDataMessage;
 
   /// Empty state message shown when there are no tasks, with instruction to tap + button
@@ -12360,7 +12378,7 @@ abstract class AppLocalizations {
   /// No description provided for @setDefaultAppContent.
   ///
   /// In en, this message translates to:
-  /// **'Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.'**
+  /// **'Set {appName} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.'**
   String setDefaultAppContent(String appName);
 
   /// No description provided for @setDefaultButton.
@@ -14520,7 +14538,7 @@ abstract class AppLocalizations {
   /// No description provided for @capabilityNotification.
   ///
   /// In en, this message translates to:
-  /// **'Notification'**
+  /// **'Smart Notifications'**
   String get capabilityNotification;
 
   /// No description provided for @triggerAudioBytes.
@@ -15512,6 +15530,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Phone Call Settings'**
   String get phoneCallSettingsTitle;
+
+  /// No description provided for @showPhoneCallButtonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Phone Call Button'**
+  String get showPhoneCallButtonTitle;
+
+  /// No description provided for @showPhoneCallButtonDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Display phone call button on home screen'**
+  String get showPhoneCallButtonDesc;
 
   /// No description provided for @yourVerifiedNumbers.
   ///
@@ -17024,6 +17054,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.'**
   String get chatQuotaExceededReply;
+
+  /// Voice response audio feature title
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Omi responses aloud'**
+  String get voiceResponseAudio;
+
+  /// Voice response mode setting row title
+  ///
+  /// In en, this message translates to:
+  /// **'Voice response'**
+  String get voiceResponseMode;
+
+  /// Bottom sheet title for voice response mode selector
+  ///
+  /// In en, this message translates to:
+  /// **'When to speak responses'**
+  String get voiceResponseModeTitle;
+
+  /// Voice response mode: off
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get voiceResponseOff;
+
+  /// Voice response mode: only when headphones connected
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones only'**
+  String get voiceResponseHeadphonesOnly;
+
+  /// Voice response mode: always, including phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get voiceResponseAlways;
+
+  /// Button label on the data and AI consent screen — explicit consent action.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree & Continue'**
+  String get agreeAndContinue;
+
+  /// No description provided for @startVoiceRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Start voice recording'**
+  String get startVoiceRecording;
+
+  /// No description provided for @startCallRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Start call recording'**
+  String get startCallRecording;
+
+  /// Section header for memory knowledge graph on home page
+  ///
+  /// In en, this message translates to:
+  /// **'Mind Map'**
+  String get mindMap;
+
+  /// iOS home screen quick action: opens chat in voice mode
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Mode'**
+  String get voiceMode;
+
+  /// iOS home screen quick action: opens chat page
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi Anything'**
+  String get quickActionAskOmi;
+
+  /// Label for the Record button on the home page app bar
+  ///
+  /// In en, this message translates to:
+  /// **'Record'**
+  String get record;
+
+  /// Label shown on the Record button while a recording is in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get stop;
+
+  /// Title of the phone-mic option in the record-options sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Record with Phone Mic'**
+  String get recordWithPhoneMic;
+
+  /// Subtitle for the phone-mic option in the record-options sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Capture audio around you'**
+  String get recordWithPhoneMicSubtitle;
+
+  /// Title of the phone-call option in the record-options sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Call'**
+  String get phoneCall;
+
+  /// Subtitle for the phone-call option in the record-options sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Record a call with live transcription'**
+  String get phoneCallSubtitle;
+
+  /// Hint text for the action items search field
+  ///
+  /// In en, this message translates to:
+  /// **'Search action items'**
+  String get searchActionItems;
+
+  /// Top-bar button to enter selection mode on the action items page
+  ///
+  /// In en, this message translates to:
+  /// **'Select multiple'**
+  String get selectActionItems;
+
+  /// Title of the bottom sheet listing platforms to bulk-export selected action items to
+  ///
+  /// In en, this message translates to:
+  /// **'Export {count} item(s) to…'**
+  String chooseExportDestination(int count);
+
+  /// Snackbar shown while a bulk export is running
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting…'**
+  String get bulkExportInProgress;
+
+  /// Snackbar shown when a bulk export completes for all items
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {count} to {platform}'**
+  String bulkExportSuccess(int count, String platform);
+
+  /// Snackbar shown when only some items in a bulk export succeeded
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {success} of {total} to {platform}'**
+  String bulkExportPartial(int success, int total, String platform);
+
+  /// Action menu entry to reveal completed tasks on the action items page
+  ///
+  /// In en, this message translates to:
+  /// **'Show completed'**
+  String get showCompletedTasks;
+
+  /// Action menu entry to hide completed tasks on the action items page
+  ///
+  /// In en, this message translates to:
+  /// **'Hide completed'**
+  String get hideCompletedTasks;
+
+  /// Action menu entry to select every task in the action items list
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAllTasksMenu;
+
+  /// Snackbar shown when the user taps Export but no third-party task integration is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a task app in Settings to export'**
+  String get connectTaskAppToExport;
+
+  /// Snackbar action label that opens the Task Integrations settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get connectAction;
+
+  /// Action menu entry that clears any current task selection while staying in selection mode
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get deselectAllTasksMenu;
+
+  /// Snackbar shown when every selected task is already exported and Export is tapped
+  ///
+  /// In en, this message translates to:
+  /// **'All selected tasks already exported'**
+  String get bulkExportAlreadyExported;
+
+  /// Snackbar shown when the bulk delete request fails and the local list is restored
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete tasks. Please try again.'**
+  String get bulkDeleteFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

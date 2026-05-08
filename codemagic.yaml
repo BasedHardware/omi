@@ -25,7 +25,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -84,7 +84,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -116,21 +115,66 @@ workflows:
         script: |
           cd ios && pod install --repo-update
 
+      - name: Resolve next version from TestFlight + App Store
+        script: |
+          set -e
+
+          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
+          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
+          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
+          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
+          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
+
+          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
+          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
+          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
+          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
+
+          echo "TestFlight latest: ${TF_V}+${TF_B}"
+          echo "App Store latest:  ${AS_V}+${AS_B}"
+
+          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
+            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
+            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
+          else
+            semver_gt() {
+              IFS='.' read -r a1 a2 a3 <<< "$1"
+              IFS='.' read -r b1 b2 b3 <<< "$2"
+              [ "$a1" -gt "$b1" ] && return 0
+              [ "$a1" -lt "$b1" ] && return 1
+              [ "$a2" -gt "$b2" ] && return 0
+              [ "$a2" -lt "$b2" ] && return 1
+              [ "$a3" -gt "$b3" ] && return 0
+              return 1
+            }
+
+            if semver_gt "$TF_V" "$AS_V"; then
+              BUILD_NAME="$TF_V"
+              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
+            else
+              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
+              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
+              if [ "$TF_V" = "0.0.0" ]; then
+                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
+              else
+                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
+              fi
+            fi
+
+            MAX_B=$TF_B
+            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
+            BUILD_NUMBER=$((MAX_B + 1))
+          fi
+
+          echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+
       - name: Flutter build ipa
         script: |
           xcode-project use-profiles
-
-          # Extract version from pubspec.yaml (source of truth for both name and build number)
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
-          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
-
-          # Skip if this build number is already on TestFlight
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number $APP_ID || echo "0")
-          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
-            echo "Build $BUILD_NUMBER already on TestFlight (latest: $LATEST_BUILD). Skipping."
-            exit 0
-          fi
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -188,6 +232,8 @@ workflows:
     name: Auto Deploy Android to Internal Play Store
     instance_type: mac_mini_m2
     max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
     environment:
       android_signing:
         - prod_android_upload_keystore
@@ -198,6 +244,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
+        APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
@@ -291,13 +338,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
@@ -310,20 +357,70 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Build AAB with Flutter
+      - name: Resolve next version from TestFlight + App Store + Play Store
         script: |
-          # Extract version from pubspec.yaml (source of truth for both name and build number)
-          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
-          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
+          set -e
 
-          # Skip if this build number is already on Google Play
-          LATEST_BUILD=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal || echo "0")
-          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
-            echo "Build $BUILD_NUMBER already on Google Play (latest: $LATEST_BUILD). Skipping."
-            exit 0
+          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
+          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
+          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
+          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
+          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
+
+          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
+          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
+          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
+          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
+          PLAY_B=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null || echo "0")
+          PLAY_B="${PLAY_B:-0}"
+
+          echo "TestFlight latest: ${TF_V}+${TF_B}"
+          echo "App Store latest:  ${AS_V}+${AS_B}"
+          echo "Play Store latest: ${PLAY_B}"
+
+          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
+            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
+            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
+            [ "$PLAY_B" -ge "$BUILD_NUMBER" ] && BUILD_NUMBER=$((PLAY_B + 1))
+          else
+            semver_gt() {
+              IFS='.' read -r a1 a2 a3 <<< "$1"
+              IFS='.' read -r b1 b2 b3 <<< "$2"
+              [ "$a1" -gt "$b1" ] && return 0
+              [ "$a1" -lt "$b1" ] && return 1
+              [ "$a2" -gt "$b2" ] && return 0
+              [ "$a2" -lt "$b2" ] && return 1
+              [ "$a3" -gt "$b3" ] && return 0
+              return 1
+            }
+
+            if semver_gt "$TF_V" "$AS_V"; then
+              BUILD_NAME="$TF_V"
+              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
+            else
+              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
+              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
+              if [ "$TF_V" = "0.0.0" ]; then
+                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
+              else
+                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
+              fi
+            fi
+
+            MAX_B=$TF_B
+            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
+            [ "$PLAY_B" -gt "$MAX_B" ] && MAX_B=$PLAY_B
+            BUILD_NUMBER=$((MAX_B + 1))
           fi
 
+          echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+
+      - name: Build AAB with Flutter
+        script: |
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
           flutter build appbundle \
@@ -377,7 +474,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -435,7 +532,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -615,7 +711,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -855,13 +950,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
@@ -931,7 +1026,7 @@ workflows:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
       flutter: 3.35.3
-      xcode: 16.4
+      xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
       cache_paths:
@@ -996,7 +1091,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -1109,7 +1203,6 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
@@ -1777,13 +1870,13 @@ workflows:
         script: |
           echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
-          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
           echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
           echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
           echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
@@ -1832,13 +1925,12 @@ workflows:
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
   #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
-  #   OMI_DESKTOP_APP_ENV_V2          — base64-encoded .env bundled into .app at build time
-  #                                     Contains:
-  #                                       OMI_API_URL=https://api.omi.me
-  #                                       OMI_AUTH_URL=https://omi-desktop-auth-208440318997.us-central1.run.app/
+  #   OMI_DESKTOP_APP_ENV_V3          — base64-encoded .env bundled into .app at build time
+  #                                     Contains only secrets (not URLs):
   #                                       FIREBASE_API_KEY=<prod firebase web api key>
   #                                       MIXPANEL_PROJECT_TOKEN=<token>
-  #                                     NOTE: OMI_PYTHON_API_URL is set via workflow vars (not in this secret)
+  #                                     URLs are set via workflow vars (not in this secret):
+  #                                       OMI_DESKTOP_API_URL, OMI_PYTHON_API_URL
   #                                     REMOVED from V1 (now served by backend /v1/config/api-keys):
   #                                       DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY,
   #                                       GOOGLE_CALENDAR_API_KEY
@@ -1876,7 +1968,7 @@ workflows:
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
-        DESKTOP_BACKEND_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app"
+        OMI_DESKTOP_API_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
         OMI_PYTHON_API_URL: "https://api.omi.me"
         GCP_PROJECT: "based-hardware"
         GCP_REGION: "us-central1"
@@ -2168,20 +2260,6 @@ workflows:
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
 
-          # HeapSwiftCore: binary xcframework, copy the macOS slice + its dependency
-          HEAP_FW="Desktop/.build/artifacts/heap-swift-core-sdk/HeapSwiftCore/HeapSwiftCore.xcframework/macos-arm64_x86_64/HeapSwiftCore.framework"
-          if [ -d "$HEAP_FW" ]; then
-            cp -R "$HEAP_FW" "$APP_BUNDLE/Contents/Frameworks/"
-          else
-            echo "WARNING: HeapSwiftCore.framework not found (non-fatal)"
-          fi
-          CSPB_FW="Desktop/.build/artifacts/csswiftprotobuf/CSSwiftProtobuf/CSSwiftProtobuf.xcframework/macos-arm64_x86_64/CSSwiftProtobuf.framework"
-          if [ -d "$CSPB_FW" ]; then
-            cp -R "$CSPB_FW" "$APP_BUNDLE/Contents/Frameworks/"
-          else
-            echo "WARNING: CSSwiftProtobuf.framework not found (non-fatal)"
-          fi
-
           # Add rpath so Sparkle can be found at runtime
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
@@ -2274,13 +2352,14 @@ workflows:
           [ -f "Desktop/embedded.provisionprofile" ] && \
             cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
 
-          # Write runtime .env from OMI_DESKTOP_APP_ENV_V2 secret (base64-encoded, slimmed down)
-          # V2 contains: OMI_API_URL, OMI_AUTH_URL, FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
-          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are now fetched at
+          # Write runtime .env from OMI_DESKTOP_APP_ENV_V3 secret (base64-encoded, secrets only)
+          # V3 contains only: FIREBASE_API_KEY, MIXPANEL_PROJECT_TOKEN
+          # URLs are appended from workflow vars below
+          # API keys (Deepgram, Gemini, Anthropic, Google Calendar) are fetched at
           # runtime from backend /v1/config/api-keys via APIKeyService
-          echo "$OMI_DESKTOP_APP_ENV_V2" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
-          # OMI_PYTHON_API_URL — main Omi Python backend (subscriptions, payments, transcription)
-          # Must point to api.omi.me, NOT the Rust desktop-backend
+          echo "$OMI_DESKTOP_APP_ENV_V3" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          # Append backend URLs from workflow vars
+          echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
@@ -2345,16 +2424,6 @@ workflows:
             "$SPARKLE_FW/Versions/B/Updater.app"
           codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
             "$SPARKLE_FW"
-
-          # Sign Heap frameworks (CSSwiftProtobuf first — dependency of HeapSwiftCore)
-          CSPB_FW="$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
-          if [ -d "$CSPB_FW" ]; then
-            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CSPB_FW"
-          fi
-          HEAP_FW="$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
-          if [ -d "$HEAP_FW" ]; then
-            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$HEAP_FW"
-          fi
 
           # Sign libwebp dylibs (must be before main app bundle)
           if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
@@ -2637,7 +2706,7 @@ workflows:
             -H "Content-Type: application/json" \
             -H "X-Release-Secret: $RELEASE_SECRET" \
             -d "$RELEASE_JSON" \
-            "$DESKTOP_BACKEND_URL/updates/releases")
+            "$OMI_DESKTOP_API_URL/updates/releases")
 
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" = "201" ]; then

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Request, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 
 import db
@@ -23,7 +23,7 @@ MULTION_API_KEY = os.getenv('MULTION_API_KEY', '123')
 
 
 class BooksToBuy(BaseModel):
-    books: List[str] = Field(description="The list of titles of the books mentioned", default=[], min_items=0)
+    books: List[str] = Field(description="The list of titles of the books mentioned", default=[], min_length=0)
 
 
 def retrieve_books_to_buy(transcript: str) -> List[str]:

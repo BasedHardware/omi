@@ -149,6 +149,15 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
     return STTService.deepgram, 'en', 'nova-3'
 
 
+def should_preserve_filler_words(language: str) -> bool:
+    """Return True if filler words should be preserved for the given Deepgram language.
+
+    English filler sounds ("um", "uh") are safe to strip. But in other languages
+    those sounds are real words — e.g. Portuguese "um" means "a/one" (#6575).
+    """
+    return not language.startswith('en')
+
+
 # Initialize Deepgram client based on environment configuration
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
@@ -378,7 +387,7 @@ def connect_to_deepgram(
             smart_format=True,
             profanity_filter=False,
             diarize=True,
-            filler_words=False,
+            filler_words=should_preserve_filler_words(language),
             channels=channels,
             multichannel=channels > 1,
             model=model,

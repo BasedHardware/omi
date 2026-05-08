@@ -39,6 +39,7 @@ pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
 pytest tests/unit/test_vad_onnx.py -v
 pytest tests/unit/test_log_sanitizer.py -v
+pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
@@ -58,6 +59,7 @@ pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_action_item_dedup.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
@@ -69,6 +71,7 @@ pytest tests/unit/test_fair_use_async.py -v
 pytest tests/unit/test_dg_usage_batch.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_pcm_decode.py -v
+pytest tests/unit/test_sync_opus_decode.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_fair_use_upgrade.py -v
@@ -77,11 +80,13 @@ pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
+pytest tests/unit/test_dev_api_folder_filters.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
+pytest tests/unit/test_sync_record_usage.py -v
 pytest tests/unit/test_vision_stream_async.py -v
 pytest tests/unit/test_desktop_transcribe.py -v
 pytest tests/unit/test_desktop_migration.py -v
@@ -99,11 +104,14 @@ pytest tests/unit/test_async_geocoding.py -v
 pytest tests/unit/test_geocoding_cache.py -v
 pytest tests/unit/test_realtime_integrations_usage_tracking.py -v
 pytest tests/unit/test_async_auth.py -v
+pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_thread_join_elimination.py -v
 pytest tests/unit/test_async_http_infrastructure.py -v
 pytest tests/unit/test_clean_sweep_migrations.py -v
 pytest tests/unit/test_omi_qos_tiers.py -v
 pytest tests/unit/test_byok_security.py -v
+pytest tests/unit/test_vertex_ai_system_role.py -v
+pytest tests/unit/test_tts.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

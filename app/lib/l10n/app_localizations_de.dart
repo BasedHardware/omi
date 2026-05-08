@@ -64,6 +64,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get copySummary => 'Zusammenfassung kopieren';
 
   @override
+  String get copyConversationId => 'Konversations-ID kopieren';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID in Zwischenablage kopiert';
+
+  @override
   String get testPrompt => 'Prompt testen';
 
   @override
@@ -2389,6 +2395,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get batteryLevel => 'Batteriestand';
 
   @override
+  String get charging => 'Wird geladen';
+
+  @override
   String get productUpdate => 'Produktaktualisierung';
 
   @override
@@ -4557,12 +4566,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Ihr Plan endete am $date.\\nAbonnieren Sie jetzt erneut - Ihnen wird sofort für einen neuen Abrechnungszeitraum berechnet.';
+    return 'Ihr Plan endete am $date.\nAbonnieren Sie jetzt erneut - Ihnen wird sofort für einen neuen Abrechnungszeitraum berechnet.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Ihr Plan wird am $date gekündigt.\\nAbonnieren Sie jetzt erneut, um Ihre Vorteile zu behalten - keine Gebühr bis $date.';
+    return 'Ihr Plan wird am $date gekündigt.\nAbonnieren Sie jetzt erneut, um Ihre Vorteile zu behalten - keine Gebühr bis $date.';
   }
 
   @override
@@ -6585,7 +6594,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName als Standard-App für Zusammenfassungen festlegen?\\n\\nDiese App wird automatisch für alle zukünftigen Gesprächszusammenfassungen verwendet.';
+    return '$appName als Standard-App für Zusammenfassungen festlegen?\n\nDiese App wird automatisch für alle zukünftigen Gesprächszusammenfassungen verwendet.';
   }
 
   @override
@@ -8357,6 +8366,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Anrufeinstellungen';
 
   @override
+  String get showPhoneCallButtonTitle => 'Anruf-Schaltfläche anzeigen';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Anruf-Schaltfläche auf dem Startbildschirm anzeigen';
+
+  @override
   String get yourVerifiedNumbers => 'Ihre verifizierten Nummern';
 
   @override
@@ -9200,4 +9215,106 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Du hast dein monatliches Limit erreicht. Upgrade, um ohne Einschränkungen mit Omi weiterzuchatten.';
+
+  @override
+  String get voiceResponseAudio => 'Omis Antwort laut vorlesen';
+
+  @override
+  String get voiceResponseMode => 'Sprachantwort';
+
+  @override
+  String get voiceResponseModeTitle => 'Wann Antworten vorgelesen werden';
+
+  @override
+  String get voiceResponseOff => 'Aus';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Nur Kopfhörer';
+
+  @override
+  String get voiceResponseAlways => 'Immer';
+
+  @override
+  String get agreeAndContinue => 'Zustimmen und fortfahren';
+
+  @override
+  String get startVoiceRecording => 'Sprachaufnahme starten';
+
+  @override
+  String get startCallRecording => 'Anrufaufnahme starten';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Sprachmodus';
+
+  @override
+  String get quickActionAskOmi => 'Frag Omi irgendetwas';
+
+  @override
+  String get record => 'Aufnehmen';
+
+  @override
+  String get stop => 'Stopp';
+
+  @override
+  String get recordWithPhoneMic => 'Mit Telefonmikrofon aufnehmen';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Erfasse Audio in deiner Umgebung';
+
+  @override
+  String get phoneCall => 'Anruf';
+
+  @override
+  String get phoneCallSubtitle => 'Anruf mit Live-Transkription aufnehmen';
+
+  @override
+  String get searchActionItems => 'Aktionspunkte durchsuchen';
+
+  @override
+  String get selectActionItems => 'Mehrere auswählen';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count Element(e) exportieren nach…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportieren…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count nach $platform exportiert';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success von $total nach $platform exportiert';
+  }
+
+  @override
+  String get showCompletedTasks => 'Erledigte anzeigen';
+
+  @override
+  String get hideCompletedTasks => 'Erledigte ausblenden';
+
+  @override
+  String get selectAllTasksMenu => 'Alle auswählen';
+
+  @override
+  String get connectTaskAppToExport => 'Verbinde eine Aufgaben-App in den Einstellungen zum Exportieren';
+
+  @override
+  String get connectAction => 'Verbinden';
+
+  @override
+  String get deselectAllTasksMenu => 'Alle abwählen';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alle ausgewählten Aufgaben wurden bereits exportiert';
+
+  @override
+  String get bulkDeleteFailed => 'Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen.';
 }

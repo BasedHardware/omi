@@ -97,12 +97,12 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 1
-    memory: 4Gi
-    nvidia.com/gpu: 1
-  limits:
     cpu: 2
     memory: 6Gi
+    nvidia.com/gpu: 1
+  limits:
+    cpu: 3
+    memory: 12Gi
     nvidia.com/gpu: 1
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -129,8 +129,30 @@ autoscaling:
   enabled: true
   minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 300
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 15
+      - type: Pods
+        value: 1
+        periodSeconds: 15
+      selectPolicy: Max
+  # targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 70
+  requestLatencyP99: 300   # milliseconds
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -157,7 +179,7 @@ affinity:
             - key: service
               operator: In
               values:
-                - vad
+                - diarizer
             - key: env
               operator: In
               values:

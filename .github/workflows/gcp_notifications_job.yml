@@ -17,6 +17,10 @@ on:
         required: true
         default: 'main'
         type: string
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: notifications-job
@@ -32,9 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
+        env:
+          INPUT_ENV: ${{ github.event.inputs.environment }}
         run: |
-          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
-            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+          if [[ "$INPUT_ENV" != "development" && "$INPUT_ENV" != "prod" ]]; then
+            echo "Invalid environment: $INPUT_ENV. Must be 'development' or 'prod'."
             exit 1
           fi
 
@@ -83,3 +89,14 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Generate deployment summary
+        if: always() # Ensure this step runs even if previous steps fail
+        uses: ./.github/actions/deployment-summary
+        with:
+          workflow_name: ${{ github.workflow }}
+          environment: ${{ github.event.inputs.environment }}
+          branch: ${{ github.event.inputs.branch }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}

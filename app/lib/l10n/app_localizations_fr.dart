@@ -64,6 +64,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get copySummary => 'Copier le résumé';
 
   @override
+  String get copyConversationId => 'Copier l\'ID de la conversation';
+
+  @override
+  String get conversationIdCopied => 'ID de la conversation copié dans le presse-papiers';
+
+  @override
   String get testPrompt => 'Tester le prompt';
 
   @override
@@ -2388,6 +2394,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get batteryLevel => 'Niveau de batterie';
 
   @override
+  String get charging => 'En charge';
+
+  @override
   String get productUpdate => 'Mise à jour du produit';
 
   @override
@@ -4563,12 +4572,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Votre forfait s\'est terminé le $date.\\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.';
+    return 'Votre forfait s\'est terminé le $date.\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Votre forfait est programmé pour être annulé le $date.\\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
+    return 'Votre forfait est programmé pour être annulé le $date.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
   }
 
   @override
@@ -6593,7 +6602,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Définir $appName comme application de résumé par défaut ?\\n\\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.';
+    return 'Définir $appName comme application de résumé par défaut ?\n\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.';
   }
 
   @override
@@ -8365,6 +8374,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Parametres d\'appel';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afficher le bouton d\'appel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afficher le bouton d\'appel téléphonique sur l\'écran d\'accueil';
+
+  @override
   String get yourVerifiedNumbers => 'Vos numeros verifies';
 
   @override
@@ -9206,4 +9221,106 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Vous avez atteint votre limite mensuelle. Passez à un plan supérieur pour continuer à discuter avec Omi sans restrictions.';
+
+  @override
+  String get voiceResponseAudio => 'Lire la réponse d\'Omi à haute voix';
+
+  @override
+  String get voiceResponseMode => 'Réponse vocale';
+
+  @override
+  String get voiceResponseModeTitle => 'Quand énoncer les réponses';
+
+  @override
+  String get voiceResponseOff => 'Désactivé';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Casque uniquement';
+
+  @override
+  String get voiceResponseAlways => 'Toujours';
+
+  @override
+  String get agreeAndContinue => 'Accepter et continuer';
+
+  @override
+  String get startVoiceRecording => 'Démarrer l\'enregistrement vocal';
+
+  @override
+  String get startCallRecording => 'Démarrer l\'enregistrement d\'appel';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mode vocal';
+
+  @override
+  String get quickActionAskOmi => 'Demandez n\'importe quoi à Omi';
+
+  @override
+  String get record => 'Enregistrer';
+
+  @override
+  String get stop => 'Arrêter';
+
+  @override
+  String get recordWithPhoneMic => 'Enregistrer avec le micro du téléphone';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capturez l\'audio autour de vous';
+
+  @override
+  String get phoneCall => 'Appel téléphonique';
+
+  @override
+  String get phoneCallSubtitle => 'Enregistrez un appel avec transcription en direct';
+
+  @override
+  String get searchActionItems => 'Rechercher des actions';
+
+  @override
+  String get selectActionItems => 'Sélection multiple';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exporter $count élément(s) vers…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Exportation…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count exportés vers $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$success sur $total exportés vers $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Afficher les terminées';
+
+  @override
+  String get hideCompletedTasks => 'Masquer les terminées';
+
+  @override
+  String get selectAllTasksMenu => 'Tout sélectionner';
+
+  @override
+  String get connectTaskAppToExport => 'Connectez une application de tâches dans les Paramètres pour exporter';
+
+  @override
+  String get connectAction => 'Connecter';
+
+  @override
+  String get deselectAllTasksMenu => 'Tout désélectionner';
+
+  @override
+  String get bulkExportAlreadyExported => 'Toutes les tâches sélectionnées sont déjà exportées';
+
+  @override
+  String get bulkDeleteFailed => 'Impossible de supprimer les tâches. Veuillez réessayer.';
 }

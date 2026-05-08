@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,19 +28,30 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
-class DeveloperSettingsPage extends StatefulWidget {
+class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
   @override
-  State<DeveloperSettingsPage> createState() => _DeveloperSettingsPageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => DeveloperModeProvider()..initialize(),
+      child: const _DeveloperSettingsPageView(),
+    );
+  }
 }
 
-class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
+class _DeveloperSettingsPageView extends StatefulWidget {
+  const _DeveloperSettingsPageView();
+
+  @override
+  State<_DeveloperSettingsPageView> createState() => _DeveloperSettingsPageState();
+}
+
+class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -295,7 +307,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       child: InkWell(
         onTap: () {
           launchUrl(Uri.parse(url));
-          MixpanelManager().pageOpened('$label Docs');
+          PlatformManager.instance.analytics.pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
         child: Padding(
@@ -837,7 +849,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
-                            MixpanelManager().exportMemories();
+                            PlatformManager.instance.analytics.exportMemories();
                             setState(() => provider.loadingExportMemories = false);
                           },
                     child: Container(
@@ -1508,54 +1520,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
-                        // Follow-up Questions
-                        _buildExperimentalItem(
-                          title: context.l10n.followUpQuestions,
-                          description: context.l10n.suggestQuestionsAfterConversations,
-                          icon: FontAwesomeIcons.lightbulb,
-                          value: provider.followUpQuestionEnabled,
-                          onChanged: provider.onFollowUpQuestionChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Goal Tracker
-                        _buildExperimentalItem(
-                          title: context.l10n.goalTracker,
-                          description: context.l10n.trackYourGoalsOnHomepage,
-                          icon: FontAwesomeIcons.bullseye,
-                          value: provider.showGoalTrackerEnabled,
-                          onChanged: provider.onShowGoalTrackerChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Daily Score
-                        _buildExperimentalItem(
-                          title: context.l10n.dailyScore,
-                          description: context.l10n.showDailyScoreOnHomepage,
-                          icon: FontAwesomeIcons.chartLine,
-                          value: provider.showDailyScoreEnabled,
-                          onChanged: provider.onShowDailyScoreChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Tasks
-                        _buildExperimentalItem(
-                          title: context.l10n.tasks,
-                          description: context.l10n.showTasksOnHomepage,
-                          icon: FontAwesomeIcons.listCheck,
-                          value: provider.showTasksEnabled,
-                          onChanged: provider.onShowTasksChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
                         // VAD Gate
                         _buildExperimentalItem(
                           title: 'VAD Gate',
@@ -1637,6 +1601,64 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 activeColor: const Color(0xFF22C55E),
                               ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Home Screen Section
+                  const SizedBox(height: 32),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, right: 4, bottom: 12),
+                    child: Text(
+                      'Home Screen',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+                    child: Column(
+                      children: [
+                        _buildExperimentalItem(
+                          title: context.l10n.goalTracker,
+                          description: context.l10n.trackYourGoalsOnHomepage,
+                          icon: FontAwesomeIcons.bullseye,
+                          value: provider.showGoalTrackerEnabled,
+                          onChanged: provider.onShowGoalTrackerChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        _buildExperimentalItem(
+                          title: context.l10n.dailyScore,
+                          description: context.l10n.showDailyScoreOnHomepage,
+                          icon: FontAwesomeIcons.chartLine,
+                          value: provider.showDailyScoreEnabled,
+                          onChanged: provider.onShowDailyScoreChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        _buildExperimentalItem(
+                          title: context.l10n.tasks,
+                          description: context.l10n.showTasksOnHomepage,
+                          icon: FontAwesomeIcons.listCheck,
+                          value: provider.showTasksEnabled,
+                          onChanged: provider.onShowTasksChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        _buildExperimentalItem(
+                          title: context.l10n.showPhoneCallButtonTitle,
+                          description: context.l10n.showPhoneCallButtonDesc,
+                          icon: FontAwesomeIcons.phone,
+                          value: provider.showPhoneCallButton,
+                          onChanged: provider.onShowPhoneCallButtonChanged,
                         ),
                       ],
                     ),

@@ -64,6 +64,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get copySummary => 'Copiază rezumatul';
 
   @override
+  String get copyConversationId => 'Copiază ID-ul conversației';
+
+  @override
+  String get conversationIdCopied => 'ID-ul conversației a fost copiat în clipboard';
+
+  @override
   String get testPrompt => 'Testează promptul';
 
   @override
@@ -2380,6 +2386,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get batteryLevel => 'Nivel baterie';
 
   @override
+  String get charging => 'Se încarcă';
+
+  @override
   String get productUpdate => 'Actualizare produs';
 
   @override
@@ -4544,12 +4553,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Planul dvs. s-a încheiat pe $date.\\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
+    return 'Planul dvs. s-a încheiat pe $date.\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Planul dvs. este setat să fie anulat pe $date.\\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+    return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
@@ -6567,7 +6576,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Setați $appName ca aplicație implicită de rezumat?\\n\\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
+    return 'Setați $appName ca aplicație implicită de rezumat?\n\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
   }
 
   @override
@@ -8329,6 +8338,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Setari apeluri';
 
   @override
+  String get showPhoneCallButtonTitle => 'Afișați butonul de apel';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Afișați butonul de apel telefonic pe ecranul de pornire';
+
+  @override
   String get yourVerifiedNumbers => 'Numerele dvs. verificate';
 
   @override
@@ -9166,4 +9181,106 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Ai atins limita lunară. Fă upgrade pentru a continua să discuți cu Omi fără restricții.';
+
+  @override
+  String get voiceResponseAudio => 'Citește răspunsul Omi cu voce tare';
+
+  @override
+  String get voiceResponseMode => 'Răspuns vocal';
+
+  @override
+  String get voiceResponseModeTitle => 'Când să rostească răspunsurile';
+
+  @override
+  String get voiceResponseOff => 'Oprit';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Doar căști';
+
+  @override
+  String get voiceResponseAlways => 'Întotdeauna';
+
+  @override
+  String get agreeAndContinue => 'Accept și continuă';
+
+  @override
+  String get startVoiceRecording => 'Porniți înregistrarea vocală';
+
+  @override
+  String get startCallRecording => 'Porniți înregistrarea apelului';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Mod voce';
+
+  @override
+  String get quickActionAskOmi => 'Întrebați Omi orice';
+
+  @override
+  String get record => 'Înregistrează';
+
+  @override
+  String get stop => 'Oprește';
+
+  @override
+  String get recordWithPhoneMic => 'Înregistrează cu microfonul telefonului';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Capturează sunetul din jurul tău';
+
+  @override
+  String get phoneCall => 'Apel telefonic';
+
+  @override
+  String get phoneCallSubtitle => 'Înregistrează un apel cu transcriere în direct';
+
+  @override
+  String get searchActionItems => 'Căutați elemente de acțiune';
+
+  @override
+  String get selectActionItems => 'Selectare multiplă';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Exportă $count element(e) în…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Se exportă…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Exportate $count în $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Exportate $success din $total în $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Afișați finalizate';
+
+  @override
+  String get hideCompletedTasks => 'Ascundeți finalizate';
+
+  @override
+  String get selectAllTasksMenu => 'Selectați tot';
+
+  @override
+  String get connectTaskAppToExport => 'Conectați o aplicație de sarcini în Setări pentru a exporta';
+
+  @override
+  String get connectAction => 'Conectare';
+
+  @override
+  String get deselectAllTasksMenu => 'Deselectați tot';
+
+  @override
+  String get bulkExportAlreadyExported => 'Toate sarcinile selectate sunt deja exportate';
+
+  @override
+  String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
 }

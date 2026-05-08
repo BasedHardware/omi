@@ -64,6 +64,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get copySummary => 'Kopēt kopsavilkumu';
 
   @override
+  String get copyConversationId => 'Kopēt sarakstes ID';
+
+  @override
+  String get conversationIdCopied => 'Sarakstes ID nokopēts starpliktuvē';
+
+  @override
   String get testPrompt => 'Testēt uzvedni';
 
   @override
@@ -2374,6 +2380,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get batteryLevel => 'Akumulatora līmenis';
 
   @override
+  String get charging => 'Uzlāde';
+
+  @override
   String get productUpdate => 'Produkta atjauninājums';
 
   @override
@@ -4528,12 +4537,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Jūsu plāns beidzās $date.\\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.';
+    return 'Jūsu plāns beidzās $date.\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Jūsu plāns ir iestatīts atcelšanai $date.\\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+    return 'Jūsu plāns ir iestatīts atcelšanai $date.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
   }
 
   @override
@@ -6549,7 +6558,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Vai iestatīt $appName kā noklusējuma kopsavilkuma lietotni?\\n\\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.';
+    return 'Vai iestatīt $appName kā noklusējuma kopsavilkuma lietotni?\n\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.';
   }
 
   @override
@@ -8305,6 +8314,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get phoneCallSettingsTitle => 'Zvanu iestatijumi';
 
   @override
+  String get showPhoneCallButtonTitle => 'Rādīt zvana pogu';
+
+  @override
+  String get showPhoneCallButtonDesc => 'Rādīt tālruņa zvana pogu sākuma ekrānā';
+
+  @override
   String get yourVerifiedNumbers => 'Jusu verificetie numuri';
 
   @override
@@ -9141,4 +9156,106 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'Jūs esat sasniedzis savu mēneša limitu. Jauniniet, lai turpinātu tērzēt ar Omi bez ierobežojumiem.';
+
+  @override
+  String get voiceResponseAudio => 'Lasīt Omi atbildi skaļi';
+
+  @override
+  String get voiceResponseMode => 'Balss atbilde';
+
+  @override
+  String get voiceResponseModeTitle => 'Kad atskaņot atbildes';
+
+  @override
+  String get voiceResponseOff => 'Izslēgts';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'Tikai austiņās';
+
+  @override
+  String get voiceResponseAlways => 'Vienmēr';
+
+  @override
+  String get agreeAndContinue => 'Piekrītu un turpināt';
+
+  @override
+  String get startVoiceRecording => 'Sākt balss ierakstīšanu';
+
+  @override
+  String get startCallRecording => 'Sākt zvana ierakstīšanu';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'Balss režīms';
+
+  @override
+  String get quickActionAskOmi => 'Jautājiet Omi jebko';
+
+  @override
+  String get record => 'Ierakstīt';
+
+  @override
+  String get stop => 'Apturēt';
+
+  @override
+  String get recordWithPhoneMic => 'Ierakstīt ar tālruņa mikrofonu';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'Tveriet skaņu sev apkārt';
+
+  @override
+  String get phoneCall => 'Telefona zvans';
+
+  @override
+  String get phoneCallSubtitle => 'Ierakstiet zvanu ar tiešraides transkripciju';
+
+  @override
+  String get searchActionItems => 'Meklēt darbības vienumus';
+
+  @override
+  String get selectActionItems => 'Atlasīt vairākus';
+
+  @override
+  String chooseExportDestination(int count) {
+    return 'Eksportēt $count vienību(-as) uz…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'Eksportē…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return 'Eksportēti $count uz $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return 'Eksportēti $success no $total uz $platform';
+  }
+
+  @override
+  String get showCompletedTasks => 'Rādīt pabeigtās';
+
+  @override
+  String get hideCompletedTasks => 'Slēpt pabeigtās';
+
+  @override
+  String get selectAllTasksMenu => 'Atlasīt visus';
+
+  @override
+  String get connectTaskAppToExport => 'Savienojiet uzdevumu lietotni Iestatījumos, lai eksportētu';
+
+  @override
+  String get connectAction => 'Savienot';
+
+  @override
+  String get deselectAllTasksMenu => 'Noņemt visu atlasi';
+
+  @override
+  String get bulkExportAlreadyExported => 'Visi atlasītie uzdevumi jau ir eksportēti';
+
+  @override
+  String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
 }

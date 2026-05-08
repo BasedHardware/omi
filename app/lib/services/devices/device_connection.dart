@@ -19,9 +19,6 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/app_globals.dart';
-import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
@@ -67,11 +64,20 @@ class DeviceConnectionFactory {
     final locator = device.locator;
     if (locator == null) return null;
 
+    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
+    final deviceName = device.name.toLowerCase();
+    final isOmiGlass = device.type == DeviceType.openglass ||
+        deviceName.contains('openglass') ||
+        deviceName.contains('omiglass') ||
+        deviceName.contains('glass');
+
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        final needsBond = device.type == DeviceType.limitless;
+        // OmiGlass firmware does not have CONFIG_BT_SMP — exclude it from the bonded set
+        // even if it advertised as DeviceType.omi.
+        final needsBond = device.type == DeviceType.limitless || (device.type == DeviceType.omi && !isOmiGlass);
         transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 
@@ -82,14 +88,6 @@ class DeviceConnectionFactory {
       default:
         return null;
     }
-
-    // Create device connection with transport
-    // Use name-based detection as fallback for OmiGlass devices
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
 
     switch (device.type) {
       case DeviceType.omi:
@@ -234,7 +232,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performRetrieveBatteryLevel();
     }
-    _showDeviceDisconnectedNotification();
     return -1;
   }
 
@@ -244,7 +241,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -263,7 +259,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -301,7 +296,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetAudioCodec();
     }
-    _showDeviceDisconnectedNotification();
     return BleAudioCodec.pcm8;
   }
 
@@ -389,7 +383,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetStorageList();
     }
-    _showDeviceDisconnectedNotification();
     return Future.value(<int>[]);
   }
 
@@ -419,7 +412,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performWriteToStorage(numFile, command, offset);
     }
-    _showDeviceDisconnectedNotification();
     return Future.value(false);
   }
 
@@ -429,7 +421,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -441,7 +432,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performCameraStartPhotoController();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -451,7 +441,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performCameraStopPhotoController();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -461,7 +450,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performHasPhotoStreamingCharacteristic();
     }
-    _showDeviceDisconnectedNotification();
     return false;
   }
 
@@ -473,7 +461,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetImageListener(onImageReceived: onImageReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -485,7 +472,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetAccelListener(onAccelChange: onAccelChange);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -497,7 +483,6 @@ abstract class DeviceConnection {
       _features = await performGetFeatures();
       return _features!;
     }
-    _showDeviceDisconnectedNotification();
     return 0;
   }
 
@@ -507,7 +492,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performSetLedDimRatio(ratio);
     }
-    _showDeviceDisconnectedNotification();
   }
 
   Future<void> performSetLedDimRatio(int ratio);
@@ -516,7 +500,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetLedDimRatio();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -526,7 +509,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performSetMicGain(gain);
     }
-    _showDeviceDisconnectedNotification();
   }
 
   Future<void> performSetMicGain(int gain);
@@ -535,7 +517,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetMicGain();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -577,7 +558,6 @@ abstract class DeviceConnection {
       return result;
     }
     debugPrint('DeviceConnection: startWifiSync - device disconnected, showing notification');
-    _showDeviceDisconnectedNotification();
     return false;
   }
 
@@ -589,7 +569,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performStopWifiSync();
     }
-    _showDeviceDisconnectedNotification();
     return false;
   }
 
@@ -608,14 +587,5 @@ abstract class DeviceConnection {
     required void Function(int status) onStatusReceived,
   }) async {
     return null;
-  }
-
-  void _showDeviceDisconnectedNotification() {
-    final ctx = globalNavigatorKey.currentContext;
-    final deviceName = device.name;
-    NotificationService.instance.createNotification(
-      title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',
-      body: ctx?.l10n.deviceDisconnectedBody(deviceName) ?? 'Please reconnect to continue using your $deviceName.',
-    );
   }
 }

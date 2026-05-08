@@ -234,6 +234,28 @@ void main() {
       }
       expect(sync.getInFlightSeconds(), 5); // 500 frames / 100 fps = 5s
     });
+
+    test('returns 0 when all frames are synced', () {
+      for (int i = 0; i < 500; i++) {
+        final key = FrameSyncKey([i & 0xFF]);
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
+        sync.markFrameSynced(key);
+      }
+      expect(sync.getInFlightSeconds(), 0);
+    });
+
+    test('counts only unsynced frames', () {
+      // 300 synced + 200 unsynced = 200 unsynced / 100 fps = 2s
+      for (int i = 0; i < 300; i++) {
+        final key = FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF]);
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: key));
+        sync.markFrameSynced(key);
+      }
+      for (int i = 300; i < 500; i++) {
+        sync.onFrameCaptured(WalFrame(payload: [0, 1, 2], syncKey: FrameSyncKey([i & 0xFF, (i >> 8) & 0xFF])));
+      }
+      expect(sync.getInFlightSeconds(), 2);
+    });
   });
 
   group('finalizeCurrentSession', () {

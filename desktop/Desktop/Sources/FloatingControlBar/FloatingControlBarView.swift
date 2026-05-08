@@ -166,55 +166,92 @@ struct FloatingControlBarView: View {
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button {
-                FloatingControlBarManager.shared.openNotificationAsChat(notification)
-            } label: {
-                HStack(alignment: .top, spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.08))
-                            .frame(width: 34, height: 34)
+        // The entire card opens the chat. A SwiftUI Button only hit-tests its
+        // visible content, so the previous layout left the padding and spacer
+        // as dead zones — users reported clicks landing "on the box" doing
+        // nothing. Wrapping the whole card in a single Button with
+        // contentShape(Rectangle()) makes every pixel clickable. The dismiss
+        // (X) button sits in an overlay on top so it keeps its own hit region.
+        Button {
+            FloatingControlBarManager.shared.openNotificationAsChat(notification)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 34, height: 34)
 
-                        Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(notification.title)
-                            .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-
-                        Text(notification.message)
-                            .scaledFont(size: 12)
-                            .foregroundColor(.white.opacity(0.72))
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 0)
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
 
-            Button {
-                FloatingControlBarManager.shared.dismissCurrentNotification()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white.opacity(0.62))
-                    .frame(width: 18, height: 18)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(notification.title)
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Text(notification.message)
+                        .scaledFont(size: 12)
+                        .foregroundColor(.white.opacity(0.72))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                // Reserve space so text never runs under the overlaid action buttons.
+                Color.clear.frame(width: 90, height: 18)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 6) {
+                // Spawn an agent pill that handles whatever the notification is
+                // about — reuses the same parallel-pill bridge flow.
+                Button {
+                    let model = ShortcutSettings.shared.selectedModel.isEmpty
+                        ? "claude-sonnet-4-6"
+                        : ShortcutSettings.shared.selectedModel
+                    let query = "Handle this notification: \(notification.title). \(notification.message)"
+                    AgentPillsManager.shared.spawn(query: query, model: model)
+                    FloatingControlBarManager.shared.dismissCurrentNotification()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("Execute")
+                            .scaledFont(size: 10, weight: .semibold)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.18))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Spawn an agent to handle this")
+
+                Button {
+                    FloatingControlBarManager.shared.dismissCurrentNotification()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white.opacity(0.62))
+                        .frame(width: 18, height: 18)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+        }
         .floatingBackground(cornerRadius: 18)
     }
 

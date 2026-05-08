@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,7 +9,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -33,7 +33,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().deleteAccountFlowStarted();
+    PlatformManager.instance.analytics.deleteAccountFlowStarted();
     _confirmController.addListener(() => setState(() {}));
   }
 
@@ -56,15 +56,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
   ];
 
   String _label(String key) => switch (key) {
-    'privacy_concerns' => context.l10n.deleteReasonPrivacy,
-    'not_using_enough' => context.l10n.deleteReasonNotUsing,
-    'missing_features' => context.l10n.deleteReasonMissingFeatures,
-    'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
-    'found_alternative' => context.l10n.deleteReasonFoundAlternative,
-    'taking_break' => context.l10n.deleteReasonTakingBreak,
-    'other' => context.l10n.deleteReasonOther,
-    _ => key,
-  };
+        'privacy_concerns' => context.l10n.deleteReasonPrivacy,
+        'not_using_enough' => context.l10n.deleteReasonNotUsing,
+        'missing_features' => context.l10n.deleteReasonMissingFeatures,
+        'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
+        'found_alternative' => context.l10n.deleteReasonFoundAlternative,
+        'taking_break' => context.l10n.deleteReasonTakingBreak,
+        'other' => context.l10n.deleteReasonOther,
+        _ => key,
+      };
 
   void _next() {
     if (_page < 2) {
@@ -98,9 +98,12 @@ class _DeleteAccountState extends State<DeleteAccount> {
         setState(() => _isDeleting = false);
         return;
       }
-      MixpanelManager().deleteAccountConfirmed();
-      MixpanelManager().deleteAccountFeedbackSubmitted(reason: _selectedReason ?? 'unspecified', details: details);
-      MixpanelManager().deleteUser();
+      PlatformManager.instance.analytics.deleteAccountConfirmed();
+      PlatformManager.instance.analytics.deleteAccountFeedbackSubmitted(
+        reason: _selectedReason ?? 'unspecified',
+        details: details,
+      );
+      PlatformManager.instance.analytics.deleteUser();
       await WalFileManager.clearAll();
       await SharedPreferencesUtil().clear();
       await FirebaseAuth.instance.signOut();
@@ -120,7 +123,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           // Native swipe/back on page 0 still counts as an abandon.
-          MixpanelManager().deleteAccountAbandoned(step: _page + 1, reason: _selectedReason);
+          PlatformManager.instance.analytics.deleteAccountAbandoned(step: _page + 1, reason: _selectedReason);
           return;
         }
         if (!_isDeleting) _back();
@@ -207,7 +210,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
               child: ElevatedButton(
                 onPressed: canContinue
                     ? () {
-                        MixpanelManager().deleteAccountReasonSelected(reason: _selectedReason!);
+                        PlatformManager.instance.analytics.deleteAccountReasonSelected(reason: _selectedReason!);
                         _next();
                       }
                     : null,
@@ -480,7 +483,10 @@ class _DeleteAccountState extends State<DeleteAccount> {
                     onPressed: _isDeleting
                         ? null
                         : () {
-                            MixpanelManager().deleteAccountKeptAccount(step: 3, reason: _selectedReason);
+                            PlatformManager.instance.analytics.deleteAccountKeptAccount(
+                              step: 3,
+                              reason: _selectedReason,
+                            );
                             Navigator.of(context).pop();
                           },
                     style: ElevatedButton.styleFrom(

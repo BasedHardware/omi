@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "کپی شناسه مکالمه",
+    "conversationIdCopied": "شناسه مکالمه در کلیپ‌بورد کپی شد",
     "testPrompt": "تست موضوع",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "سطح باتری",
+    "charging": "در حال شارژ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "طرح شما در تاریخ {date} پایان یافت.\\nهمین الآن مجددا مشترک شوید - برای یک دوره صورت‌حساب جدید بلافاصله شارژ خواهید شد.",
+    "planEndedOn": "طرح شما در تاریخ {date} پایان یافت.\nهمین الآن مجددا مشترک شوید - برای یک دوره صورت‌حساب جدید بلافاصله شارژ خواهید شد.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "طرح شما برای لغو در تاریخ {date} برنامه‌ریزی شده است.\\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
+    "planSetToCancelOn": "طرح شما برای لغو در تاریخ {date} برنامه‌ریزی شده است.\nهمین الآن مجددا مشترک شوید تا از مزایای خود محروم نشوید - تا {date} هیچ هزینه‌ای نخواهید داشت.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "وظایف از مکالمات شما اینجا ظاهر خواهند شد.\\n+ را ضربه بزنید تا یکی به‌صورت دستی ایجاد کنید.",
+    "tasksEmptyStateMessage": "وظایف از مکالمات شما اینجا ظاهر خواهند شد.\n+ را ضربه بزنید تا یکی به‌صورت دستی ایجاد کنید.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "نصب Omi روی\\nApple Watch",
+    "installOmiOnAppleWatch": "نصب Omi روی\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "باز کردن Omi روی\\nApple Watch",
+    "openOmiOnAppleWatch": "باز کردن Omi روی\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "ایجاد\\nداستان 2025 شما...",
+    "wrappedCreatingYourStory": "ایجاد\nداستان 2025 شما...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "چیز\\nاشتباهی رخ داد",
+    "wrappedSomethingWentWrong": "چیز\nاشتباهی رخ داد",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "پیش فرض",
     "lastUsedLabel": "آخرین استفاده",
     "setDefaultApp": "تنظیم برنامه پیش فرض",
-    "setDefaultAppContent": "تنظیم {appName} به عنوان برنامه خلاصه سازی پیش فرض شما؟\\n\\nاین برنامه به طور خودکار برای تمام خلاصه های مکالمه آینده استفاده خواهد شد.",
+    "setDefaultAppContent": "تنظیم {appName} به عنوان برنامه خلاصه سازی پیش فرض شما؟\n\nاین برنامه به طور خودکار برای تمام خلاصه های مکالمه آینده استفاده خواهد شد.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "بلندگو",
     "phoneEndCall": "پایان",
     "phoneCallSettingsTitle": "تنظیمات تماس تلفنی",
+    "showPhoneCallButtonTitle": "نمایش دکمه تماس",
+    "showPhoneCallButtonDesc": "نمایش دکمه تماس تلفنی در صفحه اصلی",
     "yourVerifiedNumbers": "شماره‌های تأیید شده شما",
     "verifiedNumbersDescription": "هنگامی که شما تماس می‌گیرید، طرف مقابل این شماره را روی تلفن خود خواهد دید",
     "noVerifiedNumbers": "بدون شماره تأیید شده",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "باتری",
     "day": "روز",
     "noBatteryDataYet": "هنوز داده‌ای از باتری موجود نیست",
-    "week": "هفته"
+    "week": "هفته",
+    "voiceResponseAudio": "خواندن پاسخ Omi با صدای بلند",
+    "voiceResponseMode": "پاسخ صوتی",
+    "voiceResponseModeTitle": "چه زمانی پاسخ‌ها خوانده شوند",
+    "voiceResponseOff": "خاموش",
+    "voiceResponseHeadphonesOnly": "فقط هدفون",
+    "voiceResponseAlways": "همیشه",
+    "agreeAndContinue": "موافقم و ادامه",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "حالت صوتی",
+    "quickActionAskOmi": "از Omi هر چیزی بپرسید",
+    "record": "ضبط",
+    "stop": "توقف",
+    "recordWithPhoneMic": "ضبط با میکروفون تلفن",
+    "recordWithPhoneMicSubtitle": "صدای اطراف خود را ضبط کنید",
+    "phoneCall": "تماس تلفنی",
+    "phoneCallSubtitle": "یک تماس را با رونویسی زنده ضبط کنید",
+    "bulkExportInProgress": "در حال صادرات…",
+    "bulkExportPartial": "{success} از {total} به {platform} صادر شد",
+    "bulkExportSuccess": "{count} به {platform} صادر شد",
+    "chooseExportDestination": "صادرات {count} مورد به…",
+    "connectAction": "اتصال",
+    "connectTaskAppToExport": "برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید",
+    "deselectAllTasksMenu": "لغو انتخاب همه",
+    "hideCompletedTasks": "پنهان کردن انجام‌شده‌ها",
+    "searchActionItems": "جستجوی موارد اقدام",
+    "selectActionItems": "انتخاب چندگانه",
+    "selectAllTasksMenu": "انتخاب همه",
+    "showCompletedTasks": "نمایش انجام‌شده‌ها",
+    "startCallRecording": "شروع ضبط تماس",
+    "startVoiceRecording": "شروع ضبط صدا",
+    "bulkExportAlreadyExported": "همهٔ کارهای انتخاب‌شده قبلاً صادر شده‌اند",
+    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید."
 }

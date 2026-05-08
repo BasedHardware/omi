@@ -467,6 +467,53 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
     return [m['metadata'].get('action_item_id') for m in kept]
 
 
+def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[dict]:
+    """
+    Find action items semantically similar to the given query text. Used to
+    feed the conversation extraction prompt with potentially-duplicate open
+    tasks so the LLM can suppress true duplicates.
+
+    Returns matches at or above the threshold. Each result is
+    `{'action_item_id': str, 'score': float}` ordered by Pinecone relevance.
+    Pinecone or embedding failures degrade silently to an empty list — the
+    caller treats "no candidates" as "user has nothing relevant," which is
+    the same behavior as a brand-new user.
+    """
+    if index is None:
+        return []
+
+    try:
+        vector = embeddings.embed_query(query)
+        xc = index.query(
+            vector=vector,
+            top_k=limit,
+            include_metadata=True,
+            filter={'uid': uid},
+            namespace=ACTION_ITEMS_NAMESPACE,
+        )
+        matches = xc.get('matches', [])
+        kept = []
+        dropped_no_id = 0
+        for m in matches:
+            if m.get('score', 0.0) < threshold:
+                continue
+            aid = m.get('metadata', {}).get('action_item_id')
+            if not aid:
+                dropped_no_id += 1
+                continue
+            kept.append({'action_item_id': aid, 'score': m.get('score', 0.0)})
+        top_score = matches[0]['score'] if matches else None
+        logger.info(
+            f'find_similar_action_items uid={uid} matches={len(matches)} '
+            f'kept={len(kept)} dropped_no_id={dropped_no_id} '
+            f'top_score={top_score} threshold={threshold}'
+        )
+        return kept
+    except Exception as e:
+        logger.exception(f'find_similar_action_items failed uid={uid}: {e}')
+        return []
+
+
 def delete_action_item_vector(uid: str, action_item_id: str):
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector delete')

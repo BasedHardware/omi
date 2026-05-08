@@ -293,15 +293,14 @@ class OmiBleManager private constructor(private val application: Application) {
             completion(Result.failure(Exception("Device not connected")))
             return
         }
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+        val state = device.bondState
+        if (state == BluetoothDevice.BOND_BONDED) {
             Log.i(TAG, "requestBond: $addr already bonded")
             completion(Result.success(true))
             return
         }
-        Log.i(TAG, "requestBond: $addr initiating bond")
         bondingAddress = addr
         bondCompletionCallback = { bonded -> completion(Result.success(bonded)) }
-        device.createBond()
         val timeoutRunnable = Runnable {
             bondTimeoutRunnable = null
             bondingAddress = null
@@ -311,6 +310,14 @@ class OmiBleManager private constructor(private val application: Application) {
         }
         bondTimeoutRunnable = timeoutRunnable
         mainHandler.postDelayed(timeoutRunnable, BOND_TIMEOUT_MS)
+        if (state == BluetoothDevice.BOND_BONDING) {
+            // Peripheral already initiated SMP (firmware's bt_conn_set_security).
+            // Don't call createBond() again — it can spawn a second pair dialog or restart SMP.
+            Log.i(TAG, "requestBond: $addr already bonding, awaiting completion")
+            return
+        }
+        Log.i(TAG, "requestBond: $addr initiating bond")
+        device.createBond()
     }
 
     // ── Characteristic operations ──

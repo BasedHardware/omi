@@ -64,6 +64,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get copySummary => 'ಸಾರಾಂಶ ನಕಲಿ ಮಾಡಿ';
 
   @override
+  String get copyConversationId => 'ಸಂಭಾಷಣೆ ID ನಕಲಿಸಿ';
+
+  @override
+  String get conversationIdCopied => 'ಸಂಭಾಷಣೆ ID ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ';
+
+  @override
   String get testPrompt => 'ಪ್ರಯೋಗ ನಿರ್ದೇಶನ';
 
   @override
@@ -2381,6 +2387,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get batteryLevel => 'ಬ್ಯಾಟರಿ ಸ್ತರ';
 
   @override
+  String get charging => 'ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ';
+
+  @override
   String get productUpdate => 'ಉತ್ಪನ್ನ ನವೀಕರಣ';
 
   @override
@@ -4538,12 +4547,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.';
+    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
+    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
   }
 
   @override
@@ -5114,7 +5123,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
+      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -5147,14 +5156,14 @@ class AppLocalizationsKn extends AppLocalizations {
   String get checkingAppleWatch => 'Apple Watch ಪರಿಶೀಲಿಸುತ್ತಿದೆ...';
 
   @override
-  String get installOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ';
+  String get installOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Omi ನೊಂದಿಗೆ ಆಪಲ್ ಗಡಿಯಾರವನ್ನು ಬಳಸಲು, ನೀವು ಮೊದಲು ನಿಮ್ಮ ಗಡಿಯಾರದಲ್ಲಿ Omi ಅಪ್ಲಿಕೇಶನ ಸ್ಥಾಪಿಸಬೇಕು.';
 
   @override
-  String get openOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ';
+  String get openOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5408,7 +5417,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get wrappedProcessingDefault => 'ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ...';
 
   @override
-  String get wrappedCreatingYourStory => 'ನಿಮ್ಮ\\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...';
+  String get wrappedCreatingYourStory => 'ನಿಮ್ಮ\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...';
 
   @override
   String get wrappedSomethingWentWrong => 'ಏನೋ ತಪ್ಪಾಗಿದೆ';
@@ -6559,7 +6568,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\\n\\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.';
+    return '$appName ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\n\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.';
   }
 
   @override
@@ -8318,6 +8327,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get phoneCallSettingsTitle => 'ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
+  String get showPhoneCallButtonTitle => 'ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ';
+
+  @override
   String get yourVerifiedNumbers => 'ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು';
 
   @override
@@ -9155,4 +9170,106 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'ನೀವು ನಿಮ್ಮ ಮಾಸಿಕ ಮಿತಿಯನ್ನು ತಲುಪಿದ್ದೀರಿ. ನಿರ್ಬಂಧಗಳಿಲ್ಲದೆ Omi ಜೊತೆ ಚಾಟ್ ಮುಂದುವರಿಸಲು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ.';
+
+  @override
+  String get voiceResponseAudio => 'Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ';
+
+  @override
+  String get voiceResponseMode => 'ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ';
+
+  @override
+  String get voiceResponseModeTitle => 'ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ';
+
+  @override
+  String get voiceResponseOff => 'ಆಫ್';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ';
+
+  @override
+  String get voiceResponseAlways => 'ಯಾವಾಗಲೂ';
+
+  @override
+  String get agreeAndContinue => 'ಒಪ್ಪಿಗೆ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ';
+
+  @override
+  String get startVoiceRecording => 'ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ';
+
+  @override
+  String get startCallRecording => 'ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'ಧ್ವನಿ ಮೋಡ್';
+
+  @override
+  String get quickActionAskOmi => 'Omi ಗೆ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ';
+
+  @override
+  String get record => 'ರೆಕಾರ್ಡ್';
+
+  @override
+  String get stop => 'ನಿಲ್ಲಿಸಿ';
+
+  @override
+  String get recordWithPhoneMic => 'ಫೋನ್ ಮೈಕ್‌ನೊಂದಿಗೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'ನಿಮ್ಮ ಸುತ್ತಲಿನ ಆಡಿಯೋ ಸೆರೆಹಿಡಿಯಿರಿ';
+
+  @override
+  String get phoneCall => 'ಫೋನ್ ಕರೆ';
+
+  @override
+  String get phoneCallSubtitle => 'ಲೈವ್ ಪ್ರತಿಲೇಖನದೊಂದಿಗೆ ಕರೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get searchActionItems => 'ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String get selectActionItems => 'ಬಹು ಆಯ್ಕೆ';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count ಐಟಂ(ಗಳನ್ನು) ರಫ್ತು ಮಾಡಿ…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count ಅನ್ನು $platform ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total ರಲ್ಲಿ $success ಅನ್ನು $platform ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ';
+  }
+
+  @override
+  String get showCompletedTasks => 'ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ';
+
+  @override
+  String get hideCompletedTasks => 'ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ';
+
+  @override
+  String get selectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ';
+
+  @override
+  String get connectTaskAppToExport => 'ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get connectAction => 'ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get deselectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ';
+
+  @override
+  String get bulkExportAlreadyExported => 'ಆಯ್ಕೆಮಾಡಿದ ಎಲ್ಲಾ ಕಾರ್ಯಗಳು ಈಗಾಗಲೇ ರಫ್ತಾಗಿವೆ';
+
+  @override
+  String get bulkDeleteFailed => 'ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

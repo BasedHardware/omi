@@ -488,14 +488,10 @@ class TasksStore: ObservableObject {
             let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
             await backfillRelevanceScoresIfNeeded(userId: userId)
         }
-        // Ensure minimum promoted tasks on startup — insert directly, no full reload
-        Task {
-            let promoted = await TaskPromotionService.shared.ensureMinimumOnStartup()
-            if !promoted.isEmpty {
-                self.incompleteTasks.append(contentsOf: promoted)
-                log("TasksStore: Inserted \(promoted.count) promoted tasks on startup")
-            }
-        }
+        // Note: no startup task promotion. Promotion happens on the natural
+        // cadence — when the user completes/deletes a task, or via the
+        // 5-minute safety-net timer. Bursting up to 5 promotions on every
+        // launch felt like spam.
     }
 
     /// Load incomplete tasks (To Do) using local-first pattern (like Memories)

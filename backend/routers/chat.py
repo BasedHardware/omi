@@ -71,6 +71,26 @@ _WS_IDLE_TIMEOUT_S = 60
 _MAX_PCM_BODY_BYTES = 200_000_000
 
 
+def _parse_context_keywords(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+
+    keywords = []
+    seen = set()
+    for item in raw.split(','):
+        keyword = item.strip()
+        if len(keyword) < 2 or len(keyword) > 80:
+            continue
+        key = keyword.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        keywords.append(keyword)
+        if len(keywords) >= 100:
+            break
+    return keywords
+
+
 def filter_messages(messages, app_id):
     logger.info(f'filter_messages {len(messages)} {app_id}')
     collected = []
@@ -501,6 +521,7 @@ async def transcribe_voice_message(
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         language = request.query_params.get("language")
+        context_keywords = _parse_context_keywords(request.query_params.get("keywords"))
         encoding = request.query_params.get("encoding", "linear16")
         try:
             sample_rate = int(request.query_params.get("sample_rate", "16000"))
@@ -529,6 +550,7 @@ async def transcribe_voice_message(
                 encoding=encoding,
                 sample_rate=sample_rate,
                 channels=channels,
+                keywords=context_keywords,
             )
         except RuntimeError as e:
             logger.error(f'PCM transcription failed: {e}')
@@ -660,6 +682,7 @@ async def transcribe_voice_message_stream(
     sample_rate: int = 16000,
     codec: str = 'linear16',
     channels: int = 1,
+    keywords: Optional[str] = None,
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
@@ -672,6 +695,7 @@ async def transcribe_voice_message_stream(
         sample_rate: Audio sample rate in Hz (default 16000)
         codec: Audio codec, must be 'linear16' (default 'linear16')
         channels: Number of audio channels (default 1)
+        keywords: Comma-separated context terms to boost recognition
 
     Client sends:
         - binary frames: audio data (PCM 16-bit)
@@ -729,6 +753,7 @@ async def transcribe_voice_message_stream(
     # PTT transcribe-stream always uses Deepgram (lightweight, no conversation lifecycle).
     # get_stt_service_for_language resolves the language/model for the DG call.
     _, stt_language, stt_model = get_stt_service_for_language(language)
+    context_keywords = _parse_context_keywords(keywords)
 
     loop = asyncio.get_running_loop()
 
@@ -763,6 +788,7 @@ async def transcribe_voice_message_stream(
             sample_rate=sample_rate,
             channels=channels,
             model=stt_model,
+            keywords=context_keywords,
             is_active=lambda: websocket_active,
         )
 

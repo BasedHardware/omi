@@ -63,6 +63,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copySummary => '复制摘要';
 
   @override
+  String get copyConversationId => '复制对话 ID';
+
+  @override
+  String get conversationIdCopied => '对话 ID 已复制到剪贴板';
+
+  @override
   String get testPrompt => '测试提示词';
 
   @override
@@ -2323,6 +2329,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryLevel => '电池电量';
 
   @override
+  String get charging => '充电中';
+
+  @override
   String get productUpdate => '产品更新';
 
   @override
@@ -4433,12 +4442,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return '您的计划于$date结束。\\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
+    return '您的计划于$date结束。\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return '您的计划将于$date取消。\\n立即重新订阅以保留您的权益 - $date之前不收费。';
+    return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
@@ -6412,7 +6421,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '将 $appName 设为您的默认摘要应用？\\n\\n此应用将自动用于所有未来的对话摘要。';
+    return '将 $appName 设为您的默认摘要应用？\n\n此应用将自动用于所有未来的对话摘要。';
   }
 
   @override
@@ -8139,6 +8148,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSettingsTitle => '通话设置';
 
   @override
+  String get showPhoneCallButtonTitle => '显示电话按钮';
+
+  @override
+  String get showPhoneCallButtonDesc => '在主屏幕上显示电话按钮';
+
+  @override
   String get yourVerifiedNumbers => '您已验证的号码';
 
   @override
@@ -8960,4 +8975,106 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatQuotaExceededReply => '您已达到每月限额。升级以无限制地继续与Omi聊天。';
+
+  @override
+  String get voiceResponseAudio => '朗读 Omi 的回复';
+
+  @override
+  String get voiceResponseMode => '语音回复';
+
+  @override
+  String get voiceResponseModeTitle => '何时朗读回复';
+
+  @override
+  String get voiceResponseOff => '关闭';
+
+  @override
+  String get voiceResponseHeadphonesOnly => '仅耳机';
+
+  @override
+  String get voiceResponseAlways => '始终';
+
+  @override
+  String get agreeAndContinue => '同意并继续';
+
+  @override
+  String get startVoiceRecording => '开始语音录音';
+
+  @override
+  String get startCallRecording => '开始通话录音';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '语音模式';
+
+  @override
+  String get quickActionAskOmi => '向Omi询问任何事';
+
+  @override
+  String get record => '录音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '用手机麦克风录音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '捕捉您周围的声音';
+
+  @override
+  String get phoneCall => '电话';
+
+  @override
+  String get phoneCallSubtitle => '录制带实时转录的通话';
+
+  @override
+  String get searchActionItems => '搜索操作项';
+
+  @override
+  String get selectActionItems => '多选';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '导出 $count 个项目到…';
+  }
+
+  @override
+  String get bulkExportInProgress => '正在导出…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '已将 $count 项导出到 $platform';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '已将 $success/$total 导出到 $platform';
+  }
+
+  @override
+  String get showCompletedTasks => '显示已完成';
+
+  @override
+  String get hideCompletedTasks => '隐藏已完成';
+
+  @override
+  String get selectAllTasksMenu => '全选';
+
+  @override
+  String get connectTaskAppToExport => '在设置中连接任务应用以导出';
+
+  @override
+  String get connectAction => '连接';
+
+  @override
+  String get deselectAllTasksMenu => '取消全选';
+
+  @override
+  String get bulkExportAlreadyExported => '所选任务已全部导出';
+
+  @override
+  String get bulkDeleteFailed => '无法删除任务，请重试。';
 }

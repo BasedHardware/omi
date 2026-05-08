@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "ಸಂಭಾಷಣೆ ID ನಕಲಿಸಿ",
+    "conversationIdCopied": "ಸಂಭಾಷಣೆ ID ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ",
     "testPrompt": "ಪ್ರಯೋಗ ನಿರ್ದೇಶನ",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -2512,6 +2514,7 @@
         }
     },
     "batteryLevel": "ಬ್ಯಾಟರಿ ಸ್ತರ",
+    "charging": "ಚಾರ್ಜ್ ಆಗುತ್ತಿದೆ",
     "@batteryLevel": {
         "description": "Battery level label"
     },
@@ -5254,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.",
+    "planEndedOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5264,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
+    "planSetToCancelOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - {date} ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6037,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "tasksEmptyStateMessage": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6081,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ",
+    "installOmiOnAppleWatch": "Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6089,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "openOmiOnAppleWatch": "Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6456,7 +6459,7 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "ನಿಮ್ಮ\\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...",
+    "wrappedCreatingYourStory": "ನಿಮ್ಮ\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -7997,7 +8000,7 @@
     "defaultLabel": "ಡಿಫಾಲ್ಟ್",
     "lastUsedLabel": "ಕೆಲವು ಪ್ರಯುಕ್ತ",
     "setDefaultApp": "ಡಿಫಾಲ್ಟ್ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸಿ",
-    "setDefaultAppContent": "{appName} ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\\n\\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.",
+    "setDefaultAppContent": "{appName} ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\n\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -9995,6 +9998,8 @@
     "phoneSpeaker": "ಸ್ಪೀಕರ್",
     "phoneEndCall": "ಅವಸಾನ",
     "phoneCallSettingsTitle": "ಫೋನ್ ಕರೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "showPhoneCallButtonTitle": "ಫೋನ್ ಕಾಲ್ ಬಟನ್ ತೋರಿಸಿ",
+    "showPhoneCallButtonDesc": "ಮುಖ್ಯ ಪರದೆಯಲ್ಲಿ ಫೋನ್ ಕಾಲ್ ಬಟನ್ ಪ್ರದರ್ಶಿಸಿ",
     "yourVerifiedNumbers": "ನಿಮ್ಮ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆಗಳು",
     "verifiedNumbersDescription": "ನೀವು ಯಾರನನ್ನೂ ಕರೆ ಮಾಡುವಾಗ, ಅವರು ತಮ್ಮ ಫೋನ ಉದ್ದಿಂದ ಈ ಸಂಖ್ಯೆ ನೋಡುತ್ತಾರೆ",
     "noVerifiedNumbers": "ಯಾವುದೇ ಪರಿಶೀಲಿತ ಸಂಖ್ಯೆ ಇಲ್ಲ",
@@ -10685,5 +10690,40 @@
     "batteryHistory": "ಬ್ಯಾಟರಿ",
     "day": "ದಿನ",
     "noBatteryDataYet": "ಇನ್ನೂ ಬ್ಯಾಟರಿ ಡೇಟಾ ಇಲ್ಲ",
-    "week": "ವಾರ"
+    "week": "ವಾರ",
+    "voiceResponseAudio": "Omi ಪ್ರತಿಕ್ರಿಯೆಯನ್ನು ಜೋರಾಗಿ ಓದಿ",
+    "voiceResponseMode": "ಧ್ವನಿ ಪ್ರತಿಕ್ರಿಯೆ",
+    "voiceResponseModeTitle": "ಪ್ರತಿಕ್ರಿಯೆ ಯಾವಾಗ",
+    "voiceResponseOff": "ಆಫ್",
+    "voiceResponseHeadphonesOnly": "ಹೆಡ್‌ಫೋನ್‌ಗಳು ಮಾತ್ರ",
+    "voiceResponseAlways": "ಯಾವಾಗಲೂ",
+    "agreeAndContinue": "ಒಪ್ಪಿಗೆ ಮತ್ತು ಮುಂದುವರಿಯಿರಿ",
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "ಧ್ವನಿ ಮೋಡ್",
+    "quickActionAskOmi": "Omi ಗೆ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ",
+    "record": "ರೆಕಾರ್ಡ್",
+    "stop": "ನಿಲ್ಲಿಸಿ",
+    "recordWithPhoneMic": "ಫೋನ್ ಮೈಕ್‌ನೊಂದಿಗೆ ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "recordWithPhoneMicSubtitle": "ನಿಮ್ಮ ಸುತ್ತಲಿನ ಆಡಿಯೋ ಸೆರೆಹಿಡಿಯಿರಿ",
+    "phoneCall": "ಫೋನ್ ಕರೆ",
+    "phoneCallSubtitle": "ಲೈವ್ ಪ್ರತಿಲೇಖನದೊಂದಿಗೆ ಕರೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "bulkExportInProgress": "ರಫ್ತು ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "bulkExportPartial": "{total} ರಲ್ಲಿ {success} ಅನ್ನು {platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
+    "bulkExportSuccess": "{count} ಅನ್ನು {platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
+    "chooseExportDestination": "{count} ಐಟಂ(ಗಳನ್ನು) ರಫ್ತು ಮಾಡಿ…",
+    "connectAction": "ಸಂಪರ್ಕಿಸಿ",
+    "connectTaskAppToExport": "ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ",
+    "deselectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ",
+    "hideCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ",
+    "searchActionItems": "ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ",
+    "selectActionItems": "ಬಹು ಆಯ್ಕೆ",
+    "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
+    "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
+    "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+    "bulkExportAlreadyExported": "ಆಯ್ಕೆಮಾಡಿದ ಎಲ್ಲಾ ಕಾರ್ಯಗಳು ಈಗಾಗಲೇ ರಫ್ತಾಗಿವೆ",
+    "bulkDeleteFailed": "ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

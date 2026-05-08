@@ -213,5 +213,9 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
     }
   }
 
-  return transcripts.join(' ');
+  final transcript = transcripts.join(' ').trim();
+  if (transcript.isEmpty) {
+    throw Exception('Voice message transcription returned empty transcript');
+  }
+  return transcript;
 }

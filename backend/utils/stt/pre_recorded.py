@@ -262,6 +262,7 @@ def deepgram_prerecorded_from_bytes(
     language: Optional[str] = None,
     model: str = "nova-3",
     return_language: bool = False,
+    keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio bytes using Deepgram's pre-recorded API.
@@ -280,6 +281,7 @@ def deepgram_prerecorded_from_bytes(
         language: Language code for transcription, or None for auto-detect
         model: Deepgram model name (default 'nova-3')
         return_language: If True, returns (words, language) tuple
+        keywords: Custom vocabulary words to boost transcription accuracy
 
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
@@ -302,6 +304,12 @@ def deepgram_prerecorded_from_bytes(
         }
         if language and not is_multi:
             options["language"] = language
+
+        if keywords:
+            if str(model).startswith("nova-3"):
+                options["keyterm"] = list(keywords)
+            else:
+                options["keywords"] = list(keywords)
 
         # For raw PCM, Deepgram needs encoding + sample_rate to interpret the bytes
         if encoding:
@@ -361,7 +369,16 @@ def deepgram_prerecorded_from_bytes(
         logger.error(f'Deepgram prerecorded from bytes error: {e}')
         if attempts < 2:
             return deepgram_prerecorded_from_bytes(
-                audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, model, return_language
+                audio_bytes,
+                sample_rate,
+                diarize,
+                attempts + 1,
+                encoding,
+                channels,
+                language,
+                model,
+                return_language,
+                keywords,
             )
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
 

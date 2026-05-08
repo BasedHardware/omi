@@ -64,6 +64,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get copySummary => 'خلاصہ کاپی کریں';
 
   @override
+  String get copyConversationId => 'گفتگو کی ID کاپی کریں';
+
+  @override
+  String get conversationIdCopied => 'گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی';
+
+  @override
   String get testPrompt => 'ٹیسٹ پروپٹ';
 
   @override
@@ -2373,6 +2379,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get batteryLevel => 'بیٹری کی سطح';
+
+  @override
+  String get charging => 'چارج ہو رہا ہے';
 
   @override
   String get productUpdate => 'مصنوع کی اپ ڈیٹ';
@@ -6545,7 +6554,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\\n\\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔';
+    return '$appName کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\n\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔';
   }
 
   @override
@@ -8301,6 +8310,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSettingsTitle => 'فون کال کی ترتیبات';
 
   @override
+  String get showPhoneCallButtonTitle => 'فون کال بٹن دکھائیں';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ہوم اسکرین پر فون کال بٹن دکھائیں';
+
+  @override
   String get yourVerifiedNumbers => 'آپ کے تصدیق شدہ نمبر';
 
   @override
@@ -9140,4 +9155,106 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get chatQuotaExceededReply =>
       'آپ اپنی ماہانہ حد تک پہنچ گئے ہیں۔ بغیر کسی پابندی کے Omi کے ساتھ چیٹ جاری رکھنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get voiceResponseAudio => 'Omi کا جواب بلند آواز میں پڑھیں';
+
+  @override
+  String get voiceResponseMode => 'آواز کا جواب';
+
+  @override
+  String get voiceResponseModeTitle => 'جواب کب پڑھے جائیں';
+
+  @override
+  String get voiceResponseOff => 'بند';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'صرف ہیڈ فون';
+
+  @override
+  String get voiceResponseAlways => 'ہمیشہ';
+
+  @override
+  String get agreeAndContinue => 'اتفاق اور جاری رکھیں';
+
+  @override
+  String get startVoiceRecording => 'وائس ریکارڈنگ شروع کریں';
+
+  @override
+  String get startCallRecording => 'کال ریکارڈنگ شروع کریں';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => 'آواز موڈ';
+
+  @override
+  String get quickActionAskOmi => 'Omi سے کچھ بھی پوچھیں';
+
+  @override
+  String get record => 'ریکارڈ کریں';
+
+  @override
+  String get stop => 'روکیں';
+
+  @override
+  String get recordWithPhoneMic => 'فون مائیک سے ریکارڈ کریں';
+
+  @override
+  String get recordWithPhoneMicSubtitle => 'اپنے ارد گرد کی آواز ریکارڈ کریں';
+
+  @override
+  String get phoneCall => 'فون کال';
+
+  @override
+  String get phoneCallSubtitle => 'لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں';
+
+  @override
+  String get searchActionItems => 'ایکشن آئٹمز تلاش کریں';
+
+  @override
+  String get selectActionItems => 'متعدد منتخب کریں';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count آئٹم ایکسپورٹ کریں…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'ایکسپورٹ ہو رہا ہے…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count کو $platform میں ایکسپورٹ کیا گیا';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total میں سے $success کو $platform میں ایکسپورٹ کیا گیا';
+  }
+
+  @override
+  String get showCompletedTasks => 'مکمل شدہ دکھائیں';
+
+  @override
+  String get hideCompletedTasks => 'مکمل شدہ چھپائیں';
+
+  @override
+  String get selectAllTasksMenu => 'سب منتخب کریں';
+
+  @override
+  String get connectTaskAppToExport => 'ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں';
+
+  @override
+  String get connectAction => 'جوڑیں';
+
+  @override
+  String get deselectAllTasksMenu => 'تمام کا انتخاب ختم کریں';
+
+  @override
+  String get bulkExportAlreadyExported => 'منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں';
+
+  @override
+  String get bulkDeleteFailed => 'کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔';
 }
