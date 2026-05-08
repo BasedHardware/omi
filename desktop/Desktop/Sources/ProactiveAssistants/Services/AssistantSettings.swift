@@ -108,11 +108,15 @@ class AssistantSettings {
     /// The language code for transcription (e.g., "en", "uk", "ru")
     var transcriptionLanguage: String {
         get {
-            let value = UserDefaults.standard.string(forKey: transcriptionLanguageKey)
-            return value ?? defaultTranscriptionLanguage
+            let value = UserDefaults.standard.string(forKey: transcriptionLanguageKey) ?? defaultTranscriptionLanguage
+            let normalized = Self.normalizeTranscriptionLanguageCode(value)
+            if normalized != value {
+                UserDefaults.standard.set(normalized, forKey: transcriptionLanguageKey)
+            }
+            return normalized
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: transcriptionLanguageKey)
+            UserDefaults.standard.set(Self.normalizeTranscriptionLanguageCode(newValue), forKey: transcriptionLanguageKey)
             NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
         }
     }
@@ -132,26 +136,8 @@ class AssistantSettings {
     /// If auto-detect is enabled and the language supports multi-language mode, returns "multi"
     /// Otherwise returns the specific language code
     var effectiveTranscriptionLanguage: String {
-        if transcriptionAutoDetect {
-            // Languages that support multi-language detection in DeepGram Nova-3
-            let multiLanguageSupported: Set<String> = [
-                "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
-                "es", "es-419",
-                "fr", "fr-CA",
-                "de",
-                "hi",
-                "ru",
-                "pt", "pt-BR", "pt-PT",
-                "ja",
-                "it",
-                "nl"
-            ]
-
-            // If the selected language supports multi-language mode, use "multi"
-            // Otherwise fall back to single language (e.g., Ukrainian doesn't support multi)
-            if multiLanguageSupported.contains(transcriptionLanguage) {
-                return "multi"
-            }
+        if transcriptionAutoDetect && Self.supportsAutoDetect(transcriptionLanguage) {
+            return "multi"
         }
         return transcriptionLanguage
     }
@@ -224,8 +210,28 @@ class AssistantSettings {
 
     // MARK: - Supported Languages
 
-    /// All languages supported by DeepGram Nova-3 for single-language transcription
-    static let supportedLanguages: [(code: String, name: String)] = [
+    /// Canonical backend-supported DeepGram Nova-3 language options for single-language transcription.
+    nonisolated static let supportedLanguages: [(code: String, name: String)] = [
+        ("ar", "Arabic"),
+        ("ar-AE", "Arabic (United Arab Emirates)"),
+        ("ar-SA", "Arabic (Saudi Arabia)"),
+        ("ar-QA", "Arabic (Qatar)"),
+        ("ar-KW", "Arabic (Kuwait)"),
+        ("ar-SY", "Arabic (Syria)"),
+        ("ar-LB", "Arabic (Lebanon)"),
+        ("ar-PS", "Arabic (Palestine)"),
+        ("ar-JO", "Arabic (Jordan)"),
+        ("ar-EG", "Arabic (Egypt)"),
+        ("ar-SD", "Arabic (Sudan)"),
+        ("ar-TD", "Arabic (Chad)"),
+        ("ar-MA", "Arabic (Morocco)"),
+        ("ar-DZ", "Arabic (Algeria)"),
+        ("ar-TN", "Arabic (Tunisia)"),
+        ("ar-IQ", "Arabic (Iraq)"),
+        ("ar-IR", "Arabic (Iran)"),
+        ("be", "Belarusian"),
+        ("bn", "Bengali"),
+        ("bs", "Bosnian"),
         ("en", "English"),
         ("en-US", "English (US)"),
         ("en-GB", "English (UK)"),
@@ -234,25 +240,36 @@ class AssistantSettings {
         ("en-NZ", "English (New Zealand)"),
         ("bg", "Bulgarian"),
         ("ca", "Catalan"),
+        ("zh-CN", "Chinese (Simplified)"),
+        ("zh-HK", "Chinese (Hong Kong)"),
+        ("zh-TW", "Chinese (Taiwan)"),
         ("cs", "Czech"),
         ("da", "Danish"),
+        ("da-DK", "Danish (Denmark)"),
         ("nl", "Dutch"),
         ("nl-BE", "Dutch (Belgium)"),
         ("et", "Estonian"),
+        ("fa", "Persian"),
         ("fi", "Finnish"),
         ("fr", "French"),
         ("fr-CA", "French (Canada)"),
         ("de", "German"),
         ("de-CH", "German (Switzerland)"),
         ("el", "Greek"),
+        ("he", "Hebrew"),
         ("hi", "Hindi"),
+        ("hr", "Croatian"),
         ("hu", "Hungarian"),
         ("id", "Indonesian"),
         ("it", "Italian"),
         ("ja", "Japanese"),
+        ("kn", "Kannada"),
         ("ko", "Korean"),
+        ("ko-KR", "Korean (South Korea)"),
         ("lv", "Latvian"),
         ("lt", "Lithuanian"),
+        ("mk", "Macedonian"),
+        ("mr", "Marathi"),
         ("ms", "Malay"),
         ("no", "Norwegian"),
         ("pl", "Polish"),
@@ -262,16 +279,25 @@ class AssistantSettings {
         ("ro", "Romanian"),
         ("ru", "Russian"),
         ("sk", "Slovak"),
+        ("sl", "Slovenian"),
+        ("sr", "Serbian"),
         ("es", "Spanish"),
         ("es-419", "Spanish (Latin America)"),
         ("sv", "Swedish"),
+        ("sv-SE", "Swedish (Sweden)"),
+        ("ta", "Tamil"),
+        ("te", "Telugu"),
+        ("th", "Thai"),
+        ("th-TH", "Thai (Thailand)"),
+        ("tl", "Tagalog"),
         ("tr", "Turkish"),
         ("uk", "Ukrainian"),
+        ("ur", "Urdu"),
         ("vi", "Vietnamese"),
     ]
 
     /// Languages that support multi-language (auto-detect) mode in DeepGram Nova-3
-    static let multiLanguageSupported: Set<String> = [
+    nonisolated static let multiLanguageSupported: Set<String> = [
         "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
         "es", "es-419",
         "fr", "fr-CA",
@@ -285,9 +311,54 @@ class AssistantSettings {
     ]
 
     /// Check if a language supports auto-detect mode
-    static func supportsAutoDetect(_ languageCode: String) -> Bool {
-        return multiLanguageSupported.contains(languageCode)
+    nonisolated static func supportsAutoDetect(_ languageCode: String) -> Bool {
+        return multiLanguageSupported.contains(normalizeTranscriptionLanguageCode(languageCode))
     }
+
+    nonisolated static func normalizeTranscriptionLanguageCode(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "en" }
+
+        let normalizedSeparator = trimmed.replacingOccurrences(of: "_", with: "-")
+        let lookupKey = normalizedSeparator.lowercased()
+
+        if let alias = transcriptionLanguageAliases[lookupKey] {
+            return alias
+        }
+
+        if let supported = supportedLanguages.first(where: {
+            $0.code.compare(normalizedSeparator, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }) {
+            return supported.code
+        }
+
+        return normalizedSeparator
+    }
+
+    /// Normalizes legacy, backend, and user-entered aliases into codes accepted by `/v4/listen`.
+    nonisolated private static let transcriptionLanguageAliases: [String: String] = [
+        "br": "pt-BR",
+        "chinese": "zh-CN",
+        "chinese simplified": "zh-CN",
+        "chinese (simplified)": "zh-CN",
+        "mandarin": "zh-CN",
+        "mandarin chinese": "zh-CN",
+        "pt-br": "pt-BR",
+        "simplified chinese": "zh-CN",
+        "zh": "zh-CN",
+        "zh-cn": "zh-CN",
+        "zh-hans": "zh-CN",
+        "zh-tw": "zh-TW",
+        "zh-hant": "zh-TW",
+        "zh-hk": "zh-HK",
+        "中文": "zh-CN",
+        "普通话": "zh-CN",
+        "汉语": "zh-CN",
+        "国语": "zh-CN",
+        "简体中文": "zh-CN",
+        "繁体中文": "zh-TW",
+        "粤语": "zh-HK",
+    ]
 }
 
 // MARK: - Notification Names

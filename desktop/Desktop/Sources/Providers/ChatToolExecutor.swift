@@ -1087,13 +1087,14 @@ class ChatToolExecutor {
     var results: [String] = []
 
     if let language = args["language"] as? String, !language.isEmpty {
-      AssistantSettings.shared.transcriptionLanguage = language
-      let supportsMulti = AssistantSettings.supportsAutoDetect(language)
+      let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language)
+      AssistantSettings.shared.transcriptionLanguage = normalizedLanguage
+      let supportsMulti = AssistantSettings.supportsAutoDetect(normalizedLanguage)
       AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
       Task {
-        _ = try? await APIClient.shared.updateUserLanguage(language)
+        _ = try? await APIClient.shared.updateUserLanguage(normalizedLanguage)
       }
-      results.append("Language set to \(language)")
+      results.append("Language set to \(normalizedLanguage)")
     }
 
     if let name = args["name"] as? String, !name.isEmpty {
