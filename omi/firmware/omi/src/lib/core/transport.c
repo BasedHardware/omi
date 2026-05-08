@@ -1075,7 +1075,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-#define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 
@@ -1180,12 +1179,12 @@ void pusher(void)
                 bt_conn_unref(conn);
             } else if (!conn) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                if (is_sd_on()) {
                     storage_full_warned = false;
                     write_to_storage();
                 } else {
                     if (!storage_full_warned) {
-                        LOG_WRN("Storage full, stopping offline storage");
+                        LOG_WRN("Offline storage unavailable");
                         storage_full_warned = true;
                     }
                 }
