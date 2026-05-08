@@ -838,6 +838,7 @@ def get_or_create_merged_audio(
     pcm_to_wav_func,
     fill_gaps: bool = True,
     sample_rate: int = 16000,
+    await_upload: bool = False,
 ) -> tuple[bytes, bool]:
     """
     Get merged audio from cache or create it.
@@ -851,6 +852,11 @@ def get_or_create_merged_audio(
         pcm_to_wav_func: Function to convert PCM to WAV
         fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
         sample_rate: Audio sample rate in Hz (default 16000)
+        await_upload: If True, the cache upload runs synchronously and the function only
+            returns once the blob exists in GCS. Used by the audio-share flow so a caller
+            calling get_merged_audio_signed_url() immediately after won't race the
+            background upload. Default False preserves the original fire-and-forget
+            behavior used by precache.
 
     Returns:
         Tuple of (audio_data_bytes, was_cached)
@@ -890,20 +896,29 @@ def get_or_create_merged_audio(
     wav_data = pcm_to_wav_func(pcm_data)
     del pcm_data  # Free PCM data immediately after WAV conversion
 
-    # Upload to cache in background thread with 3-day TTL
+    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+    cache_metadata = {
+        'expires_at': expires_at.isoformat(),
+        'audio_file_id': audio_file_id,
+    }
+
     def _upload_to_cache():
         try:
-            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
-            cache_blob.metadata = {
-                'expires_at': expires_at.isoformat(),
-                'audio_file_id': audio_file_id,
-            }
+            cache_blob.metadata = cache_metadata
             cache_blob.upload_from_string(wav_data, content_type='audio/wav')
             logger.info(f"Cached merged audio at: {cache_path}")
         except Exception as e:
             logger.error(f"Error uploading audio cache: {e}")
+            raise
 
-    storage_executor.submit(_upload_to_cache)
+    if await_upload:
+        # Caller (e.g. share flow) needs the blob to exist before it generates a signed URL.
+        # Run the upload on storage_executor and block on the result so we don't tie up the
+        # current thread's GCS connection pool.
+        future = storage_executor.submit(_upload_to_cache)
+        future.result()
+    else:
+        storage_executor.submit(_upload_to_cache)
 
     return wav_data, False
 
