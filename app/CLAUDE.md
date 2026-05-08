@@ -81,7 +81,7 @@ flutter test test/unit/  # specific directory
 ## Localization (l10n)
 
 - All user-facing strings must use `context.l10n.keyName`
-- 49 locales: English (template) + 48 translations in `lib/l10n/`. Don't trust this count from memory — enumerate with `ls app/lib/l10n/app_*.arb`.
+- 49 locales: English (template) + 48 translations in `lib/l10n/`. Don't trust this count from memory — enumerate with `ls lib/l10n/app_*.arb`.
 - Template: `lib/l10n/app_en.arb`
 - Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
 - Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
