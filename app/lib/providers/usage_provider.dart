@@ -60,9 +60,20 @@ class UsageProvider with ChangeNotifier {
   // straight to the existing unlimited behavior.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
+  static const Set<PlanType> _paidPlans = {
+    // Legacy Stripe plans
+    PlanType.unlimited,
+    PlanType.operator,
+    PlanType.architect,
+    // Superwall mobile plans (App Store / Play Billing)
+    PlanType.lite,
+    PlanType.plus,
+    PlanType.max,
+  };
+
   bool get _isPaidPlan {
     final plan = _subscription?.subscription.plan;
-    return plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    return plan != null && _paidPlans.contains(plan);
   }
 
   bool get canAccessPhoneCalls {
@@ -92,7 +103,7 @@ class UsageProvider with ChangeNotifier {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
     final plan = _subscription!.subscription.plan;
-    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect) return false;
+    if (_paidPlans.contains(plan)) return false;
     // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {

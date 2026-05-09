@@ -68,6 +68,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/superwall_service.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
@@ -190,6 +191,17 @@ Future _init() async {
   BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
     Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
   };
+
+  // Superwall — configures the mobile paywall + IAP layer. No-ops on macOS
+  // and on builds without --dart-define=SUPERWALL_API_KEY_*. Identify the
+  // signed-in user immediately so webhook payloads carry the correct uid.
+  await SuperwallService.instance.initialize();
+  if (isAuth) {
+    final uid = SharedPreferencesUtil().uid;
+    if (uid.isNotEmpty) {
+      await SuperwallService.instance.identify(uid);
+    }
+  }
 
   await CrashlyticsManager.init();
   if (isAuth) {

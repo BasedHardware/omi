@@ -2,7 +2,11 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType { basic, unlimited, architect, operator }
+// `lite`, `plus`, `max` are the new Superwall-purchased mobile tiers
+// (App Store / Play Billing). `basic`, `unlimited` (Neo), `architect`,
+// `operator` are the existing Stripe-billed plans. See backend
+// `models/users.py:PlanType`.
+enum PlanType { basic, unlimited, architect, operator, lite, plus, max }
 
 enum SubscriptionStatus { active, inactive }
 

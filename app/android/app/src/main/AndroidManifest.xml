@@ -169,6 +169,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Superwall paywall activity (rendered via the Superwall SDK
+             when Superwall.shared.registerPlacement() fires). -->
+        <activity
+            android:name="com.superwall.sdk.paywall.view.SuperwallPaywallActivity"
+            android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

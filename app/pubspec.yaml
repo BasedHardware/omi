@@ -38,6 +38,10 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
 
+  # Mobile paywall + subscription management (App Store IAP / Play Billing).
+  # See backend/routers/superwall.py for the webhook side.
+  superwallkit_flutter: ^2.4.12
+
   # Firebase
   firebase_core: 3.13.0
   firebase_auth: 5.5.3
@@ -82,7 +86,7 @@ dependencies:
   uuid: ^4.4.0
   tuple: ^2.0.2
   googleapis_auth: 2.0.0
-  envied: 1.1.1
+  envied: ^1.2.0
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   nordic_dfu: ^6.1.4+hotfix
@@ -162,10 +166,10 @@ dev_dependencies:
   lints: ^4.0.0
   flutter_test:
     sdk: flutter
-  envied_generator: 1.1.1
+  envied_generator: ^1.2.0
   build_runner: ^2.4.15
   flutter_flavorizr: ^2.2.3
-  flutter_gen_runner: 5.10.0
+  flutter_gen_runner: ^5.14.1
   pigeon: ^26.0.1
 
 flutter_launcher_icons:
