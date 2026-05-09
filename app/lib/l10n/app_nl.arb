@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Alles selecteren",
     "showCompletedTasks": "Voltooide tonen",
     "startCallRecording": "Gespreksopname starten",
-    "startVoiceRecording": "Spraakopname starten"
+    "startVoiceRecording": "Spraakopname starten",
+    "bulkExportAlreadyExported": "Alle geselecteerde taken zijn al geëxporteerd",
+    "bulkDeleteFailed": "Taken konden niet worden verwijderd. Probeer het opnieuw."
 }

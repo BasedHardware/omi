@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Seleziona tutto",
     "showCompletedTasks": "Mostra completate",
     "startCallRecording": "Avvia registrazione chiamata",
-    "startVoiceRecording": "Avvia registrazione vocale"
+    "startVoiceRecording": "Avvia registrazione vocale",
+    "bulkExportAlreadyExported": "Tutte le attività selezionate sono già state esportate",
+    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova."
 }

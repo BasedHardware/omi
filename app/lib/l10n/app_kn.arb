@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
     "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
     "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
-    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ"
+    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+    "bulkExportAlreadyExported": "ಆಯ್ಕೆಮಾಡಿದ ಎಲ್ಲಾ ಕಾರ್ಯಗಳು ಈಗಾಗಲೇ ರಫ್ತಾಗಿವೆ",
+    "bulkDeleteFailed": "ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

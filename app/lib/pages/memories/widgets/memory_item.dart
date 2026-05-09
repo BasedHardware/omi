@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,7 +17,6 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -83,7 +83,7 @@ class MemoryItem extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () {
                         if (!context.read<UsageProvider>().showSubscriptionUI) return;
-                        MixpanelManager().paywallOpened('Action Item');
+                        PlatformManager.instance.analytics.paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },
@@ -125,7 +125,7 @@ class MemoryItem extends StatelessWidget {
         final memoryContent = memory.content.decodeString;
 
         provider.deleteMemory(memory);
-        MixpanelManager().memoriesPageDeletedMemory(memory);
+        PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
         if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
           context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
@@ -259,7 +259,7 @@ class MemoryItem extends StatelessWidget {
   //     ],
   //     onSelected: (visibility) {
   //       provider.updateMemoryVisibility(memory, visibility);
-  //       MixpanelManager().memoryVisibilityChanged(memory, visibility);
+  //       PlatformManager.instance.analytics.memoryVisibilityChanged(memory, visibility);
   //     },
   //   );
   // }

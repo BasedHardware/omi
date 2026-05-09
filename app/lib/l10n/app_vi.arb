@@ -3020,5 +3020,7 @@
     "selectAllTasksMenu": "Chọn tất cả",
     "showCompletedTasks": "Hiện đã hoàn thành",
     "startCallRecording": "Bắt đầu ghi âm cuộc gọi",
-    "startVoiceRecording": "Bắt đầu ghi âm giọng nói"
+    "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
+    "bulkExportAlreadyExported": "Tất cả các tác vụ đã chọn đều đã được xuất",
+    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại."
 }

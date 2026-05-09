@@ -69,8 +69,8 @@ If a PR changes how audio streaming, transcription, conversation lifecycle, spea
 ### App (Flutter)
 
 - All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
-- When adding new l10n keys, translate all 33 non-English locales — never leave English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill for translations. Ensure `{parameter}` placeholders match the English ARB exactly.
-- After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`
+- When adding new l10n keys, translate all 48 non-English locales — never leave English text in non-English ARB files. Don't hardcode the count from memory; the authoritative list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`. Use the `omi-add-missing-language-keys-l10n` skill for translations and ensure `{parameter}` placeholders match the English ARB exactly.
+- After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`. The task is only done when this command emits zero "untranslated message(s)" warnings.
 
 #### Verifying UI Changes (agent-flutter)
 

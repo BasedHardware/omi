@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +19,6 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -173,11 +173,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildGetStartedOptions(BuildContext context) {
-    Widget option({
-      required IconData icon,
-      required String label,
-      required VoidCallback onTap,
-    }) {
+    Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
       return GestureDetector(
         onTap: () {
           HapticFeedback.lightImpact();
@@ -214,12 +210,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               child: Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  height: 1.2,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
               ),
             ),
           ],
@@ -231,30 +222,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       icon: Icons.mic_rounded,
       label: 'Record with Phone',
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ConversationCapturingPage()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
       },
     );
     final callOption = option(
       icon: Icons.phone_in_talk_rounded,
       label: 'Record Call',
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
       },
     );
     final deviceOption = option(
       icon: Icons.bluetooth_searching_rounded,
       label: 'Connect Device',
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const DeviceSelectionPage()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSelectionPage()));
       },
     );
 
@@ -266,13 +248,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           phoneOption,
           const SizedBox(height: 22),
           // Bottom of the triangle: the other two side by side.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              callOption,
-              deviceOption,
-            ],
-          ),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [callOption, deviceOption]),
         ],
       ),
     );
@@ -284,7 +260,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          ),
           if (onViewAll != null)
             GestureDetector(
               onTap: onViewAll,
@@ -359,10 +338,12 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
     return GestureDetector(
       onTap: () {
-        MixpanelManager().dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
+        PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary)),
+          MaterialPageRoute(
+            builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
+          ),
         );
       },
       child: Container(
@@ -375,14 +356,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           child: Stack(
             children: [
               // Map at bottom
-              if (hasMap)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: _mapHeight,
-                  child: _buildCardMap(summary),
-                ),
+              if (hasMap) Positioned(bottom: 0, left: 0, right: 0, height: _mapHeight, child: _buildCardMap(summary)),
               // Text content at top
               Positioned(
                 top: 0,
@@ -427,15 +401,17 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final centerLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a + b) / summary.locations.length;
 
     final markers = summary.locations
-        .map((loc) => Marker(
-              point: LatLng(loc.latitude, loc.longitude),
-              width: 22,
-              height: 22,
-              child: Container(
-                decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
-                child: const Icon(Icons.location_on, color: Colors.white, size: 13),
-              ),
-            ))
+        .map(
+          (loc) => Marker(
+            point: LatLng(loc.latitude, loc.longitude),
+            width: 22,
+            height: 22,
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
+              child: const Icon(Icons.location_on, color: Colors.white, size: 13),
+            ),
+          ),
+        )
         .toList();
 
     return SizedBox(
@@ -555,19 +531,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
     return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        childCount: recent.length,
-        (context, index) {
-          final c = recent[index];
-          final dateKey = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
-          return ConversationListItem(
-            key: ValueKey(c.id),
-            conversation: c,
-            date: dateKey,
-            conversationIdx: index,
-          );
-        },
-      ),
+      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
+        final c = recent[index];
+        final dateKey = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
+        return ConversationListItem(key: ValueKey(c.id), conversation: c, date: dateKey, conversationIdx: index);
+      }),
     );
   }
 }

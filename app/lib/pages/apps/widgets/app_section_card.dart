@@ -1,5 +1,6 @@
 import 'dart:math'; // Need max and min
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -85,7 +85,7 @@ class SectionAppItemCard extends StatelessWidget {
       builder: (context, provider, child) {
         return GestureDetector(
           onTap: () async {
-            MixpanelManager().pageOpened('App Detail From Popular Apps Section');
+            PlatformManager.instance.analytics.pageOpened('App Detail From Popular Apps Section');
             await routeToPage(context, AppDetailPage(app: app));
             provider.filterApps();
           },

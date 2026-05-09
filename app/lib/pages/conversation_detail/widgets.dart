@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,7 +29,6 @@ import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -233,7 +233,7 @@ class GetSummaryWidgets extends StatelessWidget {
         HapticFeedback.selectionClick();
 
         // Track folder chip clicked
-        MixpanelManager().conversationDetailFolderChipClicked(
+        PlatformManager.instance.analytics.conversationDetailFolderChipClicked(
           conversationId: conversationId,
           currentFolderId: currentFolderId,
         );
@@ -252,7 +252,7 @@ class GetSummaryWidgets extends StatelessWidget {
           context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
 
           // Track conversation moved to folder
-          MixpanelManager().conversationMovedToFolder(
+          PlatformManager.instance.analytics.conversationMovedToFolder(
             conversationId: conversationId,
             fromFolderId: currentFolderId,
             toFolderId: newFolderId,
@@ -378,7 +378,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  PlatformManager.instance.analytics.conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.private_.value,
@@ -408,7 +408,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  PlatformManager.instance.analytics.conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.shared.value,
@@ -569,7 +569,10 @@ class ActionItemsListWidget extends StatelessWidget {
                               duration: const Duration(seconds: 2),
                             ),
                           );
-                          MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
+                          PlatformManager.instance.analytics.copiedConversationDetails(
+                            provider.conversation,
+                            source: 'Action Items',
+                          );
                         },
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                       ),
@@ -596,7 +599,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     var tempIdx = idx;
                     provider.deleteActionItem(idx);
                     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    MixpanelManager().deletedActionItem(provider.conversation);
+                    PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
                     // ScaffoldMessenger.of(context)
                     //     .showSnackBar(
                     //       SnackBar(
@@ -615,7 +618,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     //     .then((reason) {
                     //   if (reason != SnackBarClosedReason.action) {
                     //     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    //     MixpanelManager().deletedActionItem(provider.conversation);
+                    //     PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
                     //   }
                     // });
                   },
@@ -637,9 +640,9 @@ class ActionItemsListWidget extends StatelessWidget {
                                   context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
                                   setConversationActionItemState(provider.conversation.id, [idx], [value]);
                                   if (value) {
-                                    MixpanelManager().checkedActionItem(provider.conversation, idx);
+                                    PlatformManager.instance.analytics.checkedActionItem(provider.conversation, idx);
                                   } else {
-                                    MixpanelManager().uncheckedActionItem(provider.conversation, idx);
+                                    PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, idx);
                                   }
                                 }
                               },
@@ -914,7 +917,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
-                  MixpanelManager().pageOpened('App Detail');
+                  PlatformManager.instance.analytics.pageOpened('App Detail');
                   await routeToPage(context, AppDetailPage(app: widget.app!));
                 }
               },

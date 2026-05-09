@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
@@ -50,7 +50,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       });
       _animationController.forward();
       // Track page view
-      MixpanelManager().dailySummaryDetailViewed(
+      PlatformManager.instance.analytics.dailySummaryDetailViewed(
         summaryId: widget.summaryId,
         date: widget.summary!.date,
         source: 'direct',
@@ -67,7 +67,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       _animationController.forward();
       // Track page view
       if (summary != null) {
-        MixpanelManager().dailySummaryDetailViewed(
+        PlatformManager.instance.analytics.dailySummaryDetailViewed(
           summaryId: widget.summaryId,
           date: summary.date,
           source: 'api_fetch',
@@ -83,8 +83,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-          ? _buildNotFound()
-          : _buildContent(),
+              ? _buildNotFound()
+              : _buildContent(),
     );
   }
 
@@ -93,7 +93,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
     // Track conversation click
     if (_summary != null) {
-      MixpanelManager().dailySummaryConversationClicked(
+      PlatformManager.instance.analytics.dailySummaryConversationClicked(
         summaryId: widget.summaryId,
         conversationId: conversationId,
         source: 'daily_summary_detail',
@@ -412,9 +412,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit: singleLocation
-                        ? null
-                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit:
+                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -668,8 +667,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-              ? '$startFormatted - $endFormatted'
-              : startFormatted)
+            ? '$startFormatted - $endFormatted'
+            : startFormatted)
         : '';
 
     return GestureDetector(

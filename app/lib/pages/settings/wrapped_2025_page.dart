@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -59,7 +59,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().wrappedPageOpened();
+    PlatformManager.instance.analytics.wrappedPageOpened();
     SharedPreferencesUtil().hasViewedWrapped2025 = true;
     _loadWrappedStatus();
     _pageController.addListener(_onPageChanged);
@@ -100,7 +100,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       'Summary Collage',
     ];
     if (page >= 0 && page < cardNames.length) {
-      MixpanelManager().wrappedCardViewed(cardName: cardNames[page], cardIndex: page);
+      PlatformManager.instance.analytics.wrappedCardViewed(cardName: cardNames[page], cardIndex: page);
     }
   }
 
@@ -148,13 +148,13 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             final totalMinutes = (totalHours * 60).toInt();
             final totalConvs = _result?['total_conversations'] ?? 0;
             final daysActive = _result?['days_active'] ?? 0;
-            MixpanelManager().wrappedGenerationCompleted(
+            PlatformManager.instance.analytics.wrappedGenerationCompleted(
               totalConversations: totalConvs,
               totalMinutes: totalMinutes,
               daysActive: daysActive,
             );
           } else if (_status == WrappedStatus.error) {
-            MixpanelManager().wrappedGenerationFailed(error: _error);
+            PlatformManager.instance.analytics.wrappedGenerationFailed(error: _error);
           }
         }
       }
@@ -162,7 +162,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   }
 
   Future<void> _generateWrapped() async {
-    MixpanelManager().wrappedGenerationStarted();
+    PlatformManager.instance.analytics.wrappedGenerationStarted();
 
     setState(() {
       _status = WrappedStatus.processing;
@@ -180,7 +180,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         _startPolling();
       }
     } else {
-      MixpanelManager().wrappedGenerationFailed(error: 'Failed to start generation');
+      PlatformManager.instance.analytics.wrappedGenerationFailed(error: 'Failed to start generation');
       setState(() {
         _status = WrappedStatus.error;
         _error = context.l10n.wrappedFailedToStartGeneration;
@@ -210,7 +210,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final cardName = cardInfo?['name'] ?? filename;
     final cardIndex = cardInfo?['index'] ?? -1;
 
-    MixpanelManager().wrappedShareButtonClicked(cardName: cardName, cardIndex: cardIndex);
+    PlatformManager.instance.analytics.wrappedShareButtonClicked(cardName: cardName, cardIndex: cardIndex);
 
     try {
       HapticFeedback.mediumImpact();
@@ -226,7 +226,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final boundary = _shareTemplateKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         Logger.debug('Share template boundary is null for $filename');
-        MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: 'Boundary is null');
+        PlatformManager.instance.analytics.wrappedShareFailed(
+          cardName: cardName,
+          cardIndex: cardIndex,
+          error: 'Boundary is null',
+        );
         return;
       }
 
@@ -235,7 +239,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final image = await boundary.toImage(pixelRatio: 1.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
-        MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: 'Byte data is null');
+        PlatformManager.instance.analytics.wrappedShareFailed(
+          cardName: cardName,
+          cardIndex: cardIndex,
+          error: 'Byte data is null',
+        );
         return;
       }
 
@@ -254,7 +262,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         sharePositionOrigin: sharePositionOrigin,
       );
 
-      MixpanelManager().wrappedSharedSuccessfully(
+      PlatformManager.instance.analytics.wrappedSharedSuccessfully(
         cardName: cardName,
         cardIndex: cardIndex,
         fileSizeBytes: bytes.length,
@@ -268,7 +276,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       }
     } catch (e) {
       Logger.debug('Error sharing $filename: $e');
-      MixpanelManager().wrappedShareFailed(cardName: cardName, cardIndex: cardIndex, error: e.toString());
+      PlatformManager.instance.analytics.wrappedShareFailed(
+        cardName: cardName,
+        cardIndex: cardIndex,
+        error: e.toString(),
+      );
       if (mounted) {
         setState(() {
           _currentShareTemplate = null;
@@ -1988,9 +2000,8 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
               final isFirst = index == 0;
 
               // Label appears when its slice starts animating
-              final labelOpacity = index < _sliceAnimations.length
-                  ? _sliceAnimations[index].value.clamp(0.0, 1.0)
-                  : 0.0;
+              final labelOpacity =
+                  index < _sliceAnimations.length ? _sliceAnimations[index].value.clamp(0.0, 1.0) : 0.0;
 
               return Opacity(
                 opacity: labelOpacity,
@@ -2247,9 +2258,8 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                               color: WrappedColors.indigo,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
-                              decoration: strikethroughProgress > 0.9
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
+                              decoration:
+                                  strikethroughProgress > 0.9 ? TextDecoration.lineThrough : TextDecoration.none,
                               decorationColor: WrappedColors.indigo,
                               decorationThickness: 2,
                             ),
@@ -2446,8 +2456,8 @@ class _MemorableDayData {
     required this.title,
     required this.description,
     required this.dateStr,
-  }) : month = _parseMonth(dateStr),
-       day = _parseDay(dateStr);
+  })  : month = _parseMonth(dateStr),
+        day = _parseDay(dateStr);
 
   static int _parseMonth(String dateStr) {
     final months = {
@@ -2728,9 +2738,8 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     return AnimatedBuilder(
       animation: _introAnimation,
       builder: (context, child) {
-        final currentDay = widget.days.isNotEmpty && _currentDayIndex < widget.days.length
-            ? widget.days[_currentDayIndex]
-            : null;
+        final currentDay =
+            widget.days.isNotEmpty && _currentDayIndex < widget.days.length ? widget.days[_currentDayIndex] : null;
 
         return Column(
           children: [

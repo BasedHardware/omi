@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
     "showCompletedTasks": "పూర్తయినవి చూపించు",
     "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
-    "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి"
+    "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
+    "bulkExportAlreadyExported": "ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి",
+    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి."
 }

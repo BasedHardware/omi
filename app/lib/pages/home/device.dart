@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,7 +14,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -174,11 +174,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
-                    ? const FaIcon(
-                        FontAwesomeIcons.chargingStation,
-                        color: Color.fromARGB(255, 0, 255, 8),
-                        size: 20,
-                      )
+                    ? const FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
                     : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
@@ -376,7 +372,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted && Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
               }
-              MixpanelManager().disconnectFriendClicked();
+              PlatformManager.instance.analytics.disconnectFriendClicked();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),

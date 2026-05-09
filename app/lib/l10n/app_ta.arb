@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "அனைத்தையும் தேர்ந்தெடு",
     "showCompletedTasks": "முடிந்தவற்றைக் காட்டு",
     "startCallRecording": "அழைப்பு பதிவைத் தொடங்கு",
-    "startVoiceRecording": "குரல் பதிவைத் தொடங்கு"
+    "startVoiceRecording": "குரல் பதிவைத் தொடங்கு",
+    "bulkExportAlreadyExported": "தேர்ந்தெடுக்கப்பட்ட அனைத்து பணிகளும் ஏற்கனவே ஏற்றுமதி செய்யப்பட்டுள்ளன",
+    "bulkDeleteFailed": "பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்."
 }

@@ -1,7 +1,9 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
@@ -11,8 +13,6 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/ui/atoms/omi_search_input.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -76,7 +76,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      MixpanelManager().actionItemsPageOpened();
+      PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
@@ -152,7 +152,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Future<void> _onActionItemCompleted() async {
-    MixpanelManager().actionItemCompleted(fromTab: 'Tasks');
+    PlatformManager.instance.analytics.actionItemCompleted(fromTab: 'Tasks');
 
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
@@ -190,7 +190,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             currentValue: current,
           );
           if (created != null) {
-            MixpanelManager().goalCreated(
+            PlatformManager.instance.analytics.goalCreated(
               goalId: created.id,
               titleLength: title.length,
               targetValue: target,
@@ -228,29 +228,47 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildPageHeader(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
-            child: OmiSearchInput(
+            child: TextFormField(
               controller: _searchController,
               focusNode: _searchFocusNode,
-              hint: context.l10n.searchActionItems,
-              highlightOnFocus: false,
               onChanged: (value) {
                 _searchDebouncer.run(() {
                   if (!mounted) return;
                   provider.setSearchQuery(value);
                 });
               },
-              onClear: () {
-                _searchController.clear();
-                _searchDebouncer.cancel();
-                provider.clearSearchQuery();
-              },
+              decoration: InputDecoration(
+                hintText: context.l10n.searchActionItems,
+                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
+                filled: true,
+                fillColor: const Color(0xFF1F1F25),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                prefixIcon: const Icon(Icons.search, color: Colors.white60),
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (_, val, __) => val.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            _searchDebouncer.cancel();
+                            provider.clearSearchQuery();
+                          },
+                          child: const Icon(Icons.close, color: Colors.white),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              style: const TextStyle(color: Colors.white),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           _buildOverflowMenu(provider),
         ],
       ),
@@ -262,64 +280,51 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final hasItems = provider.actionItems.isNotEmpty;
     final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
 
-    return PopupMenuButton<String>(
-      tooltip: '',
-      icon: Icon(Icons.more_horiz_rounded, color: Colors.grey[400], size: 22),
-      color: const Color(0xFF1F1F25),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (value) {
-        switch (value) {
-          case 'select':
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.selectActionItems,
+          iconWidget: const Icon(Icons.check_box_outlined, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             _searchFocusNode.unfocus();
             provider.startSelection();
-            break;
-          case 'select_all':
+          },
+        ),
+        PullDownMenuItem(
+          title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
+          iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             _searchFocusNode.unfocus();
             if (allSelected) {
-              // Stay in selection mode but clear — user can re-pick individuals.
               provider.clearSelection();
             } else {
               if (!provider.isSelectionMode) provider.startSelection();
               provider.selectAllItems();
             }
-            break;
-          case 'toggle_completed':
+          },
+        ),
+        PullDownMenuItem(
+          title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+          iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+          onTap: () {
             HapticFeedback.lightImpact();
             provider.toggleShowCompletedView();
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        _menuItem(
-          value: 'select',
-          icon: Icons.check_box_outlined,
-          label: context.l10n.selectActionItems,
-        ),
-        _menuItem(
-          value: 'select_all',
-          icon: allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
-          label: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
-        ),
-        _menuItem(
-          value: 'toggle_completed',
-          icon: showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-          label: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
+          },
         ),
       ],
-    );
-  }
-
-  PopupMenuItem<String> _menuItem({required String value, required IconData icon, required String label}) {
-    return PopupMenuItem<String>(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 18),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
-        ],
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          showMenu();
+        },
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+          child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
+        ),
       ),
     );
   }
@@ -602,10 +607,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: _buildEmptyTasksContent()),
-        ),
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
       ],
     );
   }
@@ -628,10 +630,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      Colors.deepPurple.withValues(alpha: 0.35),
-                      Colors.deepPurple.withValues(alpha: 0.0),
-                    ],
+                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -663,12 +662,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           const SizedBox(height: 28),
           Text(
             context.l10n.noTasksYet,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
           const SizedBox(height: 10),
           ConstrainedBox(
@@ -676,11 +670,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             child: Text(
               context.l10n.tasksEmptyStateMessage,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 15,
-                height: 1.5,
-              ),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
             ),
           ),
           const SizedBox(height: 28),
@@ -701,11 +691,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
                 ],
               ),
               child: Row(
@@ -747,27 +733,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: _buildNoSearchResultsContent()),
-            )
+            SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoSearchResultsContent()))
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final item = filteredItems[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildTaskItem(
-                      item,
-                      provider,
-                      category: _getCategoryForItem(item),
-                      categoryItems: filteredItems,
-                    ),
-                  );
-                },
-                childCount: filteredItems.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final item = filteredItems[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildTaskItem(
+                    item,
+                    provider,
+                    category: _getCategoryForItem(item),
+                    categoryItems: filteredItems,
+                  ),
+                );
+              }, childCount: filteredItems.length),
             ),
         ] else ...[
           SliverToBoxAdapter(child: _buildGoalsRow()),
@@ -825,7 +805,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         GestureDetector(
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                            PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
                             _showCreateGoalSheet();
                           },
                           child: Container(
@@ -857,7 +837,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onWillAcceptWithDetails: (details) => goal != null,
       onAcceptWithDetails: (details) {
         if (goal == null) return;
-        MixpanelManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
+        PlatformManager.instance.analytics.taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
         _attachTaskToGoal(details.data.id, goal.id);
       },
       builder: (context, candidateData, rejectedData) {
@@ -1213,10 +1193,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   /// stopping at the first sibling/ancestor. The data model is flat (no
   /// parent_id), so the page is the right layer to compute this: it owns the
   /// category-grouped display order; the provider does not.
-  List<String> _visibleDescendantIds(
-    ActionItemWithMetadata parent,
-    List<ActionItemWithMetadata> categoryItems,
-  ) {
+  List<String> _visibleDescendantIds(ActionItemWithMetadata parent, List<ActionItemWithMetadata> categoryItems) {
     final idx = categoryItems.indexWhere((i) => i.id == parent.id);
     if (idx < 0) return const [];
     final ids = <String>[];
@@ -1453,11 +1430,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         await provider.updateActionItemState(item, !item.completed);
                         if (!item.completed) _onActionItemCompleted();
                       },
-                child: SizedBox(
-                  width: 44,
-                  height: 48,
-                  child: Center(child: _buildCheckbox(item.completed)),
-                ),
+                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(item.completed))),
               ),
               // Task text
               Expanded(
@@ -1503,10 +1476,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Different shape + position from the leading completion circle
               // so completion vs. selection cannot be confused.
               if (provider.isSelectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8),
-                  child: _buildSelectionSquare(isSelected),
-                ),
+                Padding(padding: const EdgeInsets.only(left: 8, right: 8), child: _buildSelectionSquare(isSelected)),
             ],
           ),
         ),
@@ -1590,7 +1560,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Goals are not part of selection mode — selection only applies to
         // tasks (the action bar's Export action acts on tasks only).
         if (provider.isSelectionMode) return;
-        MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+        PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
         _showEditGoalSheet(goal);
       },
       child: Container(
@@ -1660,7 +1630,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
-        MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
         await _deleteGoal(goal);
       },
       background: Container(
@@ -1686,10 +1656,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           // Update goal via provider
           final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
           await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-          MixpanelManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
+          PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
         },
         onDelete: () {
-          MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+          PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
           _deleteGoal(goal);
         },
       ),
@@ -2159,13 +2129,7 @@ class _DashedCirclePainter extends CustomPainter {
 
     for (var i = 0; i < segments; i++) {
       final startAngle = i * stepAngle;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        dashAngle,
-        false,
-        paint,
-      );
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashAngle, false, paint);
     }
   }
 

@@ -9073,8 +9073,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deselectAllTasksMenu => '取消全选';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => '所选任务已全部导出';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => '无法删除任务，请重试。';
 }

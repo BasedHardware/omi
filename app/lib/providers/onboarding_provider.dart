@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -19,7 +20,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/logger.dart';
@@ -71,20 +71,23 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void updateLocationPermission(bool value) {
     hasLocationPermission = value;
     SharedPreferencesUtil().locationEnabled = value;
-    AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
+    PlatformManager.instance.analytics.setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
     notifyListeners();
   }
 
   void updateNotificationPermission(bool value) {
     hasNotificationPermission = value;
     SharedPreferencesUtil().notificationsEnabled = value;
-    AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+    PlatformManager.instance.analytics.setUserAttribute(
+      'Notifications Enabled',
+      SharedPreferencesUtil().notificationsEnabled,
+    );
     notifyListeners();
   }
 
   void updateBackgroundPermission(bool value) {
     hasBackgroundPermission = value;
-    AnalyticsManager().setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
+    PlatformManager.instance.analytics.setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
 

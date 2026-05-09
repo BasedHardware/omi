@@ -9301,8 +9301,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deselectAllTasksMenu => 'Αποεπιλογή όλων';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Όλες οι επιλεγμένες εργασίες έχουν ήδη εξαχθεί';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.';
 }

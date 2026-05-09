@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "Izberi vse",
     "showCompletedTasks": "Prikaži dokončane",
     "startCallRecording": "Začni snemanje klica",
-    "startVoiceRecording": "Začni glasovno snemanje"
+    "startVoiceRecording": "Začni glasovno snemanje",
+    "bulkExportAlreadyExported": "Vse izbrane naloge so že izvožene",
+    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova."
 }

@@ -10723,5 +10723,7 @@
     "selectAllTasksMenu": "سب منتخب کریں",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
-    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں"
+    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
+    "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
 }

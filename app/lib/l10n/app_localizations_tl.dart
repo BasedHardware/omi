@@ -9321,8 +9321,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deselectAllTasksMenu => 'I-deselect lahat';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Lahat ng napiling gawain ay na-export na';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
 }

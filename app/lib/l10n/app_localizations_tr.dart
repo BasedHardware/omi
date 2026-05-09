@@ -9249,8 +9249,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deselectAllTasksMenu => 'Tümünün seçimini kaldır';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Seçilen tüm görevler zaten dışa aktarıldı';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
 }

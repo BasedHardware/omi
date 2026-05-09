@@ -9190,8 +9190,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deselectAllTasksMenu => 'ยกเลิกเลือกทั้งหมด';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'งานที่เลือกทั้งหมดถูกส่งออกแล้ว';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'ลบงานไม่สำเร็จ โปรดลองอีกครั้ง';
 }

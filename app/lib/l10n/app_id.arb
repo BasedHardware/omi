@@ -3057,5 +3057,7 @@
     "selectAllTasksMenu": "Pilih semua",
     "showCompletedTasks": "Tampilkan selesai",
     "startCallRecording": "Mulai rekaman panggilan",
-    "startVoiceRecording": "Mulai rekaman suara"
+    "startVoiceRecording": "Mulai rekaman suara",
+    "bulkExportAlreadyExported": "Semua tugas yang dipilih sudah diekspor",
+    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi."
 }

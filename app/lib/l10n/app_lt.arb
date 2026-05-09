@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Pasirinkti viską",
     "showCompletedTasks": "Rodyti užbaigtas",
     "startCallRecording": "Pradėti skambučio įrašymą",
-    "startVoiceRecording": "Pradėti balso įrašymą"
+    "startVoiceRecording": "Pradėti balso įrašymą",
+    "bulkExportAlreadyExported": "Visos pasirinktos užduotys jau eksportuotos",
+    "bulkDeleteFailed": "Nepavyko ištrinti užduočių. Bandykite dar kartą."
 }

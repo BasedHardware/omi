@@ -9240,8 +9240,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deselectAllTasksMenu => 'Avmarkera alla';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Alla valda uppgifter är redan exporterade';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Det gick inte att ta bort uppgifterna. Försök igen.';
 }

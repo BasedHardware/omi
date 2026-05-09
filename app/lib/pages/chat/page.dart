@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +33,6 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -189,7 +189,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
   void _openSettingsDrawer() {
     HapticFeedback.mediumImpact();
-    MixpanelManager().pageOpened('Settings');
+    PlatformManager.instance.analytics.pageOpened('Settings');
     final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
     final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
     final previousModel = SharedPreferencesUtil().transcriptionModel;
@@ -530,8 +530,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                             color: const Color(0xFF1f1f25),
                                                             borderRadius: BorderRadius.circular(16),
                                                           ),
-                                                          padding:
-                                                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                          padding: const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 8,
+                                                          ),
                                                           child: Row(
                                                             mainAxisSize: MainAxisSize.min,
                                                             children: [
@@ -565,8 +567,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                                     _selectedContext = null;
                                                                   });
                                                                 },
-                                                                child: const Icon(Icons.close,
-                                                                    size: 14, color: Colors.blue),
+                                                                child: const Icon(
+                                                                  Icons.close,
+                                                                  size: 14,
+                                                                  color: Colors.blue,
+                                                                ),
                                                               ),
                                                             ],
                                                           ),
@@ -607,8 +612,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                               textAlignVertical: const TextAlignVertical(y: -0.35),
                                                               decoration: InputDecoration(
                                                                 hintText: context.l10n.askAnything,
-                                                                hintStyle:
-                                                                    const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                                hintStyle: const TextStyle(
+                                                                  fontSize: 16.0,
+                                                                  color: Colors.grey,
+                                                                ),
                                                                 focusedBorder: InputBorder.none,
                                                                 enabledBorder: InputBorder.none,
                                                                 contentPadding: const EdgeInsets.symmetric(
@@ -777,9 +784,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 ),
                                               ],
                                             ),
-                                            child: const Center(
-                                              child: Icon(Icons.stop, color: Colors.white, size: 18),
-                                            ),
+                                            child: const Center(child: Icon(Icons.stop, color: Colors.white, size: 18)),
                                           ),
                                         ),
                                       ),
@@ -1079,7 +1084,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   Future<void> _navigateToChatAppsPage() async {
     if (!mounted) return;
 
-    MixpanelManager().pageOpened('Chat Apps');
+    PlatformManager.instance.analytics.pageOpened('Chat Apps');
     // Navigate to chat capability apps page
     await routeToPage(
       context,
@@ -1627,8 +1632,10 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
     _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
     _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation =
-        Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
+    _arrowAnimation = Tween<double>(
+      begin: 0,
+      end: 10,
+    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
   }
 
   @override

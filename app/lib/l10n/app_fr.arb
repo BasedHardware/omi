@@ -3050,5 +3050,7 @@
     "selectAllTasksMenu": "Tout sélectionner",
     "showCompletedTasks": "Afficher les terminées",
     "startCallRecording": "Démarrer l'enregistrement d'appel",
-    "startVoiceRecording": "Démarrer l'enregistrement vocal"
+    "startVoiceRecording": "Démarrer l'enregistrement vocal",
+    "bulkExportAlreadyExported": "Toutes les tâches sélectionnées sont déjà exportées",
+    "bulkDeleteFailed": "Impossible de supprimer les tâches. Veuillez réessayer."
 }

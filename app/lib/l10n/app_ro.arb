@@ -3015,5 +3015,7 @@
     "selectAllTasksMenu": "Selectați tot",
     "showCompletedTasks": "Afișați finalizate",
     "startCallRecording": "Porniți înregistrarea apelului",
-    "startVoiceRecording": "Porniți înregistrarea vocală"
+    "startVoiceRecording": "Porniți înregistrarea vocală",
+    "bulkExportAlreadyExported": "Toate sarcinile selectate sunt deja exportate",
+    "bulkDeleteFailed": "Nu am putut șterge sarcinile. Vă rugăm să încercați din nou."
 }

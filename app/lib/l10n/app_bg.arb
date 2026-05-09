@@ -2984,5 +2984,7 @@
     "selectAllTasksMenu": "Избиране на всички",
     "showCompletedTasks": "Показване на завършените",
     "startCallRecording": "Стартиране на запис на разговор",
-    "startVoiceRecording": "Стартиране на гласов запис"
+    "startVoiceRecording": "Стартиране на гласов запис",
+    "bulkExportAlreadyExported": "Всички избрани задачи вече са експортирани",
+    "bulkDeleteFailed": "Задачите не можаха да бъдат изтрити. Моля, опитайте отново."
 }

@@ -9279,8 +9279,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deselectAllTasksMenu => 'Deselectați tot';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Toate sarcinile selectate sunt deja exportate';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
 }
