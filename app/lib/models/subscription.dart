@@ -10,6 +10,20 @@ enum PlanType { basic, unlimited, architect, operator, lite, plus, max }
 
 enum SubscriptionStatus { active, inactive }
 
+// Which billing rail created the subscription. `stripe` covers the legacy book
+// (web/desktop checkout); `superwall_ios` / `superwall_android` are the new
+// mobile IAP purchases routed through Superwall. See backend
+// `models/users.py:SubscriptionSource`. JsonValue annotations keep the wire
+// format snake_case to match the backend's enum values.
+enum SubscriptionSource {
+  @JsonValue('stripe')
+  stripe,
+  @JsonValue('superwall_ios')
+  superwallIos,
+  @JsonValue('superwall_android')
+  superwallAndroid,
+}
+
 @JsonSerializable(fieldRename: FieldRename.snake)
 class PlanLimits {
   final int? transcriptionSeconds;
@@ -38,8 +52,14 @@ class Subscription {
   final PlanType plan;
   @JsonKey(unknownEnumValue: SubscriptionStatus.inactive)
   final SubscriptionStatus status;
+  // Defaults to `stripe` to match the backend default. Existing user docs
+  // that don't carry the field deserialize as Stripe-sourced, which is
+  // correct for the entire pre-Superwall book.
+  @JsonKey(defaultValue: SubscriptionSource.stripe, unknownEnumValue: SubscriptionSource.stripe)
+  final SubscriptionSource source;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;
+  final String? superwallSubscriptionId;
   final String? currentPriceId;
   @JsonKey(defaultValue: [])
   final List<String> features;
@@ -53,8 +73,10 @@ class Subscription {
   Subscription({
     required this.plan,
     required this.status,
+    this.source = SubscriptionSource.stripe,
     this.currentPeriodEnd,
     this.stripeSubscriptionId,
+    this.superwallSubscriptionId,
     this.currentPriceId,
     this.features = const [],
     this.cancelAtPeriodEnd = false,

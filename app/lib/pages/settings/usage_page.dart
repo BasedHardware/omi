@@ -18,7 +18,7 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/utils/paywall_router.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -484,25 +484,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   void _showPlansSheet() {
-    if (!context.read<UsageProvider>().showSubscriptionUI) {
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return PlansSheet(
-              waveController: _waveController,
-              notesController: _notesController,
-              arrowController: _arrowController,
-              arrowAnimation: _arrowAnimation,
-            );
-          },
-        );
-      },
+    showUpgradePaywall(
+      context,
+      placement: 'upgrade_settings',
+      waveController: _waveController,
+      notesController: _notesController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
     );
   }
 
