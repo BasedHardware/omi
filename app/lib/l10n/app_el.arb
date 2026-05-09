@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Επιλογή όλων",
     "showCompletedTasks": "Εμφάνιση ολοκληρωμένων",
     "startCallRecording": "Έναρξη εγγραφής κλήσης",
-    "startVoiceRecording": "Έναρξη ηχογράφησης"
+    "startVoiceRecording": "Έναρξη ηχογράφησης",
+    "restorePurchasesAction": "Επαναφορά αγορών",
+    "restorePurchasesSuccess": "Οι αγορές επαναφέρθηκαν.",
+    "restorePurchasesFailed": "Δεν ήταν δυνατή η επαναφορά των αγορών. Δοκιμάστε ξανά αργότερα."
 }

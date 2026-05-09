@@ -9077,4 +9077,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => '恢复购买';
+
+  @override
+  String get restorePurchasesSuccess => '已恢复购买。';
+
+  @override
+  String get restorePurchasesFailed => '无法恢复购买。请稍后重试。';
 }

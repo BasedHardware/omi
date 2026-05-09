@@ -9249,4 +9249,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'কেনাকাটা পুনরুদ্ধার করুন';
+
+  @override
+  String get restorePurchasesSuccess => 'কেনাকাটা পুনরুদ্ধার করা হয়েছে।';
+
+  @override
+  String get restorePurchasesFailed => 'কেনাকাটা পুনরুদ্ধার করা যায়নি। পরে আবার চেষ্টা করুন।';
 }

@@ -9254,4 +9254,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Відновити покупки';
+
+  @override
+  String get restorePurchasesSuccess => 'Покупки відновлено.';
+
+  @override
+  String get restorePurchasesFailed => 'Не вдалося відновити покупки. Спробуйте пізніше.';
 }

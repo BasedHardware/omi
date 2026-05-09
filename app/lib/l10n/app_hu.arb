@@ -3111,5 +3111,8 @@
     "selectAllTasksMenu": "Összes kijelölése",
     "showCompletedTasks": "Befejezettek megjelenítése",
     "startCallRecording": "Hívásfelvétel indítása",
-    "startVoiceRecording": "Hangfelvétel indítása"
+    "startVoiceRecording": "Hangfelvétel indítása",
+    "restorePurchasesAction": "Vásárlások visszaállítása",
+    "restorePurchasesSuccess": "Vásárlások visszaállítva.",
+    "restorePurchasesFailed": "A vásárlásokat nem sikerült visszaállítani. Próbáld újra később."
 }

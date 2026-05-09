@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "سب منتخب کریں",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
-    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں"
+    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
+    "restorePurchasesAction": "خریداریاں بحال کریں",
+    "restorePurchasesSuccess": "خریداریاں بحال ہو گئیں۔",
+    "restorePurchasesFailed": "خریداریاں بحال نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔"
 }

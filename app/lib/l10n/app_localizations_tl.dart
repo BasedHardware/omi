@@ -9325,4 +9325,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'I-restore ang mga Pagbili';
+
+  @override
+  String get restorePurchasesSuccess => 'Naibalik na ang mga pagbili.';
+
+  @override
+  String get restorePurchasesFailed => 'Hindi maibalik ang mga pagbili. Subukan ulit mamaya.';
 }

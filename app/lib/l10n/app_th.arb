@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "เลือกทั้งหมด",
     "showCompletedTasks": "แสดงที่เสร็จแล้ว",
     "startCallRecording": "เริ่มบันทึกการโทร",
-    "startVoiceRecording": "เริ่มบันทึกเสียง"
+    "startVoiceRecording": "เริ่มบันทึกเสียง",
+    "restorePurchasesAction": "กู้คืนการซื้อ",
+    "restorePurchasesSuccess": "กู้คืนการซื้อแล้ว",
+    "restorePurchasesFailed": "ไม่สามารถกู้คืนการซื้อได้ ลองใหม่อีกครั้งภายหลัง"
 }

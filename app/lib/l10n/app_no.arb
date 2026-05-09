@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Velg alle",
     "showCompletedTasks": "Vis fullførte",
     "startCallRecording": "Start samtaleopptak",
-    "startVoiceRecording": "Start stemmeopptak"
+    "startVoiceRecording": "Start stemmeopptak",
+    "restorePurchasesAction": "Gjenopprett kjøp",
+    "restorePurchasesSuccess": "Kjøp gjenopprettet.",
+    "restorePurchasesFailed": "Kunne ikke gjenopprette kjøp. Prøv igjen senere."
 }

@@ -3020,5 +3020,8 @@
     "selectAllTasksMenu": "Vybrať všetko",
     "showCompletedTasks": "Zobraziť dokončené",
     "startCallRecording": "Spustiť nahrávanie hovoru",
-    "startVoiceRecording": "Spustiť hlasový záznam"
+    "startVoiceRecording": "Spustiť hlasový záznam",
+    "restorePurchasesAction": "Obnoviť nákupy",
+    "restorePurchasesSuccess": "Nákupy obnovené.",
+    "restorePurchasesFailed": "Nákupy sa nepodarilo obnoviť. Skúste neskôr."
 }

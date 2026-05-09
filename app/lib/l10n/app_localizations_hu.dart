@@ -9279,4 +9279,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Vásárlások visszaállítása';
+
+  @override
+  String get restorePurchasesSuccess => 'Vásárlások visszaállítva.';
+
+  @override
+  String get restorePurchasesFailed => 'A vásárlásokat nem sikerült visszaállítani. Próbáld újra később.';
 }

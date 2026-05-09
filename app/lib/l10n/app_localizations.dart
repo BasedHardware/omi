@@ -17246,6 +17246,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete tasks. Please try again.'**
   String get bulkDeleteFailed;
+
+  /// Settings link to restore previously purchased mobile subscription via Superwall.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Purchases'**
+  String get restorePurchasesAction;
+
+  /// Snackbar after a successful restore-purchases run.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases restored.'**
+  String get restorePurchasesSuccess;
+
+  /// Snackbar shown when restore-purchases fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore purchases. Try again later.'**
+  String get restorePurchasesFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

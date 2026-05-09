@@ -3037,5 +3037,8 @@
     "selectAllTasksMenu": "全选",
     "showCompletedTasks": "显示已完成",
     "startCallRecording": "开始通话录音",
-    "startVoiceRecording": "开始语音录音"
+    "startVoiceRecording": "开始语音录音",
+    "restorePurchasesAction": "恢复购买",
+    "restorePurchasesSuccess": "已恢复购买。",
+    "restorePurchasesFailed": "无法恢复购买。请稍后重试。"
 }

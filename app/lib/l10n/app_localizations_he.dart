@@ -9168,4 +9168,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'שחזור רכישות';
+
+  @override
+  String get restorePurchasesSuccess => 'הרכישות שוחזרו.';
+
+  @override
+  String get restorePurchasesFailed => 'לא ניתן לשחזר רכישות. נסה שוב מאוחר יותר.';
 }

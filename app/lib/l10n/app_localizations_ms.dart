@@ -9264,4 +9264,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Pulihkan Pembelian';
+
+  @override
+  String get restorePurchasesSuccess => 'Pembelian dipulihkan.';
+
+  @override
+  String get restorePurchasesFailed => 'Tidak dapat memulihkan pembelian. Cuba lagi kemudian.';
 }

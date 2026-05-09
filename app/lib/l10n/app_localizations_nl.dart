@@ -9268,4 +9268,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Aankopen herstellen';
+
+  @override
+  String get restorePurchasesSuccess => 'Aankopen hersteld.';
+
+  @override
+  String get restorePurchasesFailed => 'Kan aankopen niet herstellen. Probeer het later opnieuw.';
 }

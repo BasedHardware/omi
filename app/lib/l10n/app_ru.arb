@@ -3050,5 +3050,8 @@
     "selectAllTasksMenu": "Выбрать все",
     "showCompletedTasks": "Показать завершённые",
     "startCallRecording": "Начать запись звонка",
-    "startVoiceRecording": "Начать голосовую запись"
+    "startVoiceRecording": "Начать голосовую запись",
+    "restorePurchasesAction": "Восстановить покупки",
+    "restorePurchasesSuccess": "Покупки восстановлены.",
+    "restorePurchasesFailed": "Не удалось восстановить покупки. Повторите попытку позже."
 }

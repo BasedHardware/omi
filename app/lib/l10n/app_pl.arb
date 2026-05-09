@@ -3050,5 +3050,8 @@
     "selectAllTasksMenu": "Zaznacz wszystkie",
     "showCompletedTasks": "Pokaż ukończone",
     "startCallRecording": "Rozpocznij nagrywanie rozmowy",
-    "startVoiceRecording": "Rozpocznij nagrywanie głosu"
+    "startVoiceRecording": "Rozpocznij nagrywanie głosu",
+    "restorePurchasesAction": "Przywróć zakupy",
+    "restorePurchasesSuccess": "Zakupy przywrócone.",
+    "restorePurchasesFailed": "Nie udało się przywrócić zakupów. Spróbuj ponownie później."
 }

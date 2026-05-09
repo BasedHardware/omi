@@ -3051,5 +3051,8 @@
     "selectAllTasksMenu": "Selecionar todos",
     "showCompletedTasks": "Mostrar concluídas",
     "startCallRecording": "Iniciar gravação de chamada",
-    "startVoiceRecording": "Iniciar gravação de voz"
+    "startVoiceRecording": "Iniciar gravação de voz",
+    "restorePurchasesAction": "Restaurar compras",
+    "restorePurchasesSuccess": "Compras restauradas.",
+    "restorePurchasesFailed": "Não foi possível restaurar as compras. Tente novamente mais tarde."
 }

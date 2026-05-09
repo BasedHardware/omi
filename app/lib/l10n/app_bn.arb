@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "সমস্ত নির্বাচন",
     "showCompletedTasks": "সম্পন্ন দেখান",
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
-    "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন"
+    "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
+    "restorePurchasesAction": "কেনাকাটা পুনরুদ্ধার করুন",
+    "restorePurchasesSuccess": "কেনাকাটা পুনরুদ্ধার করা হয়েছে।",
+    "restorePurchasesFailed": "কেনাকাটা পুনরুদ্ধার করা যায়নি। পরে আবার চেষ্টা করুন।"
 }

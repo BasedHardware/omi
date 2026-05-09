@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "सर्व निवडा",
     "showCompletedTasks": "पूर्ण झालेले दाखवा",
     "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
-    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा"
+    "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
+    "restorePurchasesAction": "खरेदी पुनर्संचयित करा",
+    "restorePurchasesSuccess": "खरेदी पुनर्संचयित केली.",
+    "restorePurchasesFailed": "खरेदी पुनर्संचयित करता आल्या नाहीत. नंतर पुन्हा प्रयत्न करा."
 }

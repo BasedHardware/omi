@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "انتخاب همه",
     "showCompletedTasks": "نمایش انجام‌شده‌ها",
     "startCallRecording": "شروع ضبط تماس",
-    "startVoiceRecording": "شروع ضبط صدا"
+    "startVoiceRecording": "شروع ضبط صدا",
+    "restorePurchasesAction": "بازیابی خریدها",
+    "restorePurchasesSuccess": "خریدها بازیابی شدند.",
+    "restorePurchasesFailed": "بازیابی خریدها ممکن نشد. بعداً دوباره تلاش کنید."
 }

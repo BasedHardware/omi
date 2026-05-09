@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "Piliin lahat",
     "showCompletedTasks": "Ipakita ang tapos na",
     "startCallRecording": "Simulan ang pag-record ng tawag",
-    "startVoiceRecording": "Simulan ang voice recording"
+    "startVoiceRecording": "Simulan ang voice recording",
+    "restorePurchasesAction": "I-restore ang mga Pagbili",
+    "restorePurchasesSuccess": "Naibalik na ang mga pagbili.",
+    "restorePurchasesFailed": "Hindi maibalik ang mga pagbili. Subukan ulit mamaya."
 }

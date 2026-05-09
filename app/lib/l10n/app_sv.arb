@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Välj alla",
     "showCompletedTasks": "Visa slutförda",
     "startCallRecording": "Starta samtalsinspelning",
-    "startVoiceRecording": "Starta röstinspelning"
+    "startVoiceRecording": "Starta röstinspelning",
+    "restorePurchasesAction": "Återställ köp",
+    "restorePurchasesSuccess": "Köp återställda.",
+    "restorePurchasesFailed": "Det gick inte att återställa köp. Försök igen senare."
 }

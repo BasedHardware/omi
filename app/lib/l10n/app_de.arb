@@ -2983,5 +2983,8 @@
     "selectAllTasksMenu": "Alle auswählen",
     "showCompletedTasks": "Erledigte anzeigen",
     "startCallRecording": "Anrufaufnahme starten",
-    "startVoiceRecording": "Sprachaufnahme starten"
+    "startVoiceRecording": "Sprachaufnahme starten",
+    "restorePurchasesAction": "Käufe wiederherstellen",
+    "restorePurchasesSuccess": "Käufe wiederhergestellt.",
+    "restorePurchasesFailed": "Käufe konnten nicht wiederhergestellt werden. Versuche es später erneut."
 }

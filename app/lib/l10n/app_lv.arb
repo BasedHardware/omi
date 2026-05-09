@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Atlasīt visus",
     "showCompletedTasks": "Rādīt pabeigtās",
     "startCallRecording": "Sākt zvana ierakstīšanu",
-    "startVoiceRecording": "Sākt balss ierakstīšanu"
+    "startVoiceRecording": "Sākt balss ierakstīšanu",
+    "restorePurchasesAction": "Atjaunot pirkumus",
+    "restorePurchasesSuccess": "Pirkumi atjaunoti.",
+    "restorePurchasesFailed": "Neizdevās atjaunot pirkumus. Mēģiniet vēlāk."
 }

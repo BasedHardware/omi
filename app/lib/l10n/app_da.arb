@@ -3024,5 +3024,8 @@
     "selectAllTasksMenu": "Vælg alle",
     "showCompletedTasks": "Vis fuldførte",
     "startCallRecording": "Start opkaldsoptagelse",
-    "startVoiceRecording": "Start stemmeoptagelse"
+    "startVoiceRecording": "Start stemmeoptagelse",
+    "restorePurchasesAction": "Gendan køb",
+    "restorePurchasesSuccess": "Køb gendannet.",
+    "restorePurchasesFailed": "Kunne ikke gendanne køb. Prøv igen senere."
 }

@@ -9270,4 +9270,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Vrati kupnje';
+
+  @override
+  String get restorePurchasesSuccess => 'Kupnje su vraćene.';
+
+  @override
+  String get restorePurchasesFailed => 'Vraćanje kupnji nije uspjelo. Pokušajte ponovno kasnije.';
 }

@@ -9257,4 +9257,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'خریداریاں بحال کریں';
+
+  @override
+  String get restorePurchasesSuccess => 'خریداریاں بحال ہو گئیں۔';
+
+  @override
+  String get restorePurchasesFailed => 'خریداریاں بحال نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔';
 }

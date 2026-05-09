@@ -9226,4 +9226,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Gendan køb';
+
+  @override
+  String get restorePurchasesSuccess => 'Køb gendannet.';
+
+  @override
+  String get restorePurchasesFailed => 'Kunne ikke gendanne køb. Prøv igen senere.';
 }

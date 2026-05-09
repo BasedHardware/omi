@@ -9305,4 +9305,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Επαναφορά αγορών';
+
+  @override
+  String get restorePurchasesSuccess => 'Οι αγορές επαναφέρθηκαν.';
+
+  @override
+  String get restorePurchasesFailed => 'Δεν ήταν δυνατή η επαναφορά των αγορών. Δοκιμάστε ξανά αργότερα.';
 }

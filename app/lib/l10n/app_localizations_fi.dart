@@ -9239,4 +9239,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Palauta ostokset';
+
+  @override
+  String get restorePurchasesSuccess => 'Ostokset palautettu.';
+
+  @override
+  String get restorePurchasesFailed => 'Ostosten palauttaminen epäonnistui. Yritä myöhemmin uudelleen.';
 }

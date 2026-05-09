@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Alles selecteren",
     "showCompletedTasks": "Voltooide tonen",
     "startCallRecording": "Gespreksopname starten",
-    "startVoiceRecording": "Spraakopname starten"
+    "startVoiceRecording": "Spraakopname starten",
+    "restorePurchasesAction": "Aankopen herstellen",
+    "restorePurchasesSuccess": "Aankopen hersteld.",
+    "restorePurchasesFailed": "Kan aankopen niet herstellen. Probeer het later opnieuw."
 }

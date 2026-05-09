@@ -2984,5 +2984,8 @@
     "selectAllTasksMenu": "Selecciona tot",
     "showCompletedTasks": "Mostra les completades",
     "startCallRecording": "Inicia l'enregistrament de trucada",
-    "startVoiceRecording": "Inicia l'enregistrament de veu"
+    "startVoiceRecording": "Inicia l'enregistrament de veu",
+    "restorePurchasesAction": "Restaurar compres",
+    "restorePurchasesSuccess": "Compres restaurades.",
+    "restorePurchasesFailed": "No s'han pogut restaurar les compres. Torna-ho a provar més tard."
 }

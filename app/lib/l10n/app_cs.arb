@@ -2984,5 +2984,8 @@
     "selectAllTasksMenu": "Vybrat vše",
     "showCompletedTasks": "Zobrazit dokončené",
     "startCallRecording": "Zahájit nahrávání hovoru",
-    "startVoiceRecording": "Zahájit hlasový záznam"
+    "startVoiceRecording": "Zahájit hlasový záznam",
+    "restorePurchasesAction": "Obnovit nákupy",
+    "restorePurchasesSuccess": "Nákupy obnoveny.",
+    "restorePurchasesFailed": "Nákupy se nepodařilo obnovit. Zkuste to znovu později."
 }

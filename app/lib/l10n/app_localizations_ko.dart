@@ -9092,4 +9092,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => '구매 복원';
+
+  @override
+  String get restorePurchasesSuccess => '구매가 복원되었습니다.';
+
+  @override
+  String get restorePurchasesFailed => '구매를 복원할 수 없습니다. 나중에 다시 시도해 주세요.';
 }

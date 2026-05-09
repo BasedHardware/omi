@@ -9283,4 +9283,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Restaurează achizițiile';
+
+  @override
+  String get restorePurchasesSuccess => 'Achiziții restaurate.';
+
+  @override
+  String get restorePurchasesFailed => 'Achizițiile nu au putut fi restaurate. Încearcă din nou mai târziu.';
 }

@@ -3020,5 +3020,8 @@
     "selectAllTasksMenu": "Chọn tất cả",
     "showCompletedTasks": "Hiện đã hoàn thành",
     "startCallRecording": "Bắt đầu ghi âm cuộc gọi",
-    "startVoiceRecording": "Bắt đầu ghi âm giọng nói"
+    "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
+    "restorePurchasesAction": "Khôi phục giao dịch",
+    "restorePurchasesSuccess": "Đã khôi phục giao dịch.",
+    "restorePurchasesFailed": "Không thể khôi phục giao dịch. Vui lòng thử lại sau."
 }

@@ -9240,4 +9240,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Khôi phục giao dịch';
+
+  @override
+  String get restorePurchasesSuccess => 'Đã khôi phục giao dịch.';
+
+  @override
+  String get restorePurchasesFailed => 'Không thể khôi phục giao dịch. Vui lòng thử lại sau.';
 }

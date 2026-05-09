@@ -3057,5 +3057,8 @@
     "selectAllTasksMenu": "Pilih semua",
     "showCompletedTasks": "Tampilkan selesai",
     "startCallRecording": "Mulai rekaman panggilan",
-    "startVoiceRecording": "Mulai rekaman suara"
+    "startVoiceRecording": "Mulai rekaman suara",
+    "restorePurchasesAction": "Pulihkan Pembelian",
+    "restorePurchasesSuccess": "Pembelian dipulihkan.",
+    "restorePurchasesFailed": "Tidak dapat memulihkan pembelian. Coba lagi nanti."
 }

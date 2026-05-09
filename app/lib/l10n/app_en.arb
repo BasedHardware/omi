@@ -11020,5 +11020,17 @@
     "bulkDeleteFailed": "Could not delete tasks. Please try again.",
     "@bulkDeleteFailed": {
         "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
+    },
+    "restorePurchasesAction": "Restore Purchases",
+    "@restorePurchasesAction": {
+        "description": "Settings link to restore previously purchased mobile subscription via Superwall."
+    },
+    "restorePurchasesSuccess": "Purchases restored.",
+    "@restorePurchasesSuccess": {
+        "description": "Snackbar after a successful restore-purchases run."
+    },
+    "restorePurchasesFailed": "Could not restore purchases. Try again later.",
+    "@restorePurchasesFailed": {
+        "description": "Snackbar shown when restore-purchases fails."
     }
 }

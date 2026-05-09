@@ -9258,4 +9258,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Atjaunot pirkumus';
+
+  @override
+  String get restorePurchasesSuccess => 'Pirkumi atjaunoti.';
+
+  @override
+  String get restorePurchasesFailed => 'Neizdevās atjaunot pirkumus. Mēģiniet vēlāk.';
 }

@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
     "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
     "startCallRecording": "ಕರೆ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
-    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ"
+    "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
+    "restorePurchasesAction": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ",
+    "restorePurchasesSuccess": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲಾಗಿದೆ.",
+    "restorePurchasesFailed": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮರಳಿ ಪ್ರಯತ್ನಿಸಿ."
 }

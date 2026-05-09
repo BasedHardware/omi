@@ -2984,5 +2984,8 @@
     "selectAllTasksMenu": "Избиране на всички",
     "showCompletedTasks": "Показване на завършените",
     "startCallRecording": "Стартиране на запис на разговор",
-    "startVoiceRecording": "Стартиране на гласов запис"
+    "startVoiceRecording": "Стартиране на гласов запис",
+    "restorePurchasesAction": "Възстановяване на покупки",
+    "restorePurchasesSuccess": "Покупките са възстановени.",
+    "restorePurchasesFailed": "Покупките не могат да бъдат възстановени. Опитайте отново по-късно."
 }

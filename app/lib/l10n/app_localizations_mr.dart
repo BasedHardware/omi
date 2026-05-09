@@ -9251,4 +9251,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'खरेदी पुनर्संचयित करा';
+
+  @override
+  String get restorePurchasesSuccess => 'खरेदी पुनर्संचयित केली.';
+
+  @override
+  String get restorePurchasesFailed => 'खरेदी पुनर्संचयित करता आल्या नाहीत. नंतर पुन्हा प्रयत्न करा.';
 }

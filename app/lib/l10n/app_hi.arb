@@ -3016,5 +3016,8 @@
     "selectAllTasksMenu": "सभी चुनें",
     "showCompletedTasks": "पूर्ण दिखाएं",
     "startCallRecording": "कॉल रिकॉर्डिंग शुरू करें",
-    "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें"
+    "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें",
+    "restorePurchasesAction": "खरीदारी पुनर्स्थापित करें",
+    "restorePurchasesSuccess": "खरीदारी पुनर्स्थापित कर दी गई।",
+    "restorePurchasesFailed": "खरीदारी पुनर्स्थापित नहीं हो सकीं। बाद में पुनः प्रयास करें।"
 }

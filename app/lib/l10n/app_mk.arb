@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "Избери ги сите",
     "showCompletedTasks": "Прикажи завршени",
     "startCallRecording": "Започни снимање повик",
-    "startVoiceRecording": "Започни гласовно снимање"
+    "startVoiceRecording": "Започни гласовно снимање",
+    "restorePurchasesAction": "Врати купувања",
+    "restorePurchasesSuccess": "Купувањата се вратени.",
+    "restorePurchasesFailed": "Не може да се вратат купувањата. Обидете се повторно подоцна."
 }

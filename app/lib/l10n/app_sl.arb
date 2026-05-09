@@ -10723,5 +10723,8 @@
     "selectAllTasksMenu": "Izberi vse",
     "showCompletedTasks": "Prikaži dokončane",
     "startCallRecording": "Začni snemanje klica",
-    "startVoiceRecording": "Začni glasovno snemanje"
+    "startVoiceRecording": "Začni glasovno snemanje",
+    "restorePurchasesAction": "Obnovi nakupe",
+    "restorePurchasesSuccess": "Nakupi obnovljeni.",
+    "restorePurchasesFailed": "Nakupov ni bilo mogoče obnoviti. Poskusite znova pozneje."
 }

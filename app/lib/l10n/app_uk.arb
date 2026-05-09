@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Вибрати все",
     "showCompletedTasks": "Показати завершені",
     "startCallRecording": "Почати запис дзвінка",
-    "startVoiceRecording": "Почати голосовий запис"
+    "startVoiceRecording": "Почати голосовий запис",
+    "restorePurchasesAction": "Відновити покупки",
+    "restorePurchasesSuccess": "Покупки відновлено.",
+    "restorePurchasesFailed": "Не вдалося відновити покупки. Спробуйте пізніше."
 }

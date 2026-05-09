@@ -30,6 +30,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/paywall_router.dart';
 
 class MessageProvider extends ChangeNotifier {
   MessageProvider();
@@ -578,6 +579,7 @@ class MessageProvider extends ChangeNotifier {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            _presentChatQuotaPaywall();
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
             }
@@ -710,6 +712,7 @@ class MessageProvider extends ChangeNotifier {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            _presentChatQuotaPaywall();
             notifyListeners();
             return;
           }
@@ -730,6 +733,17 @@ class MessageProvider extends ChangeNotifier {
       setShowTypingIndicator(false);
       setSendingMessage(false);
     }
+  }
+
+  /// Present the upgrade paywall (Superwall placement for new tiers, or the
+  /// legacy PlansSheet for existing Stripe subscribers) when chat quota is hit.
+  /// Fire-and-forget — guarded by mounted-context inside the router so it's
+  /// safe to call from this provider without awaiting.
+  void _presentChatQuotaPaywall() {
+    final ctx = globalNavigatorKey.currentContext;
+    if (ctx == null) return;
+    // Don't await — message rendering must not block on the paywall sheet.
+    showUpgradePaywall(ctx, placement: 'chat_quota_exceeded');
   }
 
   bool _tryParseQuotaError(String errorText) {

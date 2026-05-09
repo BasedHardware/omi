@@ -9253,4 +9253,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Satın Almaları Geri Yükle';
+
+  @override
+  String get restorePurchasesSuccess => 'Satın almalar geri yüklendi.';
+
+  @override
+  String get restorePurchasesFailed => 'Satın almalar geri yüklenemedi. Daha sonra tekrar deneyin.';
 }

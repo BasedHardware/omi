@@ -3050,5 +3050,8 @@
     "selectAllTasksMenu": "Tümünü seç",
     "showCompletedTasks": "Tamamlananları göster",
     "startCallRecording": "Arama kaydını başlat",
-    "startVoiceRecording": "Ses kaydını başlat"
+    "startVoiceRecording": "Ses kaydını başlat",
+    "restorePurchasesAction": "Satın Almaları Geri Yükle",
+    "restorePurchasesSuccess": "Satın almalar geri yüklendi.",
+    "restorePurchasesFailed": "Satın almalar geri yüklenemedi. Daha sonra tekrar deneyin."
 }

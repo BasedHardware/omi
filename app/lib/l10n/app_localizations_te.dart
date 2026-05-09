@@ -9290,4 +9290,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'కొనుగోళ్లను పునరుద్ధరించండి';
+
+  @override
+  String get restorePurchasesSuccess => 'కొనుగోళ్లు పునరుద్ధరించబడ్డాయి.';
+
+  @override
+  String get restorePurchasesFailed => 'కొనుగోళ్లను పునరుద్ధరించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.';
 }

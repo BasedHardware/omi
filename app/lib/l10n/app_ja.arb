@@ -3016,5 +3016,8 @@
     "selectAllTasksMenu": "すべて選択",
     "showCompletedTasks": "完了を表示",
     "startCallRecording": "通話録音を開始",
-    "startVoiceRecording": "音声録音を開始"
+    "startVoiceRecording": "音声録音を開始",
+    "restorePurchasesAction": "購入を復元",
+    "restorePurchasesSuccess": "購入を復元しました。",
+    "restorePurchasesFailed": "購入を復元できませんでした。後でもう一度お試しください。"
 }

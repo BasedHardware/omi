@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Valitse kaikki",
     "showCompletedTasks": "Näytä valmiit",
     "startCallRecording": "Aloita puhelun nauhoitus",
-    "startVoiceRecording": "Aloita ääninauhoitus"
+    "startVoiceRecording": "Aloita ääninauhoitus",
+    "restorePurchasesAction": "Palauta ostokset",
+    "restorePurchasesSuccess": "Ostokset palautettu.",
+    "restorePurchasesFailed": "Ostosten palauttaminen epäonnistui. Yritä myöhemmin uudelleen."
 }

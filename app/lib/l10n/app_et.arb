@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Vali kõik",
     "showCompletedTasks": "Kuva lõpetatud",
     "startCallRecording": "Alusta kõne salvestamist",
-    "startVoiceRecording": "Alusta häälsalvestust"
+    "startVoiceRecording": "Alusta häälsalvestust",
+    "restorePurchasesAction": "Taasta ostud",
+    "restorePurchasesSuccess": "Ostud taastatud.",
+    "restorePurchasesFailed": "Ostude taastamine ebaõnnestus. Proovi hiljem uuesti."
 }

@@ -3050,5 +3050,8 @@
     "selectAllTasksMenu": "Tout sélectionner",
     "showCompletedTasks": "Afficher les terminées",
     "startCallRecording": "Démarrer l'enregistrement d'appel",
-    "startVoiceRecording": "Démarrer l'enregistrement vocal"
+    "startVoiceRecording": "Démarrer l'enregistrement vocal",
+    "restorePurchasesAction": "Restaurer les achats",
+    "restorePurchasesSuccess": "Achats restaurés.",
+    "restorePurchasesFailed": "Impossible de restaurer les achats. Réessaie plus tard."
 }

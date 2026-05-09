@@ -2982,5 +2982,8 @@
     "selectAllTasksMenu": "تحديد الكل",
     "showCompletedTasks": "إظهار المكتملة",
     "startCallRecording": "بدء تسجيل المكالمة",
-    "startVoiceRecording": "بدء التسجيل الصوتي"
+    "startVoiceRecording": "بدء التسجيل الصوتي",
+    "restorePurchasesAction": "استعادة المشتريات",
+    "restorePurchasesSuccess": "تمت استعادة المشتريات.",
+    "restorePurchasesFailed": "تعذرت استعادة المشتريات. حاول مرة أخرى لاحقًا."
 }

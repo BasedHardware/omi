@@ -9179,4 +9179,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'استعادة المشتريات';
+
+  @override
+  String get restorePurchasesSuccess => 'تمت استعادة المشتريات.';
+
+  @override
+  String get restorePurchasesFailed => 'تعذرت استعادة المشتريات. حاول مرة أخرى لاحقًا.';
 }

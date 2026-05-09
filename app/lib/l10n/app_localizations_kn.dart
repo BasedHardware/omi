@@ -9272,4 +9272,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ';
+
+  @override
+  String get restorePurchasesSuccess => 'ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲಾಗಿದೆ.';
+
+  @override
+  String get restorePurchasesFailed => 'ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮರಳಿ ಪ್ರಯತ್ನಿಸಿ.';
 }

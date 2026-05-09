@@ -9243,4 +9243,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'بازیابی خریدها';
+
+  @override
+  String get restorePurchasesSuccess => 'خریدها بازیابی شدند.';
+
+  @override
+  String get restorePurchasesFailed => 'بازیابی خریدها ممکن نشد. بعداً دوباره تلاش کنید.';
 }

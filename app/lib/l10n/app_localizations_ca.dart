@@ -9294,4 +9294,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get restorePurchasesAction => 'Restaurar compres';
+
+  @override
+  String get restorePurchasesSuccess => 'Compres restaurades.';
+
+  @override
+  String get restorePurchasesFailed => 'No s\'han pogut restaurar les compres. Torna-ho a provar més tard.';
 }

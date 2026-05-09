@@ -3015,5 +3015,8 @@
     "selectAllTasksMenu": "Seleziona tutto",
     "showCompletedTasks": "Mostra completate",
     "startCallRecording": "Avvia registrazione chiamata",
-    "startVoiceRecording": "Avvia registrazione vocale"
+    "startVoiceRecording": "Avvia registrazione vocale",
+    "restorePurchasesAction": "Ripristina acquisti",
+    "restorePurchasesSuccess": "Acquisti ripristinati.",
+    "restorePurchasesFailed": "Impossibile ripristinare gli acquisti. Riprova più tardi."
 }
