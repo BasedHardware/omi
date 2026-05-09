@@ -132,6 +132,20 @@ class TestResolvePlan:
         ):
             assert superwall.resolve_plan("com.omi.app.weird") is None
 
+    def test_play_store_triple_resolves_via_normalized_key(self):
+        """Google Play v5 sends ``<product>:<base_plan>:<offer>`` —
+        the bare-id portion should still resolve from the same map.
+        """
+        from routers import superwall
+
+        with patch.object(
+            superwall,
+            "get_superwall_product_map",
+            return_value={"com.omi.app.lite_monthly": "lite"},
+        ):
+            assert superwall.resolve_plan("com.omi.app.lite_monthly:monthly:sw-auto") == PlanType.lite
+            assert superwall.resolve_plan("com.omi.app.lite_monthly") == PlanType.lite
+
 
 # ── Per-event handlers ──────────────────────────────────────────────────────
 

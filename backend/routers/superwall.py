@@ -117,15 +117,32 @@ def verify_signature(
 # ── Product → PlanType resolution ───────────────────────────────────────────
 
 
+def _normalize_product_id(product_id: str) -> str:
+    """Strip Google Play's base-plan + offer suffix from a Superwall product id.
+
+    Apple sends the bare bundle-style id (``com.omi.app.lite_monthly``);
+    Google Play sends the v5 triple ``<product>:<base_plan_id>:<offer_id>``
+    (e.g. ``com.omi.app.lite_monthly:monthly:sw-auto``). The backend only
+    cares about the leading product part for plan resolution, so we collapse
+    both formats to the same key before hitting ``superwall_product_map``.
+    """
+    return (product_id or "").split(":", 1)[0]
+
+
 def resolve_plan(product_id: str) -> Optional[PlanType]:
     """Map a Superwall ``product_id`` (App Store or Play SKU) to a ``PlanType``.
 
     Reads the ``superwall_product_map`` from the ``app_config/plan_caps``
     Firestore doc so new SKUs can be wired in without a redeploy. Returns
     ``None`` if the product isn't recognized — caller should reject the event.
+
+    Accepts both Apple bare ids (``com.omi.app.lite_monthly``) and Google
+    Play v5 triples (``com.omi.app.lite_monthly:monthly:sw-auto``); the
+    Firestore map only needs the bare-id keys.
     """
+    bare = _normalize_product_id(product_id)
     mapping = get_superwall_product_map() or {}
-    plan_value = mapping.get(product_id)
+    plan_value = mapping.get(bare)
     if not plan_value:
         return None
     try:
