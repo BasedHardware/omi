@@ -9299,4 +9299,17 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'కొనుగోళ్లను పునరుద్ధరించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'రెండు చందాలు సక్రియం';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'మీకు యాక్టివ్ వెబ్ చందా కూడా ఉంది. రెండు సార్లు చార్జ్ కాకుండా వెబ్ బిల్లింగ్ పోర్టల్‌లో దాన్ని నిర్వహించి రద్దు చేయండి.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'తర్వాత';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'బిల్లింగ్ పోర్టల్ తెరవండి';
 }

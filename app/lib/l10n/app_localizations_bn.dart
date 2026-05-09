@@ -9258,4 +9258,17 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'কেনাকাটা পুনরুদ্ধার করা যায়নি। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'দুটি সাবস্ক্রিপশন সক্রিয়';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'আপনার একটি ওয়েব সাবস্ক্রিপশনও সক্রিয় আছে। দ্বিগুণ চার্জ এড়াতে ওয়েব বিলিং পোর্টাল থেকে এটি পরিচালনা করুন এবং বাতিল করুন।';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'পরে';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'বিলিং পোর্টাল খুলুন';
 }

@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Почати голосовий запис",
     "restorePurchasesAction": "Відновити покупки",
     "restorePurchasesSuccess": "Покупки відновлено.",
-    "restorePurchasesFailed": "Не вдалося відновити покупки. Спробуйте пізніше."
+    "restorePurchasesFailed": "Не вдалося відновити покупки. Спробуйте пізніше.",
+    "dualSubscriptionDetectedTitle": "Активні дві підписки",
+    "dualSubscriptionDetectedBody": "У вас також активна вебпідписка. Щоб уникнути подвійного списання, керуйте нею та скасуйте у вебпорталі оплати.",
+    "dualSubscriptionDetectedDismiss": "Пізніше",
+    "dualSubscriptionDetectedManage": "Відкрити портал оплати"
 }

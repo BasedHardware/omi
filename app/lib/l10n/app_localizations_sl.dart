@@ -9273,4 +9273,17 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Nakupov ni bilo mogoče obnoviti. Poskusite znova pozneje.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Dve aktivni naročnini';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Imate tudi aktivno spletno naročnino. Da se izognete dvojnemu plačilu, upravljajte in prekličite jo v spletnem plačilnem portalu.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Pozneje';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Odpri plačilni portal';
 }

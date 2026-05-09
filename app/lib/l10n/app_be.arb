@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "Пачаць галасавы запіс",
     "restorePurchasesAction": "Аднавіць пакупкі",
     "restorePurchasesSuccess": "Пакупкі адноўлены.",
-    "restorePurchasesFailed": "Не атрымалася аднавіць пакупкі. Паспрабуйце пазней."
+    "restorePurchasesFailed": "Не атрымалася аднавіць пакупкі. Паспрабуйце пазней.",
+    "dualSubscriptionDetectedTitle": "Дзве актыўныя падпіскі",
+    "dualSubscriptionDetectedBody": "У вас таксама ёсць актыўная вэб-падпіска. Каб не плаціць двойчы, кіруйце ёй і скасуйце праз вэб-партал аплаты.",
+    "dualSubscriptionDetectedDismiss": "Пазней",
+    "dualSubscriptionDetectedManage": "Адкрыць партал аплаты"
 }

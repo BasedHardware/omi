@@ -9245,4 +9245,17 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Nákupy se nepodařilo obnovit. Zkuste to znovu později.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Aktivní dvě předplatná';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Máte také aktivní webové předplatné. Abyste nezaplatili dvakrát, spravujte ho a zrušte ve webovém fakturačním portálu.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Později';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Otevřít fakturační portál';
 }

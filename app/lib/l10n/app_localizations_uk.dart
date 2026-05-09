@@ -9263,4 +9263,17 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Не вдалося відновити покупки. Спробуйте пізніше.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Активні дві підписки';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'У вас також активна вебпідписка. Щоб уникнути подвійного списання, керуйте нею та скасуйте у вебпорталі оплати.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Пізніше';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Відкрити портал оплати';
 }

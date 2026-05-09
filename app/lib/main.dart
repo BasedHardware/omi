@@ -201,6 +201,11 @@ Future _init() async {
     if (uid.isNotEmpty) {
       await SuperwallService.instance.identify(uid);
     }
+    // Watch for the dual-billing-rail edge case (active Stripe sub + Superwall
+    // mobile purchase). Surfaces a one-time dialog asking the user to cancel
+    // the Stripe one. Safe to call before the navigator key is mounted —
+    // the listener defers context use until the next status emission.
+    await SuperwallService.instance.watchForStripeConflict();
   }
 
   await CrashlyticsManager.init();

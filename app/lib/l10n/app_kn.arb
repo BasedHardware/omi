@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "ಧ್ವನಿ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಿ",
     "restorePurchasesAction": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ",
     "restorePurchasesSuccess": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲಾಗಿದೆ.",
-    "restorePurchasesFailed": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮರಳಿ ಪ್ರಯತ್ನಿಸಿ."
+    "restorePurchasesFailed": "ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮರಳಿ ಪ್ರಯತ್ನಿಸಿ.",
+    "dualSubscriptionDetectedTitle": "ಎರಡು ಚಂದಾಗಳು ಸಕ್ರಿಯ",
+    "dualSubscriptionDetectedBody": "ನಿಮ್ಮಲ್ಲಿ ಸಕ್ರಿಯ ವೆಬ್ ಚಂದಾ ಕೂಡ ಇದೆ. ಎರಡು ಬಾರಿ ಶುಲ್ಕ ತಪ್ಪಿಸಲು ವೆಬ್ ಬಿಲ್ಲಿಂಗ್ ಪೋರ್ಟಲ್‌ನಿಂದ ಅದನ್ನು ನಿರ್ವಹಿಸಿ ಮತ್ತು ರದ್ದುಪಡಿಸಿ.",
+    "dualSubscriptionDetectedDismiss": "ನಂತರ",
+    "dualSubscriptionDetectedManage": "ಬಿಲ್ಲಿಂಗ್ ಪೋರ್ಟಲ್ ತೆರೆಯಿರಿ"
 }

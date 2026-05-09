@@ -9288,4 +9288,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'A vásárlásokat nem sikerült visszaállítani. Próbáld újra később.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Két aktív előfizetés';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Aktív webes előfizetésed is van. A kétszeres terhelés elkerülése érdekében kezeld és mondd le a webes számlázási portálon.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Később';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Számlázási portál megnyitása';
 }

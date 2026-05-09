@@ -9237,4 +9237,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Nákupy sa nepodarilo obnoviť. Skúste neskôr.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Aktívne dve predplatné';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Máte aj aktívne webové predplatné. Aby ste neboli účtovaní dvakrát, spravujte ho a zrušte vo webovom portáli platieb.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Neskôr';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Otvoriť platobný portál';
 }

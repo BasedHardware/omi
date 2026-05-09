@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "เริ่มบันทึกเสียง",
     "restorePurchasesAction": "กู้คืนการซื้อ",
     "restorePurchasesSuccess": "กู้คืนการซื้อแล้ว",
-    "restorePurchasesFailed": "ไม่สามารถกู้คืนการซื้อได้ ลองใหม่อีกครั้งภายหลัง"
+    "restorePurchasesFailed": "ไม่สามารถกู้คืนการซื้อได้ ลองใหม่อีกครั้งภายหลัง",
+    "dualSubscriptionDetectedTitle": "การสมัครสมาชิก 2 รายการใช้งานอยู่",
+    "dualSubscriptionDetectedBody": "คุณยังมีการสมัครสมาชิกบนเว็บที่ใช้งานอยู่ด้วย เพื่อหลีกเลี่ยงการเรียกเก็บซ้ำ จัดการและยกเลิกผ่านพอร์ทัลการเรียกเก็บเงินบนเว็บ",
+    "dualSubscriptionDetectedDismiss": "ภายหลัง",
+    "dualSubscriptionDetectedManage": "เปิดพอร์ทัลการเรียกเก็บเงิน"
 }

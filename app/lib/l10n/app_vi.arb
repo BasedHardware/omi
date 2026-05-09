@@ -3023,5 +3023,9 @@
     "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
     "restorePurchasesAction": "Khôi phục giao dịch",
     "restorePurchasesSuccess": "Đã khôi phục giao dịch.",
-    "restorePurchasesFailed": "Không thể khôi phục giao dịch. Vui lòng thử lại sau."
+    "restorePurchasesFailed": "Không thể khôi phục giao dịch. Vui lòng thử lại sau.",
+    "dualSubscriptionDetectedTitle": "Hai gói đăng ký đang hoạt động",
+    "dualSubscriptionDetectedBody": "Bạn cũng có một gói đăng ký web đang hoạt động. Để tránh bị tính phí hai lần, hãy quản lý và hủy nó qua cổng thanh toán web.",
+    "dualSubscriptionDetectedDismiss": "Để sau",
+    "dualSubscriptionDetectedManage": "Mở cổng thanh toán"
 }

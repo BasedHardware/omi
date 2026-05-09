@@ -3027,5 +3027,9 @@
     "startVoiceRecording": "Start stemmeoptagelse",
     "restorePurchasesAction": "Gendan køb",
     "restorePurchasesSuccess": "Køb gendannet.",
-    "restorePurchasesFailed": "Kunne ikke gendanne køb. Prøv igen senere."
+    "restorePurchasesFailed": "Kunne ikke gendanne køb. Prøv igen senere.",
+    "dualSubscriptionDetectedTitle": "To aktive abonnementer",
+    "dualSubscriptionDetectedBody": "Du har også et aktivt webabonnement. For at undgå dobbelt opkrævning, administrér og opsig det fra webbetalingsportalen.",
+    "dualSubscriptionDetectedDismiss": "Senere",
+    "dualSubscriptionDetectedManage": "Åbn betalingsportal"
 }

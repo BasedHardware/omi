@@ -9284,4 +9284,17 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Покупките не могат да бъдат възстановени. Опитайте отново по-късно.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Активни два абонамента';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Имате и активен уеб абонамент. За да не бъдете таксувани двукратно, управлявайте го и го отменете от уеб портала за плащане.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'По-късно';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Отвори портала';
 }

@@ -9229,4 +9229,17 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'खरीदारी पुनर्स्थापित नहीं हो सकीं। बाद में पुनः प्रयास करें।';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'दो सक्रिय सदस्यताएँ';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'आपके पास एक सक्रिय वेब सदस्यता भी है। दोहरे शुल्क से बचने के लिए वेब बिलिंग पोर्टल से उसे प्रबंधित करें और रद्द करें।';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'बाद में';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'बिलिंग पोर्टल खोलें';
 }

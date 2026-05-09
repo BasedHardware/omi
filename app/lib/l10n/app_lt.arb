@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Pradėti balso įrašymą",
     "restorePurchasesAction": "Atkurti pirkinius",
     "restorePurchasesSuccess": "Pirkiniai atkurti.",
-    "restorePurchasesFailed": "Nepavyko atkurti pirkinių. Bandykite vėliau."
+    "restorePurchasesFailed": "Nepavyko atkurti pirkinių. Bandykite vėliau.",
+    "dualSubscriptionDetectedTitle": "Aktyvios dvi prenumeratos",
+    "dualSubscriptionDetectedBody": "Taip pat turite aktyvią žiniatinklio prenumeratą. Kad nebūtumėte apmokestintas du kartus, tvarkykite ir atšaukite ją žiniatinklio sąskaitų portale.",
+    "dualSubscriptionDetectedDismiss": "Vėliau",
+    "dualSubscriptionDetectedManage": "Atidaryti sąskaitų portalą"
 }

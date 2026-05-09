@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Sākt balss ierakstīšanu",
     "restorePurchasesAction": "Atjaunot pirkumus",
     "restorePurchasesSuccess": "Pirkumi atjaunoti.",
-    "restorePurchasesFailed": "Neizdevās atjaunot pirkumus. Mēģiniet vēlāk."
+    "restorePurchasesFailed": "Neizdevās atjaunot pirkumus. Mēģiniet vēlāk.",
+    "dualSubscriptionDetectedTitle": "Aktīvi divi abonementi",
+    "dualSubscriptionDetectedBody": "Jums ir arī aktīvs tīmekļa abonements. Lai izvairītos no dubultas maksas, pārvaldiet un atceliet to tīmekļa rēķinu portālā.",
+    "dualSubscriptionDetectedDismiss": "Vēlāk",
+    "dualSubscriptionDetectedManage": "Atvērt rēķinu portālu"
 }

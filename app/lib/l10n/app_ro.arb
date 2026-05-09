@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Porniți înregistrarea vocală",
     "restorePurchasesAction": "Restaurează achizițiile",
     "restorePurchasesSuccess": "Achiziții restaurate.",
-    "restorePurchasesFailed": "Achizițiile nu au putut fi restaurate. Încearcă din nou mai târziu."
+    "restorePurchasesFailed": "Achizițiile nu au putut fi restaurate. Încearcă din nou mai târziu.",
+    "dualSubscriptionDetectedTitle": "Două abonamente active",
+    "dualSubscriptionDetectedBody": "Ai și un abonament web activ. Pentru a evita dubla taxare, gestionează-l și anulează-l din portalul de facturare web.",
+    "dualSubscriptionDetectedDismiss": "Mai târziu",
+    "dualSubscriptionDetectedManage": "Deschide portalul de facturare"
 }

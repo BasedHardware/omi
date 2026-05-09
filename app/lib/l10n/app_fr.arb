@@ -3053,5 +3053,9 @@
     "startVoiceRecording": "Démarrer l'enregistrement vocal",
     "restorePurchasesAction": "Restaurer les achats",
     "restorePurchasesSuccess": "Achats restaurés.",
-    "restorePurchasesFailed": "Impossible de restaurer les achats. Réessaie plus tard."
+    "restorePurchasesFailed": "Impossible de restaurer les achats. Réessaie plus tard.",
+    "dualSubscriptionDetectedTitle": "Deux abonnements actifs",
+    "dualSubscriptionDetectedBody": "Tu as aussi un abonnement web actif. Pour éviter d'être facturé deux fois, gère-le et annule-le depuis le portail de facturation web.",
+    "dualSubscriptionDetectedDismiss": "Plus tard",
+    "dualSubscriptionDetectedManage": "Ouvrir le portail de facturation"
 }

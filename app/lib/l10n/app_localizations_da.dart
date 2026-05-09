@@ -9235,4 +9235,17 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Kunne ikke gendanne køb. Prøv igen senere.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'To aktive abonnementer';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Du har også et aktivt webabonnement. For at undgå dobbelt opkrævning, administrér og opsig det fra webbetalingsportalen.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Senere';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Åbn betalingsportal';
 }

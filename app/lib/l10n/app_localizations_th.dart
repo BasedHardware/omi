@@ -9203,4 +9203,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'ไม่สามารถกู้คืนการซื้อได้ ลองใหม่อีกครั้งภายหลัง';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'การสมัครสมาชิก 2 รายการใช้งานอยู่';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'คุณยังมีการสมัครสมาชิกบนเว็บที่ใช้งานอยู่ด้วย เพื่อหลีกเลี่ยงการเรียกเก็บซ้ำ จัดการและยกเลิกผ่านพอร์ทัลการเรียกเก็บเงินบนเว็บ';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'ภายหลัง';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'เปิดพอร์ทัลการเรียกเก็บเงิน';
 }

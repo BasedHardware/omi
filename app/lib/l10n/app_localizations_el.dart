@@ -9314,4 +9314,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Δεν ήταν δυνατή η επαναφορά των αγορών. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Δύο ενεργές συνδρομές';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Έχετε επίσης μια ενεργή διαδικτυακή συνδρομή. Για να αποφύγετε διπλή χρέωση, διαχειριστείτε και ακυρώστε την στην πύλη χρέωσης στο διαδίκτυο.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Αργότερα';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Άνοιγμα πύλης χρέωσης';
 }

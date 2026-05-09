@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Spraakopname starten",
     "restorePurchasesAction": "Aankopen herstellen",
     "restorePurchasesSuccess": "Aankopen hersteld.",
-    "restorePurchasesFailed": "Kan aankopen niet herstellen. Probeer het later opnieuw."
+    "restorePurchasesFailed": "Kan aankopen niet herstellen. Probeer het later opnieuw.",
+    "dualSubscriptionDetectedTitle": "Twee actieve abonnementen",
+    "dualSubscriptionDetectedBody": "Je hebt ook een actief webabonnement. Beheer en zeg het op via het webbetalingsportaal om dubbele kosten te voorkomen.",
+    "dualSubscriptionDetectedDismiss": "Later",
+    "dualSubscriptionDetectedManage": "Betalingsportaal openen"
 }

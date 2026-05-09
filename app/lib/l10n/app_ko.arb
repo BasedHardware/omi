@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "음성 녹음 시작",
     "restorePurchasesAction": "구매 복원",
     "restorePurchasesSuccess": "구매가 복원되었습니다.",
-    "restorePurchasesFailed": "구매를 복원할 수 없습니다. 나중에 다시 시도해 주세요."
+    "restorePurchasesFailed": "구매를 복원할 수 없습니다. 나중에 다시 시도해 주세요.",
+    "dualSubscriptionDetectedTitle": "두 개의 구독이 활성",
+    "dualSubscriptionDetectedBody": "활성 웹 구독도 있습니다. 이중 청구를 피하려면 웹 결제 포털에서 관리하고 취소하세요.",
+    "dualSubscriptionDetectedDismiss": "나중에",
+    "dualSubscriptionDetectedManage": "결제 포털 열기"
 }

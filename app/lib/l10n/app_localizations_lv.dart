@@ -9267,4 +9267,17 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Neizdevās atjaunot pirkumus. Mēģiniet vēlāk.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Aktīvi divi abonementi';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Jums ir arī aktīvs tīmekļa abonements. Lai izvairītos no dubultas maksas, pārvaldiet un atceliet to tīmekļa rēķinu portālā.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Vēlāk';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Atvērt rēķinu portālu';
 }

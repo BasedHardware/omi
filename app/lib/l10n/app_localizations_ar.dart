@@ -9188,4 +9188,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'تعذرت استعادة المشتريات. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'اشتراكان نشطان';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'لديك أيضًا اشتراك ويب نشط. لتجنب الدفع مرتين، أدِر وألغِ الاشتراك من بوابة الفوترة على الويب.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'لاحقًا';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'فتح بوابة الفوترة';
 }

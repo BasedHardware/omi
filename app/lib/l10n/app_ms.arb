@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Mula rakaman suara",
     "restorePurchasesAction": "Pulihkan Pembelian",
     "restorePurchasesSuccess": "Pembelian dipulihkan.",
-    "restorePurchasesFailed": "Tidak dapat memulihkan pembelian. Cuba lagi kemudian."
+    "restorePurchasesFailed": "Tidak dapat memulihkan pembelian. Cuba lagi kemudian.",
+    "dualSubscriptionDetectedTitle": "Dua langganan aktif",
+    "dualSubscriptionDetectedBody": "Anda juga mempunyai langganan web yang aktif. Untuk mengelakkan caj berganda, urus dan batalkannya melalui portal pembayaran web.",
+    "dualSubscriptionDetectedDismiss": "Kemudian",
+    "dualSubscriptionDetectedManage": "Buka portal pembayaran"
 }

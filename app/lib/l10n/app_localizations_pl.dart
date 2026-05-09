@@ -9269,4 +9269,17 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Nie udało się przywrócić zakupów. Spróbuj ponownie później.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Dwie aktywne subskrypcje';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Masz także aktywną subskrypcję internetową. Aby uniknąć podwójnego obciążenia, zarządzaj nią i anuluj w internetowym portalu rozliczeniowym.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Później';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Otwórz portal płatności';
 }

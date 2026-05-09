@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "התחל הקלטה קולית",
     "restorePurchasesAction": "שחזור רכישות",
     "restorePurchasesSuccess": "הרכישות שוחזרו.",
-    "restorePurchasesFailed": "לא ניתן לשחזר רכישות. נסה שוב מאוחר יותר."
+    "restorePurchasesFailed": "לא ניתן לשחזר רכישות. נסה שוב מאוחר יותר.",
+    "dualSubscriptionDetectedTitle": "שני מנויים פעילים",
+    "dualSubscriptionDetectedBody": "יש לך גם מנוי אינטרנט פעיל. כדי להימנע מחיוב כפול, נהל ובטל אותו דרך פורטל החיוב באינטרנט.",
+    "dualSubscriptionDetectedDismiss": "אחר כך",
+    "dualSubscriptionDetectedManage": "פתח את פורטל החיוב"
 }

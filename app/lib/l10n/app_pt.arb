@@ -3054,5 +3054,9 @@
     "startVoiceRecording": "Iniciar gravação de voz",
     "restorePurchasesAction": "Restaurar compras",
     "restorePurchasesSuccess": "Compras restauradas.",
-    "restorePurchasesFailed": "Não foi possível restaurar as compras. Tente novamente mais tarde."
+    "restorePurchasesFailed": "Não foi possível restaurar as compras. Tente novamente mais tarde.",
+    "dualSubscriptionDetectedTitle": "Duas assinaturas ativas",
+    "dualSubscriptionDetectedBody": "Você também tem uma assinatura web ativa. Para evitar cobrança em duplicata, gerencie e cancele pelo portal de cobrança web.",
+    "dualSubscriptionDetectedDismiss": "Mais tarde",
+    "dualSubscriptionDetectedManage": "Abrir portal de cobrança"
 }

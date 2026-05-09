@@ -9086,4 +9086,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => '无法恢复购买。请稍后重试。';
+
+  @override
+  String get dualSubscriptionDetectedTitle => '两个订阅同时有效';
+
+  @override
+  String get dualSubscriptionDetectedBody => '您还有一个有效的网页订阅。为避免重复扣费,请通过网页计费门户管理并取消该订阅。';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => '稍后';
+
+  @override
+  String get dualSubscriptionDetectedManage => '打开计费门户';
 }

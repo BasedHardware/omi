@@ -9177,4 +9177,17 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'לא ניתן לשחזר רכישות. נסה שוב מאוחר יותר.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'שני מנויים פעילים';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'יש לך גם מנוי אינטרנט פעיל. כדי להימנע מחיוב כפול, נהל ובטל אותו דרך פורטל החיוב באינטרנט.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'אחר כך';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'פתח את פורטל החיוב';
 }

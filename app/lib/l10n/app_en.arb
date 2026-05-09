@@ -11032,5 +11032,21 @@
     "restorePurchasesFailed": "Could not restore purchases. Try again later.",
     "@restorePurchasesFailed": {
         "description": "Snackbar shown when restore-purchases fails."
+    },
+    "dualSubscriptionDetectedTitle": "Two subscriptions active",
+    "@dualSubscriptionDetectedTitle": {
+        "description": "Title of one-time dialog when a user purchases a Superwall sub while still holding an active Stripe sub."
+    },
+    "dualSubscriptionDetectedBody": "You also have an active web subscription. To avoid being charged twice, manage and cancel it from the web billing portal.",
+    "@dualSubscriptionDetectedBody": {
+        "description": "Body explaining the dual-billing-rail conflict and pointing to the Stripe portal."
+    },
+    "dualSubscriptionDetectedDismiss": "Later",
+    "@dualSubscriptionDetectedDismiss": {
+        "description": "Dismiss button on the dual-subscription dialog."
+    },
+    "dualSubscriptionDetectedManage": "Open billing portal",
+    "@dualSubscriptionDetectedManage": {
+        "description": "Action button that opens the Stripe customer portal."
     }
 }

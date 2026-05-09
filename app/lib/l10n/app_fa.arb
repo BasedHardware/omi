@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "شروع ضبط صدا",
     "restorePurchasesAction": "بازیابی خریدها",
     "restorePurchasesSuccess": "خریدها بازیابی شدند.",
-    "restorePurchasesFailed": "بازیابی خریدها ممکن نشد. بعداً دوباره تلاش کنید."
+    "restorePurchasesFailed": "بازیابی خریدها ممکن نشد. بعداً دوباره تلاش کنید.",
+    "dualSubscriptionDetectedTitle": "دو اشتراک فعال",
+    "dualSubscriptionDetectedBody": "شما یک اشتراک وب فعال نیز دارید. برای جلوگیری از پرداخت دوبرابر، آن را از پورتال صورت‌حساب وب مدیریت و لغو کنید.",
+    "dualSubscriptionDetectedDismiss": "بعداً",
+    "dualSubscriptionDetectedManage": "باز کردن پورتال صورت‌حساب"
 }

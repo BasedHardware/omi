@@ -2987,5 +2987,9 @@
     "startVoiceRecording": "Inicia l'enregistrament de veu",
     "restorePurchasesAction": "Restaurar compres",
     "restorePurchasesSuccess": "Compres restaurades.",
-    "restorePurchasesFailed": "No s'han pogut restaurar les compres. Torna-ho a provar més tard."
+    "restorePurchasesFailed": "No s'han pogut restaurar les compres. Torna-ho a provar més tard.",
+    "dualSubscriptionDetectedTitle": "Dues subscripcions actives",
+    "dualSubscriptionDetectedBody": "També tens una subscripció web activa. Per evitar el doble cobrament, gestiona-la i cancel·la-la al portal de facturació web.",
+    "dualSubscriptionDetectedDismiss": "Més tard",
+    "dualSubscriptionDetectedManage": "Obre el portal de facturació"
 }

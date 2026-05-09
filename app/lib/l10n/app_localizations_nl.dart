@@ -9277,4 +9277,17 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Kan aankopen niet herstellen. Probeer het later opnieuw.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Twee actieve abonnementen';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Je hebt ook een actief webabonnement. Beheer en zeg het op via het webbetalingsportaal om dubbele kosten te voorkomen.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Later';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Betalingsportaal openen';
 }

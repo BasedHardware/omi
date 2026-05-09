@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
     "restorePurchasesAction": "కొనుగోళ్లను పునరుద్ధరించండి",
     "restorePurchasesSuccess": "కొనుగోళ్లు పునరుద్ధరించబడ్డాయి.",
-    "restorePurchasesFailed": "కొనుగోళ్లను పునరుద్ధరించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి."
+    "restorePurchasesFailed": "కొనుగోళ్లను పునరుద్ధరించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.",
+    "dualSubscriptionDetectedTitle": "రెండు చందాలు సక్రియం",
+    "dualSubscriptionDetectedBody": "మీకు యాక్టివ్ వెబ్ చందా కూడా ఉంది. రెండు సార్లు చార్జ్ కాకుండా వెబ్ బిల్లింగ్ పోర్టల్‌లో దాన్ని నిర్వహించి రద్దు చేయండి.",
+    "dualSubscriptionDetectedDismiss": "తర్వాత",
+    "dualSubscriptionDetectedManage": "బిల్లింగ్ పోర్టల్ తెరవండి"
 }

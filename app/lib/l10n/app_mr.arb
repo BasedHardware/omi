@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
     "restorePurchasesAction": "खरेदी पुनर्संचयित करा",
     "restorePurchasesSuccess": "खरेदी पुनर्संचयित केली.",
-    "restorePurchasesFailed": "खरेदी पुनर्संचयित करता आल्या नाहीत. नंतर पुन्हा प्रयत्न करा."
+    "restorePurchasesFailed": "खरेदी पुनर्संचयित करता आल्या नाहीत. नंतर पुन्हा प्रयत्न करा.",
+    "dualSubscriptionDetectedTitle": "दोन सदस्यता सक्रिय",
+    "dualSubscriptionDetectedBody": "तुमच्याकडे एक सक्रिय वेब सदस्यताही आहे. दुहेरी आकारणी टाळण्यासाठी वेब बिलिंग पोर्टलमधून ती व्यवस्थापित करा आणि रद्द करा.",
+    "dualSubscriptionDetectedDismiss": "नंतर",
+    "dualSubscriptionDetectedManage": "बिलिंग पोर्टल उघडा"
 }

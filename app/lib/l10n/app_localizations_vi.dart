@@ -9249,4 +9249,17 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Không thể khôi phục giao dịch. Vui lòng thử lại sau.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Hai gói đăng ký đang hoạt động';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Bạn cũng có một gói đăng ký web đang hoạt động. Để tránh bị tính phí hai lần, hãy quản lý và hủy nó qua cổng thanh toán web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Để sau';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Mở cổng thanh toán';
 }

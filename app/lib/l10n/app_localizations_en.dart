@@ -9246,4 +9246,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Could not restore purchases. Try again later.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Two subscriptions active';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'You also have an active web subscription. To avoid being charged twice, manage and cancel it from the web billing portal.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Later';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Open billing portal';
 }

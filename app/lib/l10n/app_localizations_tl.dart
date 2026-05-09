@@ -9334,4 +9334,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Hindi maibalik ang mga pagbili. Subukan ulit mamaya.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Dalawang subscription ang aktibo';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'May aktibo ka ring web subscription. Upang maiwasan ang dobleng singil, pamahalaan at kanselahin ito sa web billing portal.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Mamaya';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Buksan ang billing portal';
 }

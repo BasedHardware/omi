@@ -9304,4 +9304,17 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Impossibile ripristinare gli acquisti. Riprova più tardi.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Due abbonamenti attivi';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Hai anche un abbonamento web attivo. Per evitare il doppio addebito, gestiscilo e cancellalo dal portale di fatturazione web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Più tardi';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Apri portale di fatturazione';
 }

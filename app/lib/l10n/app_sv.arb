@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Starta röstinspelning",
     "restorePurchasesAction": "Återställ köp",
     "restorePurchasesSuccess": "Köp återställda.",
-    "restorePurchasesFailed": "Det gick inte att återställa köp. Försök igen senare."
+    "restorePurchasesFailed": "Det gick inte att återställa köp. Försök igen senare.",
+    "dualSubscriptionDetectedTitle": "Två aktiva prenumerationer",
+    "dualSubscriptionDetectedBody": "Du har också en aktiv webbprenumeration. För att undvika dubbel debitering, hantera och säg upp den i webbportalen för betalningar.",
+    "dualSubscriptionDetectedDismiss": "Senare",
+    "dualSubscriptionDetectedManage": "Öppna betalningsportalen"
 }

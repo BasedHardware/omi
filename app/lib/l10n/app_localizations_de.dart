@@ -9326,4 +9326,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Käufe konnten nicht wiederhergestellt werden. Versuche es später erneut.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Zwei aktive Abos';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Du hast auch ein aktives Web-Abo. Um doppelte Abrechnungen zu vermeiden, verwalte und kündige es im Web-Zahlungsportal.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Später';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Zahlungsportal öffnen';
 }

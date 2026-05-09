@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
     "restorePurchasesAction": "কেনাকাটা পুনরুদ্ধার করুন",
     "restorePurchasesSuccess": "কেনাকাটা পুনরুদ্ধার করা হয়েছে।",
-    "restorePurchasesFailed": "কেনাকাটা পুনরুদ্ধার করা যায়নি। পরে আবার চেষ্টা করুন।"
+    "restorePurchasesFailed": "কেনাকাটা পুনরুদ্ধার করা যায়নি। পরে আবার চেষ্টা করুন।",
+    "dualSubscriptionDetectedTitle": "দুটি সাবস্ক্রিপশন সক্রিয়",
+    "dualSubscriptionDetectedBody": "আপনার একটি ওয়েব সাবস্ক্রিপশনও সক্রিয় আছে। দ্বিগুণ চার্জ এড়াতে ওয়েব বিলিং পোর্টাল থেকে এটি পরিচালনা করুন এবং বাতিল করুন।",
+    "dualSubscriptionDetectedDismiss": "পরে",
+    "dualSubscriptionDetectedManage": "বিলিং পোর্টাল খুলুন"
 }

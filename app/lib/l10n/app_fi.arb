@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Aloita ääninauhoitus",
     "restorePurchasesAction": "Palauta ostokset",
     "restorePurchasesSuccess": "Ostokset palautettu.",
-    "restorePurchasesFailed": "Ostosten palauttaminen epäonnistui. Yritä myöhemmin uudelleen."
+    "restorePurchasesFailed": "Ostosten palauttaminen epäonnistui. Yritä myöhemmin uudelleen.",
+    "dualSubscriptionDetectedTitle": "Kaksi aktiivista tilausta",
+    "dualSubscriptionDetectedBody": "Sinulla on myös aktiivinen verkkotilaus. Vältä kaksinkertainen veloitus hallinnoimalla ja peruuttamalla se verkkolaskutusportaalissa.",
+    "dualSubscriptionDetectedDismiss": "Myöhemmin",
+    "dualSubscriptionDetectedManage": "Avaa laskutusportaali"
 }

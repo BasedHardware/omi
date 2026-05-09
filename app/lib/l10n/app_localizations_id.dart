@@ -9259,4 +9259,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Tidak dapat memulihkan pembelian. Coba lagi nanti.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Dua langganan aktif';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Anda juga memiliki langganan web yang aktif. Untuk menghindari penagihan ganda, kelola dan batalkan melalui portal penagihan web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Nanti';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Buka portal penagihan';
 }

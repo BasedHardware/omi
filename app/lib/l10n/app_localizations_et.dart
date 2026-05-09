@@ -9246,4 +9246,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Ostude taastamine ebaõnnestus. Proovi hiljem uuesti.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Kaks aktiivset tellimust';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Sul on ka aktiivne veebitellimus. Topeltveloimise vältimiseks halda ja tühista see veebimakseportaalist.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Hiljem';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Ava makseportaal';
 }

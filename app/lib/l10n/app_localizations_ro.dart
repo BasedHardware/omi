@@ -9292,4 +9292,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Achizițiile nu au putut fi restaurate. Încearcă din nou mai târziu.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Două abonamente active';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Ai și un abonament web activ. Pentru a evita dubla taxare, gestionează-l și anulează-l din portalul de facturare web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Mai târziu';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Deschide portalul de facturare';
 }

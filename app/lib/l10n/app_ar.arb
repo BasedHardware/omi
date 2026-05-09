@@ -2985,5 +2985,9 @@
     "startVoiceRecording": "بدء التسجيل الصوتي",
     "restorePurchasesAction": "استعادة المشتريات",
     "restorePurchasesSuccess": "تمت استعادة المشتريات.",
-    "restorePurchasesFailed": "تعذرت استعادة المشتريات. حاول مرة أخرى لاحقًا."
+    "restorePurchasesFailed": "تعذرت استعادة المشتريات. حاول مرة أخرى لاحقًا.",
+    "dualSubscriptionDetectedTitle": "اشتراكان نشطان",
+    "dualSubscriptionDetectedBody": "لديك أيضًا اشتراك ويب نشط. لتجنب الدفع مرتين، أدِر وألغِ الاشتراك من بوابة الفوترة على الويب.",
+    "dualSubscriptionDetectedDismiss": "لاحقًا",
+    "dualSubscriptionDetectedManage": "فتح بوابة الفوترة"
 }

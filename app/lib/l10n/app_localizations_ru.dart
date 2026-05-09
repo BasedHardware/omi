@@ -9278,4 +9278,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Не удалось восстановить покупки. Повторите попытку позже.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Активны две подписки';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'У вас также есть активная веб-подписка. Чтобы не платить дважды, управляйте ею и отмените её в веб-портале выставления счетов.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Позже';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Открыть портал оплаты';
 }

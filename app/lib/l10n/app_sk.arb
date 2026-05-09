@@ -3023,5 +3023,9 @@
     "startVoiceRecording": "Spustiť hlasový záznam",
     "restorePurchasesAction": "Obnoviť nákupy",
     "restorePurchasesSuccess": "Nákupy obnovené.",
-    "restorePurchasesFailed": "Nákupy sa nepodarilo obnoviť. Skúste neskôr."
+    "restorePurchasesFailed": "Nákupy sa nepodarilo obnoviť. Skúste neskôr.",
+    "dualSubscriptionDetectedTitle": "Aktívne dve predplatné",
+    "dualSubscriptionDetectedBody": "Máte aj aktívne webové predplatné. Aby ste neboli účtovaní dvakrát, spravujte ho a zrušte vo webovom portáli platieb.",
+    "dualSubscriptionDetectedDismiss": "Neskôr",
+    "dualSubscriptionDetectedManage": "Otvoriť platobný portál"
 }

@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Alusta häälsalvestust",
     "restorePurchasesAction": "Taasta ostud",
     "restorePurchasesSuccess": "Ostud taastatud.",
-    "restorePurchasesFailed": "Ostude taastamine ebaõnnestus. Proovi hiljem uuesti."
+    "restorePurchasesFailed": "Ostude taastamine ebaõnnestus. Proovi hiljem uuesti.",
+    "dualSubscriptionDetectedTitle": "Kaks aktiivset tellimust",
+    "dualSubscriptionDetectedBody": "Sul on ka aktiivne veebitellimus. Topeltveloimise vältimiseks halda ja tühista see veebimakseportaalist.",
+    "dualSubscriptionDetectedDismiss": "Hiljem",
+    "dualSubscriptionDetectedManage": "Ava makseportaal"
 }

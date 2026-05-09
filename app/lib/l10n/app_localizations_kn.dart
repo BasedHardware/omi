@@ -9281,4 +9281,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'ಖರೀದಿಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮರಳಿ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'ಎರಡು ಚಂದಾಗಳು ಸಕ್ರಿಯ';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'ನಿಮ್ಮಲ್ಲಿ ಸಕ್ರಿಯ ವೆಬ್ ಚಂದಾ ಕೂಡ ಇದೆ. ಎರಡು ಬಾರಿ ಶುಲ್ಕ ತಪ್ಪಿಸಲು ವೆಬ್ ಬಿಲ್ಲಿಂಗ್ ಪೋರ್ಟಲ್‌ನಿಂದ ಅದನ್ನು ನಿರ್ವಹಿಸಿ ಮತ್ತು ರದ್ದುಪಡಿಸಿ.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'ನಂತರ';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'ಬಿಲ್ಲಿಂಗ್ ಪೋರ್ಟಲ್ ತೆರೆಯಿರಿ';
 }

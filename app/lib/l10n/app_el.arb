@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Έναρξη ηχογράφησης",
     "restorePurchasesAction": "Επαναφορά αγορών",
     "restorePurchasesSuccess": "Οι αγορές επαναφέρθηκαν.",
-    "restorePurchasesFailed": "Δεν ήταν δυνατή η επαναφορά των αγορών. Δοκιμάστε ξανά αργότερα."
+    "restorePurchasesFailed": "Δεν ήταν δυνατή η επαναφορά των αγορών. Δοκιμάστε ξανά αργότερα.",
+    "dualSubscriptionDetectedTitle": "Δύο ενεργές συνδρομές",
+    "dualSubscriptionDetectedBody": "Έχετε επίσης μια ενεργή διαδικτυακή συνδρομή. Για να αποφύγετε διπλή χρέωση, διαχειριστείτε και ακυρώστε την στην πύλη χρέωσης στο διαδίκτυο.",
+    "dualSubscriptionDetectedDismiss": "Αργότερα",
+    "dualSubscriptionDetectedManage": "Άνοιγμα πύλης χρέωσης"
 }

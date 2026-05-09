@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "Začni glasovno snemanje",
     "restorePurchasesAction": "Obnovi nakupe",
     "restorePurchasesSuccess": "Nakupi obnovljeni.",
-    "restorePurchasesFailed": "Nakupov ni bilo mogoče obnoviti. Poskusite znova pozneje."
+    "restorePurchasesFailed": "Nakupov ni bilo mogoče obnoviti. Poskusite znova pozneje.",
+    "dualSubscriptionDetectedTitle": "Dve aktivni naročnini",
+    "dualSubscriptionDetectedBody": "Imate tudi aktivno spletno naročnino. Da se izognete dvojnemu plačilu, upravljajte in prekličite jo v spletnem plačilnem portalu.",
+    "dualSubscriptionDetectedDismiss": "Pozneje",
+    "dualSubscriptionDetectedManage": "Odpri plačilni portal"
 }

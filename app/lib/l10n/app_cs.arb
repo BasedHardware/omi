@@ -2987,5 +2987,9 @@
     "startVoiceRecording": "Zahájit hlasový záznam",
     "restorePurchasesAction": "Obnovit nákupy",
     "restorePurchasesSuccess": "Nákupy obnoveny.",
-    "restorePurchasesFailed": "Nákupy se nepodařilo obnovit. Zkuste to znovu později."
+    "restorePurchasesFailed": "Nákupy se nepodařilo obnovit. Zkuste to znovu později.",
+    "dualSubscriptionDetectedTitle": "Aktivní dvě předplatná",
+    "dualSubscriptionDetectedBody": "Máte také aktivní webové předplatné. Abyste nezaplatili dvakrát, spravujte ho a zrušte ve webovém fakturačním portálu.",
+    "dualSubscriptionDetectedDismiss": "Později",
+    "dualSubscriptionDetectedManage": "Otevřít fakturační portál"
 }

@@ -9332,4 +9332,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Impossible de restaurer les achats. Réessaie plus tard.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Deux abonnements actifs';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Tu as aussi un abonnement web actif. Pour éviter d\'être facturé deux fois, gère-le et annule-le depuis le portail de facturation web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Plus tard';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Ouvrir le portail de facturation';
 }

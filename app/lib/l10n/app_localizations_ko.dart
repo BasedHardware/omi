@@ -9101,4 +9101,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => '구매를 복원할 수 없습니다. 나중에 다시 시도해 주세요.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => '두 개의 구독이 활성';
+
+  @override
+  String get dualSubscriptionDetectedBody => '활성 웹 구독도 있습니다. 이중 청구를 피하려면 웹 결제 포털에서 관리하고 취소하세요.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => '나중에';
+
+  @override
+  String get dualSubscriptionDetectedManage => '결제 포털 열기';
 }

@@ -9100,4 +9100,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => '購入を復元できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get dualSubscriptionDetectedTitle => '2 つのサブスクリプションが有効';
+
+  @override
+  String get dualSubscriptionDetectedBody => 'ウェブのサブスクリプションも有効です。二重請求を避けるため、ウェブの請求ポータルから管理・キャンセルしてください。';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => '後で';
+
+  @override
+  String get dualSubscriptionDetectedManage => '請求ポータルを開く';
 }

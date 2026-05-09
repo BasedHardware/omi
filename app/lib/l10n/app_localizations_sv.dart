@@ -9253,4 +9253,17 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Det gick inte att återställa köp. Försök igen senare.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Två aktiva prenumerationer';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Du har också en aktiv webbprenumeration. För att undvika dubbel debitering, hantera och säg upp den i webbportalen för betalningar.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Senare';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Öppna betalningsportalen';
 }

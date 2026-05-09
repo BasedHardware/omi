@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "Pokreni glasovno snimanje",
     "restorePurchasesAction": "Vrati kupovine",
     "restorePurchasesSuccess": "Kupovine su vraćene.",
-    "restorePurchasesFailed": "Vraćanje kupovina nije uspjelo. Pokušajte ponovo kasnije."
+    "restorePurchasesFailed": "Vraćanje kupovina nije uspjelo. Pokušajte ponovo kasnije.",
+    "dualSubscriptionDetectedTitle": "Aktivne dvije pretplate",
+    "dualSubscriptionDetectedBody": "Imate i aktivnu web pretplatu. Da izbjegnete dvostruko naplaćivanje, upravljajte i otkažite je iz web portala za naplatu.",
+    "dualSubscriptionDetectedDismiss": "Kasnije",
+    "dualSubscriptionDetectedManage": "Otvori portal za naplatu"
 }

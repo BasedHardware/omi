@@ -17264,6 +17264,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not restore purchases. Try again later.'**
   String get restorePurchasesFailed;
+
+  /// Title of one-time dialog when a user purchases a Superwall sub while still holding an active Stripe sub.
+  ///
+  /// In en, this message translates to:
+  /// **'Two subscriptions active'**
+  String get dualSubscriptionDetectedTitle;
+
+  /// Body explaining the dual-billing-rail conflict and pointing to the Stripe portal.
+  ///
+  /// In en, this message translates to:
+  /// **'You also have an active web subscription. To avoid being charged twice, manage and cancel it from the web billing portal.'**
+  String get dualSubscriptionDetectedBody;
+
+  /// Dismiss button on the dual-subscription dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get dualSubscriptionDetectedDismiss;
+
+  /// Action button that opens the Stripe customer portal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open billing portal'**
+  String get dualSubscriptionDetectedManage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

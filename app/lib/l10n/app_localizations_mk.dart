@@ -9298,4 +9298,17 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Не може да се вратат купувањата. Обидете се повторно подоцна.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Активни две претплати';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Имате и активна веб-претплата. За да не бидете наплатени двапати, управувајте и откажете ја преку веб-порталот за плаќање.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Подоцна';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Отвори портал за плаќање';
 }

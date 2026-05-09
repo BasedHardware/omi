@@ -9262,4 +9262,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Satın almalar geri yüklenemedi. Daha sonra tekrar deneyin.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'İki abonelik aktif';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Aktif bir web aboneliğin de var. İki kez ücretlendirilmemek için web faturalandırma portalından yönet ve iptal et.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Sonra';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Faturalandırma portalını aç';
 }

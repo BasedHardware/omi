@@ -9252,4 +9252,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'بازیابی خریدها ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'دو اشتراک فعال';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'شما یک اشتراک وب فعال نیز دارید. برای جلوگیری از پرداخت دوبرابر، آن را از پورتال صورت‌حساب وب مدیریت و لغو کنید.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'بعداً';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'باز کردن پورتال صورت‌حساب';
 }

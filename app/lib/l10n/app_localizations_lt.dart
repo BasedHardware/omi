@@ -9258,4 +9258,17 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Nepavyko atkurti pirkinių. Bandykite vėliau.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Aktyvios dvi prenumeratos';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Taip pat turite aktyvią žiniatinklio prenumeratą. Kad nebūtumėte apmokestintas du kartus, tvarkykite ir atšaukite ją žiniatinklio sąskaitų portale.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Vėliau';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Atidaryti sąskaitų portalą';
 }

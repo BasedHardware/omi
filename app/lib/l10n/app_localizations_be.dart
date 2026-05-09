@@ -9275,4 +9275,17 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Не атрымалася аднавіць пакупкі. Паспрабуйце пазней.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Дзве актыўныя падпіскі';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'У вас таксама ёсць актыўная вэб-падпіска. Каб не плаціць двойчы, кіруйце ёй і скасуйце праз вэб-партал аплаты.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Пазней';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Адкрыць партал аплаты';
 }

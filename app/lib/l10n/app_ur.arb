@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
     "restorePurchasesAction": "خریداریاں بحال کریں",
     "restorePurchasesSuccess": "خریداریاں بحال ہو گئیں۔",
-    "restorePurchasesFailed": "خریداریاں بحال نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔"
+    "restorePurchasesFailed": "خریداریاں بحال نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔",
+    "dualSubscriptionDetectedTitle": "دو فعال سبسکرپشنز",
+    "dualSubscriptionDetectedBody": "آپ کے پاس ایک فعال ویب سبسکرپشن بھی ہے۔ دوہری چارجنگ سے بچنے کے لیے اسے ویب بلنگ پورٹل سے منظم اور منسوخ کریں۔",
+    "dualSubscriptionDetectedDismiss": "بعد میں",
+    "dualSubscriptionDetectedManage": "بلنگ پورٹل کھولیں"
 }

@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "Simulan ang voice recording",
     "restorePurchasesAction": "I-restore ang mga Pagbili",
     "restorePurchasesSuccess": "Naibalik na ang mga pagbili.",
-    "restorePurchasesFailed": "Hindi maibalik ang mga pagbili. Subukan ulit mamaya."
+    "restorePurchasesFailed": "Hindi maibalik ang mga pagbili. Subukan ulit mamaya.",
+    "dualSubscriptionDetectedTitle": "Dalawang subscription ang aktibo",
+    "dualSubscriptionDetectedBody": "May aktibo ka ring web subscription. Upang maiwasan ang dobleng singil, pamahalaan at kanselahin ito sa web billing portal.",
+    "dualSubscriptionDetectedDismiss": "Mamaya",
+    "dualSubscriptionDetectedManage": "Buksan ang billing portal"
 }

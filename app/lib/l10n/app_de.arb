@@ -2986,5 +2986,9 @@
     "startVoiceRecording": "Sprachaufnahme starten",
     "restorePurchasesAction": "Käufe wiederherstellen",
     "restorePurchasesSuccess": "Käufe wiederhergestellt.",
-    "restorePurchasesFailed": "Käufe konnten nicht wiederhergestellt werden. Versuche es später erneut."
+    "restorePurchasesFailed": "Käufe konnten nicht wiederhergestellt werden. Versuche es später erneut.",
+    "dualSubscriptionDetectedTitle": "Zwei aktive Abos",
+    "dualSubscriptionDetectedBody": "Du hast auch ein aktives Web-Abo. Um doppelte Abrechnungen zu vermeiden, verwalte und kündige es im Web-Zahlungsportal.",
+    "dualSubscriptionDetectedDismiss": "Später",
+    "dualSubscriptionDetectedManage": "Zahlungsportal öffnen"
 }

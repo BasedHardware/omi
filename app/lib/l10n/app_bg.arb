@@ -2987,5 +2987,9 @@
     "startVoiceRecording": "Стартиране на гласов запис",
     "restorePurchasesAction": "Възстановяване на покупки",
     "restorePurchasesSuccess": "Покупките са възстановени.",
-    "restorePurchasesFailed": "Покупките не могат да бъдат възстановени. Опитайте отново по-късно."
+    "restorePurchasesFailed": "Покупките не могат да бъдат възстановени. Опитайте отново по-късно.",
+    "dualSubscriptionDetectedTitle": "Активни два абонамента",
+    "dualSubscriptionDetectedBody": "Имате и активен уеб абонамент. За да не бъдете таксувани двукратно, управлявайте го и го отменете от уеб портала за плащане.",
+    "dualSubscriptionDetectedDismiss": "По-късно",
+    "dualSubscriptionDetectedManage": "Отвори портала"
 }

@@ -3018,5 +3018,9 @@
     "startVoiceRecording": "Avvia registrazione vocale",
     "restorePurchasesAction": "Ripristina acquisti",
     "restorePurchasesSuccess": "Acquisti ripristinati.",
-    "restorePurchasesFailed": "Impossibile ripristinare gli acquisti. Riprova più tardi."
+    "restorePurchasesFailed": "Impossibile ripristinare gli acquisti. Riprova più tardi.",
+    "dualSubscriptionDetectedTitle": "Due abbonamenti attivi",
+    "dualSubscriptionDetectedBody": "Hai anche un abbonamento web attivo. Per evitare il doppio addebito, gestiscilo e cancellalo dal portale di fatturazione web.",
+    "dualSubscriptionDetectedDismiss": "Più tardi",
+    "dualSubscriptionDetectedManage": "Apri portale di fatturazione"
 }

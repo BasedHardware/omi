@@ -9245,4 +9245,17 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Kunne ikke gjenopprette kjøp. Prøv igjen senere.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'To aktive abonnementer';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Du har også et aktivt webabonnement. For å unngå dobbel belastning, administrer og si det opp i webbetalingsportalen.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Senere';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Åpne betalingsportalen';
 }

@@ -9262,4 +9262,17 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Враћање куповина није успело. Покушајте поново касније.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Активне две претплате';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Имате и активну веб претплату. Да бисте избегли двоструко наплаћивање, управљајте и откажите је на веб порталу за наплату.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Касније';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Отвори портал за наплату';
 }

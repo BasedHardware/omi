@@ -9248,4 +9248,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Ostosten palauttaminen epäonnistui. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Kaksi aktiivista tilausta';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Sinulla on myös aktiivinen verkkotilaus. Vältä kaksinkertainen veloitus hallinnoimalla ja peruuttamalla se verkkolaskutusportaalissa.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Myöhemmin';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Avaa laskutusportaali';
 }

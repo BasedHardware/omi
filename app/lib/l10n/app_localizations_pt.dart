@@ -9253,4 +9253,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'Não foi possível restaurar as compras. Tente novamente mais tarde.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Duas assinaturas ativas';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'Você também tem uma assinatura web ativa. Para evitar cobrança em duplicata, gerencie e cancele pelo portal de cobrança web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Mais tarde';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Abrir portal de cobrança';
 }

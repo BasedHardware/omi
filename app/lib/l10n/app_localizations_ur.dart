@@ -9266,4 +9266,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'خریداریاں بحال نہیں ہو سکیں۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'دو فعال سبسکرپشنز';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'آپ کے پاس ایک فعال ویب سبسکرپشن بھی ہے۔ دوہری چارجنگ سے بچنے کے لیے اسے ویب بلنگ پورٹل سے منظم اور منسوخ کریں۔';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'بعد میں';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'بلنگ پورٹل کھولیں';
 }

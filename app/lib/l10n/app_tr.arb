@@ -3053,5 +3053,9 @@
     "startVoiceRecording": "Ses kaydını başlat",
     "restorePurchasesAction": "Satın Almaları Geri Yükle",
     "restorePurchasesSuccess": "Satın almalar geri yüklendi.",
-    "restorePurchasesFailed": "Satın almalar geri yüklenemedi. Daha sonra tekrar deneyin."
+    "restorePurchasesFailed": "Satın almalar geri yüklenemedi. Daha sonra tekrar deneyin.",
+    "dualSubscriptionDetectedTitle": "İki abonelik aktif",
+    "dualSubscriptionDetectedBody": "Aktif bir web aboneliğin de var. İki kez ücretlendirilmemek için web faturalandırma portalından yönet ve iptal et.",
+    "dualSubscriptionDetectedDismiss": "Sonra",
+    "dualSubscriptionDetectedManage": "Faturalandırma portalını aç"
 }

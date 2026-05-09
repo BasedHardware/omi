@@ -3053,5 +3053,9 @@
     "startVoiceRecording": "Rozpocznij nagrywanie głosu",
     "restorePurchasesAction": "Przywróć zakupy",
     "restorePurchasesSuccess": "Zakupy przywrócone.",
-    "restorePurchasesFailed": "Nie udało się przywrócić zakupów. Spróbuj ponownie później."
+    "restorePurchasesFailed": "Nie udało się przywrócić zakupów. Spróbuj ponownie później.",
+    "dualSubscriptionDetectedTitle": "Dwie aktywne subskrypcje",
+    "dualSubscriptionDetectedBody": "Masz także aktywną subskrypcję internetową. Aby uniknąć podwójnego obciążenia, zarządzaj nią i anuluj w internetowym portalu rozliczeniowym.",
+    "dualSubscriptionDetectedDismiss": "Później",
+    "dualSubscriptionDetectedManage": "Otwórz portal płatności"
 }

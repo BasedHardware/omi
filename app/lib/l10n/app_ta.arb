@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "குரல் பதிவைத் தொடங்கு",
     "restorePurchasesAction": "கொள்முதல்களை மீட்டெடு",
     "restorePurchasesSuccess": "கொள்முதல்கள் மீட்டெடுக்கப்பட்டன.",
-    "restorePurchasesFailed": "கொள்முதல்களை மீட்டெடுக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்."
+    "restorePurchasesFailed": "கொள்முதல்களை மீட்டெடுக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
+    "dualSubscriptionDetectedTitle": "இரண்டு சந்தாக்கள் செயலில்",
+    "dualSubscriptionDetectedBody": "உங்களுக்கு செயலிலுள்ள இணைய சந்தாவும் உள்ளது. இரட்டை கட்டணத்தைத் தவிர்க்க இணைய பில்லிங் போர்டலிலிருந்து நிர்வகித்து ரத்து செய்யவும்.",
+    "dualSubscriptionDetectedDismiss": "பின்னர்",
+    "dualSubscriptionDetectedManage": "பில்லிங் போர்டலைத் திற"
 }

@@ -10726,5 +10726,9 @@
     "startVoiceRecording": "Започни гласовно снимање",
     "restorePurchasesAction": "Врати купувања",
     "restorePurchasesSuccess": "Купувањата се вратени.",
-    "restorePurchasesFailed": "Не може да се вратат купувањата. Обидете се повторно подоцна."
+    "restorePurchasesFailed": "Не може да се вратат купувањата. Обидете се повторно подоцна.",
+    "dualSubscriptionDetectedTitle": "Активни две претплати",
+    "dualSubscriptionDetectedBody": "Имате и активна веб-претплата. За да не бидете наплатени двапати, управувајте и откажете ја преку веб-порталот за плаќање.",
+    "dualSubscriptionDetectedDismiss": "Подоцна",
+    "dualSubscriptionDetectedManage": "Отвори портал за плаќање"
 }

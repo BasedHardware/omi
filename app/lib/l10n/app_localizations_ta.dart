@@ -9318,4 +9318,17 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'கொள்முதல்களை மீட்டெடுக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'இரண்டு சந்தாக்கள் செயலில்';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'உங்களுக்கு செயலிலுள்ள இணைய சந்தாவும் உள்ளது. இரட்டை கட்டணத்தைத் தவிர்க்க இணைய பில்லிங் போர்டலிலிருந்து நிர்வகித்து ரத்து செய்யவும்.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'பின்னர்';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'பில்லிங் போர்டலைத் திற';
 }

@@ -9303,4 +9303,17 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get restorePurchasesFailed => 'No s\'han pogut restaurar les compres. Torna-ho a provar més tard.';
+
+  @override
+  String get dualSubscriptionDetectedTitle => 'Dues subscripcions actives';
+
+  @override
+  String get dualSubscriptionDetectedBody =>
+      'També tens una subscripció web activa. Per evitar el doble cobrament, gestiona-la i cancel·la-la al portal de facturació web.';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => 'Més tard';
+
+  @override
+  String get dualSubscriptionDetectedManage => 'Obre el portal de facturació';
 }
