@@ -3656,11 +3656,20 @@ enum SubscriptionPlanType: String, Codable {
   case architect  // display "Architect" ($400/mo, cost_usd quota)
   case pro        // backward compat: old Firestore docs may still say "pro"
   case `operator` // new — display "Operator"
+  case lite       // Superwall mobile tier — $9.99/mo, 100 msgs / 1500 mins
+  case plus       // Superwall mobile tier — $29.99/mo, 300 msgs / 4000 mins
+  case max        // Superwall mobile tier — unlimited
 }
 
 enum SubscriptionStatusType: String, Codable {
   case active
   case inactive
+}
+
+enum SubscriptionSourceType: String, Codable {
+  case stripe
+  case superwallIos = "superwall_ios"
+  case superwallAndroid = "superwall_android"
 }
 
 struct SubscriptionLimitsResponse: Codable {
@@ -3680,8 +3689,13 @@ struct SubscriptionLimitsResponse: Codable {
 struct UserSubscriptionInfo: Codable {
   let plan: SubscriptionPlanType
   let status: SubscriptionStatusType
+  /// Which billing rail created the subscription. Optional for backward
+  /// compat — older backend builds (and existing Stripe-book user docs) omit
+  /// the field; treat missing as `.stripe`.
+  let source: SubscriptionSourceType?
   let currentPeriodEnd: Int?
   let stripeSubscriptionId: String?
+  let superwallSubscriptionId: String?
   let currentPriceId: String?
   let features: [String]
   let cancelAtPeriodEnd: Bool
@@ -3689,10 +3703,15 @@ struct UserSubscriptionInfo: Codable {
   let deprecated: Bool?
   let deprecationMessage: String?
 
+  /// Effective source — defaults to Stripe when the field is absent so the
+  /// existing book continues to route Manage to the Stripe customer portal.
+  var effectiveSource: SubscriptionSourceType { source ?? .stripe }
+
   enum CodingKeys: String, CodingKey {
-    case plan, status, features, limits, deprecated
+    case plan, status, source, features, limits, deprecated
     case currentPeriodEnd = "current_period_end"
     case stripeSubscriptionId = "stripe_subscription_id"
+    case superwallSubscriptionId = "superwall_subscription_id"
     case currentPriceId = "current_price_id"
     case cancelAtPeriodEnd = "cancel_at_period_end"
     case deprecationMessage = "deprecation_message"

@@ -1773,17 +1773,26 @@ struct SettingsContentView: View {
               ProgressView()
                 .controlSize(.small)
             } else if hasPaidSubscription {
-              Button(action: openCustomerPortal) {
-                if isOpeningCustomerPortal {
-                  ProgressView()
-                    .controlSize(.small)
-                } else {
-                  Text("Manage")
-                    .scaledFont(size: 13, weight: .semibold)
+              if isMobileSourcedSubscription {
+                // Superwall (App Store / Play) subs can't be managed on Mac;
+                // Apple/Google's Subscriptions UI lives on the user's phone.
+                Text(mobileSourcedManageHint)
+                  .scaledFont(size: 12, weight: .medium)
+                  .foregroundColor(OmiColors.textSecondary)
+                  .multilineTextAlignment(.trailing)
+              } else {
+                Button(action: openCustomerPortal) {
+                  if isOpeningCustomerPortal {
+                    ProgressView()
+                      .controlSize(.small)
+                  } else {
+                    Text("Manage")
+                      .scaledFont(size: 13, weight: .semibold)
+                  }
                 }
+                .buttonStyle(.bordered)
+                .disabled(isOpeningCustomerPortal)
               }
-              .buttonStyle(.bordered)
-              .disabled(isOpeningCustomerPortal)
             } else {
               Button("Refresh") {
                 loadSubscriptionInfo()
@@ -1867,6 +1876,24 @@ struct SettingsContentView: View {
                 }
               }
             }
+          }
+        }
+      } else if shouldShowMobileOnlyManageHint {
+        // User holds an active Superwall mobile sub OR the backend asked us to
+        // hide the desktop purchase UI for some other reason. We can't sell on
+        // Mac, but we can at least tell them where to manage the existing one.
+        settingsCard(settingId: "planusage.mobile-managed") {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Subscriptions are managed on mobile")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              "Open the omi app on your iPhone or Android device to change or cancel your plan. "
+                + "Your current entitlement stays active here on Mac."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
@@ -6038,7 +6065,41 @@ struct SettingsContentView: View {
   }
 
   private var shouldShowPlanPurchaseOptions: Bool {
-    !subscriptionPlansForDisplay.isEmpty
+    // Backend gates the catalog when the user holds a Superwall mobile sub
+    // (no new desktop purchase path per the rollout's Q4) OR when the App
+    // Review hide-flag is set for this build/uid.
+    guard userSubscription?.showSubscriptionUI ?? true else { return false }
+    return !subscriptionPlansForDisplay.isEmpty
+  }
+
+  /// True when the active sub is a Superwall mobile purchase and Apple /
+  /// Google — not Stripe — owns the billing relationship.
+  private var isMobileSourcedSubscription: Bool {
+    guard let info = userSubscription?.subscription else { return false }
+    switch info.effectiveSource {
+    case .superwallIos, .superwallAndroid: return true
+    case .stripe: return false
+    }
+  }
+
+  /// "Manage in iOS Settings → Subscriptions" / "Manage in Play Store" — only
+  /// rendered when `isMobileSourcedSubscription` is true.
+  private var mobileSourcedManageHint: String {
+    guard let info = userSubscription?.subscription else { return "Managed on mobile" }
+    switch info.effectiveSource {
+    case .superwallIos: return "Manage in iOS Settings → Subscriptions"
+    case .superwallAndroid: return "Manage in the Play Store"
+    case .stripe: return "Managed on web"
+    }
+  }
+
+  /// Show the "subscriptions are managed on mobile" empty-state card when the
+  /// purchase UI is hidden AND the user has an active Superwall sub. Without
+  /// the second clause we'd show this card to App-Review-hidden builds too,
+  /// which would defeat the hide flag's purpose.
+  private var shouldShowMobileOnlyManageHint: Bool {
+    let hideFlagOff = !(userSubscription?.showSubscriptionUI ?? true)
+    return hideFlagOff && isMobileSourcedSubscription
   }
 
   private var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
