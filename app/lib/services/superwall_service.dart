@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart' as omi;
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -23,17 +24,14 @@ import 'package:superwallkit_flutter/superwallkit_flutter.dart';
 /// backend webhook (POST /v1/superwall/webhook) reconciles state. See
 /// `plans/moonlit-petting-rocket.md` for the architecture write-up.
 ///
-/// API keys are read from `--dart-define=SUPERWALL_API_KEY_IOS=…` /
-/// `--dart-define=SUPERWALL_API_KEY_ANDROID=…` at build time so the values
-/// don't ship in source. When unset, `initialize()` no-ops with a debug log
-/// (lets the app boot without a Superwall workspace configured — useful for
-/// local dev and pre-launch preview builds).
+/// API keys come from envied (``SUPERWALL_API_KEY_IOS`` /
+/// ``SUPERWALL_API_KEY_ANDROID`` in ``.env`` / ``.dev.env``) so they're
+/// obfuscated in the build alongside the other vendor secrets. When unset,
+/// ``initialize()`` no-ops with a debug log so the app still boots in
+/// pre-launch preview builds without a Superwall workspace configured.
 class SuperwallService {
   SuperwallService._();
   static final SuperwallService instance = SuperwallService._();
-
-  static const _iosApiKey = String.fromEnvironment('SUPERWALL_API_KEY_IOS');
-  static const _androidApiKey = String.fromEnvironment('SUPERWALL_API_KEY_ANDROID');
 
   bool _configured = false;
   StreamSubscription<SubscriptionStatus>? _statusSub;
@@ -48,12 +46,15 @@ class SuperwallService {
   Future<void> initialize() async {
     if (_configured) return;
 
-    final apiKey = Platform.isIOS ? _iosApiKey : (Platform.isAndroid ? _androidApiKey : '');
+    final apiKey = Platform.isIOS
+        ? (Env.superwallApiKeyIos ?? '')
+        : (Platform.isAndroid ? (Env.superwallApiKeyAndroid ?? '') : '');
     if (apiKey.isEmpty) {
       if (kDebugMode) {
         Logger.debug(
           'SuperwallService.initialize: no API key for ${Platform.operatingSystem} — skipping. '
-          'Set --dart-define=SUPERWALL_API_KEY_IOS=… / SUPERWALL_API_KEY_ANDROID=… to enable.',
+          'Set SUPERWALL_API_KEY_IOS / SUPERWALL_API_KEY_ANDROID in .env (or .dev.env) and rerun '
+          '`flutter pub run build_runner build --delete-conflicting-outputs`.',
         );
       }
       return;

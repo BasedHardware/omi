@@ -21,6 +21,14 @@ final class ProdEnv implements EnvFields {
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
 
   @override
+  @EnviedField(varName: 'SUPERWALL_API_KEY_IOS', obfuscate: true)
+  final String? superwallApiKeyIos = _ProdEnv.superwallApiKeyIos;
+
+  @override
+  @EnviedField(varName: 'SUPERWALL_API_KEY_ANDROID', obfuscate: true)
+  final String? superwallApiKeyAndroid = _ProdEnv.superwallApiKeyAndroid;
+
+  @override
   @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
   final String? growthbookApiKey = _ProdEnv.growthbookApiKey;
 

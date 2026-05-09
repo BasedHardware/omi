@@ -21,6 +21,14 @@ final class DevEnv implements EnvFields {
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
 
   @override
+  @EnviedField(varName: 'SUPERWALL_API_KEY_IOS', obfuscate: true)
+  final String? superwallApiKeyIos = _DevEnv.superwallApiKeyIos;
+
+  @override
+  @EnviedField(varName: 'SUPERWALL_API_KEY_ANDROID', obfuscate: true)
+  final String? superwallApiKeyAndroid = _DevEnv.superwallApiKeyAndroid;
+
+  @override
   @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
   final String? growthbookApiKey = _DevEnv.growthbookApiKey;
 
