@@ -69,6 +69,35 @@ def _default_caps_for(plan: PlanType) -> dict:
             'insights_gained': None,
             'memories_created': None,
         }
+    # Mobile Superwall tiers — caps from BasedHardware/omi-enterprise#23.
+    # Env vars override only when explicitly set; otherwise use the issue spec.
+    if plan == PlanType.lite:
+        return {
+            'chat_questions_per_month': int(os.getenv('LITE_CHAT_QUESTIONS_PER_MONTH', '100')),
+            'chat_cost_usd_per_month': None,
+            'transcription_seconds': int(os.getenv('LITE_TRANSCRIPTION_MINUTES_PER_MONTH', '1500')) * 60,
+            'words_transcribed': None,
+            'insights_gained': None,
+            'memories_created': None,
+        }
+    if plan == PlanType.plus:
+        return {
+            'chat_questions_per_month': int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '300')),
+            'chat_cost_usd_per_month': None,
+            'transcription_seconds': int(os.getenv('PLUS_TRANSCRIPTION_MINUTES_PER_MONTH', '4000')) * 60,
+            'words_transcribed': None,
+            'insights_gained': None,
+            'memories_created': None,
+        }
+    if plan == PlanType.max:
+        return {
+            'chat_questions_per_month': None,
+            'chat_cost_usd_per_month': None,
+            'transcription_seconds': None,
+            'words_transcribed': None,
+            'insights_gained': None,
+            'memories_created': None,
+        }
     # PlanType.basic and any other (defensive) plan fall through to free-tier caps.
     basic_minutes = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))
     return {

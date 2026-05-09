@@ -16,7 +16,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
+PAID_PLAN_TYPES = {
+    PlanType.unlimited,
+    PlanType.architect,
+    PlanType.operator,
+    # Mobile Superwall tiers — paid, but hard-cap at their limits since
+    # StoreKit / Play Billing can't do usage-based overage charges.
+    PlanType.lite,
+    PlanType.plus,
+    PlanType.max,
+}
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -250,6 +259,9 @@ PLAN_DISPLAY_NAMES = {
     PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
+    PlanType.lite: 'Lite',
+    PlanType.plus: 'Plus',
+    PlanType.max: 'Max',
 }
 
 
