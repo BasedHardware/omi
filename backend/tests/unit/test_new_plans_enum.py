@@ -23,7 +23,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Stub heavy deps before importing production code.
-sys.modules.setdefault("database._client", types.SimpleNamespace(db=MagicMock()))
+sys.modules.setdefault(
+    "database._client",
+    types.SimpleNamespace(db=MagicMock(), document_id_from_seed=MagicMock(return_value="seed_id")),
+)
 sys.modules.setdefault("database.cache", types.SimpleNamespace(get_memory_cache=MagicMock()))
 
 from models.users import PlanType, PlanLimits, Subscription, SubscriptionSource
