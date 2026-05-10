@@ -41,6 +41,11 @@ class SuperwallService {
   // they want to re-trigger for a specific user (rare).
   static const _conflictPrefsKey = 'superwall_stripe_conflict_dialog_shown';
 
+  /// Lazy-init alias used by the paywall router. Same as [initialize] —
+  /// kept as a separate name to make the call site self-documenting ("only
+  /// configure when we're about to actually use Superwall").
+  Future<void> ensureConfigured() => initialize();
+
   /// Configure the Superwall SDK. Idempotent — safe to call from app startup
   /// even if the user later signs out and back in.
   Future<void> initialize() async {
