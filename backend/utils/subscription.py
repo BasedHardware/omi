@@ -24,7 +24,7 @@ PAID_PLAN_TYPES = {
     # StoreKit / Play Billing can't do usage-based overage charges.
     PlanType.lite,
     PlanType.plus,
-    PlanType.max,
+    PlanType.unlimited_v2,
 }
 
 
@@ -261,7 +261,7 @@ PLAN_DISPLAY_NAMES = {
     PlanType.operator: 'Operator',
     PlanType.lite: 'Lite',
     PlanType.plus: 'Plus',
-    PlanType.max: 'Max',
+    PlanType.unlimited_v2: 'Unlimited',
 }
 
 

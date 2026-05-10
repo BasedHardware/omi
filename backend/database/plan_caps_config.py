@@ -89,7 +89,7 @@ def _default_caps_for(plan: PlanType) -> dict:
             'insights_gained': None,
             'memories_created': None,
         }
-    if plan == PlanType.max:
+    if plan == PlanType.unlimited_v2:
         return {
             'chat_questions_per_month': None,
             'chat_cost_usd_per_month': None,

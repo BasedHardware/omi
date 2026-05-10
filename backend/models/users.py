@@ -20,10 +20,14 @@ class PlanType(str, Enum):
     # Mobile-only paid tiers (Superwall-purchased via App Store / Play). The
     # caps live in `app_config/plan_caps` Firestore doc; defaults match
     # BasedHardware/omi-enterprise#23 (Lite: 100 msgs / 1500 mins, Plus: 300
-    # msgs / 4000 mins, Max: unlimited).
+    # msgs / 4000 mins, Unlimited: no caps).
+    # Note: ``unlimited_v2`` is internally distinct from the legacy ``unlimited``
+    # (Neo) plan — the legacy keeps its enum value for backward-compat with
+    # live Stripe subscribers; the new mobile tier uses ``unlimited_v2`` to
+    # avoid colliding while still being displayed to users as "Unlimited".
     lite = 'lite'
     plus = 'plus'
-    max = 'max'
+    unlimited_v2 = 'unlimited_v2'
 
     @classmethod
     def _missing_(cls, value):

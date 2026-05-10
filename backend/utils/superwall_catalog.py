@@ -13,7 +13,7 @@ from models.users import PlanType, Subscription, SubscriptionSource, Subscriptio
 # avoids a circular import (utils.subscription imports database.users, which
 # imports back from utils.subscription). The set must mirror the legacy +
 # mobile paid plans defined in ``utils.subscription``.
-_PAID_PLAN_VALUES = {"unlimited", "architect", "operator", "lite", "plus", "max"}
+_PAID_PLAN_VALUES = {"unlimited", "architect", "operator", "lite", "plus", "unlimited_v2"}
 
 
 # Mobile-only Superwall tiers — display fallback for clients that fetch the
@@ -43,11 +43,11 @@ _MOBILE_PLAN_DEFINITIONS = [
         "eyebrow": "Most popular",
     },
     {
-        "plan_id": "max",
-        "title": "Max",
+        "plan_id": "unlimited_v2",
+        "title": "Unlimited",
         "subtitle": "Unlimited listening + chat",
-        "monthly": ("com.omi.app.max_monthly", 4999, "$49.99/mo"),
-        "annual": ("com.omi.app.max_yearly", 29999, "$25.00/mo"),
+        "monthly": ("com.omi.app.unlimited_v2_monthly", 4999, "$49.99/mo"),
+        "annual": ("com.omi.app.unlimited_v2_yearly", 29999, "$25.00/mo"),
         "annual_description": "Save 50% with annual billing.",
         "eyebrow": "Power user",
     },
