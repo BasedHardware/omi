@@ -1053,6 +1053,14 @@ int app_sd_off(void)
             sd_enable_power(false);
         }
         sd_enabled = false;
+
+        const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
+        if (device_is_ready(spi_dev)) {
+            int ret = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
+            if (ret < 0 && ret != -EALREADY && ret != -ENOSYS && ret != -ENOTSUP) {
+                LOG_WRN("SPI3 shutdown suspend failed: %d", ret);
+            }
+        }
     }
 
     return 0;
