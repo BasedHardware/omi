@@ -1,0 +1,69 @@
+==============================================================================
+ OMI cost / revenue / platform-split report — last 30 days
+ Generated: 2026-05-10T20:33:18.736945+00:00Z
+==============================================================================
+
+─── GCP (BigQuery billing export — both accounts, gross + credits) ───────────
+  GCP / Gemini API                                 $    28,671  D=$   25,804  M=$    2,867   [service-specific weight]
+  GCP / Compute Engine                             $    11,135  D=$    2,862  M=$    8,273   [DAU split]
+  GCP / Vertex AI                                  $     8,595  D=$    7,735  M=$      859   [service-specific weight]
+  GCP / Translate                                  $     8,330  D=$        0  M=$    8,330   [service-specific weight]
+  GCP / App Engine                                 $     6,999  D=$    1,799  M=$    5,200   [DAU split]
+  GCP / Cloud Storage                              $     3,821  D=$      982  M=$    2,839   [DAU split]
+  GCP / Cloud Run                                  $     3,770  D=$      969  M=$    2,801   [DAU split]
+  GCP / Networking                                 $     2,494  D=$      641  M=$    1,853   [DAU split]
+  GCP / Geocoding API                              $     1,287  D=$        0  M=$    1,287   [service-specific weight]
+  GCP / Cloud Logging                              $     1,084  D=$      279  M=$      806   [DAU split]
+  GCP / Cloud Pub/Sub                              $       605  D=$      155  M=$      450   [DAU split]
+  GCP / Cloud Monitoring                           $       189  D=$       49  M=$      140   [DAU split]
+  GCP / Cloud Run Functions                        $       162  D=$       42  M=$      120   [DAU split]
+  GCP / Artifact Registry                          $       146  D=$       38  M=$      108   [DAU split]
+  GCP / Kubernetes Engine                          $       142  D=$       36  M=$      106   [DAU split]
+  GCP / Container Registry Vulnerability Scanning  $       131  D=$       34  M=$       97   [DAU split]
+  GCP / BigQuery                                   $        56  D=$       14  M=$       42   [DAU split]
+  GCP / Secret Manager                             $        15  D=$        4  M=$       11   [DAU split]
+  GCP / Maps Static API                            $         2  D=$        0  M=$        2   [service-specific weight]
+  GCP / Cloud Key Management Service (KMS)         $         0  D=$        0  M=$        0   [DAU split]
+  GCP / Cloud Build                                $         0  D=$        0  M=$        0   [DAU split]
+  GCP / VM Manager                                 $         0  D=$        0  M=$        0   [DAU split]
+  GCP subtotal                                     $    77,632
+
+─── Firestore llm_usage — exact per-platform from bucket prefix ──────────────
+  Firestore llm_usage / desktop_chat               $     3,760  D=$    3,760  M=$        0   [bucket prefix → desktop]
+  Firestore llm_usage subtotal                     $     3,760
+
+─── External providers (no admin API keys → reference values) ────────────────
+  External / Anthropic                             $    14,326  D=$   12,893  M=$    1,433   [team-beasts 7-day×2 (90/10 weight)]
+  External / OpenAI                                $    14,884  D=$    7,442  M=$    7,442   [team-beasts 7-day×2 (50/50 weight)]
+  External / Deepgram                              $    10,580  D=$    2,116  M=$    8,464   [team-beasts 7-day×2 (20/80 weight)]
+  External subtotal                                $    39,790
+
+─── TOTALS ───────────────────────────────────────────────────────────────────
+  COST (last 30d)                                  $   121,182  D=$   67,652  M=$   53,530
+  REVENUE (current MRR / Stripe active)            $    41,483  D=$    3,026  M=$   37,845  unknown=$  613
+  NET (revenue − cost)                             $   -79,698  D=$  -64,626  M=$  -15,685
+  Revenue / cost ratio                                   0.34x
+
+─── NOTES ────────────────────────────────────────────────────────────────────
+  • Sample of 1000 users: 382 (38.2%) have signup_platform set.
+
+─── PLATFORM ATTRIBUTION GAPS — backend changes that close them ──────────────
+  • OpenAI / Anthropic / Deepgram are pulled from a static reference table
+    today. Wire `record_llm_usage_bucket(uid, ..., bucket=…, cost_usd=…)`
+    in every backend caller (utils/llm/*, utils/stt/*) so live spend
+    flows into Firestore `llm_usage` with platform-specific buckets.
+    Result: this report becomes 100% live, no reference table.
+  • Mobile LLM buckets are not written today (backend hardcodes
+    `desktop_*`). Add a platform parameter sourced from `X-App-Platform`
+    so calls become `mobile_chat`, `mobile_proactive`, etc.
+  • GCP service splits use a coarse 27/73 DAU ratio for shared infra
+    (Compute Engine, App Engine, Cloud Run, Storage, Networking).
+    For exact attribution, add GCP labels {team, platform} on every
+    workload (Helm charts already support `commonLabels`) and BQ sums
+    by label. Then GCP becomes exact too.
+  • Mercury bank is not pulled — we don't have an API token. If you
+    drop one in GCP Secret Manager as MERCURY_API_TOKEN, this CLI can
+    cross-check by category (Anthropic, OpenAI, Vendor X, etc.) for a
+    full ground-truth bill.
+
+==============================================================================
