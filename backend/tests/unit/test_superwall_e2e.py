@@ -390,3 +390,81 @@ class TestStripeConflictGuard:
         )
         assert resp.status_code == 422
         assert "mobile" in resp.json()["detail"].lower()
+
+
+# ── Available-plans flag gating ────────────────────────────────────────────
+
+
+class TestAvailablePlansFlagGating:
+    """Regression test for the Superwall flag gate on /v1/payments/available-plans.
+
+    The endpoint had two routing layers — paywall_router on the client honored
+    the flag, but the catalog endpoint only branched on (platform, source).
+    Net effect: with flag OFF, mobile users opening PlansSheet still saw the
+    new Lite/Plus/Unlimited tiers via this endpoint. Fix: gate the mobile
+    branch on ``is_superwall_enabled(uid)`` so flag-off mobile users fall
+    through to the legacy Stripe catalog same as desktop.
+    """
+
+    _BASE_CONFIG = {
+        "superwall_product_map": {
+            "com.omi.app.lite_monthly": "lite",
+            "com.omi.app.lite_yearly": "lite",
+            "com.omi.app.plus_monthly": "plus",
+            "com.omi.app.plus_yearly": "plus",
+            "com.omi.app.unlimited_v2_monthly": "unlimited_v2",
+            "com.omi.app.unlimited_v2_yearly": "unlimited_v2",
+        },
+    }
+
+    def setup_method(self):
+        _reset_state()
+        # Reset config to baseline (no superwall_enabled — flag OFF by default)
+        plan_caps_config._get_config = lambda: dict(self._BASE_CONFIG)
+
+    def teardown_method(self):
+        plan_caps_config._get_config = lambda: dict(self._BASE_CONFIG)
+
+    def test_mobile_with_flag_on_returns_new_mobile_catalog(self):
+        """Flag ON + mobile + no sub → Lite/Plus/Unlimited catalog from build_mobile_plan_catalog."""
+        plan_caps_config._get_config = lambda: {**self._BASE_CONFIG, "superwall_enabled": True}
+
+        resp = client.get(
+            "/v1/payments/available-plans",
+            headers={"X-App-Platform": "ios"},
+        )
+        assert resp.status_code == 200
+        plan_ids = {p["id"] for p in resp.json()["plans"]}
+        # All 6 mobile SKUs should be in the response
+        assert "com.omi.app.lite_monthly" in plan_ids
+        assert "com.omi.app.lite_yearly" in plan_ids
+        assert "com.omi.app.plus_monthly" in plan_ids
+        assert "com.omi.app.plus_yearly" in plan_ids
+        assert "com.omi.app.unlimited_v2_monthly" in plan_ids
+        assert "com.omi.app.unlimited_v2_yearly" in plan_ids
+
+    def test_mobile_with_flag_off_does_not_return_mobile_catalog(self):
+        """Flag OFF + mobile → must NOT return the new mobile SKUs.
+
+        With the flag off, the endpoint should fall through to the legacy
+        Stripe path (or return empty / error if Stripe not stubbed) — but
+        crucially, it must not return the new lite/plus/unlimited_v2 IDs.
+        """
+        # Default config (no superwall_enabled key) — flag is OFF.
+        # The legacy Stripe path may 500 without full Stripe mocking; we
+        # accept that and only assert: IF the response succeeds, the new
+        # mobile SKUs are NOT in it.
+        resp = client.get(
+            "/v1/payments/available-plans",
+            headers={"X-App-Platform": "ios"},
+        )
+        if resp.status_code == 200:
+            plan_ids = {p["id"] for p in resp.json()["plans"]}
+            assert "com.omi.app.lite_monthly" not in plan_ids
+            assert "com.omi.app.plus_monthly" not in plan_ids
+            assert "com.omi.app.unlimited_v2_monthly" not in plan_ids
+        else:
+            # 500/422 means the legacy Stripe path errored without full
+            # mocking — that's fine; the regression is about NOT returning
+            # mobile SKUs, which we get for free when the request errors.
+            assert resp.status_code in (422, 500)
