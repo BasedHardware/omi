@@ -694,9 +694,7 @@ static void drain_pending_write_queue_for_shutdown(void)
 
 static void sd_set_io_low_power(bool enable)
 {
-    const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
-
-    if (!sd_enabled || !device_is_ready(spi_dev)) {
+    if (!sd_enabled) {
         return;
     }
 
@@ -705,6 +703,7 @@ static void sd_set_io_low_power(bool enable)
             return;
         }
 
+        /* spi3 is shared with OTA external flash; only suspend the SD slot itself. */
         int ret_sd = 0;
         if (atomic_get(&sd_dev_pm_supported)) {
             ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
@@ -712,16 +711,14 @@ static void sd_set_io_low_power(bool enable)
                 atomic_set(&sd_dev_pm_supported, 0);
             }
         }
-        int ret_spi = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
-        if (!pm_action_is_ok(ret_sd) || !pm_action_is_ok(ret_spi)) {
-            LOG_WRN("SD suspend failed (sd=%d spi=%d)", ret_sd, ret_spi);
+        if (!pm_action_is_ok(ret_sd)) {
+            LOG_WRN("SD suspend failed (sd=%d)", ret_sd);
         }
     } else {
         if (!atomic_cas(&sd_io_low_power, 1, 0)) {
             return;
         }
 
-        int ret_spi = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
         int ret_sd = 0;
         if (atomic_get(&sd_dev_pm_supported)) {
             ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
@@ -729,8 +726,8 @@ static void sd_set_io_low_power(bool enable)
                 atomic_set(&sd_dev_pm_supported, 0);
             }
         }
-        if (!pm_action_is_ok(ret_sd) || !pm_action_is_ok(ret_spi)) {
-            LOG_WRN("SD resume failed (sd=%d spi=%d)", ret_sd, ret_spi);
+        if (!pm_action_is_ok(ret_sd)) {
+            LOG_WRN("SD resume failed (sd=%d)", ret_sd);
         }
     }
 }
@@ -739,30 +736,29 @@ static int sd_enable_power(bool enable)
 {
     int ret;
     gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT);
-    const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
 
     if (enable) {
         ret = gpio_pin_set_dt(&sd_en, 1);
-        if (device_is_ready(spi_dev)) {
-            pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
-            if (atomic_get(&sd_dev_pm_supported)) {
-                int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
-                if (pm_action_is_unsupported(ret_sd)) {
-                    atomic_set(&sd_dev_pm_supported, 0);
-                }
+        if (atomic_get(&sd_dev_pm_supported)) {
+            int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+            if (pm_action_is_unsupported(ret_sd)) {
+                atomic_set(&sd_dev_pm_supported, 0);
+            }
+            if (!pm_action_is_ok(ret_sd)) {
+                LOG_WRN("SD power-on resume failed (sd=%d)", ret_sd);
             }
         }
         atomic_set(&sd_io_low_power, 0);
         sd_enabled = true;
     } else {
-        if (device_is_ready(spi_dev)) {
-            if (atomic_get(&sd_dev_pm_supported)) {
-                int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
-                if (pm_action_is_unsupported(ret_sd)) {
-                    atomic_set(&sd_dev_pm_supported, 0);
-                }
+        if (atomic_get(&sd_dev_pm_supported)) {
+            int ret_sd = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+            if (pm_action_is_unsupported(ret_sd)) {
+                atomic_set(&sd_dev_pm_supported, 0);
             }
-            pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
+            if (!pm_action_is_ok(ret_sd)) {
+                LOG_WRN("SD power-off suspend failed (sd=%d)", ret_sd);
+            }
         }
         gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
         ret = gpio_pin_set_dt(&sd_en, 0);
