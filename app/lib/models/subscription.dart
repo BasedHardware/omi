@@ -160,6 +160,12 @@ class UserSubscriptionResponse {
   final List<SubscriptionPlan> availablePlans;
   @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
+  // Server-driven gate for the Superwall mobile paywall. When false the
+  // client routes all upgrade triggers to the legacy PlansSheet and skips
+  // Superwall SDK configuration entirely. Default false matches the backend
+  // default so older builds / unconfigured Firestore docs hide the new path.
+  @JsonKey(defaultValue: false)
+  final bool superwallEnabled;
   // Chat quota fields — populated from subscription endpoint
   @JsonKey(defaultValue: 0.0)
   final double chatQuotaUsed;
@@ -183,6 +189,7 @@ class UserSubscriptionResponse {
     required this.memoriesCreatedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.superwallEnabled = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,

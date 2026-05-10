@@ -173,6 +173,7 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               .toList() ??
           [],
       showSubscriptionUi: json['show_subscription_ui'] as bool? ?? true,
+      superwallEnabled: json['superwall_enabled'] as bool? ?? false,
       chatQuotaUsed: (json['chat_quota_used'] as num?)?.toDouble() ?? 0.0,
       chatQuotaUnit: json['chat_quota_unit'] as String?,
       chatQuotaPercent: (json['chat_quota_percent'] as num?)?.toDouble() ?? 0.0,
@@ -198,6 +199,7 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'memories_created_limit': instance.memoriesCreatedLimit,
       'available_plans': instance.availablePlans,
       'show_subscription_ui': instance.showSubscriptionUi,
+      'superwall_enabled': instance.superwallEnabled,
       'chat_quota_used': instance.chatQuotaUsed,
       'chat_quota_unit': instance.chatQuotaUnit,
       'chat_quota_percent': instance.chatQuotaPercent,
