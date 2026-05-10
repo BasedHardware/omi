@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Beta builds now talk to the development backend for faster fixes \u2014 your data still lives in production"
+  ],
   "releases": [
     {
       "version": "0.11.379",
