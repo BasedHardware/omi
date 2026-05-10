@@ -140,6 +140,12 @@ class UserSubscriptionResponse(BaseModel):
     memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # Whether the Superwall mobile paywall is active for this user. Computed
+    # server-side from `app_config/plan_caps.superwall_enabled` (global) and
+    # `superwall_test_uids` (per-uid override). When false, the client routes
+    # all upgrade triggers to the legacy PlansSheet and skips Superwall SDK
+    # configuration entirely.
+    superwall_enabled: bool = False
     # Chat quota usage — derived from llm_usage collection
     chat_quota_used: float = 0.0
     chat_quota_unit: Optional[ChatQuotaUnit] = None
