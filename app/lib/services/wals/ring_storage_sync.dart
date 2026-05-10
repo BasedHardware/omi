@@ -289,12 +289,15 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final wal in wals) {
         if (_isCancelled) break;
         final complete = await _syncRing(wal, progress: progress);
-        wal.status = WalStatus.synced;
         if (!complete) {
+          // Leave wal.status as miss so the next sync session retries it.
+          // This preserves the "resume from same read_seq" guarantee — pairing
+          // with the no-advance-on-failure invariant in _syncRing.
           Logger.debug('RingStorageSync: Ring transfer incomplete; ring untouched, will resume next sync');
           listener.onWalUpdated();
           break;
         }
+        wal.status = WalStatus.synced;
         listener.onWalUpdated();
       }
     } catch (e) {
