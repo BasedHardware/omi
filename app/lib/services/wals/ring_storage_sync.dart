@@ -213,11 +213,16 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
   }
 
-  /// Delete a wal: the ring is a single logical stream, so any "delete" maps
-  /// to clearing the ring. We only act when this is the only pending wal —
-  /// callers shouldn't rely on per-wal delete semantics for the ring.
+  /// Delete a wal. WalSyncs.deleteWal cascades to every sub-sync regardless
+  /// of which one owns the wal, so we MUST verify membership before touching
+  /// the device — clearing the ring on an unrelated phone/sdcard delete would
+  /// wipe data the user didn't intend to delete.
+  ///
+  /// The ring is a single logical stream; deleting our virtual wal maps to
+  /// clearing the entire ring on the device.
   @override
   Future deleteWal(Wal wal) async {
+    if (!_wals.any((w) => w.id == wal.id)) return;
     await _clearRingOnDevice();
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
@@ -229,8 +234,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     listener.onWalUpdated();
   }
 
+  /// Cascades from WalSyncs.deleteAllPendingWals across every sub-sync.
+  /// Only clear the ring when WE actually own pending wals — otherwise this
+  /// runs as a no-op for users with phone/sdcard pending wals only.
   @override
   Future<void> deleteAllPendingWals() async {
+    if (!_wals.any((w) => w.status == WalStatus.miss)) return;
     await _clearRingOnDevice();
     _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
     listener.onWalUpdated();
