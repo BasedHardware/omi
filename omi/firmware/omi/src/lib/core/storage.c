@@ -42,9 +42,10 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
 #define STORAGE_STATUS_REFRESH_MS 250
 
-#define STORAGE_CHUNK_COUNT 20
+#define STORAGE_CHUNK_COUNT 36U
 #define STORAGE_BUFFER_SIZE (RAW_AUDIO_PACKET_BYTES * STORAGE_CHUNK_COUNT)
 #define STORAGE_CONTROL_NOTIFY_SIZE 32
+#define STORAGE_NOTIFY_VALUE_MAX_LEN ((CONFIG_BT_L2CAP_TX_MTU > 3U) ? (CONFIG_BT_L2CAP_TX_MTU - 3U) : 20U)
 
 #define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
 
@@ -92,7 +93,7 @@ static struct bt_gatt_attr storage_service_attr[] = {
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
 
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];
-static uint8_t data_notify_buf[1 + STORAGE_BUFFER_SIZE];
+static uint8_t data_notify_buf[STORAGE_NOTIFY_VALUE_MAX_LEN];
 static uint8_t control_notify_buf[STORAGE_CONTROL_NOTIFY_SIZE];
 
 bool storage_is_on = false;
