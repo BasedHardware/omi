@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -32,16 +33,6 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 /// On any failure (cancel, BLE drop, NOTIFY_DONE error status) the ring is left
 /// untouched — the next sync session resumes from the same read_seq.
 class RingStorageSyncImpl implements RingStorageSync {
-  static const int _ringRecordSize = 444;
-  static const int _ringTimestampBytes = 4;
-  static const int _ringAudioPayloadBytes = _ringRecordSize - _ringTimestampBytes;
-
-  static const int _notifyAck = 0x01;
-  static const int _notifyInfo = 0x02;
-  static const int _notifyData = 0x03;
-  static const int _notifyDone = 0x04;
-  static const int _notifyReadBegin = 0x05;
-
   List<Wal> _wals = const [];
   BtDevice? _device;
 
@@ -185,7 +176,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       final frameLen = codec.getFramesLengthInBytes();
       // Estimate seconds: each 440B audio payload holds ~ floor(440 / (frameLen + 1)) frames
       // (size byte + frame). framesPerRecord rounded down for a conservative duration.
-      final framesPerRecord = frameLen > 0 ? _ringAudioPayloadBytes ~/ (frameLen + 1) : 0;
+      final framesPerRecord = frameLen > 0 ? RingProtocol.audioPayloadBytes ~/ (frameLen + 1) : 0;
       final estimatedFrames = framesPerRecord * status.unreadPackets;
       final estimatedSecs = fps > 0 ? estimatedFrames ~/ fps : 0;
 
@@ -207,7 +198,7 @@ class RingStorageSyncImpl implements RingStorageSync {
           storage: WalStorage.sdcard,
           seconds: estimatedSecs,
           storageOffset: 0,
-          storageTotalBytes: status.unreadPackets * _ringRecordSize,
+          storageTotalBytes: status.unreadPackets * RingProtocol.recordSize,
           fileNum: -1, // sentinel: ring has no file index
           device: _device!.id,
           deviceModel: deviceModel,
@@ -361,7 +352,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     final rtcValid = status?.isRtcValid ?? false;
 
     final completer = Completer<bool>();
-    final List<int> notifyBuffer = []; // raw bytes from NOTIFY_DATA, not yet sliced into records
+    final reassembler = RingRecordReassembler();
     final List<List<int>> bytesData = []; // parsed opus frames awaiting flush
     int recordsConsumed = 0;
     int? firstRecordTs;
@@ -408,20 +399,19 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (value.isEmpty) return;
 
         final opcode = value[0];
-        if (opcode == _notifyAck) {
+        if (opcode == RingProtocol.notifyAck) {
           // ACK from a CMD we didn't initiate here (e.g. CLEAR/STOP). Ignore.
           return;
         }
-        if (opcode == _notifyInfo) {
+        if (opcode == RingProtocol.notifyInfo) {
           // Late INFO response; we already have ringInfo. Ignore.
           return;
         }
-        if (opcode == _notifyReadBegin) {
-          if (value.length >= 13) {
-            final bd = ByteData.sublistView(Uint8List.fromList(value));
-            final startSeq = bd.getUint64(1, Endian.big);
-            final pktCount = bd.getUint32(9, Endian.big);
-            Logger.debug('RingStorageSync: NOTIFY_READ_BEGIN start=$startSeq count=$pktCount');
+        if (opcode == RingProtocol.notifyReadBegin) {
+          final begin = RingProtocol.parseReadBeginNotification(value);
+          if (begin != null) {
+            Logger.debug(
+                'RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}');
             if (!firstDataReceived) {
               firstDataReceived = true;
               firstDataTimer?.cancel();
@@ -429,41 +419,36 @@ class RingStorageSyncImpl implements RingStorageSync {
           }
           return;
         }
-        if (opcode == _notifyDone) {
-          if (value.length < 10) {
+        if (opcode == RingProtocol.notifyDone) {
+          final done = RingProtocol.parseDoneNotification(value);
+          if (done == null) {
             Logger.debug('RingStorageSync: NOTIFY_DONE truncated (${value.length} bytes)');
             if (!completer.isCompleted) completer.complete(false);
             return;
           }
-          final bd = ByteData.sublistView(Uint8List.fromList(value));
-          final status = bd.getUint8(1);
-          doneNextSeq = bd.getUint64(2, Endian.big);
-          doneOk = status == 0;
-          Logger.debug('RingStorageSync: NOTIFY_DONE status=$status next_seq=$doneNextSeq');
+          doneNextSeq = done.nextSeq;
+          doneOk = done.isOk;
+          Logger.debug('RingStorageSync: NOTIFY_DONE status=${done.status} next_seq=$doneNextSeq');
           if (!completer.isCompleted) completer.complete(true);
           return;
         }
-        if (opcode != _notifyData) {
+        if (opcode != RingProtocol.notifyData) {
           Logger.debug('RingStorageSync: unknown notification opcode 0x${opcode.toRadixString(16)}');
           return;
         }
 
-        // NOTIFY_DATA: append payload (skip the leading opcode byte) to the buffer.
-        // The firmware does NOT align chunks to record boundaries — we reassemble.
+        // NOTIFY_DATA: append payload (skip the leading opcode byte) to the
+        // reassembler. The firmware does NOT align chunks to record boundaries.
         final payload = value.sublist(1);
         if (!firstDataReceived) {
           firstDataReceived = true;
           firstDataTimer?.cancel();
         }
-        notifyBuffer.addAll(payload);
+        reassembler.append(payload);
         _updateSpeed(payload.length);
 
-        // Slice complete 444B records out of the buffer.
-        while (notifyBuffer.length >= _ringRecordSize) {
-          final record = notifyBuffer.sublist(0, _ringRecordSize);
-          notifyBuffer.removeRange(0, _ringRecordSize);
-
-          final ts = (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
+        for (final record in reassembler.drainRecords()) {
+          final ts = RingProtocol.readRecordTimestamp(record);
 
           // Anchor timerStart on the first usable timestamp.
           if (firstRecordTs == null) {
@@ -478,23 +463,8 @@ class RingStorageSyncImpl implements RingStorageSync {
             }
           }
 
-          // Parse the 440B audio payload using the existing packed framing:
-          // [size:1][frame:size]... with zero padding allowed.
-          final audio = record.sublist(_ringTimestampBytes);
-          int packageOffset = 0;
-          while (packageOffset < audio.length - 1) {
-            final packageSize = audio[packageOffset];
-            if (packageSize == 0) {
-              packageOffset += 1;
-              continue;
-            }
-            if (packageOffset + 1 + packageSize >= audio.length) {
-              break;
-            }
-            final frame = audio.sublist(packageOffset + 1, packageOffset + 1 + packageSize);
-            bytesData.add(frame);
-            packageOffset += packageSize + 1;
-          }
+          final audio = record.sublist(RingProtocol.timestampBytes);
+          bytesData.addAll(RingProtocol.parseAudioPayload(audio));
           recordsConsumed += 1;
         }
 
@@ -503,7 +473,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (now.difference(lastProgressUpdate) >= progressInterval) {
           lastProgressUpdate = now;
           if (wal.storageTotalBytes > 0) {
-            final consumedBytes = recordsConsumed * _ringRecordSize;
+            final consumedBytes = recordsConsumed * RingProtocol.recordSize;
             final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
             progress?.onWalSyncedProgress(
               pct,
