@@ -74,7 +74,7 @@ class UsageProvider with ChangeNotifier {
     // Superwall mobile plans (App Store / Play Billing)
     PlanType.lite,
     PlanType.plus,
-    PlanType.max,
+    PlanType.unlimitedV2,
   };
 
   bool get _isPaidPlan {

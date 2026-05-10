@@ -74,7 +74,7 @@ const _$PlanTypeEnumMap = {
   PlanType.operator: 'operator',
   PlanType.lite: 'lite',
   PlanType.plus: 'plus',
-  PlanType.max: 'max',
+  PlanType.unlimitedV2: 'unlimited_v2',
 };
 
 const _$SubscriptionStatusEnumMap = {
