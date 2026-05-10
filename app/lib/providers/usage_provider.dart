@@ -14,6 +14,12 @@ class UsageProvider with ChangeNotifier {
   /// Defaults to true when the subscription response hasn't loaded yet, so a
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
+
+  /// Whether the Superwall mobile paywall is enabled for this user. Computed
+  /// server-side from the global flag + the per-uid override list. Defaults to
+  /// false when the response hasn't loaded so the legacy PlansSheet remains
+  /// the safe fallback (matches backend default).
+  bool get superwallEnabled => _subscription?.superwallEnabled ?? false;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
 
