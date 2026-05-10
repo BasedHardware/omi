@@ -89,6 +89,22 @@ static void release_resp_busy(atomic_t *busy_flag)
     }
 }
 
+static int wait_for_sd_worker_response(struct k_sem *sem, int timeout_ms, const char *op_name)
+{
+    if (!sem || !op_name) {
+        return -EINVAL;
+    }
+
+    if (k_sem_take(sem, K_MSEC(timeout_ms)) == 0) {
+        return 0;
+    }
+
+        LOG_WRN("%s timed out after %d ms waiting for SD worker; subsequent calls may return -EBUSY until the pending request completes",
+            op_name,
+            timeout_ms);
+    return -ETIMEDOUT;
+}
+
 typedef enum {
     REQ_WRITE_DATA,
     REQ_GET_RING_INFO,
@@ -1169,8 +1185,9 @@ int sd_ring_get_info(sd_ring_info_t *info)
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
-        return -ETIMEDOUT;
+    ret = wait_for_sd_worker_response(&resp.sem, 5000, "sd_ring_get_info");
+    if (ret < 0) {
+        return ret;
     }
 
     *info = resp.info;
@@ -1213,8 +1230,9 @@ int sd_ring_read(uint64_t start_seq,
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
-        return -ETIMEDOUT;
+    ret = wait_for_sd_worker_response(&resp.sem, 15000, "sd_ring_read");
+    if (ret < 0) {
+        return ret;
     }
 
     *bytes_read = resp.bytes_read;
@@ -1246,8 +1264,9 @@ int sd_ring_advance(uint64_t new_read_seq)
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
-        return -ETIMEDOUT;
+    ret = wait_for_sd_worker_response(&resp.sem, 5000, "sd_ring_advance");
+    if (ret < 0) {
+        return ret;
     }
 
     return resp.res;
@@ -1276,8 +1295,9 @@ int sd_ring_clear(void)
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(15000)) != 0) {
-        return -ETIMEDOUT;
+    ret = wait_for_sd_worker_response(&resp.sem, 15000, "sd_ring_clear");
+    if (ret < 0) {
+        return ret;
     }
 
     return resp.res;
@@ -1306,8 +1326,9 @@ int sd_flush_current_file(void)
         return ret;
     }
 
-    if (k_sem_take(&resp.sem, K_MSEC(30000)) != 0) {
-        return -ETIMEDOUT;
+    ret = wait_for_sd_worker_response(&resp.sem, 30000, "sd_flush_current_file");
+    if (ret < 0) {
+        return ret;
     }
 
     return resp.res;
