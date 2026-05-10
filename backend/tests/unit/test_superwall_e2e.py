@@ -185,8 +185,8 @@ plan_caps_config._get_config = lambda: {
         "com.omi.app.lite_yearly": "lite",
         "com.omi.app.plus_monthly": "plus",
         "com.omi.app.plus_yearly": "plus",
-        "com.omi.app.max_monthly": "max",
-        "com.omi.app.max_yearly": "max",
+        "com.omi.app.unlimited_v2_monthly": "unlimited_v2",
+        "com.omi.app.unlimited_v2_yearly": "unlimited_v2",
     }
 }
 

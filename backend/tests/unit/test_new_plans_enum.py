@@ -1,8 +1,9 @@
-"""Tests for the new mobile plan tiers (Lite / Plus / Max) and ``SubscriptionSource``.
+"""Tests for the new mobile plan tiers (Lite / Plus / Unlimited) and ``SubscriptionSource``.
 
 Mobile-only purchase tiers — Lite ($9.99/mo, $79.99/yr), Plus ($29.99/$199.99),
-and Max ($49.99/$299.99) — must:
-  - exist on ``PlanType``
+and Unlimited ($49.99/$299.99) — must:
+  - exist on ``PlanType`` (Unlimited has internal id ``unlimited_v2`` to avoid
+    colliding with the legacy ``unlimited`` Neo plan)
   - count as paid plans
   - resolve to the correct caps (with the doc-missing fallback values
     matching issue #23: 100/1500, 300/4000, unlimited/unlimited)
@@ -38,7 +39,17 @@ class TestPlanTypeEnum:
     def test_new_plans_exist(self):
         assert PlanType.lite.value == "lite"
         assert PlanType.plus.value == "plus"
-        assert PlanType.max.value == "max"
+        assert PlanType.unlimited_v2.value == "unlimited_v2"
+
+    def test_unlimited_v2_distinct_from_legacy_unlimited(self):
+        """The new mobile Unlimited tier MUST NOT collide with the legacy Neo plan.
+
+        Both display to users as "Unlimited"-ish (legacy is now "Neo") but
+        their internal enum values are independent.
+        """
+        assert PlanType.unlimited != PlanType.unlimited_v2
+        assert PlanType.unlimited.value == "unlimited"
+        assert PlanType.unlimited_v2.value == "unlimited_v2"
 
     def test_legacy_pro_alias_still_maps_to_architect(self):
         """Pre-rename `'pro'` strings in Firestore must keep resolving to architect."""
@@ -60,7 +71,7 @@ class TestIsPaidPlan:
 
         assert is_paid_plan(PlanType.lite) is True
         assert is_paid_plan(PlanType.plus) is True
-        assert is_paid_plan(PlanType.max) is True
+        assert is_paid_plan(PlanType.unlimited_v2) is True
 
     def test_basic_still_unpaid(self):
         from utils.subscription import is_paid_plan
@@ -77,7 +88,10 @@ class TestDisplayNames:
 
         assert get_plan_display_name(PlanType.lite) == "Lite"
         assert get_plan_display_name(PlanType.plus) == "Plus"
-        assert get_plan_display_name(PlanType.max) == "Max"
+        assert get_plan_display_name(PlanType.unlimited_v2) == "Unlimited"
+        # Legacy unlimited still displays as "Neo" — proves the two enum
+        # values produce different user-facing names.
+        assert get_plan_display_name(PlanType.unlimited) == "Neo"
 
 
 # ── Cap defaults (Firestore doc absent → fallback to issue #23 spec) ────────
@@ -109,11 +123,11 @@ class TestNewPlanCapsDefaults:
         assert caps["chat_questions_per_month"] == 300
         assert caps["transcription_seconds"] == 4000 * 60  # 240,000s
 
-    def test_max_unlimited_caps(self):
-        """Max tier is unlimited on both axes."""
+    def test_unlimited_v2_uncapped(self):
+        """Unlimited tier (internal id ``unlimited_v2``) has no caps on either axis."""
         mod = _reload_config_module()
         with patch.object(mod, "_get_config", return_value={}):
-            caps = mod.get_plan_caps(PlanType.max)
+            caps = mod.get_plan_caps(PlanType.unlimited_v2)
         assert caps["chat_questions_per_month"] is None
         assert caps["transcription_seconds"] is None
 

@@ -49,12 +49,12 @@ def _sub(
 
 
 class TestMobileCatalog:
-    """Mobile users see Lite/Plus/Max if not on a legacy Stripe sub."""
+    """Mobile users see Lite/Plus/Unlimited if not on a legacy Stripe sub."""
 
     def test_mobile_no_sub_returns_three_tiers(self):
         opts = build_mobile_plan_catalog(PlanType.basic)
         plan_ids = sorted({o["plan_id"] for o in opts})
-        assert plan_ids == ["lite", "max", "plus"]
+        assert plan_ids == ["lite", "plus", "unlimited_v2"]
         # Each tier ships monthly + annual = 6 options total.
         assert len(opts) == 6
 
@@ -71,7 +71,7 @@ class TestMobileCatalog:
         assert by_id["com.omi.app.lite_monthly"]["unit_amount"] == 999
         assert by_id["com.omi.app.lite_yearly"]["unit_amount"] == 7999
         assert by_id["com.omi.app.plus_monthly"]["unit_amount"] == 2999
-        assert by_id["com.omi.app.max_monthly"]["unit_amount"] == 4999
+        assert by_id["com.omi.app.unlimited_v2_monthly"]["unit_amount"] == 4999
 
     def test_mobile_catalog_unknown_current_plan(self):
         """A legacy Stripe-paid plan should not match any mobile tier as active."""

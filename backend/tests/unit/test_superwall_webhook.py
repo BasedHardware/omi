@@ -235,12 +235,12 @@ class TestHandlers:
         with patch("database.users.update_user_subscription") as mock_update:
             superwall.handle_product_change(
                 "uid_test",
-                PlanType.max,
+                PlanType.unlimited_v2,
                 SubscriptionSource.superwall_ios,
-                self._payload(product_id="com.omi.app.max_monthly"),
+                self._payload(product_id="com.omi.app.unlimited_v2_monthly"),
             )
         sub_dict = mock_update.call_args.args[1]
-        assert sub_dict["plan"] == "max"
+        assert sub_dict["plan"] == "unlimited_v2"
 
 
 class TestSourceDetection:
