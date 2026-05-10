@@ -183,3 +183,22 @@ def get_superwall_product_map() -> dict:
     via Firestore so new SKUs don't need a redeploy.
     """
     return _get_config().get('superwall_product_map') or {}
+
+
+def is_superwall_enabled(uid: Optional[str] = None) -> bool:
+    """Whether the Superwall mobile paywall is active for this user.
+
+    Resolution:
+      1. ``uid`` in ``superwall_test_uids`` → True (override list — internal
+         testers / beta users see Superwall regardless of the global flag).
+      2. Otherwise → ``superwall_enabled`` global flag (default False).
+
+    Both fields live in the existing ``app_config/plan_caps`` Firestore doc so
+    the test list can be edited without touching user records.
+    """
+    cfg = _get_config()
+    if uid:
+        test_uids = cfg.get('superwall_test_uids') or []
+        if uid in test_uids:
+            return True
+    return bool(cfg.get('superwall_enabled', False))
