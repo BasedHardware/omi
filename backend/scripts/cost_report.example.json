@@ -1,0 +1,251 @@
+{
+  "window_days": 30,
+  "total_cost_usd": 121181.67999999998,
+  "total_desktop_usd": 67652.07,
+  "total_mobile_usd": 53529.61000000001,
+  "revenue_total": 41483.4,
+  "revenue_desktop": 3025.59,
+  "revenue_mobile": 37844.72,
+  "revenue_unknown": 613.09,
+  "n_active_subs": 2241,
+  "rows": [
+    {
+      "service": "GCP / Gemini API",
+      "gross_usd": 28670.64,
+      "credits_usd": 0.0,
+      "net_usd": 28670.64,
+      "desktop_usd": 25803.58,
+      "mobile_usd": 2867.06,
+      "method": "service-specific weight"
+    },
+    {
+      "service": "GCP / Compute Engine",
+      "gross_usd": 11209.01,
+      "credits_usd": -74.28,
+      "net_usd": 11134.73,
+      "desktop_usd": 2861.63,
+      "mobile_usd": 8273.1,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Vertex AI",
+      "gross_usd": 8594.51,
+      "credits_usd": 0.0,
+      "net_usd": 8594.51,
+      "desktop_usd": 7735.06,
+      "mobile_usd": 859.45,
+      "method": "service-specific weight"
+    },
+    {
+      "service": "GCP / Translate",
+      "gross_usd": 8349.61,
+      "credits_usd": -20.0,
+      "net_usd": 8329.61,
+      "desktop_usd": 0.0,
+      "mobile_usd": 8329.61,
+      "method": "service-specific weight"
+    },
+    {
+      "service": "GCP / App Engine",
+      "gross_usd": 6998.67,
+      "credits_usd": 0.0,
+      "net_usd": 6998.67,
+      "desktop_usd": 1798.66,
+      "mobile_usd": 5200.01,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Storage",
+      "gross_usd": 3820.58,
+      "credits_usd": 0.0,
+      "net_usd": 3820.58,
+      "desktop_usd": 981.89,
+      "mobile_usd": 2838.69,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Run",
+      "gross_usd": 3780.85,
+      "credits_usd": -10.44,
+      "net_usd": 3770.41,
+      "desktop_usd": 969.0,
+      "mobile_usd": 2801.41,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Networking",
+      "gross_usd": 2738.67,
+      "credits_usd": -244.19,
+      "net_usd": 2494.48,
+      "desktop_usd": 641.08,
+      "mobile_usd": 1853.4,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Geocoding API",
+      "gross_usd": 1286.77,
+      "credits_usd": 0.0,
+      "net_usd": 1286.77,
+      "desktop_usd": 0.0,
+      "mobile_usd": 1286.77,
+      "method": "service-specific weight"
+    },
+    {
+      "service": "GCP / Cloud Logging",
+      "gross_usd": 1084.23,
+      "credits_usd": 0.0,
+      "net_usd": 1084.23,
+      "desktop_usd": 278.65,
+      "mobile_usd": 805.58,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Pub/Sub",
+      "gross_usd": 605.01,
+      "credits_usd": 0.0,
+      "net_usd": 605.01,
+      "desktop_usd": 155.49,
+      "mobile_usd": 449.52,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Monitoring",
+      "gross_usd": 188.93,
+      "credits_usd": 0.0,
+      "net_usd": 188.93,
+      "desktop_usd": 48.56,
+      "mobile_usd": 140.37,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Run Functions",
+      "gross_usd": 171.96,
+      "credits_usd": -10.44,
+      "net_usd": 161.52,
+      "desktop_usd": 41.51,
+      "mobile_usd": 120.01,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Artifact Registry",
+      "gross_usd": 145.98,
+      "credits_usd": 0.0,
+      "net_usd": 145.98,
+      "desktop_usd": 37.52,
+      "mobile_usd": 108.46,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Kubernetes Engine",
+      "gross_usd": 142.01,
+      "credits_usd": 0.0,
+      "net_usd": 142.01,
+      "desktop_usd": 36.5,
+      "mobile_usd": 105.51,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Container Registry Vulnerability Scanning",
+      "gross_usd": 130.7,
+      "credits_usd": 0.0,
+      "net_usd": 130.7,
+      "desktop_usd": 33.59,
+      "mobile_usd": 97.11,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / BigQuery",
+      "gross_usd": 56.43,
+      "credits_usd": 0.0,
+      "net_usd": 56.43,
+      "desktop_usd": 14.5,
+      "mobile_usd": 41.93,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Secret Manager",
+      "gross_usd": 15.19,
+      "credits_usd": 0.0,
+      "net_usd": 15.19,
+      "desktop_usd": 3.9,
+      "mobile_usd": 11.29,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Maps Static API",
+      "gross_usd": 1.6,
+      "credits_usd": 0.0,
+      "net_usd": 1.6,
+      "desktop_usd": 0.0,
+      "mobile_usd": 1.6,
+      "method": "service-specific weight"
+    },
+    {
+      "service": "GCP / Cloud Key Management Service (KMS)",
+      "gross_usd": 0.16,
+      "credits_usd": 0.0,
+      "net_usd": 0.16,
+      "desktop_usd": 0.04,
+      "mobile_usd": 0.12,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / Cloud Build",
+      "gross_usd": 0.02,
+      "credits_usd": 0.0,
+      "net_usd": 0.02,
+      "desktop_usd": 0.01,
+      "mobile_usd": 0.01,
+      "method": "DAU split"
+    },
+    {
+      "service": "GCP / VM Manager",
+      "gross_usd": 0.01,
+      "credits_usd": -0.01,
+      "net_usd": 0.0,
+      "desktop_usd": 0.0,
+      "mobile_usd": 0.0,
+      "method": "DAU split"
+    },
+    {
+      "service": "Firestore llm_usage / desktop_chat",
+      "gross_usd": 3759.5,
+      "credits_usd": 0.0,
+      "net_usd": 3759.5,
+      "desktop_usd": 3759.5,
+      "mobile_usd": 0.0,
+      "method": "bucket prefix \u2192 desktop"
+    },
+    {
+      "service": "External / Anthropic",
+      "gross_usd": 14326.0,
+      "credits_usd": 0.0,
+      "net_usd": 14326.0,
+      "desktop_usd": 12893.4,
+      "mobile_usd": 1432.6,
+      "method": "team-beasts 7-day\u00d72 (90/10 weight)"
+    },
+    {
+      "service": "External / OpenAI",
+      "gross_usd": 14884.0,
+      "credits_usd": 0.0,
+      "net_usd": 14884.0,
+      "desktop_usd": 7442.0,
+      "mobile_usd": 7442.0,
+      "method": "team-beasts 7-day\u00d72 (50/50 weight)"
+    },
+    {
+      "service": "External / Deepgram",
+      "gross_usd": 10580.0,
+      "credits_usd": 0.0,
+      "net_usd": 10580.0,
+      "desktop_usd": 2116.0,
+      "mobile_usd": 8464.0,
+      "method": "team-beasts 7-day\u00d72 (20/80 weight)"
+    }
+  ],
+  "notes": [
+    "Sample of 1000 users: 382 (38.2%) have signup_platform set."
+  ],
+  "generated_at": "2026-05-10T20:33:18.737158+00:00Z"
+}
