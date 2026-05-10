@@ -68,7 +68,6 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/superwall_service.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
@@ -192,21 +191,11 @@ Future _init() async {
     Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
   };
 
-  // Superwall — configures the mobile paywall + IAP layer. No-ops on macOS
-  // and on builds without --dart-define=SUPERWALL_API_KEY_*. Identify the
-  // signed-in user immediately so webhook payloads carry the correct uid.
-  await SuperwallService.instance.initialize();
-  if (isAuth) {
-    final uid = SharedPreferencesUtil().uid;
-    if (uid.isNotEmpty) {
-      await SuperwallService.instance.identify(uid);
-    }
-    // Watch for the dual-billing-rail edge case (active Stripe sub + Superwall
-    // mobile purchase). Surfaces a one-time dialog asking the user to cancel
-    // the Stripe one. Safe to call before the navigator key is mounted —
-    // the listener defers context use until the next status emission.
-    await SuperwallService.instance.watchForStripeConflict();
-  }
+  // Superwall is initialized lazily on first paywall trigger via
+  // `SuperwallService.ensureConfigured()` in `utils/paywall_router.dart`.
+  // Skipping eager init means flag-off users never make a Superwall network
+  // call, and the SDK is configured only when the server-driven
+  // `superwall_enabled` flag (in UsageProvider) actually routes to it.
 
   await CrashlyticsManager.init();
   if (isAuth) {
