@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/subscription.dart' as omi;
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/superwall_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:superwallkit_flutter/superwallkit_flutter.dart';
 
@@ -33,7 +35,11 @@ Future<bool> showUpgradePaywall(
   // means: don't surface ANY upgrade affordance to this build.
   if (!usage.showSubscriptionUI) return false;
 
-  if (_isLegacyStripeSubscriber(usage.subscription?.subscription)) {
+  // Master gate: when the server-driven flag is off, OR the user is a legacy
+  // Stripe subscriber, route to the existing PlansSheet. Superwall is reserved
+  // for new acquisitions on the new mobile paywall path.
+  final superwallOn = usage.superwallEnabled;
+  if (!superwallOn || _isLegacyStripeSubscriber(usage.subscription?.subscription)) {
     if (!context.mounted) return false;
     await showModalBottomSheet(
       context: context,
@@ -49,8 +55,20 @@ Future<bool> showUpgradePaywall(
     return true;
   }
 
-  // Non-subscriber or already on Superwall — let the SDK render the paywall.
-  // The feature callback fires only when the user already has the entitlement
+  // Flag is on — lazy-configure the SDK (no-op after the first hit) and
+  // identify the signed-in user before triggering the placement. Doing this
+  // here instead of at app startup means flag-off users never make a
+  // Superwall network call.
+  await SuperwallService.instance.ensureConfigured();
+  final uid = SharedPreferencesUtil().uid;
+  if (uid.isNotEmpty) {
+    await SuperwallService.instance.identify(uid);
+  }
+  // Conflict watcher only matters once Superwall is in play; safe to call
+  // every time because it short-circuits if already subscribed.
+  await SuperwallService.instance.watchForStripeConflict();
+
+  // Feature callback fires only when the user already has the entitlement
   // (or successfully purchases on this view); we don't need to do anything
   // there because UsageProvider re-fetches on subscription status changes.
   try {
