@@ -63,6 +63,7 @@ struct raw_batch_header {
 
 struct read_resp {
     struct k_sem sem;
+    atomic_t *busy_flag;
     int res;
     uint32_t bytes_read;
     uint32_t packets_read;
@@ -70,14 +71,23 @@ struct read_resp {
 
 struct status_resp {
     struct k_sem sem;
+    atomic_t *busy_flag;
     int res;
 };
 
 struct info_resp {
     struct k_sem sem;
+    atomic_t *busy_flag;
     int res;
     sd_ring_info_t info;
 };
+
+static void release_resp_busy(atomic_t *busy_flag)
+{
+    if (busy_flag) {
+        atomic_clear(busy_flag);
+    }
+}
 
 typedef enum {
     REQ_WRITE_DATA,
@@ -150,8 +160,11 @@ static uint8_t batch_read_buffer[RAW_BATCH_BYTES];
 static uint8_t sector_buffer[DISK_SECTOR_SIZE];
 static uint16_t current_batch_packets;
 static uint64_t current_batch_base_seq;
+static uint64_t cached_read_batch_base_seq = UINT64_MAX;
+static struct raw_batch_header cached_read_batch_header;
 static bool current_batch_loaded;
 static bool current_batch_dirty;
+static bool cached_read_batch_valid;
 static int64_t last_batch_activity_ms;
 static uint8_t writing_error_counter;
 
@@ -166,6 +179,12 @@ static uint32_t compat_saved_offset;
 static void sd_worker_thread(void);
 static void sd_set_io_low_power(bool enable);
 static int flush_current_batch(bool sync_media);
+
+static void invalidate_read_batch_cache(void)
+{
+    cached_read_batch_valid = false;
+    cached_read_batch_base_seq = UINT64_MAX;
+}
 
 static bool pm_action_is_unsupported(int ret)
 {
@@ -344,6 +363,14 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
     }
 
     uint64_t base_seq = (seq / RAW_PACKETS_PER_BATCH) * RAW_PACKETS_PER_BATCH;
+    if (cached_read_batch_valid && cached_read_batch_base_seq == base_seq) {
+        if (buffer != batch_read_buffer) {
+            memcpy(buffer, batch_read_buffer, sizeof(batch_read_buffer));
+        }
+        *header = cached_read_batch_header;
+        return 0;
+    }
+
     uint32_t sector = batch_sector_for_base_seq(base_seq);
     int ret = disk_access_read(DISK_DRIVE_NAME, buffer, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
@@ -364,6 +391,13 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
                 (unsigned long long)base_seq);
         return -EIO;
     }
+
+    if (buffer != batch_read_buffer) {
+        memcpy(batch_read_buffer, buffer, sizeof(batch_read_buffer));
+    }
+    cached_read_batch_base_seq = base_seq;
+    cached_read_batch_header = *header;
+    cached_read_batch_valid = true;
 
     return 0;
 }
@@ -455,6 +489,7 @@ static int flush_current_batch(bool sync_requested)
     }
 
     current_batch_dirty = false;
+    invalidate_read_batch_cache();
     writing_error_counter = 0;
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
@@ -472,6 +507,7 @@ static int clear_ring_internal(bool sync_requested)
     compat_current_name[0] = '\0';
     compat_saved_name[0] = '\0';
     compat_saved_offset = 0;
+    invalidate_read_batch_cache();
     start_empty_batch(0);
 
     int ret = persist_ring_metadata();
@@ -904,6 +940,7 @@ handle_req:
                 req.u.info.resp->info = ring_state;
                 req.u.info.resp->res = 0;
                 k_sem_give(&req.u.info.resp->sem);
+                release_resp_busy(req.u.info.resp->busy_flag);
             }
             break;
 
@@ -915,6 +952,7 @@ handle_req:
                                                              &req.u.read.resp->bytes_read,
                                                              &req.u.read.resp->packets_read);
                 k_sem_give(&req.u.read.resp->sem);
+                release_resp_busy(req.u.read.resp->busy_flag);
             }
             break;
 
@@ -922,6 +960,7 @@ handle_req:
             if (req.u.advance.resp) {
                 req.u.advance.resp->res = advance_read_seq_internal(req.u.advance.new_read_seq, false);
                 k_sem_give(&req.u.advance.resp->sem);
+                release_resp_busy(req.u.advance.resp->busy_flag);
             }
             break;
 
@@ -929,6 +968,7 @@ handle_req:
             if (req.u.status.resp) {
                 req.u.status.resp->res = clear_ring_internal(false);
                 k_sem_give(&req.u.status.resp->sem);
+                release_resp_busy(req.u.status.resp->busy_flag);
             }
             break;
 
@@ -936,6 +976,7 @@ handle_req:
             if (req.u.status.resp) {
                 req.u.status.resp->res = flush_current_batch(true);
                 k_sem_give(&req.u.status.resp->sem);
+                release_resp_busy(req.u.status.resp->busy_flag);
             } else {
                 (void)flush_current_batch(true);
             }
@@ -947,6 +988,7 @@ handle_req:
             if (req.u.status.resp) {
                 req.u.status.resp->res = res;
                 k_sem_give(&req.u.status.resp->sem);
+                release_resp_busy(req.u.status.resp->busy_flag);
             }
             break;
         }
@@ -986,6 +1028,7 @@ int app_sd_off(void)
     if (is_mounted && sd_worker_tid) {
         struct status_resp resp;
         k_sem_init(&resp.sem, 0, 1);
+        resp.busy_flag = NULL;
         resp.res = 0;
 
         sd_req_t req = {0};
@@ -1117,17 +1160,14 @@ int sd_ring_get_info(sd_ring_info_t *info)
     }
 
     static struct info_resp resp;
-    static volatile bool info_in_flight;
+    static atomic_t info_in_flight = ATOMIC_INIT(0);
 
-    if (info_in_flight) {
-        if (k_sem_take(&resp.sem, K_NO_WAIT) != 0) {
-            return -EBUSY;
-        }
-        info_in_flight = false;
+    if (!atomic_cas(&info_in_flight, 0, 1)) {
+        return -EBUSY;
     }
 
-    info_in_flight = true;
     k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &info_in_flight;
 
     sd_req_t req = {0};
     req.type = REQ_GET_RING_INFO;
@@ -1135,7 +1175,8 @@ int sd_ring_get_info(sd_ring_info_t *info)
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
-        info_in_flight = false;
+        resp.busy_flag = NULL;
+        atomic_clear(&info_in_flight);
         return ret;
     }
 
@@ -1143,7 +1184,6 @@ int sd_ring_get_info(sd_ring_info_t *info)
         return -ETIMEDOUT;
     }
 
-    info_in_flight = false;
     *info = resp.info;
     return resp.res;
 }
@@ -1159,17 +1199,14 @@ int sd_ring_read(uint64_t start_seq,
     }
 
     static struct read_resp resp;
-    static volatile bool read_in_flight;
+    static atomic_t read_in_flight = ATOMIC_INIT(0);
 
-    if (read_in_flight) {
-        if (k_sem_take(&resp.sem, K_NO_WAIT) != 0) {
-            return -EBUSY;
-        }
-        read_in_flight = false;
+    if (!atomic_cas(&read_in_flight, 0, 1)) {
+        return -EBUSY;
     }
 
-    read_in_flight = true;
     k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &read_in_flight;
     resp.bytes_read = 0;
     resp.packets_read = 0;
 
@@ -1182,7 +1219,8 @@ int sd_ring_read(uint64_t start_seq,
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
-        read_in_flight = false;
+        resp.busy_flag = NULL;
+        atomic_clear(&read_in_flight);
         return ret;
     }
 
@@ -1190,7 +1228,6 @@ int sd_ring_read(uint64_t start_seq,
         return -ETIMEDOUT;
     }
 
-    read_in_flight = false;
     *bytes_read = resp.bytes_read;
     *packets_read = resp.packets_read;
     return resp.res;
@@ -1199,17 +1236,14 @@ int sd_ring_read(uint64_t start_seq,
 int sd_ring_advance(uint64_t new_read_seq)
 {
     static struct status_resp resp;
-    static volatile bool advance_in_flight;
+    static atomic_t advance_in_flight = ATOMIC_INIT(0);
 
-    if (advance_in_flight) {
-        if (k_sem_take(&resp.sem, K_NO_WAIT) != 0) {
-            return -EBUSY;
-        }
-        advance_in_flight = false;
+    if (!atomic_cas(&advance_in_flight, 0, 1)) {
+        return -EBUSY;
     }
 
-    advance_in_flight = true;
     k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &advance_in_flight;
 
     sd_req_t req = {0};
     req.type = REQ_ADVANCE_READ;
@@ -1218,7 +1252,8 @@ int sd_ring_advance(uint64_t new_read_seq)
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
-        advance_in_flight = false;
+        resp.busy_flag = NULL;
+        atomic_clear(&advance_in_flight);
         return ret;
     }
 
@@ -1226,24 +1261,20 @@ int sd_ring_advance(uint64_t new_read_seq)
         return -ETIMEDOUT;
     }
 
-    advance_in_flight = false;
     return resp.res;
 }
 
 int sd_ring_clear(void)
 {
     static struct status_resp resp;
-    static volatile bool clear_in_flight;
+    static atomic_t clear_in_flight = ATOMIC_INIT(0);
 
-    if (clear_in_flight) {
-        if (k_sem_take(&resp.sem, K_NO_WAIT) != 0) {
-            return -EBUSY;
-        }
-        clear_in_flight = false;
+    if (!atomic_cas(&clear_in_flight, 0, 1)) {
+        return -EBUSY;
     }
 
-    clear_in_flight = true;
     k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &clear_in_flight;
 
     sd_req_t req = {0};
     req.type = REQ_CLEAR_RING;
@@ -1251,7 +1282,8 @@ int sd_ring_clear(void)
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
-        clear_in_flight = false;
+        resp.busy_flag = NULL;
+        atomic_clear(&clear_in_flight);
         return ret;
     }
 
@@ -1259,24 +1291,20 @@ int sd_ring_clear(void)
         return -ETIMEDOUT;
     }
 
-    clear_in_flight = false;
     return resp.res;
 }
 
 int sd_flush_current_file(void)
 {
     static struct status_resp resp;
-    static volatile bool flush_in_flight;
+    static atomic_t flush_in_flight = ATOMIC_INIT(0);
 
-    if (flush_in_flight) {
-        if (k_sem_take(&resp.sem, K_NO_WAIT) != 0) {
-            return -EBUSY;
-        }
-        flush_in_flight = false;
+    if (!atomic_cas(&flush_in_flight, 0, 1)) {
+        return -EBUSY;
     }
 
-    flush_in_flight = true;
     k_sem_init(&resp.sem, 0, 1);
+    resp.busy_flag = &flush_in_flight;
 
     sd_req_t req = {0};
     req.type = REQ_FLUSH;
@@ -1284,7 +1312,8 @@ int sd_flush_current_file(void)
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
-        flush_in_flight = false;
+        resp.busy_flag = NULL;
+        atomic_clear(&flush_in_flight);
         return ret;
     }
 
@@ -1292,7 +1321,6 @@ int sd_flush_current_file(void)
         return -ETIMEDOUT;
     }
 
-    flush_in_flight = false;
     return resp.res;
 }
 
