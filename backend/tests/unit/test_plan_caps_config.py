@@ -215,3 +215,73 @@ class TestSuperwallProductMap:
         mod = _reload_config_module()
         with patch.object(mod, "_get_config", return_value={}):
             assert mod.get_superwall_product_map() == {}
+
+
+# ── Superwall feature flag (global + per-uid override) ─────────────────────
+
+
+class TestIsSuperwallEnabled:
+    """Resolution order: per-uid override list → global flag → default False."""
+
+    def test_default_false_when_doc_missing(self):
+        mod = _reload_config_module()
+        with patch.object(mod, "_get_config", return_value={}):
+            assert mod.is_superwall_enabled() is False
+            assert mod.is_superwall_enabled(uid="anyone") is False
+
+    def test_global_flag_true(self):
+        mod = _reload_config_module()
+        with patch.object(mod, "_get_config", return_value={"superwall_enabled": True}):
+            assert mod.is_superwall_enabled() is True
+            assert mod.is_superwall_enabled(uid="anyone") is True
+
+    def test_global_flag_explicit_false(self):
+        mod = _reload_config_module()
+        with patch.object(mod, "_get_config", return_value={"superwall_enabled": False}):
+            assert mod.is_superwall_enabled(uid="random") is False
+
+    def test_uid_in_test_list_overrides_global_false(self):
+        mod = _reload_config_module()
+        cfg = {"superwall_enabled": False, "superwall_test_uids": ["uid_alice", "uid_bob"]}
+        with patch.object(mod, "_get_config", return_value=cfg):
+            assert mod.is_superwall_enabled(uid="uid_alice") is True
+            assert mod.is_superwall_enabled(uid="uid_bob") is True
+            # Non-listed uid still gets the global false
+            assert mod.is_superwall_enabled(uid="uid_other") is False
+            # No-uid call also gets global false
+            assert mod.is_superwall_enabled() is False
+
+    def test_uid_in_test_list_when_global_true(self):
+        # Both true → still true (override is additive, not exclusive).
+        mod = _reload_config_module()
+        cfg = {"superwall_enabled": True, "superwall_test_uids": ["uid_alice"]}
+        with patch.object(mod, "_get_config", return_value=cfg):
+            assert mod.is_superwall_enabled(uid="uid_alice") is True
+            assert mod.is_superwall_enabled(uid="uid_other") is True
+
+    def test_empty_test_uids_list_is_safe(self):
+        mod = _reload_config_module()
+        with patch.object(
+            mod,
+            "_get_config",
+            return_value={"superwall_enabled": False, "superwall_test_uids": []},
+        ):
+            assert mod.is_superwall_enabled(uid="anyone") is False
+
+    def test_none_test_uids_field_is_safe(self):
+        mod = _reload_config_module()
+        with patch.object(
+            mod,
+            "_get_config",
+            return_value={"superwall_enabled": False, "superwall_test_uids": None},
+        ):
+            assert mod.is_superwall_enabled(uid="anyone") is False
+
+    def test_empty_uid_skips_override_lookup(self):
+        # Empty string uid should be treated as "no uid" — never matches the list.
+        mod = _reload_config_module()
+        cfg = {"superwall_enabled": False, "superwall_test_uids": ["", "uid_alice"]}
+        with patch.object(mod, "_get_config", return_value=cfg):
+            assert mod.is_superwall_enabled(uid="") is False
+            assert mod.is_superwall_enabled(uid=None) is False
+            assert mod.is_superwall_enabled(uid="uid_alice") is True
