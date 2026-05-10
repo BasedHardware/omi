@@ -280,63 +280,64 @@ class _DailySummariesListState extends State<DailySummariesList> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Emoji container - matches conversation list item
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
-                  alignment: Alignment.center,
-                  child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
-                ),
-                const SizedBox(width: 12),
-                // Title and metadata
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        summary.headline,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      // Date and stats with icons
-                      Row(
-                        children: [
-                          Text(
-                            _formatCondensedDate(summary.date),
-                            style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                            maxLines: 1,
-                          ),
-                          if (summary.stats.totalConversations > 0) ...[
-                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                            const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${summary.stats.totalConversations}',
-                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              maxLines: 1,
-                            ),
-                          ],
-                          if (summary.stats.actionItemsCount > 0) ...[
-                            const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
-                            const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${summary.stats.actionItemsCount}',
-                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              maxLines: 1,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Emoji container - matches conversation list item
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                    alignment: Alignment.center,
+                    child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  // Title and metadata
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          summary.headline,
+                          style: Theme.of(context).textTheme.titleMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        // Date and stats with icons
+                        Row(
+                          children: [
+                            Text(
+                              _formatCondensedDate(summary.date),
+                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                              maxLines: 1,
+                            ),
+                            if (summary.stats.totalConversations > 0) ...[
+                              const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                              const FaIcon(FontAwesomeIcons.solidComments, size: 10, color: Color(0xFF9A9BA1)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${summary.stats.totalConversations}',
+                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                maxLines: 1,
+                              ),
+                            ],
+                            if (summary.stats.actionItemsCount > 0) ...[
+                              const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
+                              const FaIcon(FontAwesomeIcons.listCheck, size: 11, color: Color(0xFF9A9BA1)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${summary.stats.actionItemsCount}',
+                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                maxLines: 1,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
