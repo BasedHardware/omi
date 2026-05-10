@@ -117,7 +117,13 @@ class RingProtocol {
   /// Parse the 440-byte audio payload of a ring record into opus frames.
   /// Format: [size:1][frame:size]... with zero padding allowed at any point.
   /// A leading byte of 0 is a no-op padding marker; otherwise it is the
-  /// length of the next frame. Stops at the first incomplete trailing entry.
+  /// length of the next frame. Stops at the first truncated trailing entry.
+  ///
+  /// The boundary check uses `>` not `>=`: a frame whose data ends exactly
+  /// at the last byte of the buffer is fully present and must be parsed.
+  /// (The legacy parsers in storage_sync.dart and sdcard_wal_sync.dart use
+  /// `>=` which silently drops such frames; not propagated here because
+  /// current codecs (opus 80B / opusFS320 160B) never hit that boundary.)
   static List<List<int>> parseAudioPayload(List<int> audio) {
     final frames = <List<int>>[];
     int offset = 0;
@@ -127,7 +133,7 @@ class RingProtocol {
         offset += 1;
         continue;
       }
-      if (offset + 1 + size >= audio.length) {
+      if (offset + 1 + size > audio.length) {
         break;
       }
       frames.add(audio.sublist(offset + 1, offset + 1 + size));

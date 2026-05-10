@@ -207,6 +207,29 @@ void main() {
       final frames = RingProtocol.parseAudioPayload(List.filled(440, 0));
       expect(frames, isEmpty);
     });
+
+    test('parses a frame that exactly fills the buffer (boundary)', () {
+      // [size=2][0xAA, 0xBB] — buffer length 3, frame ends at last byte.
+      // Boundary check must be > (not >=) for this to parse.
+      final frames = RingProtocol.parseAudioPayload([2, 0xAA, 0xBB]);
+      expect(frames.length, 1);
+      expect(frames[0], [0xAA, 0xBB]);
+    });
+
+    test('parses tightly-packed frames with no trailing padding (440B exactly)', () {
+      // 40 frames of [size=10][10B] = 40 * 11 = 440 bytes — the last frame
+      // ends precisely at audio.length. With >=, the last frame is silently
+      // dropped; with > it's preserved.
+      final audio = <int>[];
+      for (int i = 0; i < 40; i++) {
+        audio.add(10);
+        audio.addAll(List.filled(10, i & 0xFF));
+      }
+      expect(audio.length, 440);
+      final frames = RingProtocol.parseAudioPayload(audio);
+      expect(frames.length, 40);
+      expect(frames.last, List.filled(10, 39 & 0xFF));
+    });
   });
 
   group('RingRecordReassembler', () {
