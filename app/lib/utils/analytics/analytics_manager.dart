@@ -1488,6 +1488,16 @@ class AnalyticsManager {
     track('Daily Summary Section Viewed', properties: {'summary_id': summaryId, 'section_name': sectionName});
   }
 
+  /// Recap deletion. ``source`` distinguishes the entry point so we can tell if
+  /// users prefer the swipe gesture on the list vs the menu on the detail page.
+  void dailySummaryDeleted({required String summaryId, required String date, required String source}) {
+    track('Daily Summary Deleted', properties: {'summary_id': summaryId, 'date': date, 'source': source});
+  }
+
+  void dailySummaryDeleteFailed({required String summaryId, required String date, required String source}) {
+    track('Daily Summary Delete Failed', properties: {'summary_id': summaryId, 'date': date, 'source': source});
+  }
+
   // ============================================================================
   // ANNOUNCEMENT TRACKING
   // ============================================================================

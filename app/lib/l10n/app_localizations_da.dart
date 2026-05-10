@@ -9226,4 +9226,23 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
+
+  @override
+  String get deleteRecap => 'Slet opsummering';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Slet denne opsummering?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Opsummeringen fjernes permanent. De oprindelige samtaler fra den dag påvirkes ikke.';
+
+  @override
+  String get deleteRecapAction => 'Slet';
+
+  @override
+  String get recapDeletedSnackbar => 'Opsummering slettet';
+
+  @override
+  String get recapDeleteFailed => 'Kunne ikke slette opsummeringen. Prøv igen senere.';
 }

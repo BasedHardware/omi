@@ -7,6 +7,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
@@ -58,7 +59,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
     }
   }
 
-  void _openSummary(DailySummary summary) {
+  Future<void> _openSummary(DailySummary summary) async {
     // Track recap card click
     final cardIndex = _summaries.indexOf(summary);
     PlatformManager.instance.analytics.recapSummaryCardClicked(
@@ -67,12 +68,52 @@ class _DailySummariesListState extends State<DailySummariesList> {
       cardIndex: cardIndex,
     );
 
-    Navigator.push(
+    // Detail page pops with ``{deleted: true, summaryId}`` when the user deletes
+    // from there — drop the row so they don't see a ghost card on return.
+    final result = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(
         builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
       ),
     );
+    if (!mounted) return;
+    if (result is Map && result['deleted'] == true) {
+      final deletedId = result['summaryId'] as String?;
+      if (deletedId != null) {
+        setState(() => _summaries.removeWhere((s) => s.id == deletedId));
+      }
+    }
+  }
+
+  /// Optimistic swipe-to-delete handler. Removes from the in-memory list
+  /// before the API completes; on failure we restore the row + toast.
+  Future<bool> _handleSwipeDelete(DailySummary summary) async {
+    final confirmed = await showDeleteRecapConfirmDialog(context);
+    if (confirmed != true) return false;
+
+    final removedIndex = _summaries.indexOf(summary);
+    setState(() => _summaries.removeAt(removedIndex));
+
+    final ok = await deleteDailySummary(summary.id);
+    if (!mounted) return ok;
+    if (ok) {
+      PlatformManager.instance.analytics.dailySummaryDeleted(
+        summaryId: summary.id,
+        date: summary.date,
+        source: 'recap_list_swipe',
+      );
+      AppSnackbar.showSnackbar(context.l10n.recapDeletedSnackbar);
+    } else {
+      // Restore so the user doesn't lose data we couldn't actually delete.
+      setState(() => _summaries.insert(removedIndex, summary));
+      PlatformManager.instance.analytics.dailySummaryDeleteFailed(
+        summaryId: summary.id,
+        date: summary.date,
+        source: 'recap_list_swipe',
+      );
+      AppSnackbar.showSnackbarError(context.l10n.recapDeleteFailed);
+    }
+    return ok;
   }
 
   @override
@@ -197,16 +238,48 @@ class _DailySummariesListState extends State<DailySummariesList> {
   }
 
   Widget _buildSummaryCard(DailySummary summary) {
-    return GestureDetector(
-      onTap: () => _openSummary(summary),
-      child: Padding(
+    return Dismissible(
+      key: ValueKey('daily-summary-${summary.id}'),
+      direction: DismissDirection.endToStart,
+      // The confirm dialog is the actual decision point — return false so the
+      // framework doesn't ALSO remove the row (we manage ``_summaries``
+      // ourselves so we can restore on API failure).
+      confirmDismiss: (_) async {
+        await _handleSwipeDelete(summary);
+        return false;
+      },
+      background: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
-          width: double.maxFinite,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-            child: Row(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF6B6B).withOpacity(0.85),
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          alignment: Alignment.centerRight,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                context.l10n.deleteRecap,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.delete_outline, color: Colors.white),
+            ],
+          ),
+        ),
+      ),
+      child: GestureDetector(
+        onTap: () => _openSummary(summary),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
+          child: Container(
+            width: double.maxFinite,
+            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Emoji container - matches conversation list item
