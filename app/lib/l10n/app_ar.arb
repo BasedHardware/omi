@@ -2989,5 +2989,7 @@
     "dualSubscriptionDetectedTitle": "اشتراكان نشطان",
     "dualSubscriptionDetectedBody": "لديك أيضًا اشتراك ويب نشط. لتجنب الدفع مرتين، أدِر وألغِ الاشتراك من بوابة الفوترة على الويب.",
     "dualSubscriptionDetectedDismiss": "لاحقًا",
-    "dualSubscriptionDetectedManage": "فتح بوابة الفوترة"
+    "dualSubscriptionDetectedManage": "فتح بوابة الفوترة",
+    "bulkExportAlreadyExported": "تم تصدير جميع المهام المحددة بالفعل",
+    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى."
 }

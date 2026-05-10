@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "இரண்டு சந்தாக்கள் செயலில்",
     "dualSubscriptionDetectedBody": "உங்களுக்கு செயலிலுள்ள இணைய சந்தாவும் உள்ளது. இரட்டை கட்டணத்தைத் தவிர்க்க இணைய பில்லிங் போர்டலிலிருந்து நிர்வகித்து ரத்து செய்யவும்.",
     "dualSubscriptionDetectedDismiss": "பின்னர்",
-    "dualSubscriptionDetectedManage": "பில்லிங் போர்டலைத் திற"
+    "dualSubscriptionDetectedManage": "பில்லிங் போர்டலைத் திற",
+    "bulkExportAlreadyExported": "தேர்ந்தெடுக்கப்பட்ட அனைத்து பணிகளும் ஏற்கனவே ஏற்றுமதி செய்யப்பட்டுள்ளன",
+    "bulkDeleteFailed": "பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்."
 }

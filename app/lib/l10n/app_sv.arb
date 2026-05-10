@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Två aktiva prenumerationer",
     "dualSubscriptionDetectedBody": "Du har också en aktiv webbprenumeration. För att undvika dubbel debitering, hantera och säg upp den i webbportalen för betalningar.",
     "dualSubscriptionDetectedDismiss": "Senare",
-    "dualSubscriptionDetectedManage": "Öppna betalningsportalen"
+    "dualSubscriptionDetectedManage": "Öppna betalningsportalen",
+    "bulkExportAlreadyExported": "Alla valda uppgifter är redan exporterade",
+    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen."
 }

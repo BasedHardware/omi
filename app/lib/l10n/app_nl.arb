@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Twee actieve abonnementen",
     "dualSubscriptionDetectedBody": "Je hebt ook een actief webabonnement. Beheer en zeg het op via het webbetalingsportaal om dubbele kosten te voorkomen.",
     "dualSubscriptionDetectedDismiss": "Later",
-    "dualSubscriptionDetectedManage": "Betalingsportaal openen"
+    "dualSubscriptionDetectedManage": "Betalingsportaal openen",
+    "bulkExportAlreadyExported": "Alle geselecteerde taken zijn al geëxporteerd",
+    "bulkDeleteFailed": "Taken konden niet worden verwijderd. Probeer het opnieuw."
 }

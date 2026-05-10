@@ -3027,5 +3027,7 @@
     "dualSubscriptionDetectedTitle": "Hai gói đăng ký đang hoạt động",
     "dualSubscriptionDetectedBody": "Bạn cũng có một gói đăng ký web đang hoạt động. Để tránh bị tính phí hai lần, hãy quản lý và hủy nó qua cổng thanh toán web.",
     "dualSubscriptionDetectedDismiss": "Để sau",
-    "dualSubscriptionDetectedManage": "Mở cổng thanh toán"
+    "dualSubscriptionDetectedManage": "Mở cổng thanh toán",
+    "bulkExportAlreadyExported": "Tất cả các tác vụ đã chọn đều đã được xuất",
+    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại."
 }

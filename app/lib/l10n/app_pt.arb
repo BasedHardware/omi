@@ -3058,5 +3058,7 @@
     "dualSubscriptionDetectedTitle": "Duas assinaturas ativas",
     "dualSubscriptionDetectedBody": "Você também tem uma assinatura web ativa. Para evitar cobrança em duplicata, gerencie e cancele pelo portal de cobrança web.",
     "dualSubscriptionDetectedDismiss": "Mais tarde",
-    "dualSubscriptionDetectedManage": "Abrir portal de cobrança"
+    "dualSubscriptionDetectedManage": "Abrir portal de cobrança",
+    "bulkExportAlreadyExported": "Todas as tarefas selecionadas já foram exportadas",
+    "bulkDeleteFailed": "Não foi possível excluir as tarefas. Tente novamente."
 }

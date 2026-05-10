@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "การสมัครสมาชิก 2 รายการใช้งานอยู่",
     "dualSubscriptionDetectedBody": "คุณยังมีการสมัครสมาชิกบนเว็บที่ใช้งานอยู่ด้วย เพื่อหลีกเลี่ยงการเรียกเก็บซ้ำ จัดการและยกเลิกผ่านพอร์ทัลการเรียกเก็บเงินบนเว็บ",
     "dualSubscriptionDetectedDismiss": "ภายหลัง",
-    "dualSubscriptionDetectedManage": "เปิดพอร์ทัลการเรียกเก็บเงิน"
+    "dualSubscriptionDetectedManage": "เปิดพอร์ทัลการเรียกเก็บเงิน",
+    "bulkExportAlreadyExported": "งานที่เลือกทั้งหมดถูกส่งออกแล้ว",
+    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง"
 }

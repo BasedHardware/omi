@@ -3044,5 +3044,7 @@
     "dualSubscriptionDetectedTitle": "两个订阅同时有效",
     "dualSubscriptionDetectedBody": "您还有一个有效的网页订阅。为避免重复扣费,请通过网页计费门户管理并取消该订阅。",
     "dualSubscriptionDetectedDismiss": "稍后",
-    "dualSubscriptionDetectedManage": "打开计费门户"
+    "dualSubscriptionDetectedManage": "打开计费门户",
+    "bulkExportAlreadyExported": "所选任务已全部导出",
+    "bulkDeleteFailed": "无法删除任务，请重试。"
 }

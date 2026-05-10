@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Kaks aktiivset tellimust",
     "dualSubscriptionDetectedBody": "Sul on ka aktiivne veebitellimus. Topeltveloimise vältimiseks halda ja tühista see veebimakseportaalist.",
     "dualSubscriptionDetectedDismiss": "Hiljem",
-    "dualSubscriptionDetectedManage": "Ava makseportaal"
+    "dualSubscriptionDetectedManage": "Ava makseportaal",
+    "bulkExportAlreadyExported": "Kõik valitud ülesanded on juba eksporditud",
+    "bulkDeleteFailed": "Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti."
 }

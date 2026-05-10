@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "Dvije aktivne pretplate",
     "dualSubscriptionDetectedBody": "Imate i aktivnu web pretplatu. Kako biste izbjegli dvostruko naplaćivanje, upravljajte i otkažite je putem web portala za naplatu.",
     "dualSubscriptionDetectedDismiss": "Kasnije",
-    "dualSubscriptionDetectedManage": "Otvori portal za naplatu"
+    "dualSubscriptionDetectedManage": "Otvori portal za naplatu",
+    "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
+    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno."
 }

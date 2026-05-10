@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -26,7 +27,6 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -59,8 +59,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app =
-      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -752,28 +751,28 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 ),
               )
             : widget.showTypingIndicator
-            ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-              )
-            : Builder(
-                builder: (context) {
-                  String? selectedText;
-                  return SelectionArea(
-                    onSelectionChanged: (SelectedContent? selectedContent) {
-                      selectedText = selectedContent?.plainText;
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+                  )
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                            widget.onAskOmi?.call(text);
+                          }, selectedText: selectedText);
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
                     },
-                    contextMenuBuilder: (context, selectableRegionState) {
-                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                        widget.onAskOmi?.call(text);
-                      }, selectedText: selectedText);
-                    },
-                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                  );
-                },
-              ),
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -803,7 +802,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   if (idx != -1) {
                     context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
                     var m = memProvider.groupedConversations[date]![idx];
-                    MixpanelManager().chatMessageConversationClicked(m);
+                    PlatformManager.instance.analytics.chatMessageConversationClicked(m);
                     await Navigator.of(
                       context,
                     ).push(MaterialPageRoute(builder: (c) => ConversationDetailPage(conversation: m)));
@@ -813,7 +812,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     ServerConversation? m = await getConversationById(data.$2.id);
                     if (m == null) return;
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
-                    MixpanelManager().chatMessageConversationClicked(m);
+                    PlatformManager.instance.analytics.chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
                     context.read<ConversationDetailProvider>().updateConversation(m.id, date);
                     await Navigator.of(
@@ -1151,7 +1150,10 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
-              MixpanelManager().track('Chat Message Copied', properties: {'message': widget.messageText});
+              PlatformManager.instance.analytics.track(
+                'Chat Message Copied',
+                properties: {'message': widget.messageText},
+              );
 
               // Implicit positive feedback - user copied the message (silent, no UI change)
               if (_selectedNps == null) {
@@ -1210,7 +1212,10 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
-              MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
+              PlatformManager.instance.analytics.track(
+                'Chat Message Shared',
+                properties: {'message': widget.messageText},
+              );
 
               // Implicit positive feedback - user shared the message (silent, no UI change)
               if (_selectedNps == null) {

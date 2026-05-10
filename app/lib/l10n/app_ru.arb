@@ -3057,5 +3057,7 @@
     "dualSubscriptionDetectedTitle": "Активны две подписки",
     "dualSubscriptionDetectedBody": "У вас также есть активная веб-подписка. Чтобы не платить дважды, управляйте ею и отмените её в веб-портале выставления счетов.",
     "dualSubscriptionDetectedDismiss": "Позже",
-    "dualSubscriptionDetectedManage": "Открыть портал оплаты"
+    "dualSubscriptionDetectedManage": "Открыть портал оплаты",
+    "bulkExportAlreadyExported": "Все выбранные задачи уже экспортированы",
+    "bulkDeleteFailed": "Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз."
 }

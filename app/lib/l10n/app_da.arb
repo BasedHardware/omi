@@ -3031,5 +3031,7 @@
     "dualSubscriptionDetectedTitle": "To aktive abonnementer",
     "dualSubscriptionDetectedBody": "Du har også et aktivt webabonnement. For at undgå dobbelt opkrævning, administrér og opsig det fra webbetalingsportalen.",
     "dualSubscriptionDetectedDismiss": "Senere",
-    "dualSubscriptionDetectedManage": "Åbn betalingsportal"
+    "dualSubscriptionDetectedManage": "Åbn betalingsportal",
+    "bulkExportAlreadyExported": "Alle valgte opgaver er allerede eksporteret",
+    "bulkDeleteFailed": "Opgaverne kunne ikke slettes. Prøv igen."
 }

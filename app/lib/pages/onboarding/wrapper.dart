@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,7 +28,6 @@ import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
@@ -267,7 +267,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     List<Widget> pages = [
       AuthComponent(
         onSignIn: () async {
-          MixpanelManager().onboardingStepCompleted('Auth');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
           // Consent is checked first regardless of server-side onboarding
@@ -285,7 +285,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AiConsentWidget(
         onAgree: () async {
           SharedPreferencesUtil().aiConsentGiven = true;
-          MixpanelManager().onboardingStepCompleted('AI Consent');
+          PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
           // If the server says this user already completed onboarding, jump
           // straight to home — their first-time onboarding ran in a previous
           // session and we don't want to re-run it.
@@ -304,32 +304,32 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             FirebaseAuth.instance.currentUser!.displayName,
             FirebaseAuth.instance.currentUser!.uid,
           );
-          MixpanelManager().onboardingStepCompleted('Name');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Name');
         },
       ),
       PrimaryLanguageWidget(
         goNext: () {
           _goNext(); // Go to Found Omi page
-          MixpanelManager().onboardingStepCompleted('Primary Language');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Primary Language');
         },
       ),
       FoundOmiWidget(
         goNext: () {
           _goNext(); // Go to Permissions page
-          MixpanelManager().onboardingStepCompleted('Acquisition Source');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Acquisition Source');
         },
       ),
       PermissionsWidget(
         goNext: () {
           _goNext(); // Go to User Review page
-          MixpanelManager().onboardingStepCompleted('Permissions');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
       ),
       UserReviewPage(
         goNext: () {
           // Go directly to Speech Profile (skip device steps - we use phone mic now)
           _controller!.animateTo(kSpeechProfilePage);
-          MixpanelManager().onboardingStepCompleted('User Review');
+          PlatformManager.instance.analytics.onboardingStepCompleted('User Review');
         },
       ),
       // Placeholder pages - not used in new flow but kept for index consistency
@@ -339,18 +339,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         value: _speechProfileProvider!,
         child: SpeechProfileWidget(
           goNext: () {
-            MixpanelManager().onboardingStepCompleted('Speech Profile');
+            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile');
             _controller!.animateTo(kKnowledgeGraphPage);
           },
           onSkip: () {
-            MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
+            PlatformManager.instance.analytics.onboardingStepCompleted('Speech Profile Skipped');
             _controller!.animateTo(kKnowledgeGraphPage);
           },
         ),
       ),
       OnboardingKnowledgeGraphStep(
         onContinue: () {
-          MixpanelManager().onboardingStepCompleted('Knowledge Graph');
+          PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
           _controller!.animateTo(kCompletePage);
         },
       ),
@@ -359,7 +359,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
           updateUserOnboardingState(completed: true);
-          MixpanelManager().onboardingCompleted();
+          PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
           routeToPage(context, const HomePageWrapper(), replace: true);
         },

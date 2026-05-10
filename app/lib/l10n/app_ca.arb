@@ -2991,5 +2991,7 @@
     "dualSubscriptionDetectedTitle": "Dues subscripcions actives",
     "dualSubscriptionDetectedBody": "També tens una subscripció web activa. Per evitar el doble cobrament, gestiona-la i cancel·la-la al portal de facturació web.",
     "dualSubscriptionDetectedDismiss": "Més tard",
-    "dualSubscriptionDetectedManage": "Obre el portal de facturació"
+    "dualSubscriptionDetectedManage": "Obre el portal de facturació",
+    "bulkExportAlreadyExported": "Totes les tasques seleccionades ja s'han exportat",
+    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar."
 }

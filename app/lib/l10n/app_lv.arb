@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Aktīvi divi abonementi",
     "dualSubscriptionDetectedBody": "Jums ir arī aktīvs tīmekļa abonements. Lai izvairītos no dubultas maksas, pārvaldiet un atceliet to tīmekļa rēķinu portālā.",
     "dualSubscriptionDetectedDismiss": "Vēlāk",
-    "dualSubscriptionDetectedManage": "Atvērt rēķinu portālu"
+    "dualSubscriptionDetectedManage": "Atvērt rēķinu portālu",
+    "bulkExportAlreadyExported": "Visi atlasītie uzdevumi jau ir eksportēti",
+    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz."
 }

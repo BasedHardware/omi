@@ -3057,5 +3057,7 @@
     "dualSubscriptionDetectedTitle": "Dwie aktywne subskrypcje",
     "dualSubscriptionDetectedBody": "Masz także aktywną subskrypcję internetową. Aby uniknąć podwójnego obciążenia, zarządzaj nią i anuluj w internetowym portalu rozliczeniowym.",
     "dualSubscriptionDetectedDismiss": "Później",
-    "dualSubscriptionDetectedManage": "Otwórz portal płatności"
+    "dualSubscriptionDetectedManage": "Otwórz portal płatności",
+    "bulkExportAlreadyExported": "Wszystkie wybrane zadania zostały już wyeksportowane",
+    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie."
 }

@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "Dve aktivni naročnini",
     "dualSubscriptionDetectedBody": "Imate tudi aktivno spletno naročnino. Da se izognete dvojnemu plačilu, upravljajte in prekličite jo v spletnem plačilnem portalu.",
     "dualSubscriptionDetectedDismiss": "Pozneje",
-    "dualSubscriptionDetectedManage": "Odpri plačilni portal"
+    "dualSubscriptionDetectedManage": "Odpri plačilni portal",
+    "bulkExportAlreadyExported": "Vse izbrane naloge so že izvožene",
+    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova."
 }

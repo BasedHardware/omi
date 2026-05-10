@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Dua langganan aktif",
     "dualSubscriptionDetectedBody": "Anda juga mempunyai langganan web yang aktif. Untuk mengelakkan caj berganda, urus dan batalkannya melalui portal pembayaran web.",
     "dualSubscriptionDetectedDismiss": "Kemudian",
-    "dualSubscriptionDetectedManage": "Buka portal pembayaran"
+    "dualSubscriptionDetectedManage": "Buka portal pembayaran",
+    "bulkExportAlreadyExported": "Semua tugasan yang dipilih telah dieksport",
+    "bulkDeleteFailed": "Tidak dapat memadam tugasan. Sila cuba lagi."
 }

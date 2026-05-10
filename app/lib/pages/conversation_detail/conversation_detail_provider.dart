@@ -16,7 +16,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -318,7 +317,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
       if (_isDisposed) return false;
-      MixpanelManager().reProcessConversation(conversation);
+      PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
@@ -349,7 +348,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return true;
     } catch (err, stacktrace) {
       print(err);
-      var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
+      var conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(conversation);
       await PlatformManager.instance.crashReporter.reportCrash(
         err,
         stacktrace,
@@ -432,9 +431,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps = _cachedEnabledConversationApps
-          .where((app) => _locallyAddedAppIds.contains(app.id))
-          .toList();
+      final locallyAddedApps =
+          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);

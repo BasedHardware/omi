@@ -2991,5 +2991,7 @@
     "dualSubscriptionDetectedTitle": "Aktivní dvě předplatná",
     "dualSubscriptionDetectedBody": "Máte také aktivní webové předplatné. Abyste nezaplatili dvakrát, spravujte ho a zrušte ve webovém fakturačním portálu.",
     "dualSubscriptionDetectedDismiss": "Později",
-    "dualSubscriptionDetectedManage": "Otevřít fakturační portál"
+    "dualSubscriptionDetectedManage": "Otevřít fakturační portál",
+    "bulkExportAlreadyExported": "Všechny vybrané úkoly už byly exportovány",
+    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu."
 }

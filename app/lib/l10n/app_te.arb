@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "రెండు చందాలు సక్రియం",
     "dualSubscriptionDetectedBody": "మీకు యాక్టివ్ వెబ్ చందా కూడా ఉంది. రెండు సార్లు చార్జ్ కాకుండా వెబ్ బిల్లింగ్ పోర్టల్‌లో దాన్ని నిర్వహించి రద్దు చేయండి.",
     "dualSubscriptionDetectedDismiss": "తర్వాత",
-    "dualSubscriptionDetectedManage": "బిల్లింగ్ పోర్టల్ తెరవండి"
+    "dualSubscriptionDetectedManage": "బిల్లింగ్ పోర్టల్ తెరవండి",
+    "bulkExportAlreadyExported": "ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి",
+    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి."
 }

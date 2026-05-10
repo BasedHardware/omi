@@ -9232,10 +9232,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deselectAllTasksMenu => 'Fjern alle valg';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Alle valgte oppgaver er allerede eksportert';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Kunne ikke slette oppgavene. Prøv igjen.';
 
   @override
   String get restorePurchasesAction => 'Gjenopprett kjøp';

@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "Дзве актыўныя падпіскі",
     "dualSubscriptionDetectedBody": "У вас таксама ёсць актыўная вэб-падпіска. Каб не плаціць двойчы, кіруйце ёй і скасуйце праз вэб-партал аплаты.",
     "dualSubscriptionDetectedDismiss": "Пазней",
-    "dualSubscriptionDetectedManage": "Адкрыць партал аплаты"
+    "dualSubscriptionDetectedManage": "Адкрыць партал аплаты",
+    "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
 }

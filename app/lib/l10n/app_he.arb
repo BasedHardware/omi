@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "שני מנויים פעילים",
     "dualSubscriptionDetectedBody": "יש לך גם מנוי אינטרנט פעיל. כדי להימנע מחיוב כפול, נהל ובטל אותו דרך פורטל החיוב באינטרנט.",
     "dualSubscriptionDetectedDismiss": "אחר כך",
-    "dualSubscriptionDetectedManage": "פתח את פורטל החיוב"
+    "dualSubscriptionDetectedManage": "פתח את פורטל החיוב",
+    "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
 }

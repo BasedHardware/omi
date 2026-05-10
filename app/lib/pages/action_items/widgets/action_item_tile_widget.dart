@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +19,6 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -66,7 +66,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     final newState = !widget.actionItem.completed;
 
     // Track action item checked/unchecked
-    MixpanelManager().actionItemChecked(
+    PlatformManager.instance.analytics.actionItemChecked(
       actionItemId: widget.actionItem.id,
       completed: newState,
       timestamp: DateTime.now(),
@@ -429,7 +429,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'todoist');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Todoist',
           timestamp: exportTime,
@@ -541,7 +541,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'asana');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Asana',
           timestamp: exportTime,
@@ -662,7 +662,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         );
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Google Tasks',
           timestamp: exportTime,
@@ -754,7 +754,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'clickup');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'ClickUp',
           timestamp: exportTime,
@@ -888,7 +888,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         );
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Apple Reminders',
           timestamp: exportTime,
@@ -1013,7 +1013,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     child: GestureDetector(
                       onTap: () {
                         if (!context.read<UsageProvider>().showSubscriptionUI) return;
-                        MixpanelManager().paywallOpened('Action Item');
+                        PlatformManager.instance.analytics.paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },

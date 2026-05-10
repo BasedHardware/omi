@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Aktyvios dvi prenumeratos",
     "dualSubscriptionDetectedBody": "Taip pat turite aktyvią žiniatinklio prenumeratą. Kad nebūtumėte apmokestintas du kartus, tvarkykite ir atšaukite ją žiniatinklio sąskaitų portale.",
     "dualSubscriptionDetectedDismiss": "Vėliau",
-    "dualSubscriptionDetectedManage": "Atidaryti sąskaitų portalą"
+    "dualSubscriptionDetectedManage": "Atidaryti sąskaitų portalą",
+    "bulkExportAlreadyExported": "Visos pasirinktos užduotys jau eksportuotos",
+    "bulkDeleteFailed": "Nepavyko ištrinti užduočių. Bandykite dar kartą."
 }

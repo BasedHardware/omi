@@ -9256,10 +9256,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deselectAllTasksMenu => 'Odznacz wszystkie';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Wszystkie wybrane zadania zostały już wyeksportowane';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Nie udało się usunąć zadań. Spróbuj ponownie.';
 
   @override
   String get restorePurchasesAction => 'Przywróć zakupy';

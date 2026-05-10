@@ -3057,5 +3057,7 @@
     "dualSubscriptionDetectedTitle": "Deux abonnements actifs",
     "dualSubscriptionDetectedBody": "Tu as aussi un abonnement web actif. Pour éviter d'être facturé deux fois, gère-le et annule-le depuis le portail de facturation web.",
     "dualSubscriptionDetectedDismiss": "Plus tard",
-    "dualSubscriptionDetectedManage": "Ouvrir le portail de facturation"
+    "dualSubscriptionDetectedManage": "Ouvrir le portail de facturation",
+    "bulkExportAlreadyExported": "Toutes les tâches sélectionnées sont déjà exportées",
+    "bulkDeleteFailed": "Impossible de supprimer les tâches. Veuillez réessayer."
 }

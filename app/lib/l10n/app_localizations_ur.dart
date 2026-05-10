@@ -9253,10 +9253,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deselectAllTasksMenu => 'تمام کا انتخاب ختم کریں';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔';
 
   @override
   String get restorePurchasesAction => 'خریداریاں بحال کریں';

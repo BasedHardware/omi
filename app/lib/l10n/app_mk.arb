@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "Активни две претплати",
     "dualSubscriptionDetectedBody": "Имате и активна веб-претплата. За да не бидете наплатени двапати, управувајте и откажете ја преку веб-порталот за плаќање.",
     "dualSubscriptionDetectedDismiss": "Подоцна",
-    "dualSubscriptionDetectedManage": "Отвори портал за плаќање"
+    "dualSubscriptionDetectedManage": "Отвори портал за плаќање",
+    "bulkExportAlreadyExported": "Сите избрани задачи се веќе извезени",
+    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно."
 }

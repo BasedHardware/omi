@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "दोन सदस्यता सक्रिय",
     "dualSubscriptionDetectedBody": "तुमच्याकडे एक सक्रिय वेब सदस्यताही आहे. दुहेरी आकारणी टाळण्यासाठी वेब बिलिंग पोर्टलमधून ती व्यवस्थापित करा आणि रद्द करा.",
     "dualSubscriptionDetectedDismiss": "नंतर",
-    "dualSubscriptionDetectedManage": "बिलिंग पोर्टल उघडा"
+    "dualSubscriptionDetectedManage": "बिलिंग पोर्टल उघडा",
+    "bulkExportAlreadyExported": "निवडलेली सर्व कार्ये आधीच निर्यात केली आहेत",
+    "bulkDeleteFailed": "कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा."
 }

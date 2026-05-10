@@ -9260,10 +9260,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deselectAllTasksMenu => 'Poništi odabir svih';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Svi odabrani zadaci već su izvezeni';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo.';
 
   @override
   String get restorePurchasesAction => 'Vrati kupovine';

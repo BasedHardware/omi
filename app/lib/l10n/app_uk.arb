@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Активні дві підписки",
     "dualSubscriptionDetectedBody": "У вас також активна вебпідписка. Щоб уникнути подвійного списання, керуйте нею та скасуйте у вебпорталі оплати.",
     "dualSubscriptionDetectedDismiss": "Пізніше",
-    "dualSubscriptionDetectedManage": "Відкрити портал оплати"
+    "dualSubscriptionDetectedManage": "Відкрити портал оплати",
+    "bulkExportAlreadyExported": "Усі вибрані завдання вже експортовано",
+    "bulkDeleteFailed": "Не вдалося видалити завдання. Спробуйте ще раз."
 }

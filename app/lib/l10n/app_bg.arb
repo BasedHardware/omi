@@ -2991,5 +2991,7 @@
     "dualSubscriptionDetectedTitle": "Активни два абонамента",
     "dualSubscriptionDetectedBody": "Имате и активен уеб абонамент. За да не бъдете таксувани двукратно, управлявайте го и го отменете от уеб портала за плащане.",
     "dualSubscriptionDetectedDismiss": "По-късно",
-    "dualSubscriptionDetectedManage": "Отвори портала"
+    "dualSubscriptionDetectedManage": "Отвори портала",
+    "bulkExportAlreadyExported": "Всички избрани задачи вече са експортирани",
+    "bulkDeleteFailed": "Задачите не можаха да бъдат изтрити. Моля, опитайте отново."
 }

@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Kaksi aktiivista tilausta",
     "dualSubscriptionDetectedBody": "Sinulla on myös aktiivinen verkkotilaus. Vältä kaksinkertainen veloitus hallinnoimalla ja peruuttamalla se verkkolaskutusportaalissa.",
     "dualSubscriptionDetectedDismiss": "Myöhemmin",
-    "dualSubscriptionDetectedManage": "Avaa laskutusportaali"
+    "dualSubscriptionDetectedManage": "Avaa laskutusportaali",
+    "bulkExportAlreadyExported": "Kaikki valitut tehtävät on jo viety",
+    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen."
 }

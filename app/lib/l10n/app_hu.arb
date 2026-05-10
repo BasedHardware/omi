@@ -3118,5 +3118,7 @@
     "dualSubscriptionDetectedTitle": "Két aktív előfizetés",
     "dualSubscriptionDetectedBody": "Aktív webes előfizetésed is van. A kétszeres terhelés elkerülése érdekében kezeld és mondd le a webes számlázási portálon.",
     "dualSubscriptionDetectedDismiss": "Később",
-    "dualSubscriptionDetectedManage": "Számlázási portál megnyitása"
+    "dualSubscriptionDetectedManage": "Számlázási portál megnyitása",
+    "bulkExportAlreadyExported": "Az összes kiválasztott feladat már exportálva van",
+    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra."
 }

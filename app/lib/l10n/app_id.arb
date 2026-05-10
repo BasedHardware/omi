@@ -3064,5 +3064,7 @@
     "dualSubscriptionDetectedTitle": "Dua langganan aktif",
     "dualSubscriptionDetectedBody": "Anda juga memiliki langganan web yang aktif. Untuk menghindari penagihan ganda, kelola dan batalkan melalui portal penagihan web.",
     "dualSubscriptionDetectedDismiss": "Nanti",
-    "dualSubscriptionDetectedManage": "Buka portal penagihan"
+    "dualSubscriptionDetectedManage": "Buka portal penagihan",
+    "bulkExportAlreadyExported": "Semua tugas yang dipilih sudah diekspor",
+    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi."
 }

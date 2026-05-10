@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "Dalawang subscription ang aktibo",
     "dualSubscriptionDetectedBody": "May aktibo ka ring web subscription. Upang maiwasan ang dobleng singil, pamahalaan at kanselahin ito sa web billing portal.",
     "dualSubscriptionDetectedDismiss": "Mamaya",
-    "dualSubscriptionDetectedManage": "Buksan ang billing portal"
+    "dualSubscriptionDetectedManage": "Buksan ang billing portal",
+    "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
 }

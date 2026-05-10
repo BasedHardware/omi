@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "To aktive abonnementer",
     "dualSubscriptionDetectedBody": "Du har også et aktivt webabonnement. For å unngå dobbel belastning, administrer og si det opp i webbetalingsportalen.",
     "dualSubscriptionDetectedDismiss": "Senere",
-    "dualSubscriptionDetectedManage": "Åpne betalingsportalen"
+    "dualSubscriptionDetectedManage": "Åpne betalingsportalen",
+    "bulkExportAlreadyExported": "Alle valgte oppgaver er allerede eksportert",
+    "bulkDeleteFailed": "Kunne ikke slette oppgavene. Prøv igjen."
 }

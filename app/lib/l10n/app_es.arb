@@ -3023,5 +3023,7 @@
     "dualSubscriptionDetectedTitle": "Dos suscripciones activas",
     "dualSubscriptionDetectedBody": "También tienes una suscripción web activa. Para evitar el doble cobro, gestiónala y cancélala desde el portal de facturación web.",
     "dualSubscriptionDetectedDismiss": "Más tarde",
-    "dualSubscriptionDetectedManage": "Abrir portal de facturación"
+    "dualSubscriptionDetectedManage": "Abrir portal de facturación",
+    "bulkExportAlreadyExported": "Todas las tareas seleccionadas ya están exportadas",
+    "bulkDeleteFailed": "No se pudieron eliminar las tareas. Inténtalo de nuevo."
 }

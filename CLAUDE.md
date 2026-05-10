@@ -74,7 +74,7 @@ See service descriptions in AGENTS.md. Update both files when service boundaries
 ### Localization
 - All user-facing strings must use l10n: `context.l10n.keyName` instead of hardcoded strings.
 - Add new keys via `jq` (never read full ARB files). See skill `add-a-new-localization-key-l10n-arb`.
-- **Translate all 33 locales** — no English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill.
+- **Translate all 48 non-English locales** — no English text in non-English ARB files. The exact list is whatever `ls app/lib/l10n/app_*.arb` returns minus `app_en.arb`; don't hardcode a count from memory. After adding any key, run the `omi-add-missing-language-keys-l10n` skill to fill missing translations, then verify with `cd app && flutter gen-l10n` — zero "untranslated message(s)" warnings means done.
 - Regenerate after changes: `cd app && flutter gen-l10n`
 
 ### Firebase Prod Config

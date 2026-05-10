@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "دو فعال سبسکرپشنز",
     "dualSubscriptionDetectedBody": "آپ کے پاس ایک فعال ویب سبسکرپشن بھی ہے۔ دوہری چارجنگ سے بچنے کے لیے اسے ویب بلنگ پورٹل سے منظم اور منسوخ کریں۔",
     "dualSubscriptionDetectedDismiss": "بعد میں",
-    "dualSubscriptionDetectedManage": "بلنگ پورٹل کھولیں"
+    "dualSubscriptionDetectedManage": "بلنگ پورٹل کھولیں",
+    "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
 }

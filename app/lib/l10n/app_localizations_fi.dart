@@ -9235,10 +9235,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deselectAllTasksMenu => 'Poista kaikkien valinta';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'Kaikki valitut tehtävät on jo viety';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'Tehtävien poistaminen epäonnistui. Yritä uudelleen.';
 
   @override
   String get restorePurchasesAction => 'Palauta ostokset';

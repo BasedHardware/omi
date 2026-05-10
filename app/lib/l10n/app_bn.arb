@@ -10730,5 +10730,7 @@
     "dualSubscriptionDetectedTitle": "দুটি সাবস্ক্রিপশন সক্রিয়",
     "dualSubscriptionDetectedBody": "আপনার একটি ওয়েব সাবস্ক্রিপশনও সক্রিয় আছে। দ্বিগুণ চার্জ এড়াতে ওয়েব বিলিং পোর্টাল থেকে এটি পরিচালনা করুন এবং বাতিল করুন।",
     "dualSubscriptionDetectedDismiss": "পরে",
-    "dualSubscriptionDetectedManage": "বিলিং পোর্টাল খুলুন"
+    "dualSubscriptionDetectedManage": "বিলিং পোর্টাল খুলুন",
+    "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
 }

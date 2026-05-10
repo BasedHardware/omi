@@ -3022,5 +3022,7 @@
     "dualSubscriptionDetectedTitle": "Două abonamente active",
     "dualSubscriptionDetectedBody": "Ai și un abonament web activ. Pentru a evita dubla taxare, gestionează-l și anulează-l din portalul de facturare web.",
     "dualSubscriptionDetectedDismiss": "Mai târziu",
-    "dualSubscriptionDetectedManage": "Deschide portalul de facturare"
+    "dualSubscriptionDetectedManage": "Deschide portalul de facturare",
+    "bulkExportAlreadyExported": "Toate sarcinile selectate sunt deja exportate",
+    "bulkDeleteFailed": "Nu am putut șterge sarcinile. Vă rugăm să încercați din nou."
 }

@@ -3027,5 +3027,7 @@
     "dualSubscriptionDetectedTitle": "Aktívne dve predplatné",
     "dualSubscriptionDetectedBody": "Máte aj aktívne webové predplatné. Aby ste neboli účtovaní dvakrát, spravujte ho a zrušte vo webovom portáli platieb.",
     "dualSubscriptionDetectedDismiss": "Neskôr",
-    "dualSubscriptionDetectedManage": "Otvoriť platobný portál"
+    "dualSubscriptionDetectedManage": "Otvoriť platobný portál",
+    "bulkExportAlreadyExported": "Všetky vybrané úlohy už boli exportované",
+    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova."
 }

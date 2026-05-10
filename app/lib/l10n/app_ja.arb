@@ -3023,5 +3023,7 @@
     "dualSubscriptionDetectedTitle": "2 つのサブスクリプションが有効",
     "dualSubscriptionDetectedBody": "ウェブのサブスクリプションも有効です。二重請求を避けるため、ウェブの請求ポータルから管理・キャンセルしてください。",
     "dualSubscriptionDetectedDismiss": "後で",
-    "dualSubscriptionDetectedManage": "請求ポータルを開く"
+    "dualSubscriptionDetectedManage": "請求ポータルを開く",
+    "bulkExportAlreadyExported": "選択したタスクはすべてエクスポート済みです",
+    "bulkDeleteFailed": "タスクを削除できませんでした。もう一度お試しください。"
 }

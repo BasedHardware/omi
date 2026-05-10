@@ -9175,10 +9175,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deselectAllTasksMenu => 'إلغاء تحديد الكل';
 
   @override
-  String get bulkExportAlreadyExported => 'All selected tasks already exported';
+  String get bulkExportAlreadyExported => 'تم تصدير جميع المهام المحددة بالفعل';
 
   @override
-  String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+  String get bulkDeleteFailed => 'تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.';
 
   @override
   String get restorePurchasesAction => 'استعادة المشتريات';
