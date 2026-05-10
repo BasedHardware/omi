@@ -22,6 +22,7 @@ from database import (
     users as users_db,
 )
 from database.app_review_config import should_hide_subscription_ui
+from database.plan_caps_config import is_superwall_enabled
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -1042,6 +1043,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
+        superwall_enabled=is_superwall_enabled(uid),
     )
 
 
