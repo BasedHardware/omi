@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
+# Single-user paywall test. Force the existing freemium-threshold popup on
+# these UIDs by denying transcription credits at the gate functions below.
+# Comma-separated UIDs in `TRIAL_PAYWALL_TEST_UIDS` env var override the
+# hardcoded fallback so we can flip cohorts without redeploying.
+_TRIAL_PAYWALL_TEST_UIDS: set[str] = {
+    u.strip() for u in os.getenv("TRIAL_PAYWALL_TEST_UIDS", "").split(",") if u.strip()
+} or {"BFbNzfFrQ0RyvqHXdPP6D0db6fs1"}
+
+
+def is_trial_paywalled(uid: str) -> bool:
+    return uid in _TRIAL_PAYWALL_TEST_UIDS
+
 
 def is_paid_plan(plan: PlanType) -> bool:
     return plan in PAID_PLAN_TYPES
@@ -578,6 +590,10 @@ def has_transcription_credits(uid: str) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
     """
+    # Single-user paywall test override (see _TRIAL_PAYWALL_TEST_UIDS).
+    if is_trial_paywalled(uid):
+        return False
+
     # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
     # Require the Deepgram header on this request so a user can't activate BYOK
     # with fake fingerprints then omit x-byok-deepgram to ride Omi's key.
@@ -605,6 +621,11 @@ def get_remaining_transcription_seconds(uid: str) -> int | None:
     Returns None if unlimited, otherwise the remaining seconds (>= 0).
     Used for freemium auto-switch to on-device transcription.
     """
+    # Single-user paywall test override — surface 0 so the freemium-threshold
+    # event fires and the client renders its usage-limit popup.
+    if is_trial_paywalled(uid):
+        return 0
+
     # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.
     # Require the Deepgram header to prevent fake-fingerprint abuse.
     if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
