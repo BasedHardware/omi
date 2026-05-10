@@ -15,6 +15,7 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
+from database.plan_caps_config import is_superwall_enabled
 from database.redis_db import set_credits_invalidation_signal
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
@@ -198,15 +199,19 @@ def get_available_plans_endpoint(
     """Get available subscription plans with their price IDs and billing intervals.
 
     Catalog policy (per BasedHardware/omi-enterprise#23, manager-locked):
-      - Mobile (ios/android), no sub OR active Superwall sub →
-        Lite / Plus / Max display catalog. Actual purchase rendered by the
-        Superwall SDK; this list is just a fallback for legacy surfaces.
-      - Mobile, active legacy Stripe sub →
+      - Superwall flag OFF (global default until launch) →
+        Every caller sees the legacy Stripe catalog. The flag gates the entire
+        new-plans surface so a build with the Superwall code can ship and
+        defer activation to a Firestore flip.
+      - Mobile (ios/android), flag ON, no sub OR active Superwall sub →
+        Lite / Plus / Unlimited display catalog. Actual purchase rendered by
+        the Superwall SDK; this list is just a fallback for legacy surfaces.
+      - Mobile, flag ON, active legacy Stripe sub →
         Empty list. Legacy subscribers keep seeing their current plan +
         Stripe portal Manage button (sourced from /v1/users/me/subscription
         and /v1/payments/customer-portal). New mobile plans appear only
         after they cancel.
-      - Desktop / web, active Superwall sub →
+      - Desktop / web, flag ON, active Superwall sub →
         Empty list. No new desktop purchase path (Q4-locked); Manage flows
         to "Manage in iOS Settings / Play Store" on the client.
       - Desktop / web, otherwise →
@@ -216,10 +221,13 @@ def get_available_plans_endpoint(
     try:
         # Get user's current subscription to determine which plan is active
         current_subscription = users_db.get_user_subscription(uid)
+        superwall_on = is_superwall_enabled(uid)
 
-        # Branch on platform + subscription source BEFORE hitting Stripe — for
-        # mobile users on the new path we don't need any Stripe price reads.
-        if is_mobile_platform(x_app_platform):
+        # Mobile-specific routing only kicks in when Superwall is enabled. With
+        # the flag off, mobile users fall through to the legacy Stripe catalog
+        # below — same as desktop — so the build behaves like the
+        # pre-Superwall codebase regardless of platform.
+        if superwall_on and is_mobile_platform(x_app_platform):
             if has_active_legacy_stripe_sub(current_subscription):
                 # Legacy Stripe subscriber on a phone: hide the new catalog
                 # so we don't tempt them to double-subscribe via Superwall.
@@ -229,7 +237,9 @@ def get_available_plans_endpoint(
             return AvailablePlansResponse(plans=[PricingOption(**d) for d in build_mobile_plan_catalog(current_plan)])
 
         # Desktop / web with an active Superwall sub: no purchase UI at all.
-        if has_active_superwall_sub(current_subscription):
+        # Only relevant when the flag is on — otherwise nobody has a Superwall
+        # sub so the predicate is trivially false anyway.
+        if superwall_on and has_active_superwall_sub(current_subscription):
             return AvailablePlansResponse(plans=[])
 
         current_price_id = None
