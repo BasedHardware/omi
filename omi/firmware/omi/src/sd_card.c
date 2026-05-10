@@ -843,27 +843,16 @@ static int sd_unmount(void)
     return 0;
 }
 
-static int get_oldest_packet_name(char *buf, size_t buf_size)
+static int get_packet_name_for_seq(uint64_t seq, char *buf, size_t buf_size)
 {
     if (!buf || buf_size == 0U) {
         return -EINVAL;
     }
 
-    sd_ring_info_t info;
-    int ret = sd_ring_get_info(&info);
-    if (ret < 0) {
-        return ret;
-    }
-
-    if (info.read_seq == info.write_seq) {
-        buf[0] = '\0';
-        return 0;
-    }
-
     uint8_t packet[RAW_AUDIO_PACKET_BYTES];
     uint32_t bytes_read = 0;
     uint32_t packets_read = 0;
-    ret = sd_ring_read(info.read_seq, packet, sizeof(packet), &bytes_read, &packets_read);
+    int ret = sd_ring_read(seq, packet, sizeof(packet), &bytes_read, &packets_read);
     if (ret < 0 || packets_read == 0U) {
         return (ret < 0) ? ret : -ENOENT;
     }
@@ -1403,29 +1392,36 @@ int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN], uint32_t 
         return -EINVAL;
     }
 
-    sd_ring_info_t info;
-    int ret = sd_ring_get_info(&info);
-    if (ret < 0) {
-        return ret;
-    }
+    for (int attempt = 0; attempt < 3; attempt++) {
+        sd_ring_info_t info;
+        int ret = sd_ring_get_info(&info);
+        if (ret < 0) {
+            return ret;
+        }
 
-    if (info.read_seq == info.write_seq) {
-        *count = 0;
+        if (info.read_seq == info.write_seq) {
+            *count = 0;
+            return 0;
+        }
+
+        ret = get_packet_name_for_seq(info.read_seq, filenames[0], MAX_FILENAME_LEN);
+        if (ret == -ERANGE) {
+            continue;
+        }
+        if (ret < 0) {
+            return ret;
+        }
+
+        if (sizes) {
+            uint64_t used = (info.write_seq - info.read_seq) * RAW_AUDIO_PACKET_BYTES;
+            sizes[0] = (used > UINT32_MAX) ? UINT32_MAX : (uint32_t)used;
+        }
+
+        *count = 1;
         return 0;
     }
 
-    ret = get_oldest_packet_name(filenames[0], MAX_FILENAME_LEN);
-    if (ret < 0) {
-        return ret;
-    }
-
-    if (sizes) {
-        uint64_t used = (info.write_seq - info.read_seq) * RAW_AUDIO_PACKET_BYTES;
-        sizes[0] = (used > UINT32_MAX) ? UINT32_MAX : (uint32_t)used;
-    }
-
-    *count = 1;
-    return 0;
+    return -EAGAIN;
 }
 
 int delete_audio_file(const char *filename)
