@@ -374,6 +374,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     int? doneNextSeq;
     bool doneOk = false;
     bool flushError = false;
+    Future<void>? inFlightFlush;
     Timer? firstDataTimer;
     bool firstDataReceived = false;
 
@@ -499,14 +500,24 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         // Flush full chunks as we go (data safety: even if BLE drops mid-stream,
         // already-flushed chunks land in LocalWalSync and reach the cloud).
-        if (bytesData.length >= chunkFrames) {
-          unawaited(() async {
+        //
+        // Single in-flight flush at a time. flushChunks loops while bytesData
+        // has >= chunkFrames, so additional NOTIFY_DATA arriving during a flush
+        // are absorbed by the in-flight task's next iteration. Without this
+        // guard, two concurrent flush closures would both read chunkTimerStart
+        // before either updated it, producing overlapping timestamps in
+        // LocalWalSync. We hold the Future so the post-DONE final flush can
+        // await any flush still in flight before draining the tail.
+        if (inFlightFlush == null && bytesData.length >= chunkFrames) {
+          inFlightFlush = () async {
             try {
               await flushChunks(finalFlush: false);
             } catch (_) {
               if (!completer.isCompleted) completer.complete(false);
+            } finally {
+              inFlightFlush = null;
             }
-          }());
+          }();
         }
       },
     );
@@ -554,6 +565,18 @@ class RingStorageSyncImpl implements RingStorageSync {
       }
       await _notifyStream?.cancel();
       _notifyStream = null;
+    }
+
+    // Wait for any flush still in flight from the streaming phase before
+    // draining the tail — otherwise the final flush could race the in-flight
+    // one on bytesData and chunkTimerStart.
+    final pendingFlush = inFlightFlush;
+    if (pendingFlush != null) {
+      try {
+        await pendingFlush;
+      } catch (e) {
+        Logger.debug('RingStorageSync: in-flight flush error during settle: $e');
+      }
     }
 
     // Flush whatever frames are buffered, even on partial failure — those frames
