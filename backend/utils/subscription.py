@@ -272,6 +272,20 @@ def get_chat_quota_snapshot(uid: str) -> dict:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
     """
+    # Paywall test override — surface as exhausted Free-plan quota so the
+    # client renders the same over-limit popup it shows for normal users
+    # past 30/mo.
+    if is_trial_paywalled(uid):
+        usage = user_usage_db.get_monthly_chat_usage(uid)
+        return {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': float(FREE_CHAT_QUESTIONS_PER_MONTH),
+            'limit': float(FREE_CHAT_QUESTIONS_PER_MONTH),
+            'allowed': False,
+            'reset_at': usage['reset_at'],
+        }
+
     subscription = users_db.get_user_valid_subscription(uid)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
@@ -316,6 +330,24 @@ def enforce_chat_quota(uid: str) -> None:
     - Free plan past its cap: blocked (no card on file) → 402, which the
       chat endpoint converts into a canned AI reply for mobile UX.
     """
+    # Paywall test override — bypass BYOK + plan checks so the same 402
+    # surfaces that a free user past 30 questions would hit. The chat
+    # router converts this into the existing canned over-limit reply.
+    if is_trial_paywalled(uid):
+        snapshot = get_chat_quota_snapshot(uid)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                'error': 'quota_exceeded',
+                'plan': get_plan_display_name(PlanType.basic),
+                'plan_type': PlanType.basic.value,
+                'unit': snapshot['unit'],
+                'used': round(snapshot['used'], 4),
+                'limit': snapshot['limit'],
+                'reset_at': snapshot['reset_at'],
+            },
+        )
+
     # BYOK users pay their own LLM provider — no Omi-side cost to cap.
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
