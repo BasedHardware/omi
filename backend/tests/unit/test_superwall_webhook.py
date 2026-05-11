@@ -151,13 +151,15 @@ class TestResolvePlan:
 
 
 class TestHandlers:
+    # Handlers receive the inner `data` envelope from Superwall's webhook —
+    # camelCase keys, expirationAt in milliseconds, store as APP_STORE/PLAY_STORE.
     def _payload(self, **overrides) -> dict:
         base = {
-            'app_user_id': 'uid_test',
-            'product_id': 'com.omi.app.lite_monthly',
-            'subscription_id': 'sub_xyz',
-            'expires_at': 1900000000,
-            'store': 'app_store',
+            'originalAppUserId': 'uid_test',
+            'productId': 'com.omi.app.lite_monthly',
+            'originalTransactionId': 'sub_xyz',
+            'expirationAt': 1900000000000,  # ms since epoch (Superwall's format)
+            'store': 'APP_STORE',
         }
         base.update(overrides)
         return base
@@ -178,6 +180,7 @@ class TestHandlers:
         assert sub_dict["status"] == "active"
         assert sub_dict["source"] == "superwall_ios"
         assert sub_dict["superwall_subscription_id"] == "sub_xyz"
+        # expirationAt was 1900000000000 ms → stored as 1900000000 seconds
         assert sub_dict["current_period_end"] == 1900000000
         assert sub_dict["cancel_at_period_end"] is False
 
@@ -237,23 +240,33 @@ class TestHandlers:
                 "uid_test",
                 PlanType.unlimited_v2,
                 SubscriptionSource.superwall_ios,
-                self._payload(product_id="com.omi.app.unlimited_v2_monthly"),
+                self._payload(productId="com.omi.app.unlimited_v2_monthly"),
             )
         sub_dict = mock_update.call_args.args[1]
         assert sub_dict["plan"] == "unlimited_v2"
 
 
 class TestSourceDetection:
+    """Superwall's `store` field uses uppercase values per their webhook spec:
+    APP_STORE / PLAY_STORE / STRIPE.
+    """
+
     def test_play_store_event_is_android(self):
         from routers.superwall import _detect_source
 
-        assert _detect_source({"store": "play_store"}) == SubscriptionSource.superwall_android
-        assert _detect_source({"store": "google_play"}) == SubscriptionSource.superwall_android
+        assert _detect_source({"store": "PLAY_STORE"}) == SubscriptionSource.superwall_android
 
     def test_app_store_event_is_ios(self):
         from routers.superwall import _detect_source
 
-        assert _detect_source({"store": "app_store"}) == SubscriptionSource.superwall_ios
+        assert _detect_source({"store": "APP_STORE"}) == SubscriptionSource.superwall_ios
+
+    def test_stripe_store_defaults_to_ios(self):
+        # Superwall-on-Stripe isn't a path we use; default to iOS rather than
+        # silently mislabeling.
+        from routers.superwall import _detect_source
+
+        assert _detect_source({"store": "STRIPE"}) == SubscriptionSource.superwall_ios
 
     def test_missing_store_defaults_to_ios(self):
         from routers.superwall import _detect_source
@@ -265,16 +278,45 @@ class TestSourceDetection:
 
 
 class TestDispatch:
+    """dispatch_event reads the outer Superwall envelope: top-level `type` +
+    nested `data` dict containing originalAppUserId / productId / etc.
+    """
+
     def test_unknown_event_type_ignored(self):
         from routers import superwall
 
-        result = superwall.dispatch_event("unsupported_event", {"app_user_id": "uid_x"})
+        result = superwall.dispatch_event(
+            "unsupported_event",
+            {"type": "unsupported_event", "data": {"originalAppUserId": "uid_x"}},
+        )
         assert result == "ignored"
 
     def test_missing_app_user_id_returns_error(self):
         from routers import superwall
 
-        result = superwall.dispatch_event("initial_purchase", {"product_id": "com.omi.app.lite_monthly"})
+        result = superwall.dispatch_event(
+            "initial_purchase",
+            {"type": "initial_purchase", "data": {"productId": "com.omi.app.lite_monthly"}},
+        )
+        assert result == "missing_uid"
+
+    def test_anonymous_alias_returns_error(self):
+        """If the user purchased before identify() was called, Superwall sends
+        the SDK's anonymous alias ($SuperwallAlias:UUID). We can't reconcile
+        that to an omi user — reject so svix stops retrying.
+        """
+        from routers import superwall
+
+        result = superwall.dispatch_event(
+            "initial_purchase",
+            {
+                "type": "initial_purchase",
+                "data": {
+                    "originalAppUserId": "$SuperwallAlias:7152E89E-60A6-4B2E-9C67-D7ED8F5BE372",
+                    "productId": "com.omi.app.lite_monthly",
+                },
+            },
+        )
         assert result == "missing_uid"
 
     def test_unknown_product_returns_error(self):
@@ -282,20 +324,37 @@ class TestDispatch:
 
         with patch.object(superwall, "get_superwall_product_map", return_value={}):
             result = superwall.dispatch_event(
-                "initial_purchase", {"app_user_id": "uid_x", "product_id": "com.omi.app.unknown"}
+                "initial_purchase",
+                {
+                    "type": "initial_purchase",
+                    "data": {
+                        "originalAppUserId": "uid_x",
+                        "productId": "com.omi.app.unknown",
+                    },
+                },
             )
         assert result == "unknown_product"
 
     def test_full_initial_purchase_dispatch(self):
         from routers import superwall
 
+        # Real Superwall envelope: top-level routing fields + nested data dict.
         payload = {
-            'type': 'initial_purchase',
-            'app_user_id': 'uid_z',
-            'product_id': 'com.omi.app.lite_monthly',
-            'subscription_id': 'sub_z',
-            'expires_at': 1900000000,
-            'store': 'app_store',
+            "object": "event",
+            "type": "initial_purchase",
+            "projectId": 22416,
+            "applicationId": 44831,
+            "timestamp": 1900000000000,
+            "data": {
+                "originalAppUserId": "uid_z",
+                "productId": "com.omi.app.lite_monthly",
+                "originalTransactionId": "sub_z",
+                "transactionId": "txn_z",
+                "expirationAt": 1900000000000,  # ms
+                "store": "APP_STORE",
+                "environment": "SANDBOX",
+                "isTrialConversion": False,
+            },
         }
         with (
             patch.object(superwall, "get_superwall_product_map", return_value={"com.omi.app.lite_monthly": "lite"}),
@@ -304,6 +363,9 @@ class TestDispatch:
         ):
             assert superwall.dispatch_event("initial_purchase", payload) == "processed"
         assert mock_update.called
-        sub_dict = mock_update.call_args.args[1]
+        called_uid, sub_dict = mock_update.call_args.args
+        assert called_uid == "uid_z"
         assert sub_dict["plan"] == "lite"
         assert sub_dict["source"] == "superwall_ios"
+        assert sub_dict["superwall_subscription_id"] == "sub_z"
+        assert sub_dict["current_period_end"] == 1900000000  # ms → s

@@ -247,12 +247,20 @@ class TestWebhookHappyPath:
         """Signed initial_purchase POST → 200, sub written with plan=plus, source=superwall_ios."""
         resp = _post_webhook(
             {
+                "object": "event",
                 "type": "initial_purchase",
-                "app_user_id": "uid_test",
-                "product_id": "com.omi.app.plus_monthly",
-                "subscription_id": "sw_sub_123",
-                "expires_at": 1900000000,
-                "store": "app_store",
+                "projectId": 22416,
+                "applicationId": 44831,
+                "timestamp": 1900000000000,
+                "data": {
+                    "originalAppUserId": "uid_test",
+                    "productId": "com.omi.app.plus_monthly",
+                    "originalTransactionId": "sw_sub_123",
+                    "transactionId": "txn_123",
+                    "expirationAt": 1900000000000,  # ms since epoch
+                    "store": "APP_STORE",
+                    "environment": "SANDBOX",
+                },
             }
         )
         assert resp.status_code == 200
@@ -266,18 +274,22 @@ class TestWebhookHappyPath:
         assert sub_dict["source"] == "superwall_ios"
         assert sub_dict["status"] == "active"
         assert sub_dict["superwall_subscription_id"] == "sw_sub_123"
+        # expirationAt ms → current_period_end seconds
         assert sub_dict["current_period_end"] == 1900000000
         assert sub_dict["cancel_at_period_end"] is False
 
     def test_play_store_event_routes_android_source(self):
         resp = _post_webhook(
             {
+                "object": "event",
                 "type": "initial_purchase",
-                "app_user_id": "uid_test",
-                "product_id": "com.omi.app.lite_yearly",
-                "subscription_id": "sw_sub_play_1",
-                "expires_at": 1900000000,
-                "store": "play_store",
+                "data": {
+                    "originalAppUserId": "uid_test",
+                    "productId": "com.omi.app.lite_yearly",
+                    "originalTransactionId": "sw_sub_play_1",
+                    "expirationAt": 1900000000000,
+                    "store": "PLAY_STORE",
+                },
             },
             svix_id="msg_e2e_play",
         )
@@ -297,11 +309,13 @@ class TestWebhookLifecycle:
         resp1 = _post_webhook(
             {
                 "type": "cancellation",
-                "app_user_id": "uid_test",
-                "product_id": "com.omi.app.plus_monthly",
-                "subscription_id": "sw_sub_lc",
-                "expires_at": 1900000000,
-                "store": "app_store",
+                "data": {
+                    "originalAppUserId": "uid_test",
+                    "productId": "com.omi.app.plus_monthly",
+                    "originalTransactionId": "sw_sub_lc",
+                    "expirationAt": 1900000000000,
+                    "store": "APP_STORE",
+                },
             },
             svix_id="msg_e2e_cancel",
         )
@@ -315,11 +329,13 @@ class TestWebhookLifecycle:
         resp2 = _post_webhook(
             {
                 "type": "expiration",
-                "app_user_id": "uid_test",
-                "product_id": "com.omi.app.plus_monthly",
-                "subscription_id": "sw_sub_lc",
-                "expires_at": 1900000000,
-                "store": "app_store",
+                "data": {
+                    "originalAppUserId": "uid_test",
+                    "productId": "com.omi.app.plus_monthly",
+                    "originalTransactionId": "sw_sub_lc",
+                    "expirationAt": 1900000000000,
+                    "store": "APP_STORE",
+                },
             },
             svix_id="msg_e2e_expire",
         )
@@ -334,7 +350,7 @@ class TestSignatureVerification:
         _reset_state()
 
     def test_bad_signature_rejected(self):
-        body = {"type": "initial_purchase", "app_user_id": "uid_test"}
+        body = {"type": "initial_purchase", "data": {"originalAppUserId": "uid_test"}}
         resp = _post_webhook(body, svix_id="msg_e2e_bad", svix_signature="v1,deadbeefdeadbeefdeadbeefdead==")
         assert resp.status_code == 401
         # No DB write on auth failure
@@ -349,11 +365,13 @@ class TestIdempotency:
         """Second delivery of the same svix-id returns 'duplicate' and doesn't re-write."""
         payload = {
             "type": "initial_purchase",
-            "app_user_id": "uid_test",
-            "product_id": "com.omi.app.plus_monthly",
-            "subscription_id": "sw_sub_dup",
-            "expires_at": 1900000000,
-            "store": "app_store",
+            "data": {
+                "originalAppUserId": "uid_test",
+                "productId": "com.omi.app.plus_monthly",
+                "originalTransactionId": "sw_sub_dup",
+                "expirationAt": 1900000000000,
+                "store": "APP_STORE",
+            },
         }
         resp1 = _post_webhook(payload, svix_id="msg_e2e_dup")
         assert resp1.status_code == 200
