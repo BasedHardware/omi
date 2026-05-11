@@ -71,10 +71,21 @@ class SuperwallService {
         apiKey,
         purchaseController: null,
         completion: () {
-          _configured = true;
-          Logger.debug('SuperwallService.initialize: configured');
+          // Completion fires later, after the server-side config arrives.
+          // We only log here — `_configured` is set synchronously below so
+          // subsequent identify() / registerPlacement() calls don't get
+          // skipped by our wrapper's gate during the queueing window.
+          Logger.debug('SuperwallService.initialize: server config received');
         },
       );
+      // The SDK accepts (and internally queues) identify / registerPlacement
+      // calls from the moment configure() returns — they don't need to wait
+      // for the completion callback. Flip the gate immediately so the rest
+      // of our wrapper's methods actually reach the SDK. Pre-this fix, the
+      // first paywall trigger under lazy init silently skipped identify()
+      // and the webhook landed with no app_user_id.
+      _configured = true;
+      Logger.debug('SuperwallService.initialize: configured');
     } catch (e, st) {
       Logger.error('SuperwallService.initialize failed: $e\n$st');
     }
