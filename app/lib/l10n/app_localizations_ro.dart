@@ -6873,6 +6873,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lowBatteryAlertBody => 'Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi este complet încărcat';
+
+  @override
+  String get batteryFullyChargedBody => 'Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Dispozitivul Omi a fost deconectat';
 
   @override

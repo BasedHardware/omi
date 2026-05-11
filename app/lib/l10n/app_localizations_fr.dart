@@ -6898,6 +6898,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get lowBatteryAlertBody => 'La batterie de votre appareil est faible. Il est temps de recharger ! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi est complètement chargé';
+
+  @override
+  String get batteryFullyChargedBody => 'Votre appareil Omi est complètement chargé. Vous pouvez le débrancher !';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Votre appareil Omi s\'est déconnecté';
 
   @override

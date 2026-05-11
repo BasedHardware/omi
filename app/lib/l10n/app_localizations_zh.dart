@@ -6710,6 +6710,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi已充满电';
+
+  @override
+  String get batteryFullyChargedBody => '您的Omi设备已充满电，可以拔掉充电线了！';
+
+  @override
   String get deviceDisconnectedNotificationTitle => '您的 Omi 设备已断开连接';
 
   @override

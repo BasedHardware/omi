@@ -6850,6 +6850,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi tamamen şarj oldu';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi Cihazınız Bağlantı Kesildi';
 
   @override

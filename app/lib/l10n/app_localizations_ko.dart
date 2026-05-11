@@ -6721,6 +6721,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get lowBatteryAlertBody => '기기의 배터리가 부족합니다. 충전할 시간입니다! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi가 완전히 충전되었습니다';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi 기기가 완전히 충전되었습니다. 이제 플러그를 뽑으셔도 됩니다!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi 기기가 연결 해제되었습니다';
 
   @override

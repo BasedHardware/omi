@@ -6897,6 +6897,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get lowBatteryAlertBody => 'Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Naka-charge na ang Omi';
+
+  @override
+  String get batteryFullyChargedBody => 'Ang iyong Omi device ay ganap nang na-charge. Maaari mo na itong i-unplug!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Ang Iyong Omi Device ay Nadiskonekta';
 
   @override

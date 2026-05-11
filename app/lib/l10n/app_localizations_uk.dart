@@ -6849,6 +6849,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get lowBatteryAlertBody => 'Батарея вашого пристрою розряджена. Час зарядити! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi повністю заряджений';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваш пристрій Omi повністю заряджений. Можна відключити від зарядки!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Ваш пристрій Omi відключено';
 
   @override

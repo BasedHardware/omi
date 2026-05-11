@@ -6855,6 +6855,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get lowBatteryAlertBody => 'Vaš uređaj ima nisku bateriju. Vrijeme je za ponovno punjena! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi je potpuno napunjen';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Vaš Omi uređaj se odvojio';
 
   @override

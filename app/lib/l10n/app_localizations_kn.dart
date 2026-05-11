@@ -6864,6 +6864,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get lowBatteryAlertBody => 'ನಿಮ್ಮ ಸಾಧನವು ಬ್ಯಾಟರಿ ಕಡಿಮೆಯಿದೆ. ಚಾರ್ಜ್ ಮಾಡುವ ಸಮಯ! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi ಸಂಪೂರ್ಣ ಚಾರ್ಜ್ ಆಗಿದೆ';
+
+  @override
+  String get batteryFullyChargedBody => 'ನಿಮ್ಮ Omi ಸಾಧನ ಸಂಪೂರ್ಣ ಚಾರ್ಜ್ ಆಗಿದೆ. ಅನ್‌ಪ್ಲಗ್ ಮಾಡಬಹುದು!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'ನಿಮ್ಮ Omi ಸಾಧನ ಸಂಪರ್ಕ ಸ್ವಲ್ಪ';
 
   @override

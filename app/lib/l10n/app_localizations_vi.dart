@@ -6845,6 +6845,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get lowBatteryAlertBody => 'Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi đã sạc đầy';
+
+  @override
+  String get batteryFullyChargedBody => 'Thiết bị Omi của bạn đã sạc đầy. Bạn có thể rút cáp ra!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Thiết bị Omi của bạn đã ngắt kết nối';
 
   @override

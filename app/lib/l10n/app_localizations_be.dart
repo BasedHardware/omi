@@ -6860,6 +6860,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get lowBatteryAlertBody => 'Ваша прыстасаванне буквальна вычарпвае батарэю. Час пазарадзіць! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi поўнасцю зараджаны';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваш прылада Omi поўнасцю зараджана. Можаце адключыць!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Ваша прыстасаванне Omi адключылося';
 
   @override
