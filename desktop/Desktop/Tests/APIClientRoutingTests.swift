@@ -154,53 +154,23 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
     }
 
-    func testBetaProductionBundleRoutesToDevelopmentBackends() {
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+    func testDevelopmentBackendRoutingDisabled() {
+        // Beta-to-dev routing disabled — see DesktopBackendEnvironment for context.
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "beta"
         ))
-        // "staging" is normalized to "beta" — same routing.
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "staging"
         ))
-    }
-
-    func testStableProductionBundleKeepsProductionBackends() {
         XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "stable"
         ))
-    }
-
-    func testNonProductionBundleSkipsAutomaticBetaRouting() {
-        // Dev bundle and named test bundles never trigger beta-to-dev routing
-        // automatically. They must opt in via OMI_FORCE_DEV_BACKENDS or env URLs.
         XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.desktop-dev",
             updateChannel: "beta"
-        ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.omi-beta-dev-test",
-            updateChannel: "beta"
-        ))
-    }
-
-    func testForceOverrideEnablesDevelopmentBackendsForAnyBundle() {
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.desktop-dev",
-            updateChannel: "stable",
-            forceOverride: "1"
-        ))
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.omi-beta-dev-test",
-            updateChannel: "stable",
-            forceOverride: "true"
-        ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.computer-macos",
-            updateChannel: "stable",
-            forceOverride: "0"
         ))
     }
 
