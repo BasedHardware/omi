@@ -2214,7 +2214,19 @@ workflows:
           # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
           xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+
           X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          # Symmetric existence check — without this, a silent x86_64 build failure
+          # (exit 0 but no output) bubbles up later as "missing binary" in the
+          # universal-bundle step with no traceback. Burned a build in May 2026.
+          if [ ! -f "$X86_64_PATH" ]; then
+            echo "ERROR: x86_64 binary not found at $X86_64_PATH"
+            echo "Listing $(dirname "$X86_64_PATH"):"
+            ls -la "$(dirname "$X86_64_PATH")" 2>&1 | head -30 || true
+            echo "Listing Desktop/.build/:"
+            ls -la "Desktop/.build/" 2>&1 || true
+            exit 1
+          fi
           echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
