@@ -40,6 +40,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
+  bool _hasFullyChargedAlerted = false;
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
 
@@ -171,6 +172,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           );
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;
+        }
+        if (isCharging && batteryLevel >= 100 && !_hasFullyChargedAlerted) {
+          _hasFullyChargedAlerted = true;
+          final ctx = globalNavigatorKey.currentContext;
+          NotificationService.instance.createNotification(
+            title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is charged fully",
+            body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
+          );
+        } else if (!isCharging || batteryLevel < 100) {
+          _hasFullyChargedAlerted = false;
         }
         // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
         // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
