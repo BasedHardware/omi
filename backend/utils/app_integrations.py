@@ -22,6 +22,7 @@ from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
+from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -540,6 +541,12 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 
 
 async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+    # Paywall test: skip mentor + third-party proactive notifications for the
+    # cohort entirely (no LLM spend, no FCM push). Reactivates automatically
+    # once the user is removed from the allowlist.
+    if is_trial_paywalled(uid):
+        return {}
+
     # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
     loop = asyncio.get_running_loop()
