@@ -156,11 +156,38 @@ def resolve_plan(product_id: str) -> Optional[PlanType]:
 
 
 def _detect_source(event: dict) -> SubscriptionSource:
-    """Infer ``superwall_ios`` vs ``superwall_android`` from event metadata."""
-    store = (event.get('store') or event.get('app_store') or '').lower()
-    if 'play' in store or 'google' in store or 'android' in store:
+    """Infer ``superwall_ios`` vs ``superwall_android`` from Superwall's
+    ``store`` field. Per the documented payload, valid values are uppercase:
+    ``APP_STORE``, ``PLAY_STORE``, ``STRIPE``.
+    """
+    store = (event.get('store') or '').upper()
+    if store == 'PLAY_STORE':
         return SubscriptionSource.superwall_android
+    # APP_STORE, STRIPE, or missing → default to iOS.
     return SubscriptionSource.superwall_ios
+
+
+def _extract_sub_id(event: dict) -> Optional[str]:
+    """Pull the durable subscription id from Superwall's payload.
+
+    ``originalTransactionId`` is the across-renewals identifier; ``transactionId``
+    changes per charge. We store the original so renewals/cancellations dedupe
+    against the same sub record.
+    """
+    return event.get('originalTransactionId') or event.get('transactionId')
+
+
+def _extract_period_end_seconds(event: dict) -> Optional[int]:
+    """Convert Superwall's ``expirationAt`` (milliseconds since epoch) to the
+    unix seconds we store in ``Subscription.current_period_end``.
+    """
+    expires_at_ms = event.get('expirationAt')
+    if not expires_at_ms:
+        return None
+    try:
+        return int(expires_at_ms) // 1000
+    except (TypeError, ValueError):
+        return None
 
 
 # ── Per-event handlers ──────────────────────────────────────────────────────
@@ -205,8 +232,8 @@ def handle_initial_purchase(uid: str, plan: PlanType, source: SubscriptionSource
         _build_subscription(
             plan=plan,
             source=source,
-            superwall_sub_id=event.get('subscription_id') or event.get('id'),
-            current_period_end=event.get('expires_at'),
+            superwall_sub_id=_extract_sub_id(event),
+            current_period_end=_extract_period_end_seconds(event),
         ),
     )
 
@@ -220,8 +247,8 @@ def handle_renewal(uid: str, plan: PlanType, source: SubscriptionSource, event: 
         _build_subscription(
             plan=plan,
             source=source,
-            superwall_sub_id=event.get('subscription_id') or event.get('id'),
-            current_period_end=event.get('expires_at'),
+            superwall_sub_id=_extract_sub_id(event),
+            current_period_end=_extract_period_end_seconds(event),
             cancel_at_period_end=False,
         ),
     )
@@ -234,8 +261,8 @@ def handle_cancellation(uid: str, plan: PlanType, source: SubscriptionSource, ev
         _build_subscription(
             plan=plan,
             source=source,
-            superwall_sub_id=event.get('subscription_id') or event.get('id'),
-            current_period_end=event.get('expires_at'),
+            superwall_sub_id=_extract_sub_id(event),
+            current_period_end=_extract_period_end_seconds(event),
             cancel_at_period_end=True,
         ),
     )
@@ -254,8 +281,8 @@ def handle_expiration(uid: str, _plan: PlanType, source: SubscriptionSource, eve
         plan=PlanType.basic,
         status=SubscriptionStatus.inactive,
         source=source,
-        superwall_subscription_id=event.get('subscription_id') or event.get('id'),
-        current_period_end=event.get('expires_at'),
+        superwall_subscription_id=_extract_sub_id(event),
+        current_period_end=_extract_period_end_seconds(event),
         cancel_at_period_end=False,
     )
     users_db.update_user_subscription(uid, sub.dict())
@@ -269,8 +296,8 @@ def handle_billing_issue(uid: str, plan: PlanType, source: SubscriptionSource, e
         plan=plan,
         status=SubscriptionStatus.inactive,  # we have no `past_due` enum value yet
         source=source,
-        superwall_subscription_id=event.get('subscription_id') or event.get('id'),
-        current_period_end=event.get('expires_at'),
+        superwall_subscription_id=_extract_sub_id(event),
+        current_period_end=_extract_period_end_seconds(event),
         cancel_at_period_end=False,
     )
     users_db.update_user_subscription(uid, sub.dict())
@@ -302,38 +329,58 @@ _HANDLERS = {
 
 
 def dispatch_event(event_type: str, payload: dict) -> str:
-    """Route a parsed webhook payload to its handler. Returns a status string
-    for the response body / log line.
+    """Route a parsed Superwall webhook payload to its handler.
 
-    Payload shape (per Superwall normalized webhook):
+    Real Superwall webhook shape (per docs):
       {
+        "object": "event",
         "type": "initial_purchase",
-        "app_user_id": "<omi uid>",
-        "product_id": "com.omi.app.lite_monthly",
-        "subscription_id": "<superwall sub id>",
-        "expires_at": <unix seconds>,
-        "store": "app_store" | "play_store" | ...
+        "projectId": <int>, "applicationId": <int>, "timestamp": <ms>,
+        "data": {
+          "originalAppUserId": "<uid set via identify(), OR $SuperwallAlias:UUID>",
+          "originalTransactionId": "<durable sub id, persists across renewals>",
+          "transactionId": "<per-charge id, changes each renewal>",
+          "productId": "com.omi.app.lite_monthly",
+          "expirationAt": <ms since epoch>,
+          "store": "APP_STORE" | "PLAY_STORE" | "STRIPE",
+          ... + many other normalized fields
+        }
       }
+
+    Everything we read about the purchase lives under ``data``; the top-level
+    only carries the routing fields (type, ids, timestamp). Handlers receive
+    the inner ``data`` dict.
     """
     handler = _HANDLERS.get(event_type)
     if handler is None:
         return 'ignored'
 
-    uid = payload.get('app_user_id')
-    if not uid:
-        logger.error(f"[superwall] event {event_type} missing app_user_id")
+    data = payload.get('data') or {}
+    raw_uid = data.get('originalAppUserId') or ''
+
+    # Anonymous alias means the SDK was configured but identify() was not
+    # called before the purchase — we have no omi user to reconcile to.
+    # Log and reject so svix's 2xx-or-retry policy doesn't keep replaying.
+    if raw_uid.startswith('$SuperwallAlias:'):
+        logger.error(
+            f"[superwall] event {event_type} arrived with anonymous alias "
+            f"{sanitize(raw_uid)} — identify() was not called before purchase"
+        )
+        return 'missing_uid'
+    if not raw_uid:
+        logger.error(f"[superwall] event {event_type} missing originalAppUserId")
         return 'missing_uid'
 
-    product_id = payload.get('product_id') or ''
+    product_id = data.get('productId') or ''
     plan = resolve_plan(product_id)
     if plan is None and event_type != 'expiration':
         # Expiration doesn't need a current plan (we revert to basic regardless),
         # but every other handler does.
-        logger.error(f"[superwall] unknown product_id {sanitize(product_id)} for event {event_type}")
+        logger.error(f"[superwall] unknown productId {sanitize(product_id)} for event {event_type}")
         return 'unknown_product'
 
-    source = _detect_source(payload)
-    handler(uid, plan or PlanType.basic, source, payload)
+    source = _detect_source(data)
+    handler(raw_uid, plan or PlanType.basic, source, data)
     return 'processed'
 
 
