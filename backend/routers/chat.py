@@ -9,7 +9,18 @@ from pathlib import Path
 
 from utils.executors import critical_executor
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+    File,
+    Form,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -173,6 +184,7 @@ def send_message(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
     # overage mode silently. If exceeded, instead of raising 402 (which mobile
@@ -182,7 +194,7 @@ def send_message(
     # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
     # never reaches here when over.
     try:
-        enforce_chat_quota(uid)
+        enforce_chat_quota(uid, platform=x_app_platform)
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
@@ -461,8 +473,9 @@ async def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    enforce_chat_quota(uid)
+    enforce_chat_quota(uid, platform=x_app_platform)
 
     # wav
     paths = retrieve_file_paths(files, uid)

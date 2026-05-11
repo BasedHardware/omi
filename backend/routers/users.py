@@ -1008,7 +1008,7 @@ def get_user_subscription_endpoint(
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
 
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot = get_chat_quota_snapshot(uid)
+    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1036,7 +1036,10 @@ def get_user_subscription_endpoint(
 
 
 @router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
-def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_chat_usage_quota(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """Current-month chat usage for the user, plus their plan's cap.
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
@@ -1056,7 +1059,7 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid)
+    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:

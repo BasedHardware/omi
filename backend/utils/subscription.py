@@ -1,12 +1,15 @@
 import os
+import time
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException
+from firebase_admin import auth as firebase_auth
 import stripe
 
 import database.users as users_db
 import database.user_usage as user_usage_db
+from database import redis_db
 from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
 from utils.byok import get_byok_key
@@ -17,17 +20,90 @@ logger = logging.getLogger(__name__)
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
-# Single-user paywall test. Force the existing freemium-threshold popup on
-# these UIDs by denying transcription credits at the gate functions below.
-# Comma-separated UIDs in `TRIAL_PAYWALL_TEST_UIDS` env var override the
-# hardcoded fallback so we can flip cohorts without redeploying.
+# Desktop-only 3-day trial paywall.
+#
+# Applies to ALL desktop users on the basic plan once their Firebase Auth
+# account is older than `TRIAL_LENGTH_SECONDS` and they don't have BYOK
+# active. Mobile (ios / android), Omi devices, paid plans, BYOK users,
+# and accounts inside the trial window are exempt.
+#
+# Env-var overrides:
+#   TRIAL_PAYWALL_ENABLED=false   → kill switch, disables paywall entirely
+#   TRIAL_PAYWALL_TEST_UIDS=u1,u2 → if set, restrict paywall to listed UIDs
+#                                   (everyone else exempt). Defaults to empty
+#                                   (unrestricted) so a real prod deploy
+#                                   covers all qualifying desktop users.
+TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60
+
+_TRIAL_PAYWALL_ENABLED = os.getenv("TRIAL_PAYWALL_ENABLED", "true").lower() != "false"
+
 _TRIAL_PAYWALL_TEST_UIDS: set[str] = {
     u.strip() for u in os.getenv("TRIAL_PAYWALL_TEST_UIDS", "").split(",") if u.strip()
-} or {"BFbNzfFrQ0RyvqHXdPP6D0db6fs1"}
+}
+
+# Platform identifiers that count as desktop for paywall purposes. The Swift
+# client sends X-App-Platform: macos and the listen WS uses source=desktop.
+# Anything else (ios, android, omi device, phone_call, unknown) is exempt.
+_TRIAL_PAYWALL_DESKTOP_TOKENS = {"macos", "desktop"}
+
+# Cache the (slow) Firebase Auth + Firestore lookup result for a few minutes
+# so chat-quota polling doesn't fan out to Firebase on every request.
+_TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
 
-def is_trial_paywalled(uid: str) -> bool:
-    return uid in _TRIAL_PAYWALL_TEST_UIDS
+def _is_trial_expired_uncached(uid: str) -> bool:
+    """Is this user past their 3-day desktop trial?
+
+    Trial only applies to the basic plan; BYOK users are bypassed (they're
+    paying their own LLM/STT bill). Returns False on any lookup error so a
+    Firebase blip never paywalls a paying user.
+    """
+    try:
+        subscription = users_db.get_user_valid_subscription(uid)
+        plan = subscription.plan if subscription else PlanType.basic
+        if plan != PlanType.basic:
+            return False
+        if users_db.is_byok_active(uid):
+            return False
+        user_record = firebase_auth.get_user(uid)
+        creation_ms = user_record.user_metadata.creation_timestamp
+        if not creation_ms:
+            return False
+        age_seconds = time.time() - (creation_ms / 1000)
+        return age_seconds > TRIAL_LENGTH_SECONDS
+    except Exception as e:
+        logger.warning("trial paywall lookup failed for uid=%s: %s", uid, e)
+        return False
+
+
+def _is_trial_expired_cached(uid: str) -> bool:
+    cache_key = f"trial_paywall:expired:{uid}"
+    cached = redis_db.get_generic_cache(cache_key)
+    if cached is not None:
+        return bool(cached)
+    expired = _is_trial_expired_uncached(uid)
+    try:
+        redis_db.set_generic_cache(cache_key, expired, ttl=_TRIAL_PAYWALL_CACHE_TTL_SECONDS)
+    except Exception as e:
+        logger.debug("trial paywall cache set failed for uid=%s: %s", uid, e)
+    return expired
+
+
+def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
+    """True iff the request is from a desktop client AND the user has used
+    their full 3-day free trial without subscribing or activating BYOK.
+
+    `platform` is the X-App-Platform header for HTTP requests or the
+    `source` query param for the listen WebSocket. Mobile (ios/android),
+    Omi devices, and any unknown/missing platform are never paywalled.
+    """
+    if not _TRIAL_PAYWALL_ENABLED:
+        return False
+    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
+        return False
+    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
+        return False
+    return _is_trial_expired_cached(uid)
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -268,14 +344,18 @@ def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
 
 
-def get_chat_quota_snapshot(uid: str) -> dict:
+def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> dict:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
+
+    `platform` (X-App-Platform header) gates the paywall test override — only
+    desktop callers can be paywalled; mobile callers fall through to the
+    real plan logic.
     """
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid):
+    if is_trial_paywalled(uid, platform):
         usage = user_usage_db.get_monthly_chat_usage(uid)
         return {
             'plan': PlanType.basic,
@@ -321,7 +401,7 @@ def get_chat_quota_snapshot(uid: str) -> dict:
 OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
 
 
-def enforce_chat_quota(uid: str) -> None:
+def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
     - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
@@ -331,10 +411,10 @@ def enforce_chat_quota(uid: str) -> None:
       chat endpoint converts into a canned AI reply for mobile UX.
     """
     # Paywall test override — bypass BYOK + plan checks so the same 402
-    # surfaces that a free user past 30 questions would hit. The chat
-    # router converts this into the existing canned over-limit reply.
-    if is_trial_paywalled(uid):
-        snapshot = get_chat_quota_snapshot(uid)
+    # surfaces that a free user past 30 questions would hit. Desktop only;
+    # mobile callers continue down the normal plan path.
+    if is_trial_paywalled(uid, platform):
+        snapshot = get_chat_quota_snapshot(uid, platform=platform)
         raise HTTPException(
             status_code=402,
             detail={
@@ -355,7 +435,7 @@ def enforce_chat_quota(uid: str) -> None:
     if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
         return
 
-    snapshot = get_chat_quota_snapshot(uid)
+    snapshot = get_chat_quota_snapshot(uid, platform=platform)
     if snapshot['allowed']:
         return
 
@@ -618,12 +698,16 @@ def get_monthly_usage_for_subscription(uid: str) -> dict:
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
 
-def has_transcription_credits(uid: str) -> bool:
+def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     """
     Checks if a user has transcribing credits by verifying their valid subscription and usage.
+
+    `source` is the listen-WS `source` query param (`desktop`, `omi`, `phone_call`,
+    etc). The paywall test override only fires for desktop sources so that
+    phone-call / Omi-device traffic for cohort UIDs is unaffected.
     """
     # Single-user paywall test override (see _TRIAL_PAYWALL_TEST_UIDS).
-    if is_trial_paywalled(uid):
+    if is_trial_paywalled(uid, source):
         return False
 
     # BYOK users pay Deepgram directly — there's no Omi-side transcription quota to enforce.
@@ -647,15 +731,18 @@ def has_transcription_credits(uid: str) -> bool:
     return True
 
 
-def get_remaining_transcription_seconds(uid: str) -> int | None:
+def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) -> int | None:
     """
     Get remaining transcription seconds for the user.
     Returns None if unlimited, otherwise the remaining seconds (>= 0).
     Used for freemium auto-switch to on-device transcription.
+
+    `source` gates the desktop-only paywall test override (see
+    `is_trial_paywalled`).
     """
     # Single-user paywall test override — surface 0 so the freemium-threshold
     # event fires and the client renders its usage-limit popup.
-    if is_trial_paywalled(uid):
+    if is_trial_paywalled(uid, source):
         return 0
 
     # BYOK: user brings their own Deepgram — no Omi quota, no freemium threshold.

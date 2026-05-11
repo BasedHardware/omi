@@ -190,10 +190,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
+async def trigger_realtime_integrations(
+    uid: str,
+    segments: list[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    return await _async_trigger_realtime_integrations(uid, segments, conversation_id)
+    return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -540,11 +545,16 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
     return {}
 
 
-async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
-    # Paywall test: skip mentor + third-party proactive notifications for the
-    # cohort entirely (no LLM spend, no FCM push). Reactivates automatically
-    # once the user is removed from the allowlist.
-    if is_trial_paywalled(uid):
+async def _async_trigger_realtime_integrations(
+    uid: str,
+    segments: List[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+) -> dict:
+    # Paywall: skip mentor + third-party proactive notifications when this
+    # transcription session belongs to a paywalled desktop user.
+    # Reactivates automatically when the user upgrades or activates BYOK.
+    if is_trial_paywalled(uid, source):
         return {}
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
