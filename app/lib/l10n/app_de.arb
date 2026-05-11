@@ -2166,6 +2166,8 @@
     "selectOption": "Auswählen",
     "lowBatteryAlertTitle": "Warnung: Niedriger Akkustand",
     "lowBatteryAlertBody": "Der Akkustand Ihres Geräts ist niedrig. Zeit zum Aufladen! 🔋",
+    "batteryFullyChargedTitle": "Omi ist vollständig geladen",
+    "batteryFullyChargedBody": "Dein Omi-Gerät ist vollständig geladen. Du kannst es jetzt ausstecken!",
     "deviceDisconnectedNotificationTitle": "Ihr Omi-Gerät wurde getrennt",
     "deviceDisconnectedNotificationBody": "Bitte verbinden Sie sich erneut, um Ihr Omi weiter zu nutzen.",
     "firmwareUpdateAvailable": "Firmware-Update verfügbar",

@@ -1186,6 +1186,8 @@
     "logsCopied": "Žurnalai nukopijuoti",
     "lovingOmi": "Patinka Omi?",
     "lowBatteryAlertBody": "Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋",
+    "batteryFullyChargedTitle": "Omi yra visiškai įkrautas",
+    "batteryFullyChargedBody": "Jūsų Omi įrenginys yra visiškai įkrautas. Galite jį atjungti!",
     "lowBatteryAlertTitle": "Įspėjimas apie senką bateriją",
     "lower": "Žemesnis",
     "macOsCalendar": "macOS kalendorius",

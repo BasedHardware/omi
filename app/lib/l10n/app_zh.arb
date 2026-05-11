@@ -2185,6 +2185,8 @@
     "selectOption": "选择",
     "lowBatteryAlertTitle": "电池电量低警告",
     "lowBatteryAlertBody": "您的设备电池电量低。是时候充电了！🔋",
+    "batteryFullyChargedTitle": "Omi已充满电",
+    "batteryFullyChargedBody": "您的Omi设备已充满电，可以拔掉充电线了！",
     "deviceDisconnectedNotificationTitle": "您的 Omi 设备已断开连接",
     "deviceDisconnectedNotificationBody": "请重新连接以继续使用 Omi。",
     "firmwareUpdateAvailable": "固件更新可用",

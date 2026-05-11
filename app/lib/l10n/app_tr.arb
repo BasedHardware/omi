@@ -2184,6 +2184,8 @@
     "selectOption": "Seç",
     "lowBatteryAlertTitle": "Düşük Pil Uyarısı",
     "lowBatteryAlertBody": "Cihazınızın pili azaldı. Şarj etme zamanı! 🔋",
+    "batteryFullyChargedTitle": "Omi tamamen şarj oldu",
+    "batteryFullyChargedBody": "Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!",
     "deviceDisconnectedNotificationTitle": "Omi Cihazınız Bağlantı Kesildi",
     "deviceDisconnectedNotificationBody": "Omi'yi kullanmaya devam etmek için lütfen yeniden bağlanın.",
     "firmwareUpdateAvailable": "Yazılım Güncellemesi Mevcut",

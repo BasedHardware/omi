@@ -2185,6 +2185,8 @@
     "selectOption": "選択",
     "lowBatteryAlertTitle": "バッテリー残量低下アラート",
     "lowBatteryAlertBody": "デバイスのバッテリーが少なくなっています。充電してください！🔋",
+    "batteryFullyChargedTitle": "Omiは満充電です",
+    "batteryFullyChargedBody": "Omiデバイスが満充電になりました。充電ケーブルを外してください！",
     "deviceDisconnectedNotificationTitle": "Omiデバイスが切断されました",
     "deviceDisconnectedNotificationBody": "Omiを引き続き使用するには再接続してください。",
     "firmwareUpdateAvailable": "ファームウェアアップデートが利用可能",

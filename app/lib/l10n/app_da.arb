@@ -2142,6 +2142,8 @@
     "selectOption": "Vælg",
     "lowBatteryAlertTitle": "Advarsel om lavt batteri",
     "lowBatteryAlertBody": "Din enheds batteri er lavt. Det er tid til at genoplade! 🔋",
+    "batteryFullyChargedTitle": "Omi er fuldt opladet",
+    "batteryFullyChargedBody": "Din Omi-enhed er fuldt opladet. Du kan frakoble den nu!",
     "deviceDisconnectedNotificationTitle": "Din Omi-enhed er afbrudt",
     "deviceDisconnectedNotificationBody": "Tilslut venligst igen for at fortsætte med at bruge din Omi.",
     "firmwareUpdateAvailable": "Firmwareopdatering tilgængelig",

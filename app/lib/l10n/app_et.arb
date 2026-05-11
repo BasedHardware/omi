@@ -2184,6 +2184,8 @@
     "selectOption": "Vali",
     "lowBatteryAlertTitle": "Tühja aku hoiatus",
     "lowBatteryAlertBody": "Teie seadme aku on tühi. Aeg laadida! 🔋",
+    "batteryFullyChargedTitle": "Omi on täielikult laetud",
+    "batteryFullyChargedBody": "Teie Omi seade on täielikult laetud. Võite selle lahti ühendada!",
     "deviceDisconnectedNotificationTitle": "Teie Omi seade on lahti ühendatud",
     "deviceDisconnectedNotificationBody": "Palun ühendage uuesti, et jätkata Omi kasutamist.",
     "firmwareUpdateAvailable": "Püsivara värskendus saadaval",

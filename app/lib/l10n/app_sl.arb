@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "Vaša naprava ima nizko baterijo. Čas je za polnjenje! 🔋",
+    "batteryFullyChargedTitle": "Omi je popolnoma napolnjen",
+    "batteryFullyChargedBody": "Vaša naprava Omi je popolnoma napolnjena. Lahko jo odklopite!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },

@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "আপনার ডিভাইসের ব্যাটারি কম হয়ে যাচ্ছে। চার্জ করার সময় এসেছে! 🔋",
+    "batteryFullyChargedTitle": "Omi সম্পূর্ণ চার্জ হয়েছে",
+    "batteryFullyChargedBody": "আপনার Omi ডিভাইস সম্পূর্ণ চার্জ হয়েছে। আনপ্লাগ করতে পারেন!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },
