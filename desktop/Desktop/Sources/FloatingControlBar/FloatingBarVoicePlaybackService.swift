@@ -68,8 +68,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
     guard let mode = currentMode else { return }
     switch mode {
-    case .systemVoice(let voice):
-      enqueueSystemSpeech(phrase, voice: voice)
+    case .systemVoice:
+      enqueueSystemSpeech(phrase)
     case .openAI(let voiceID, let instructions):
       fillerTask = Task { [weak self] in
         do {
@@ -174,8 +174,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   private func enqueueChunk(_ text: String, mode: PlaybackMode) {
     switch mode {
-    case .systemVoice(let voice):
-      enqueueSystemSpeech(text, voice: voice)
+    case .systemVoice:
+      enqueueSystemSpeech(text)
     case .openAI:
       synthesisQueue.append(text)
       startSynthesisIfNeeded(mode: mode)
@@ -226,11 +226,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
-          log(
-            "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
-          )
-          self.enqueueSystemSpeech(
-            text, voice: ShortcutSettings.voiceOption(for: ShortcutSettings.localShelleyVoiceID))
+        log(
+          "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
+        )
+          self.enqueueSystemSpeech(text)
           self.startSynthesisIfNeeded(mode: mode)
         }
       }
@@ -256,7 +255,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     let voice = ShortcutSettings.voiceOption(for: voiceID)
 
     if voice.isLocalSystem {
-      enqueueSystemSpeech(phrase, voice: voice)
+      enqueueSystemSpeech(phrase)
       return
     }
 
@@ -282,8 +281,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       return
     }
 
-    enqueueSystemSpeech(
-      phrase, voice: ShortcutSettings.voiceOption(for: ShortcutSettings.localShelleyVoiceID))
+    enqueueSystemSpeech(phrase)
   }
 
   /// Synthesize and play a single short phrase via the selected voice. Used by
@@ -304,14 +302,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
           }
         } catch {
           await MainActor.run {
-            self?.enqueueSystemSpeech(
-              trimmed,
-              voice: ShortcutSettings.voiceOption(for: ShortcutSettings.localShelleyVoiceID))
+            self?.enqueueSystemSpeech(trimmed)
           }
         }
       }
-    case .systemVoice(let voice):
-      enqueueSystemSpeech(trimmed, voice: voice)
+    case .systemVoice:
+      enqueueSystemSpeech(trimmed)
     }
   }
 
@@ -347,33 +343,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     }
   }
 
-  private func enqueueSystemSpeech(_ text: String, voice: ShortcutSettings.VoiceOption) {
+  private func enqueueSystemSpeech(_ text: String) {
     let utterance = AVSpeechUtterance(string: text)
-    utterance.rate = localSpeechRate()
-    utterance.pitchMultiplier = localPitchMultiplier(for: voice)
+    utterance.rate = 0.47
+    utterance.pitchMultiplier = 1.02
     utterance.volume = 1.0
-    utterance.voice = preferredSystemVoice(for: voice)
+    utterance.voice = preferredSystemVoice()
     speechSynthesizer.speak(utterance)
-  }
-
-  private func localSpeechRate() -> Float {
-    let baseRate: Float = 0.42
-    let scaledRate = baseRate * (playbackRate / 1.4)
-    return min(
-      AVSpeechUtteranceMaximumSpeechRate,
-      max(AVSpeechUtteranceMinimumSpeechRate, scaledRate)
-    )
-  }
-
-  private func localPitchMultiplier(for voice: ShortcutSettings.VoiceOption) -> Float {
-    switch voice.id {
-    case ShortcutSettings.localShelleyVoiceID:
-      return 0.82
-    case "local:deep":
-      return 0.88
-    default:
-      return 1.02
-    }
   }
 
   nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -404,27 +380,17 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     speechSynthesizer.stopSpeaking(at: .immediate)
   }
 
-  private func preferredSystemVoice(for option: ShortcutSettings.VoiceOption) -> AVSpeechSynthesisVoice? {
+  private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {
     let voices = AVSpeechSynthesisVoice.speechVoices()
-    for identifier in option.preferredSystemVoiceIdentifiers {
-      if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
-        return voice
-      }
-    }
-    for name in option.preferredSystemVoiceNames {
+    let preferredNames = ["Ava", "Allison", "Samantha", "Karen", "Moira"]
+    for name in preferredNames {
       if let voice = voices.first(where: {
-        $0.language == "en-US" && $0.name.localizedCaseInsensitiveContains(name)
-      }) {
-        return voice
-      }
-      if let voice = voices.first(where: {
-        $0.language.hasPrefix("en") && $0.name.localizedCaseInsensitiveContains(name)
+        $0.name.localizedCaseInsensitiveContains(name)
       }) {
         return voice
       }
     }
-    return voices.first(where: { $0.language == "en-US" })
-      ?? AVSpeechSynthesisVoice(language: "en-US")
+    return AVSpeechSynthesisVoice(language: "en-US")
   }
 
   /// Synthesize speech through the desktop backend's OpenAI TTS proxy.

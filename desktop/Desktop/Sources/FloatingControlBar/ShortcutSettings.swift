@@ -425,9 +425,8 @@ class ShortcutSettings: ObservableObject {
 
     static let openAIShimmerVoiceID = "openai:shimmer"
     static let openAIOnyxVoiceID = "openai:onyx"
-    static let localShelleyVoiceID = "local:shelley"
 
-    /// Curated OpenAI and local voices available from the voice picker.
+    /// Curated OpenAI voices available from the voice picker.
     static let availableVoices: [VoiceOption] = [
         VoiceOption(
             id: openAIOnyxVoiceID,
@@ -476,52 +475,6 @@ class ShortcutSettings: ObservableObject {
                 "Speak in a natural, friendly, confident tone with clear articulation and relaxed pacing.",
             preferredSystemVoiceIdentifiers: [],
             preferredSystemVoiceNames: []
-        ),
-        VoiceOption(
-            id: localShelleyVoiceID,
-            name: "Shelley Local",
-            gender: .female,
-            description: "Local Shelley voice, no usage cost",
-            provider: .localSystem,
-            openAIVoice: nil,
-            openAIInstructions: nil,
-            preferredSystemVoiceIdentifiers: [
-                "com.apple.eloquence.en-US.Shelley",
-                "com.apple.eloquence.en-GB.Shelley",
-                "com.apple.eloquence.en-US.Flo",
-                "com.apple.speech.synthesis.voice.Whisper",
-            ],
-            preferredSystemVoiceNames: ["Shelley", "Flo", "Whisper", "Superstar", "Karen", "Moira", "Samantha"]
-        ),
-        VoiceOption(
-            id: "local:soft",
-            name: "Soft Local",
-            gender: .female,
-            description: "Local, gentle, no usage cost",
-            provider: .localSystem,
-            openAIVoice: nil,
-            openAIInstructions: nil,
-            preferredSystemVoiceIdentifiers: [
-                "com.apple.eloquence.en-US.Flo",
-                "com.apple.eloquence.en-GB.Flo",
-                "com.apple.voice.compact.en-US.Samantha",
-            ],
-            preferredSystemVoiceNames: ["Flo", "Samantha", "Karen", "Moira"]
-        ),
-        VoiceOption(
-            id: "local:deep",
-            name: "Deep Local",
-            gender: .male,
-            description: "Local, low, no usage cost",
-            provider: .localSystem,
-            openAIVoice: nil,
-            openAIInstructions: nil,
-            preferredSystemVoiceIdentifiers: [
-                "com.apple.eloquence.en-US.Rocko",
-                "com.apple.eloquence.en-US.Reed",
-                "com.apple.voice.compact.en-GB.Daniel",
-            ],
-            preferredSystemVoiceNames: ["Rocko", "Reed", "Daniel", "Fred"]
         ),
     ]
 

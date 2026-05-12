@@ -2269,15 +2269,8 @@ struct SettingsContentView: View {
         }
         Spacer()
         Picker("", selection: $shortcutSettings.selectedVoiceID) {
-          Section("OpenAI Human") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.isOpenAI }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
-          }
-          Section("Local") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.isLocalSystem }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
+          ForEach(ShortcutSettings.availableVoices) { voice in
+            Text(voice.name).tag(voice.id)
           }
         }
         .pickerStyle(.menu)
