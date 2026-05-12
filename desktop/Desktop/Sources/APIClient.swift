@@ -4629,7 +4629,10 @@ extension APIClient {
     let voiceId: String
     let modelId: String
     let outputFormat: String
-    let voiceSettings: TtsVoiceSettings
+    let voiceSettings: TtsVoiceSettings?
+    /// Optional provider override. "openai" routes to OpenAI TTS, "elevenlabs"
+    /// (or omitted) routes to ElevenLabs.
+    let provider: String?
 
     enum CodingKeys: String, CodingKey {
       case text
@@ -4637,6 +4640,7 @@ extension APIClient {
       case modelId = "model_id"
       case outputFormat = "output_format"
       case voiceSettings = "voice_settings"
+      case provider
     }
   }
 
