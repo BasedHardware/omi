@@ -102,3 +102,18 @@ jobs:
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always() # Ensure this step runs even if previous steps fail
+        uses: ./.github/actions/deployment-notifier
+        with:
+          workflow_name: ${{ github.workflow }}
+          environment: ${{ github.event.inputs.environment }}
+          branch: ${{ github.event.inputs.branch }}
+          release_version: ${{ github.event.inputs.release_version }}
+          actor: ${{ github.actor }}
+          status: ${{ job.status }}
+          run_id: ${{ github.run_id }}
+          job_id: ${{ github.job }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
