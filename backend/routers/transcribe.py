@@ -2359,8 +2359,11 @@ async def _stream_handler(
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
-                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
-                if fair_use_dg_budget_exhausted:
+                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083),
+                # or if the user has no transcription credits (free quota / trial paywall).
+                # Without this, audio still flows to Deepgram for paywalled users and
+                # we pay for STT we'll never return to them.
+                if fair_use_dg_budget_exhausted or not user_has_credits:
                     pass  # Audio not forwarded to DG — budget/credits exhausted
                 else:
                     dg_socket.send(chunk)
