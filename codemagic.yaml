@@ -2213,12 +2213,17 @@ workflows:
               echo "WARN: Homebrew $dylib not at $dst — skipping patch"
               continue
             fi
-            # Resolve symlink so we overwrite the real file in the Cellar
-            real_dst=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$dst")
-            cp "$src" "$real_dst"
-            file "$real_dst" | grep -q "universal binary" \
-              && echo "Patched $real_dst to universal" \
-              || { echo "ERROR: $real_dst is not universal after patch"; exit 1; }
+            # Replace the symlink at this well-known path with the universal
+            # file. The underlying Cellar file (libwebp.7.x.y.dylib) is read-only
+            # so we can't overwrite it directly. pkg-config's `-L<dir> -lwebp`
+            # resolves to libwebp.dylib → libwebp.7.dylib → our universal file
+            # via the now-broken chain, which is fine: dyld only cares about the
+            # last hop being readable.
+            rm -f "$dst"
+            cp "$src" "$dst"
+            file "$dst" | grep -q "universal binary" \
+              && echo "Patched $dst to universal" \
+              || { echo "ERROR: $dst is not universal after patch"; exit 1; }
           done
 
           mkdir -p "$BUILD_DIR"
