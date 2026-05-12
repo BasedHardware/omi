@@ -20,11 +20,8 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
         XCTAssertEqual(voice.openAIVoice, "shimmer")
     }
 
-    func testLocalFallbackVoiceRemainsAvailableInPicker() {
-        let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.localShelleyVoiceID)
-        XCTAssertEqual(voice.name, "Shelley Local")
-        XCTAssertTrue(voice.isLocalSystem)
-        XCTAssertEqual(voice.preferredSystemVoiceIdentifiers.first, "com.apple.eloquence.en-US.Shelley")
+    func testOnlyOpenAIVoicesAreAvailableInPicker() {
+        XCTAssertFalse(ShortcutSettings.availableVoices.contains { $0.isLocalSystem })
     }
 
     func testLegacyProxyVoicesAreNotAvailableInPicker() {
@@ -36,7 +33,7 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
         )
     }
 
-    func testInvalidVoiceFallsBackToDefaultLocalVoice() {
+    func testInvalidVoiceFallsBackToDefaultOpenAIVoice() {
         let voice = ShortcutSettings.voiceOption(for: "missing")
         XCTAssertEqual(voice.id, ShortcutSettings.defaultVoiceID)
         XCTAssertTrue(voice.isOpenAI)
