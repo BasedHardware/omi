@@ -930,8 +930,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                   letterSpacing: 0.8,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                              if (orderedItems.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                              ],
                             ],
                           ),
                         )
@@ -961,7 +963,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           )
                         else if (orderedItems.isNotEmpty)
                           Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                      ] else if (provider.showCompletedView && orderedItems.isNotEmpty)
+                      ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
                         GestureDetector(
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
                           child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
