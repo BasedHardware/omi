@@ -1,8 +1,10 @@
-"""TTS proxy route — proxies ElevenLabs text-to-speech server-side.
+"""TTS proxy route — server-side text-to-speech with pluggable providers.
 
-Mirrors `desktop/Backend-Rust/src/routes/tts.rs` so mobile clients can play
-Omi's spoken responses in background / lock-screen scenarios without shipping
-an ElevenLabs API key to the client.
+Mirrors `desktop/Backend-Rust/src/routes/tts.rs`.
+
+Providers (selected via request `provider` field):
+  - "elevenlabs" (default) — premium quality, ~$99-330 per 1M chars
+  - "openai"               — ~6.6x cheaper at $15/1M chars, MP3 output
 
 Rate limits per user (Redis-backed sliding-window + daily counter):
   - 50 requests per rolling 60 seconds → 429
@@ -34,6 +36,21 @@ _TTS_BURST_WINDOW_SECS = 60
 _TTS_REQUEST_CHAR_LIMIT = 5_000
 
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+_OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech"
+
+_OPENAI_VOICES = {
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "fable",
+    "nova",
+    "onyx",
+    "sage",
+    "shimmer",
+    "verse",
+}
 
 
 def _is_valid_voice_id(voice_id: str) -> bool:
@@ -43,19 +60,34 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
+def _is_valid_openai_voice(voice_id: str) -> bool:
+    return voice_id in _OPENAI_VOICES
+
+
 @router.post('/v2/tts/synthesize', tags=['tts'])
 async def tts_synthesize(
     req: TtsSynthesizeRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),
 ):
-    """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
-    api_key = os.getenv('ELEVENLABS_API_KEY')
-    if not api_key:
-        logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")
-        raise HTTPException(status_code=503, detail="TTS service not configured")
+    """Proxy a TTS request to the selected provider. Per-user rate limited."""
+    provider = (req.provider or "elevenlabs").lower()
 
-    if not _is_valid_voice_id(req.voice_id):
-        raise HTTPException(status_code=400, detail="invalid voice_id")
+    if provider == "elevenlabs":
+        api_key = os.getenv('ELEVENLABS_API_KEY')
+        if not api_key:
+            logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")
+            raise HTTPException(status_code=503, detail="ElevenLabs TTS not configured")
+        if not _is_valid_voice_id(req.voice_id):
+            raise HTTPException(status_code=400, detail="invalid voice_id")
+    elif provider == "openai":
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            logger.error("tts_synthesize: OPENAI_API_KEY not configured")
+            raise HTTPException(status_code=503, detail="OpenAI TTS not configured")
+        if not _is_valid_openai_voice(req.voice_id):
+            raise HTTPException(status_code=400, detail="invalid voice_id for openai provider")
+    else:
+        raise HTTPException(status_code=400, detail="invalid provider (must be 'elevenlabs' or 'openai')")
 
     text = req.text.strip()
     if not text:
@@ -91,20 +123,34 @@ async def tts_synthesize(
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
 
-    body: dict = {
-        "text": text,
-        "model_id": req.model_id,
-        "output_format": req.output_format,
-    }
-    if req.voice_settings is not None:
-        body["voice_settings"] = req.voice_settings.model_dump(exclude_none=True)
-
-    url = _ELEVENLABS_URL.format(voice_id=req.voice_id)
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-        "xi-api-key": api_key,
-    }
+    if provider == "openai":
+        openai_model = req.model_id if req.model_id in ("tts-1", "tts-1-hd") else "gpt-4o-mini-tts"
+        body = {
+            "model": openai_model,
+            "input": text,
+            "voice": req.voice_id,
+            "response_format": "mp3",
+        }
+        url = _OPENAI_TTS_URL
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+            "Authorization": f"Bearer {api_key}",
+        }
+    else:
+        body = {
+            "text": text,
+            "model_id": req.model_id,
+            "output_format": req.output_format,
+        }
+        if req.voice_settings is not None:
+            body["voice_settings"] = req.voice_settings.model_dump(exclude_none=True)
+        url = _ELEVENLABS_URL.format(voice_id=req.voice_id)
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+            "xi-api-key": api_key,
+        }
 
     client = get_tts_client()
     semaphore = get_tts_semaphore()
@@ -128,7 +174,7 @@ async def tts_synthesize(
             await upstream_cm.__aexit__(None, None, None)
             semaphore.release()
             logger.warning(
-                f"tts_synthesize: ElevenLabs returned {resp.status_code} uid={uid}: " f"{sanitize(err_text)}"
+                f"tts_synthesize: provider={provider} returned {resp.status_code} uid={uid}: {sanitize(err_text)}"
             )
             raise HTTPException(status_code=resp.status_code, detail="TTS upstream error")
     except HTTPException:
