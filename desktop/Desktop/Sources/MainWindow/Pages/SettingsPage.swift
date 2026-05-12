@@ -2269,34 +2269,42 @@ struct SettingsContentView: View {
   }
 
   private func voicePicker(settingId: String) -> some View {
-    settingsCard(settingId: settingId) {
+    let current = ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID)
+    return settingsCard(settingId: settingId) {
       HStack(spacing: 16) {
         VStack(alignment: .leading, spacing: 4) {
           Text("Voice")
             .scaledFont(size: 16, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Text(
-            ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
+            "\(current.description) · \(current.provider.displayName) · \(current.provider.costLabel)"
           )
           .scaledFont(size: 13)
           .foregroundColor(OmiColors.textSecondary)
         }
         Spacer()
         Picker("", selection: $shortcutSettings.selectedVoiceID) {
-          Section("Female") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
-          }
-          Section("Male") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
-              Text(voice.name).tag(voice.id)
+          // Grouped by provider, with cost label in the section header so the
+          // free / cheap / premium tradeoff is visible right in the picker.
+          ForEach(
+            [
+              ShortcutSettings.VoiceOption.Provider.openai,
+              .local,
+              .elevenLabs,
+            ],
+            id: \.rawValue
+          ) { provider in
+            Section("\(provider.displayName) — \(provider.costLabel)") {
+              ForEach(ShortcutSettings.availableVoices.filter { $0.provider == provider }) {
+                voice in
+                Text("\(voice.name) · \(voice.description)").tag(voice.id)
+              }
             }
           }
         }
         .pickerStyle(.menu)
         .labelsHidden()
-        .frame(width: 180)
+        .frame(width: 260)
         .tint(OmiColors.purplePrimary)
       }
     }
