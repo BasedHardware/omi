@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed: agent pills now spawn correctly when the Haiku router wraps its decision JSON in markdown code fences"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.387",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly when the Haiku router wraps its decision JSON in markdown code fences"
+      ]
+    },
     {
       "version": "0.11.386",
       "date": "2026-05-12",
