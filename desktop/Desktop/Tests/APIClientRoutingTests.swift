@@ -399,6 +399,27 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "fetchApiKeys")
     }
 
+    func testSynthesizeSpeechRoutesToRust() async {
+        let client = await makeTestClient()
+        _ = try? await client.synthesizeSpeech(
+            request: APIClient.TtsSynthesizeRequest(
+                text: "Hello",
+                voiceId: "onyx",
+                instructions: "Speak naturally"
+            )
+        )
+
+        let requests = URLCapture.capturedRequests
+        assertRoutes(requests, host: "rust-test", port: 9002,
+                     pathContains: "v1/tts/synthesize", method: "POST",
+                     label: "synthesizeSpeech")
+
+        let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        XCTAssertEqual(body?["text"] as? String, "Hello")
+        XCTAssertEqual(body?["voice_id"] as? String, "onyx")
+        XCTAssertEqual(body?["instructions"] as? String, "Speak naturally")
+    }
+
     // -- Assistant settings (GET → Python, migrated from Rust) --
 
     func testGetAssistantSettingsRoutesToPython() async {

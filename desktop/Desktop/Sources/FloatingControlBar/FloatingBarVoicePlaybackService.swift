@@ -5,7 +5,6 @@ import Foundation
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
 
-  nonisolated private static let openAITTSModelID = "gpt-4o-mini-tts"
   // First chunk stays small so playback starts fast.
   nonisolated private static let firstChunkMinimumLength = 40
   nonisolated private static let firstChunkPreferredLength = 120
@@ -150,10 +149,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     let selectedVoice = ShortcutSettings.voiceOption(for: ShortcutSettings.shared.selectedVoiceID)
 
     if selectedVoice.isOpenAI, let openAIVoice = selectedVoice.openAIVoice {
-      guard Self.openAIAPIKey() != nil else {
-        log("FloatingBarVoicePlaybackService: OpenAI TTS selected but no OpenAI BYOK key is configured")
-        return .systemVoice(ShortcutSettings.voiceOption(for: ShortcutSettings.localShelleyVoiceID))
-      }
       return .openAI(
         voiceID: openAIVoice,
         instructions: selectedVoice.openAIInstructions ?? ""
@@ -432,55 +427,21 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       ?? AVSpeechSynthesisVoice(language: "en-US")
   }
 
-  /// Synthesize speech directly through the user's OpenAI BYOK key.
+  /// Synthesize speech through the desktop backend's OpenAI TTS proxy.
+  /// APIClient attaches a user BYOK key when one is configured; otherwise the
+  /// backend uses its server-side key.
   private nonisolated static func synthesizeOpenAISpeech(
     text: String,
     voiceID: String,
     instructions: String
   ) async throws -> Data {
-    guard let apiKey = openAIAPIKey() else {
-      throw FloatingBarVoicePlaybackError.missingAPIKey("OpenAI")
-    }
-
-    let url = URL(string: "https://api.openai.com/v1/audio/speech")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 60
-    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-    request.httpBody = try JSONEncoder().encode(
-      OpenAISpeechRequest(
-        model: openAITTSModelID,
-        input: text,
-        voice: voiceID,
-        instructions: instructions.isEmpty ? nil : instructions,
-        responseFormat: "mp3"
+    try await APIClient.shared.synthesizeSpeech(
+      request: APIClient.TtsSynthesizeRequest(
+        text: text,
+        voiceId: voiceID,
+        instructions: instructions.isEmpty ? nil : instructions
       )
     )
-
-    let (data, response) = try await URLSession.shared.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw FloatingBarVoicePlaybackError.invalidResponse
-    }
-    guard (200..<300).contains(httpResponse.statusCode) else {
-      let body = String(data: data, encoding: .utf8) ?? ""
-      throw FloatingBarVoicePlaybackError.requestFailed(statusCode: httpResponse.statusCode, body: body)
-    }
-    return data
-  }
-
-  private nonisolated static func openAIAPIKey() -> String? {
-    if let key = APIKeyService.byokKey(.openai) {
-      return key
-    }
-    if let key = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]?
-      .trimmingCharacters(in: .whitespacesAndNewlines),
-      !key.isEmpty
-    {
-      return key
-    }
-    return nil
   }
 
   private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
@@ -588,37 +549,4 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 private enum PlaybackMode: Sendable {
   case openAI(voiceID: String, instructions: String)
   case systemVoice(ShortcutSettings.VoiceOption)
-}
-
-private struct OpenAISpeechRequest: Encodable {
-  let model: String
-  let input: String
-  let voice: String
-  let instructions: String?
-  let responseFormat: String
-
-  enum CodingKeys: String, CodingKey {
-    case model
-    case input
-    case voice
-    case instructions
-    case responseFormat = "response_format"
-  }
-}
-
-private enum FloatingBarVoicePlaybackError: LocalizedError {
-  case invalidResponse
-  case missingAPIKey(String)
-  case requestFailed(statusCode: Int, body: String)
-
-  var errorDescription: String? {
-    switch self {
-    case .invalidResponse:
-      return "Invalid TTS response"
-    case .missingAPIKey(let provider):
-      return "\(provider) API key is not configured"
-    case .requestFailed(let statusCode, let body):
-      return "TTS request failed (\(statusCode)): \(body)"
-  }
-}
 }

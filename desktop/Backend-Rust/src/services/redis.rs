@@ -274,6 +274,59 @@ return {daily, burst}
         Ok((daily_count, burst_count))
     }
 
+    /// Check and record an OpenAI TTS request for rate limiting.
+    /// Uses a Lua script for atomic burst (sorted set) + daily character counter.
+    /// Returns (daily_chars, burst_count) so the caller can decide Allow/Reject.
+    pub async fn check_tts_rate_limit(
+        &self,
+        uid: &str,
+        chars: usize,
+        burst_window_secs: u64,
+    ) -> Result<(i64, i64), redis::RedisError> {
+        let mut conn = self.get_connection().await?;
+
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let day_ordinal = (now_ms / 86_400_000).to_string();
+        let cutoff_ms = now_ms - (burst_window_secs as i64 * 1000);
+
+        let burst_key = format!("tts_rl:{}:burst", uid);
+        let daily_chars_key = format!("tts_rl:{}:chars:{}", uid, day_ordinal);
+
+        // KEYS[1] = burst_key, KEYS[2] = daily_chars_key
+        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl,
+        // ARGV[4] = daily_ttl, ARGV[5] = character count
+        let script = r#"
+local chars = redis.call('INCRBY', KEYS[2], ARGV[5])
+redis.call('EXPIRE', KEYS[2], ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2] .. ':' .. tostring(chars))
+local burst = redis.call('ZCARD', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return {chars, burst}
+"#;
+
+        let burst_ttl = (burst_window_secs * 2) as i64;
+        let daily_ttl: i64 = 172_800;
+
+        let result: Vec<i64> = redis::cmd("EVAL")
+            .arg(script)
+            .arg(2)
+            .arg(&burst_key)
+            .arg(&daily_chars_key)
+            .arg(cutoff_ms)
+            .arg(now_ms)
+            .arg(burst_ttl)
+            .arg(daily_ttl)
+            .arg(chars as i64)
+            .query_async(&mut conn)
+            .await?;
+
+        let daily_chars = result.first().copied().unwrap_or(0);
+        let burst_count = result.get(1).copied().unwrap_or(0);
+
+        Ok((daily_chars, burst_count))
+    }
+
     // ============================================================================
     // APP INSTALLS - matches Python backend redis_db.py
     // ============================================================================

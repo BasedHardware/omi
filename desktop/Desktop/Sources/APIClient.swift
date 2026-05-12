@@ -4620,6 +4620,62 @@ extension APIClient {
     return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
   }
 
+  struct TtsSynthesizeRequest: Encodable {
+    let text: String
+    let voiceId: String
+    let instructions: String?
+
+    enum CodingKeys: String, CodingKey {
+      case text
+      case voiceId = "voice_id"
+      case instructions
+    }
+  }
+
+  func synthesizeSpeech(request body: TtsSynthesizeRequest) async throws -> Data {
+    let base = rustBackendURL
+    guard !base.isEmpty, let url = URL(string: base + "v1/tts/synthesize") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 60
+    request.allHTTPHeaderFields = try await buildHeaders()
+    request.httpBody = try JSONEncoder().encode(body)
+
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      let authService = await MainActor.run { AuthService.shared }
+      _ = try await authService.getIdToken(forceRefresh: true)
+
+      var retryRequest = request
+      retryRequest.setValue(
+        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+
+      let (retryData, retryResponse) = try await session.data(for: retryRequest)
+      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
+        throw APIError.invalidResponse
+      }
+      guard retryHttpResponse.statusCode != 401 else {
+        throw APIError.unauthorized
+      }
+      guard (200...299).contains(retryHttpResponse.statusCode) else {
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+      }
+      return retryData
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
+    }
+
+    return data
+  }
+
   // MARK: - Platform Tools (backend RAG)
 
   struct ToolResponse: Decodable {
