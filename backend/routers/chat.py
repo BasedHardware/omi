@@ -54,7 +54,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
-from utils.subscription import enforce_chat_quota
+from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
@@ -508,6 +508,7 @@ async def create_voice_message_stream(
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """Transcribe audio and return the transcript text.
 
@@ -517,6 +518,10 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
+    # Paywalled desktop users hit the same 402 the chat endpoint returns.
+    # Without this gate, every PTT press would still bill us Deepgram.
+    enforce_chat_quota(uid, platform=x_app_platform)
+
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -696,6 +701,7 @@ async def transcribe_voice_message_stream(
     codec: str = 'linear16',
     channels: int = 1,
     keywords: Optional[str] = None,
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
@@ -718,6 +724,12 @@ async def transcribe_voice_message_stream(
           "is_user": false, "person_id": null}]
     """
     await websocket.accept()
+
+    # Paywalled desktop users — close before opening DG connection so we don't
+    # bill Deepgram for a PTT stream that wouldn't be allowed to chat anyway.
+    if is_trial_paywalled(uid, x_app_platform):
+        await websocket.close(code=1008, reason='trial_expired')
+        return
 
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
