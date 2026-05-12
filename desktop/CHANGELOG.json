@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed push-to-talk ignoring auto-detect language setting, causing non-English (e.g. Russian) speech to be force-transcribed as English"
+  ],
   "releases": [
     {
       "version": "0.11.392",
