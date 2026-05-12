@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed notification frequency setting being ignored, and replaced the dropdown with a stepped slider in Settings"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.391",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed notification frequency setting being ignored, and replaced the dropdown with a stepped slider in Settings"
+      ]
+    },
     {
       "version": "0.11.389",
       "date": "2026-05-12",
