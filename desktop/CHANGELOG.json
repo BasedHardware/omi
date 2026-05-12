@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added OpenAI TTS (~6.6x cheaper than ElevenLabs) and free on-device Apple voices to the voice picker, with new default voice Shimmer"
+  ],
   "releases": [
     {
       "version": "0.11.385",
