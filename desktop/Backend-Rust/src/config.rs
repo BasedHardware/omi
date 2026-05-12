@@ -69,13 +69,8 @@ pub struct Config {
     pub anthropic_api_key: Option<String>,
     /// Legacy Anthropic key served to old desktop clients via /api-keys (deprecated; remove after major release)
     pub desktop_legacy_anthropic_key: Option<String>,
-    /// ElevenLabs API key for TTS proxy (used server-side by /v1/tts/synthesize, never served to clients)
-    pub elevenlabs_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
-    /// When true, omit ElevenLabs API key from /v1/config/api-keys response.
-    /// Set this after all clients have updated to use the TTS proxy (issue #6622).
-    pub disable_elevenlabs_key_response: bool,
     /// When true, route Gemini calls through Vertex AI instead of AI Studio.
     /// Uses service account auth (GOOGLE_APPLICATION_CREDENTIALS) instead of API key.
     pub use_vertex_ai: bool,
@@ -142,11 +137,7 @@ impl Config {
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
             desktop_legacy_anthropic_key: env::var("DESKTOP_LEGACY_ANTHROPIC_KEY").ok(),
-            elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
-            disable_elevenlabs_key_response: env::var("DISABLE_ELEVENLABS_KEY_RESPONSE")
-                .map(|v| v == "true" || v == "1")
-                .unwrap_or(false),
             use_vertex_ai: env::var("USE_VERTEX_AI")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(true),

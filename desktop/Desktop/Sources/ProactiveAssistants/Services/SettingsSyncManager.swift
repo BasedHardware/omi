@@ -96,15 +96,6 @@ class SettingsSyncManager {
             if let v = floatingBar.voiceAnswersEnabled {
                 ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = v
             }
-            UserDefaults.standard.removeObject(forKey: FloatingBarVoicePlaybackService.devVoiceIDDefaultsKey)
-            if let v = floatingBar.elevenLabsVoiceID?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !v.isEmpty {
-                pushPartialUpdate(
-                    AssistantSettingsResponse(
-                        floatingBar: FloatingBarSettingsResponse(elevenLabsVoiceID: "")
-                    )
-                )
-            }
         }
 
         // Update channel (server-authoritative override)
@@ -164,8 +155,7 @@ class SettingsSyncManager {
         )
 
         let floatingBar = FloatingBarSettingsResponse(
-            voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled,
-            elevenLabsVoiceID: ""
+            voiceAnswersEnabled: ShortcutSettings.shared.floatingBarVoiceAnswersEnabled
         )
 
         return AssistantSettingsResponse(

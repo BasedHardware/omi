@@ -74,7 +74,6 @@ jobs:
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
-            ELEVENLABS_API_KEY=DESKTOP_ELEVENLABS_API_KEY:latest
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"
