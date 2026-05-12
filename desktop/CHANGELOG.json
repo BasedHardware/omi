@@ -403,7 +403,7 @@
       "version": "0.11.319",
       "date": "2026-04-16",
       "changes": [
-        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+        "Added a voice picker in the floating bar settings"
       ]
     },
     {

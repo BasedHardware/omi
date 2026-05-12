@@ -151,8 +151,6 @@ pub struct MemorySettingsData {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FloatingBarSettingsData {
     pub voice_answers_enabled: Option<bool>,
-    pub elevenlabs_api_key: Option<String>,
-    pub elevenlabs_voice_id: Option<String>,
 }
 
 /// All assistant settings (response and request — all fields optional for partial updates)

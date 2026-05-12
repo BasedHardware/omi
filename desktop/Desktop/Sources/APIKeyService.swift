@@ -12,7 +12,6 @@ import Foundation
 ///
 /// NOTE: Deepgram, Gemini, Anthropic keys are NO LONGER fetched from the backend —
 /// they are proxied server-side (issues #5861, #6594).
-/// NOTE: ElevenLabs key is NO LONGER fetched — proxied via /v1/tts/synthesize (issue #6622).
 /// Firebase and Calendar keys are still served via /v1/config/api-keys.
 
 /// Keys that participate in the BYOK free-plan flow.

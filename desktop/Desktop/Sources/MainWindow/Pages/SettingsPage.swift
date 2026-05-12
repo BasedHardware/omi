@@ -2283,13 +2283,13 @@ struct SettingsContentView: View {
         }
         Spacer()
         Picker("", selection: $shortcutSettings.selectedVoiceID) {
-          Section("Female") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
+          Section("OpenAI Human") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.isOpenAI }) { voice in
               Text(voice.name).tag(voice.id)
             }
           }
-          Section("Male") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
+          Section("Local") {
+            ForEach(ShortcutSettings.availableVoices.filter { $0.isLocalSystem }) { voice in
               Text(voice.name).tag(voice.id)
             }
           }
