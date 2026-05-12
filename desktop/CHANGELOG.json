@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed: agent pills now spawn correctly when the Haiku router wraps its decision JSON in markdown code fences"
+  ],
   "releases": [
     {
       "version": "0.11.385",
