@@ -1,5 +1,15 @@
-// TTS proxy route — proxies ElevenLabs text-to-speech requests server-side.
-// Key stays on the backend; desktop client authenticates via Firebase token only.
+// TTS proxy route — server-side text-to-speech with pluggable providers.
+//
+// Providers:
+//   - "elevenlabs" (default) — premium quality, ~$99-330 per 1M chars
+//   - "openai"               — ~6.6x cheaper at $15/1M chars, MP3 output,
+//                              voices: alloy/ash/ballad/coral/echo/fable/nova/
+//                              onyx/sage/shimmer/verse
+//
+// Selected via the `provider` field in the request body; default remains
+// "elevenlabs" for backward compatibility.
+//
+// Keys stay on the backend; desktop client authenticates via Firebase token only.
 //
 // Per-user rate limits (Redis-backed):
 //   - 50 requests per rolling 60-second window → 429
@@ -41,6 +51,19 @@ struct TtsSynthesizeRequest {
     #[serde(default = "default_output_format")]
     output_format: String,
     voice_settings: Option<VoiceSettings>,
+    /// Provider selector. Defaults to "elevenlabs" when omitted (backward compat).
+    /// Valid values: "elevenlabs", "openai".
+    #[serde(default)]
+    provider: Option<String>,
+}
+
+/// OpenAI TTS voice names accepted by `/v1/audio/speech`.
+const OPENAI_VOICES: &[&str] = &[
+    "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
+];
+
+fn is_valid_openai_voice(id: &str) -> bool {
+    OPENAI_VOICES.contains(&id)
 }
 
 #[derive(Deserialize, Serialize)]
@@ -75,28 +98,47 @@ struct TtsErrorDetail {
 }
 
 /// POST /v1/tts/synthesize
-/// Proxies TTS requests to ElevenLabs API. Per-user rate limited.
+/// Proxies TTS requests to the selected provider (default: ElevenLabs). Per-user rate limited.
 async fn tts_synthesize(
     State(state): State<AppState>,
     user: AuthUser,
     Json(req): Json<TtsSynthesizeRequest>,
 ) -> Result<Response, Response> {
-    let elevenlabs_key = state.config.elevenlabs_api_key.as_ref().ok_or_else(|| {
-        tracing::error!("tts_synthesize: ELEVENLABS_API_KEY not configured");
-        StatusCode::SERVICE_UNAVAILABLE.into_response()
-    })?;
+    let provider = req
+        .provider
+        .as_deref()
+        .map(|p| p.to_ascii_lowercase())
+        .unwrap_or_else(|| "elevenlabs".to_string());
 
-    // Validate voice_id: must be alphanumeric (ElevenLabs IDs are 20-char base62).
-    // Prevents path traversal (e.g. "../../history") that could retarget the xi-api-key.
-    if !is_valid_voice_id(&req.voice_id) {
-        return Err(error_response(StatusCode::BAD_REQUEST, "invalid voice_id"));
+    // Validate voice_id per provider before any external work.
+    match provider.as_str() {
+        "elevenlabs" => {
+            if !is_valid_voice_id(&req.voice_id) {
+                return Err(error_response(StatusCode::BAD_REQUEST, "invalid voice_id"));
+            }
+        }
+        "openai" => {
+            if !is_valid_openai_voice(&req.voice_id) {
+                return Err(error_response(
+                    StatusCode::BAD_REQUEST,
+                    "invalid voice_id for openai provider",
+                ));
+            }
+        }
+        other => {
+            tracing::warn!("tts_synthesize: unknown provider '{}'", other);
+            return Err(error_response(
+                StatusCode::BAD_REQUEST,
+                "invalid provider (must be 'elevenlabs' or 'openai')",
+            ));
+        }
     }
 
     // Validate text is not empty and not excessively long (single request cap: 5000 chars)
     let char_count = validate_text(&req.text)
         .map_err(|message| error_response(StatusCode::BAD_REQUEST, message))?;
 
-    // Rate limit check (Redis-backed, fail closed)
+    // Rate limit check (Redis-backed, fail closed) — shared limits across providers
     let redis = state.redis.as_ref().ok_or_else(|| {
         tracing::error!("tts_synthesize: Redis not configured — TTS rate limiting requires Redis");
         error_response(
@@ -142,34 +184,84 @@ async fn tts_synthesize(
         }
     }
 
-    // Build ElevenLabs upstream request
-    let upstream_url = format!(
-        "https://api.elevenlabs.io/v1/text-to-speech/{}",
-        req.voice_id
-    );
+    let (upstream_url, headers, body) = match provider.as_str() {
+        "openai" => {
+            let key = state.config.openai_api_key.as_ref().ok_or_else(|| {
+                tracing::error!("tts_synthesize: OPENAI_API_KEY not configured");
+                error_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "OpenAI TTS not configured",
+                )
+            })?;
+            // OpenAI model: prefer "gpt-4o-mini-tts" (cheaper + better voices) when the
+            // client didn't override model_id with an OpenAI-specific name; fall back
+            // to "tts-1" if the caller asked for it explicitly.
+            let openai_model = if req.model_id == "tts-1" || req.model_id == "tts-1-hd" {
+                req.model_id.clone()
+            } else {
+                "gpt-4o-mini-tts".to_string()
+            };
+            let body = serde_json::json!({
+                "model": openai_model,
+                "input": req.text,
+                "voice": req.voice_id,
+                "response_format": "mp3",
+            });
+            let headers = vec![
+                ("Content-Type", "application/json".to_string()),
+                ("Accept", "audio/mpeg".to_string()),
+                ("Authorization", format!("Bearer {}", key)),
+            ];
+            (
+                "https://api.openai.com/v1/audio/speech".to_string(),
+                headers,
+                body,
+            )
+        }
+        _ => {
+            let key = state.config.elevenlabs_api_key.as_ref().ok_or_else(|| {
+                tracing::error!("tts_synthesize: ELEVENLABS_API_KEY not configured");
+                error_response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "ElevenLabs TTS not configured",
+                )
+            })?;
+            let mut body = serde_json::json!({
+                "text": req.text,
+                "model_id": req.model_id,
+                "output_format": req.output_format,
+            });
+            if let Some(vs) = &req.voice_settings {
+                body["voice_settings"] = serde_json::to_value(vs).unwrap_or_default();
+            }
+            let headers = vec![
+                ("Content-Type", "application/json".to_string()),
+                ("Accept", "audio/mpeg".to_string()),
+                ("xi-api-key", key.clone()),
+            ];
+            let url = format!(
+                "https://api.elevenlabs.io/v1/text-to-speech/{}",
+                req.voice_id
+            );
+            (url, headers, body)
+        }
+    };
 
-    let mut body = serde_json::json!({
-        "text": req.text,
-        "model_id": req.model_id,
-        "output_format": req.output_format,
-    });
-    if let Some(vs) = &req.voice_settings {
-        body["voice_settings"] = serde_json::to_value(vs).unwrap_or_default();
-    }
-
-    let upstream = reqwest::Client::new()
+    let mut request_builder = reqwest::Client::new()
         .post(&upstream_url)
-        .header("Content-Type", "application/json")
-        .header("Accept", "audio/mpeg")
-        .header("xi-api-key", elevenlabs_key)
         .body(serde_json::to_vec(&body).unwrap_or_default())
-        .timeout(std::time::Duration::from_secs(60))
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("tts_synthesize: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY.into_response()
-        })?;
+        .timeout(std::time::Duration::from_secs(60));
+    for (name, value) in &headers {
+        request_builder = request_builder.header(*name, value);
+    }
+    let upstream = request_builder.send().await.map_err(|e| {
+        tracing::error!(
+            "tts_synthesize: upstream request failed (provider={}): {}",
+            provider,
+            e
+        );
+        StatusCode::BAD_GATEWAY.into_response()
+    })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -177,7 +269,8 @@ async fn tts_synthesize(
     if !status.is_success() {
         let error_body = upstream.text().await.unwrap_or_default();
         tracing::warn!(
-            "tts_synthesize: ElevenLabs returned {} for uid={}: {}",
+            "tts_synthesize: provider={} returned {} for uid={}: {}",
+            provider,
             status.as_u16(),
             user.uid,
             &error_body[..error_body.len().min(200)]
@@ -333,6 +426,29 @@ mod tests {
         assert_eq!(req.model_id, default_model_id());
         assert_eq!(req.output_format, default_output_format());
         assert!(req.voice_settings.is_none());
+        assert!(req.provider.is_none());
+    }
+
+    #[test]
+    fn openai_voice_validation() {
+        for v in ["alloy", "shimmer", "nova", "coral", "sage", "onyx"] {
+            assert!(is_valid_openai_voice(v), "expected {v} to be valid");
+        }
+        assert!(!is_valid_openai_voice("Shimmer")); // case-sensitive
+        assert!(!is_valid_openai_voice("not-a-voice"));
+        assert!(!is_valid_openai_voice(""));
+    }
+
+    #[test]
+    fn deserialize_request_with_openai_provider() {
+        let req: TtsSynthesizeRequest = serde_json::from_value(serde_json::json!({
+            "text": "hello",
+            "voice_id": "shimmer",
+            "provider": "openai",
+        }))
+        .unwrap();
+        assert_eq!(req.provider.as_deref(), Some("openai"));
+        assert_eq!(req.voice_id, "shimmer");
     }
 
     #[test]
