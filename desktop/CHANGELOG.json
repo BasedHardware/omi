@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed: agent pills now spawn correctly from voice/typed Ask Omi prompts (router was 400ing server-side)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.386",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly from voice/typed Ask Omi prompts (router was 400ing server-side)"
+      ]
+    },
     {
       "version": "0.11.385",
       "date": "2026-05-12",
