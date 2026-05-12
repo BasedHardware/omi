@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed: agent pills now spawn correctly from voice/typed Ask Omi prompts (router was 400ing server-side)"
+  ],
   "releases": [
     {
       "version": "0.11.385",
