@@ -1129,22 +1129,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     NSLog("OMI AppDelegate: Received URL event: %@", urlString)
 
-    // Debug deep-link: navigate the existing in-app UI to any sidebar item
-    // / settings section without restart. One-liner for AI agents and QA:
-    //
-    //   open 'omi-dev://debug/navigate?target=settings&section=shortcuts'
-    //   open 'omi-omi-ctrl-ptt://debug/navigate?target=chat'
-    //
-    // The `target` matches `SidebarNavItem` (dashboard, conversations, chat,
-    // memories, tasks, rewind, apps, settings, permissions). When target is
-    // `settings`, `section` selects the inner page (general, shortcuts,
-    // planUsage, advanced, etc). Optional `highlight` scrolls + highlights
-    // a specific row.
-    if url.host == "debug" {
-      Self.handleDebugDeepLink(url: url)
-      return
-    }
-
     Task { @MainActor in
       AuthService.shared.handleOAuthCallback(url: url)
       // Bring app to foreground after OAuth redirect — Safari stays in front otherwise.
@@ -1156,50 +1140,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
       }
-    }
-  }
-
-  /// Parses `omi-*://debug/navigate?target=…&section=…&highlight=…` and posts
-  /// the same notification the automation HTTP bridge uses, so the existing
-  /// in-app navigation flow handles routing. No new windows, no auth bypass —
-  /// works against any running instance that's already signed in.
-  private static func handleDebugDeepLink(url: URL) {
-    let path = url.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-    guard let verb = path.first else {
-      NSLog("OMI Debug: missing verb in %@", url.absoluteString)
-      return
-    }
-
-    let query = (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
-      .reduce(into: [String: String]()) { dict, item in dict[item.name] = item.value }
-
-    switch verb {
-    case "navigate":
-      // Allow both `?target=settings&section=shortcuts` and
-      // `/debug/navigate/settings/shortcuts` shorthand.
-      let target = query["target"] ?? (path.count > 1 ? path[1] : "")
-      let section = query["section"] ?? (path.count > 2 ? path[2] : nil)
-      let highlightId = query["highlight"]
-      let activateApp = (query["activateApp"] ?? "true").lowercased() != "false"
-
-      guard !target.isEmpty else {
-        NSLog("OMI Debug: navigate missing `target`")
-        return
-      }
-
-      var info: [String: Any] = ["target": target, "activateApp": activateApp]
-      if let section { info["settingsSection"] = section }
-      if let highlightId { info["highlightedSettingId"] = highlightId }
-
-      Task { @MainActor in
-        NotificationCenter.default.post(
-          name: .desktopAutomationNavigateRequested,
-          object: nil,
-          userInfo: info
-        )
-      }
-    default:
-      NSLog("OMI Debug: unknown verb '%@'. Supported: navigate", verb)
     }
   }
 
