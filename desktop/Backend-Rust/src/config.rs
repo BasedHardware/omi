@@ -71,6 +71,8 @@ pub struct Config {
     pub desktop_legacy_anthropic_key: Option<String>,
     /// ElevenLabs API key for TTS proxy (used server-side by /v1/tts/synthesize, never served to clients)
     pub elevenlabs_api_key: Option<String>,
+    /// OpenAI API key for the OpenAI TTS provider in /v1/tts/synthesize (~6.6x cheaper than ElevenLabs, MP3 output)
+    pub openai_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
     /// When true, omit ElevenLabs API key from /v1/config/api-keys response.
@@ -143,6 +145,7 @@ impl Config {
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
             desktop_legacy_anthropic_key: env::var("DESKTOP_LEGACY_ANTHROPIC_KEY").ok(),
             elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
             disable_elevenlabs_key_response: env::var("DISABLE_ELEVENLABS_KEY_RESPONSE")
                 .map(|v| v == "true" || v == "1")
