@@ -28,3 +28,6 @@ class TtsSynthesizeRequest(BaseModel):
     model_id: str = DEFAULT_MODEL_ID
     output_format: str = DEFAULT_OUTPUT_FORMAT
     voice_settings: Optional[TtsVoiceSettings] = None
+    # Provider selector. Defaults to "elevenlabs" when omitted (backward compat).
+    # Valid values: "elevenlabs", "openai".
+    provider: Optional[str] = None
