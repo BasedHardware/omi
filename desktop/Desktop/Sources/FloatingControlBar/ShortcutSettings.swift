@@ -279,6 +279,7 @@ class ShortcutSettings: ObservableObject {
         KeyboardShortcut(modifierOnly: .option),
         KeyboardShortcut(modifierOnly: .command, requiresRightCommand: true),
         KeyboardShortcut(modifierOnly: .function),
+        KeyboardShortcut(modifierOnly: .control),
     ]
 
     @Published var pttShortcut: KeyboardShortcut {
