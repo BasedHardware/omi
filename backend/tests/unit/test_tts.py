@@ -184,6 +184,7 @@ def test_request_model_applies_defaults():
     assert req.model_id == "eleven_turbo_v2_5"
     assert req.output_format == "mp3_44100_128"
     assert req.voice_settings is None
+    assert req.provider is None
 
 
 def test_request_model_rejects_empty_text():
@@ -193,3 +194,22 @@ def test_request_model_rejects_empty_text():
 
     with pytest.raises(ValidationError):
         TtsSynthesizeRequest(text="")
+
+
+# ---------------------------------------------------------------------------
+# OpenAI provider
+# ---------------------------------------------------------------------------
+def test_openai_voice_validation():
+    for v in ("alloy", "shimmer", "nova", "coral", "sage", "onyx"):
+        assert tts_router._is_valid_openai_voice(v), v
+    assert not tts_router._is_valid_openai_voice("Shimmer")  # case-sensitive
+    assert not tts_router._is_valid_openai_voice("not-a-voice")
+    assert not tts_router._is_valid_openai_voice("")
+
+
+def test_request_model_accepts_openai_provider():
+    from models.tts import TtsSynthesizeRequest
+
+    req = TtsSynthesizeRequest(text="hi", voice_id="shimmer", provider="openai")
+    assert req.provider == "openai"
+    assert req.voice_id == "shimmer"
