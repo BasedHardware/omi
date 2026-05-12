@@ -88,7 +88,7 @@ from utils.fair_use import (
     is_dg_budget_exhausted,
     record_dg_usage_ms,
 )
-from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
+from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds, is_trial_paywalled
 from utils.translation import TranslationService
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
@@ -274,6 +274,11 @@ async def _stream_handler(
         return
 
     user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
+    # Computed once: only the desktop trial paywall path should also drop
+    # audio at the Deepgram-send gate. Mobile over-freemium users keep their
+    # pre-existing behavior (audio still forwarded; transcripts already
+    # suppressed elsewhere).
+    is_paywalled_desktop = is_trial_paywalled(uid, source)
     if not user_has_credits:
         try:
             await send_credit_limit_notification(uid)
@@ -2360,11 +2365,11 @@ async def _stream_handler(
 
             if dg_socket is not None:
                 # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083),
-                # or if the user has no transcription credits (free quota / trial paywall).
-                # Without this, audio still flows to Deepgram for paywalled users and
-                # we pay for STT we'll never return to them.
-                if fair_use_dg_budget_exhausted or not user_has_credits:
-                    pass  # Audio not forwarded to DG — budget/credits exhausted
+                # or if this is a desktop trial-paywalled session. Mobile users over
+                # the existing freemium quota keep their pre-existing behavior so this
+                # rollout doesn't change anything on mobile.
+                if fair_use_dg_budget_exhausted or is_paywalled_desktop:
+                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
                 else:
                     dg_socket.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)

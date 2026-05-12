@@ -518,9 +518,11 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
-    # Paywalled desktop users hit the same 402 the chat endpoint returns.
-    # Without this gate, every PTT press would still bill us Deepgram.
-    enforce_chat_quota(uid, platform=x_app_platform)
+    # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
+    # Narrow to trial-only on purpose — full enforce_chat_quota here would
+    # change mobile behavior for users past their existing 30/mo chat cap.
+    if is_trial_paywalled(uid, x_app_platform):
+        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
 
     content_type = request.headers.get("content-type", "")
 
