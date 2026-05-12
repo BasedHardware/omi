@@ -63,6 +63,7 @@ jobs:
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
             REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
             FIREBASE_API_KEY=FIREBASE_API_KEY:latest
