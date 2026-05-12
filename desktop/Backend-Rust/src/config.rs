@@ -10,6 +10,8 @@ pub struct Config {
     pub port: u16,
     /// Gemini API key for LLM calls
     pub gemini_api_key: Option<String>,
+    /// OpenAI API key for server-side TTS proxy calls
+    pub openai_api_key: Option<String>,
     /// Firebase project ID (used for Firestore)
     pub firebase_project_id: Option<String>,
     /// Firebase project ID for auth token validation (defaults to firebase_project_id)
@@ -92,6 +94,7 @@ impl Config {
                     10201
                 }),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
             firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),

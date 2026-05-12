@@ -36,7 +36,7 @@ use config::Config;
 use routes::{
     // Active (real traffic from current app)
     agent_routes, auth_routes, chat_completions_routes, config_routes, crisp_routes,
-    health_routes, proxy_routes, screen_activity_routes, updates_routes, webhook_routes,
+    health_routes, proxy_routes, screen_activity_routes, tts_routes, updates_routes, webhook_routes,
     // Deprecated stubs (return 410 Gone — current app uses Python for all data CRUD)
     deprecated_routes,
 };
@@ -257,6 +257,7 @@ async fn main() {
         .merge(crisp_routes())
         .merge(proxy_routes())
         .merge(screen_activity_routes())
+        .merge(tts_routes())
         .merge(chat_completions_routes())
         .merge(updates_routes())
         .merge(webhook_routes())

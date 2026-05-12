@@ -10,6 +10,7 @@ pub mod health;
 pub mod proxy;
 pub mod rate_limit;
 pub mod screen_activity;
+pub mod tts;
 pub mod updates;
 pub mod webhooks;
 
@@ -28,5 +29,6 @@ pub use deprecated::deprecated_routes;
 pub use health::health_routes;
 pub use proxy::proxy_routes;
 pub use screen_activity::screen_activity_routes;
+pub use tts::tts_routes;
 pub use updates::updates_routes;
 pub use webhooks::webhook_routes;
