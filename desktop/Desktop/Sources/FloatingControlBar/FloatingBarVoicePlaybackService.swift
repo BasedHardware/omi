@@ -7,8 +7,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   static let devVoiceIDDefaultsKey = "dev_elevenlabs_voice_id"
 
-  nonisolated private static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"  // Sloane
-  nonisolated private static let defaultModelID = "eleven_turbo_v2_5"
+  nonisolated private static let defaultVoiceID = "shimmer"  // OpenAI Shimmer (sultry, $15/1M)
+  nonisolated private static let elevenLabsModelID = "eleven_turbo_v2_5"
   // First chunk stays small so playback starts fast.
   nonisolated private static let firstChunkMinimumLength = 40
   nonisolated private static let firstChunkPreferredLength = 120
@@ -67,14 +67,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
     }
-    guard let mode = currentMode, case .elevenLabs(let voiceID) = mode else { return }
+    // Cloud-provider filler only — local AVSpeechSynthesizer starts speaking
+    // instantly, so it has no use for a "let me check" filler.
+    guard let mode = currentMode, case .backend(let voiceID, let provider) = mode else { return }
 
     hasStartedRealPlayback = false
     let phrase = Self.fillerPhrases.randomElement()!
     fillerTask = Task { [weak self] in
       do {
         let audioData = try await Self.synthesizeSpeech(
-          text: phrase, voiceID: voiceID)
+          text: phrase, voiceID: voiceID, provider: provider)
         try Task.checkCancellation()
         await MainActor.run {
           guard let self, !self.hasStartedRealPlayback else { return }
@@ -145,14 +147,21 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   }
 
   private func resolvePlaybackMode() -> PlaybackMode {
-    // TTS is now proxied through the backend — no client-side API key needed.
-    // Fall back to system voice only if the backend URL is not configured.
-    guard getenv("OMI_DESKTOP_API_URL") != nil else {
-      return .systemFallback
-    }
     let voiceID = ShortcutSettings.shared.selectedVoiceID
     let resolvedVoiceID = voiceID.isEmpty ? Self.defaultVoiceID : voiceID
-    return .elevenLabs(voiceID: resolvedVoiceID)
+    let option = ShortcutSettings.voiceOption(for: resolvedVoiceID)
+    switch option.provider {
+    case .local:
+      return .local(voiceKey: option.id)
+    case .openai, .elevenLabs:
+      // Backend-routed providers require the desktop API URL. Fall back to a
+      // local Apple voice if the backend isn't configured (e.g. dev with no
+      // tunnel) so the user still hears speech.
+      guard getenv("OMI_DESKTOP_API_URL") != nil else {
+        return .local(voiceKey: option.name)
+      }
+      return .backend(voiceID: resolvedVoiceID, provider: option.provider)
+    }
   }
 
   private func drainBufferedText(isFinal: Bool, mode: PlaybackMode) {
@@ -171,9 +180,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   private func enqueueChunk(_ text: String, mode: PlaybackMode) {
     switch mode {
-    case .systemFallback:
-      enqueueSystemSpeech(text)
-    case .elevenLabs:
+    case .local(let voiceKey):
+      enqueueSystemSpeech(text, voiceKey: voiceKey)
+    case .backend:
       synthesisQueue.append(text)
       startSynthesisIfNeeded(mode: mode)
     }
@@ -181,7 +190,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   private func startSynthesisIfNeeded(mode: PlaybackMode) {
     guard !isSynthesizing else { return }
-    guard case .elevenLabs(let voiceID) = mode else { return }
+    guard case .backend(let voiceID, let provider) = mode else { return }
     guard !synthesisQueue.isEmpty else { return }
 
     let text = synthesisQueue.removeFirst()
@@ -190,7 +199,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     playbackTask = Task { [weak self] in
       do {
         let audioData = try await Self.synthesizeSpeech(
-          text: text, voiceID: voiceID)
+          text: text, voiceID: voiceID, provider: provider)
         try Task.checkCancellation()
         await MainActor.run {
           guard let self else { return }
@@ -219,9 +228,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
           guard let self else { return }
           self.isSynthesizing = false
           log(
-            "FloatingBarVoicePlaybackService: ElevenLabs chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
+            "FloatingBarVoicePlaybackService: \(provider.rawValue) chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
           )
-          self.enqueueSystemSpeech(text)
+          self.enqueueSystemSpeech(text, voiceKey: nil)
           self.startSynthesisIfNeeded(mode: mode)
         }
       }
@@ -235,8 +244,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     shouldInterruptNextResponse = false
   }
 
-  /// Play a short preview of the given ElevenLabs voice so the user can hear it
-  /// when switching voices in settings.
+  /// Play a short preview of the given voice so the user can hear it when
+  /// switching voices in settings. Routes to the correct provider.
   func playVoiceSample(voiceID: String) {
     resetPlaybackPipeline(clearMode: true)
     currentResponseID = nil
@@ -244,17 +253,26 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     shouldInterruptNextResponse = false
 
     let phrase = Self.voiceSampleText
+    let option = ShortcutSettings.voiceOption(for: voiceID)
 
-    // Without the backend URL the service falls back to the system voice, which
-    // wouldn't demo the ElevenLabs voice anyway.
+    // Local voices are demoed via AVSpeechSynthesizer with the named voice;
+    // no network round-trip and no API cost.
+    if option.provider == .local {
+      enqueueSystemSpeech(phrase, voiceKey: option.id)
+      return
+    }
+
+    // Backend-routed providers need the desktop API URL. Without it fall back
+    // to the on-device system voice so the user still hears _something_.
     guard getenv("OMI_DESKTOP_API_URL") != nil else {
-      enqueueSystemSpeech(phrase)
+      enqueueSystemSpeech(phrase, voiceKey: nil)
       return
     }
 
     playbackTask = Task { [weak self] in
       do {
-        let audioData = try await Self.synthesizeSpeech(text: phrase, voiceID: voiceID)
+        let audioData = try await Self.synthesizeSpeech(
+          text: phrase, voiceID: voiceID, provider: option.provider)
         try Task.checkCancellation()
         await MainActor.run {
           guard let self else { return }
@@ -265,37 +283,38 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       } catch {
         if Self.isCancellation(error) { return }
         log(
-          "FloatingBarVoicePlaybackService: voice sample failed: \(error.localizedDescription)"
+          "FloatingBarVoicePlaybackService: voice sample failed (\(option.provider.rawValue)): \(error.localizedDescription)"
         )
       }
     }
   }
 
-  /// Synthesize and play a single short phrase via ElevenLabs (or fall back to
-  /// the system voice). Used by agent pills to speak a short acknowledgement
-  /// like "On it" before the agent kicks off.
+  /// Synthesize and play a single short phrase via the current provider (or fall
+  /// back to the system voice). Used by agent pills to speak a short
+  /// acknowledgement like "On it" before the agent kicks off.
   func speakOneShot(_ text: String) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     let mode = currentMode ?? resolvePlaybackMode()
     currentMode = mode
     switch mode {
-    case .elevenLabs(let voiceID):
+    case .backend(let voiceID, let provider):
       Task { [weak self] in
         do {
-          let audio = try await Self.synthesizeSpeech(text: trimmed, voiceID: voiceID)
+          let audio = try await Self.synthesizeSpeech(
+            text: trimmed, voiceID: voiceID, provider: provider)
           await MainActor.run {
             self?.startPlayback(audio)
           }
         } catch {
           // Network/API error — fall back to system voice on the main thread.
           await MainActor.run {
-            self?.enqueueSystemSpeech(trimmed)
+            self?.enqueueSystemSpeech(trimmed, voiceKey: nil)
           }
         }
       }
-    case .systemFallback:
-      enqueueSystemSpeech(trimmed)
+    case .local(let voiceKey):
+      enqueueSystemSpeech(trimmed, voiceKey: voiceKey)
     }
   }
 
@@ -331,12 +350,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     }
   }
 
-  private func enqueueSystemSpeech(_ text: String) {
+  private func enqueueSystemSpeech(_ text: String, voiceKey: String?) {
     let utterance = AVSpeechUtterance(string: text)
     utterance.rate = 0.47
     utterance.pitchMultiplier = 1.02
     utterance.volume = 1.0
-    utterance.voice = preferredSystemVoice()
+    utterance.voice = preferredSystemVoice(matching: voiceKey)
     speechSynthesizer.speak(utterance)
   }
 
@@ -368,10 +387,30 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     speechSynthesizer.stopSpeaking(at: .immediate)
   }
 
-  private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {
-    let preferredNames = ["Ava", "Allison", "Samantha", "Karen", "Moira"]
-    for name in preferredNames {
-      if let voice = AVSpeechSynthesisVoice.speechVoices().first(where: {
+  /// Pick an installed Apple voice. When `voiceKey` is provided we look for a
+  /// voice whose name contains that key (e.g. "Ava", "Zoe"). When it's nil or
+  /// no match is found we fall through to a curated preference list, then to
+  /// any en-US voice.
+  private func preferredSystemVoice(matching voiceKey: String?) -> AVSpeechSynthesisVoice? {
+    let installed = AVSpeechSynthesisVoice.speechVoices()
+
+    if let key = voiceKey, !key.isEmpty {
+      // Prefer premium / enhanced variants of the requested voice when installed.
+      let matches = installed.filter { $0.name.localizedCaseInsensitiveContains(key) }
+      if let premium = matches.first(where: { $0.quality == .premium }) {
+        return premium
+      }
+      if let enhanced = matches.first(where: { $0.quality == .enhanced }) {
+        return enhanced
+      }
+      if let any = matches.first {
+        return any
+      }
+    }
+
+    let fallbackNames = ["Ava", "Allison", "Samantha", "Karen", "Moira"]
+    for name in fallbackNames {
+      if let voice = installed.first(where: {
         $0.name.localizedCaseInsensitiveContains(name)
       }) {
         return voice
@@ -380,21 +419,26 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     return AVSpeechSynthesisVoice(language: "en-US")
   }
 
-  /// Synthesize speech via the backend TTS proxy (ElevenLabs key stays server-side).
-  private nonisolated static func synthesizeSpeech(text: String, voiceID: String)
+  /// Synthesize speech via the backend TTS proxy. The provider (ElevenLabs or
+  /// OpenAI) is selected server-side via the request's `provider` field; keys
+  /// stay on the backend.
+  private nonisolated static func synthesizeSpeech(
+    text: String, voiceID: String, provider: ShortcutSettings.VoiceOption.Provider
+  )
     async throws -> Data
   {
+    // ElevenLabs needs `model_id` + voice_settings (stability/similarity/style);
+    // OpenAI ignores those and uses model="gpt-4o-mini-tts" (set server-side).
+    let isElevenLabs = (provider == .elevenLabs)
     let request = APIClient.TtsSynthesizeRequest(
       text: text,
       voiceId: voiceID,
-      modelId: defaultModelID,
+      modelId: isElevenLabs ? elevenLabsModelID : "tts",
       outputFormat: "mp3_44100_128",
-      voiceSettings: .init(
-        stability: 0.34,
-        similarityBoost: 0.88,
-        style: 0.12,
-        useSpeakerBoost: true
-      )
+      voiceSettings: isElevenLabs
+        ? .init(stability: 0.34, similarityBoost: 0.88, style: 0.12, useSpeakerBoost: true)
+        : nil,
+      provider: provider.backendValue
     )
     return try await APIClient.shared.synthesizeSpeech(request: request)
   }
@@ -502,8 +546,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 }
 
 private enum PlaybackMode {
-  case elevenLabs(voiceID: String)
-  case systemFallback
+  /// A cloud TTS provider routed through the backend proxy. `voiceID` is the
+  /// upstream-specific id ("shimmer" for OpenAI, base62 for ElevenLabs).
+  case backend(voiceID: String, provider: ShortcutSettings.VoiceOption.Provider)
+  /// Apple's on-device `AVSpeechSynthesizer`. `voiceKey` is matched against the
+  /// installed voice catalog (e.g. "Ava", "Zoe", "Samantha").
+  case local(voiceKey: String)
 }
 
 private enum FloatingBarVoicePlaybackError: LocalizedError {
