@@ -391,34 +391,129 @@ class ShortcutSettings: ObservableObject {
         return "Maximum"
     }
 
-    /// A selectable ElevenLabs voice for floating-bar replies.
+    /// A selectable TTS voice for floating-bar replies. Provider determines how
+    /// audio is synthesized:
+    ///   - `.local`      — Apple's built-in `AVSpeechSynthesizer` (free, on-device)
+    ///   - `.openai`     — OpenAI `/v1/audio/speech` via backend proxy (~$15/1M chars)
+    ///   - `.elevenLabs` — ElevenLabs via backend proxy (~$99-330/1M chars)
+    ///
+    /// The `id` is what's sent to the provider:
+    ///   - elevenLabs: 20-char base62 voice id (e.g. "BAMYoBHLZM7lJgJAmFz0")
+    ///   - openai:     voice name (e.g. "shimmer", "nova")
+    ///   - local:      a search key matched against installed AVSpeechSynthesisVoices
     struct VoiceOption: Identifiable, Equatable {
         enum Gender: String {
             case female
             case male
         }
 
+        enum Provider: String {
+            case elevenLabs
+            case openai
+            case local
+
+            /// Short pricing label rendered next to each provider section.
+            var costLabel: String {
+                switch self {
+                case .local: return "Free"
+                case .openai: return "$15/M"
+                case .elevenLabs: return "$99/M"
+                }
+            }
+
+            /// Display name for the picker's section header.
+            var displayName: String {
+                switch self {
+                case .local: return "Local (on-device)"
+                case .openai: return "OpenAI"
+                case .elevenLabs: return "ElevenLabs"
+                }
+            }
+
+            /// String the backend uses to dispatch the request.
+            var backendValue: String? {
+                switch self {
+                case .local: return nil
+                case .openai: return "openai"
+                case .elevenLabs: return "elevenlabs"
+                }
+            }
+        }
+
         let id: String
         let name: String
         let gender: Gender
         let description: String
+        let provider: Provider
     }
 
-    /// Curated ElevenLabs voices available from the voice picker.
+    /// Curated voices available from the voice picker, grouped by provider.
+    /// Order within each provider is female-first so the default (sultry female)
+    /// surfaces near the top of each section.
     static let availableVoices: [VoiceOption] = [
-        VoiceOption(id: "BAMYoBHLZM7lJgJAmFz0", name: "Sloane", gender: .female, description: "Warm, confident"),
-        VoiceOption(id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", gender: .female, description: "Smooth, sultry"),
-        VoiceOption(id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", gender: .female, description: "Calm, breathy"),
-        VoiceOption(id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", gender: .female, description: "Soft, mature"),
-        VoiceOption(id: "piTKgcLEGmPE4e6mEKli", name: "Nicole", gender: .female, description: "Whispery, intimate"),
-        VoiceOption(id: "pNInz6obpgDQGcFmaJgB", name: "Adam", gender: .male, description: "Deep American"),
-        VoiceOption(id: "ErXwobaYiN019PkySvjV", name: "Antoni", gender: .male, description: "Warm, friendly"),
-        VoiceOption(id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", gender: .male, description: "Young, deep"),
-        VoiceOption(id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum", gender: .male, description: "Intense, gravelly"),
-        VoiceOption(id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: .male, description: "Authoritative British"),
+        // ── OpenAI (~$15/1M chars, MP3, low latency) ──────────────────────
+        VoiceOption(id: "shimmer", name: "Shimmer", gender: .female,
+                    description: "Soft, sultry", provider: .openai),
+        VoiceOption(id: "nova", name: "Nova", gender: .female,
+                    description: "Warm, energetic", provider: .openai),
+        VoiceOption(id: "coral", name: "Coral", gender: .female,
+                    description: "Bright, confident", provider: .openai),
+        VoiceOption(id: "sage", name: "Sage", gender: .female,
+                    description: "Calm, mature", provider: .openai),
+        VoiceOption(id: "ballad", name: "Ballad", gender: .male,
+                    description: "Smooth, lyrical", provider: .openai),
+        VoiceOption(id: "ash", name: "Ash", gender: .male,
+                    description: "Crisp, articulate", provider: .openai),
+        VoiceOption(id: "onyx", name: "Onyx", gender: .male,
+                    description: "Deep, authoritative", provider: .openai),
+        VoiceOption(id: "echo", name: "Echo", gender: .male,
+                    description: "Neutral, clear", provider: .openai),
+
+        // ── Local Apple voices (free, on-device, no API) ───────────────────
+        // `id` is a search key matched against installed AVSpeechSynthesisVoices
+        // — premium/enhanced variants are preferred when available.
+        VoiceOption(id: "Ava", name: "Ava", gender: .female,
+                    description: "US English, premium", provider: .local),
+        VoiceOption(id: "Zoe", name: "Zoe", gender: .female,
+                    description: "US English, expressive", provider: .local),
+        VoiceOption(id: "Samantha", name: "Samantha", gender: .female,
+                    description: "US English, classic", provider: .local),
+        VoiceOption(id: "Allison", name: "Allison", gender: .female,
+                    description: "US English, soft", provider: .local),
+        VoiceOption(id: "Moira", name: "Moira", gender: .female,
+                    description: "Irish, warm", provider: .local),
+        VoiceOption(id: "Karen", name: "Karen", gender: .female,
+                    description: "Australian, bright", provider: .local),
+        VoiceOption(id: "Tom", name: "Tom", gender: .male,
+                    description: "US English, neutral", provider: .local),
+        VoiceOption(id: "Daniel", name: "Daniel", gender: .male,
+                    description: "British, authoritative", provider: .local),
+
+        // ── ElevenLabs (premium, ~$99-330/1M chars — kept for comparison) ──
+        VoiceOption(id: "BAMYoBHLZM7lJgJAmFz0", name: "Sloane", gender: .female,
+                    description: "Warm, confident", provider: .elevenLabs),
+        VoiceOption(id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", gender: .female,
+                    description: "Smooth, sultry", provider: .elevenLabs),
+        VoiceOption(id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", gender: .female,
+                    description: "Calm, breathy", provider: .elevenLabs),
+        VoiceOption(id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", gender: .female,
+                    description: "Soft, mature", provider: .elevenLabs),
+        VoiceOption(id: "piTKgcLEGmPE4e6mEKli", name: "Nicole", gender: .female,
+                    description: "Whispery, intimate", provider: .elevenLabs),
+        VoiceOption(id: "pNInz6obpgDQGcFmaJgB", name: "Adam", gender: .male,
+                    description: "Deep American", provider: .elevenLabs),
+        VoiceOption(id: "ErXwobaYiN019PkySvjV", name: "Antoni", gender: .male,
+                    description: "Warm, friendly", provider: .elevenLabs),
+        VoiceOption(id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", gender: .male,
+                    description: "Young, deep", provider: .elevenLabs),
+        VoiceOption(id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum", gender: .male,
+                    description: "Intense, gravelly", provider: .elevenLabs),
+        VoiceOption(id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: .male,
+                    description: "Authoritative British", provider: .elevenLabs),
     ]
 
-    static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"
+    /// Default voice — OpenAI Shimmer (soft, sultry; ~6.6x cheaper than ElevenLabs).
+    static let defaultVoiceID = "shimmer"
 
     static func voiceOption(for id: String) -> VoiceOption {
         availableVoices.first(where: { $0.id == id }) ?? availableVoices[0]
