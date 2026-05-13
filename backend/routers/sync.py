@@ -195,7 +195,9 @@ def precache_conversation_audio_endpoint(
     # Start background parallel pre-caching for all audio files using storage_executor
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
+        futures = [
+            submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af) for af in audio_files
+        ]
         for future in futures:
             try:
                 future.result()
@@ -203,7 +205,7 @@ def precache_conversation_audio_endpoint(
                 logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    critical_executor.submit(_precache_all_parallel)
+    submit_with_context(critical_executor, _precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -292,14 +294,17 @@ def get_audio_signed_urls_endpoint(
     if uncached_files:
 
         def _cache_uncached_parallel():
-            futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
+            futures = [
+                submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
+                for af in uncached_files
+            ]
             for future in futures:
                 try:
                     future.result()
                 except Exception as e:
                     logger.error(f"Error in parallel cache: {e}")
 
-        critical_executor.submit(_cache_uncached_parallel)
+        submit_with_context(critical_executor, _cache_uncached_parallel)
 
     return {"audio_files": result}
 
@@ -932,7 +937,7 @@ def process_segment(
             time.sleep(480)
             delete_syncing_temporal_file(path)
 
-        storage_executor.submit(delete_file)
+        submit_with_context(storage_executor, delete_file)
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
