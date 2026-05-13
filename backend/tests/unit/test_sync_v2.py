@@ -763,6 +763,7 @@ class TestBackgroundWorkerBehavioral:
         ]
         utils_subs = [
             'utils',
+            'utils.byok',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -1319,6 +1320,7 @@ class TestV2EndpointExecution:
             'models.transcript_segment',
             'utils',
             'utils.analytics',
+            'utils.byok',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
