@@ -49,6 +49,7 @@ from utils.other.storage import (
 )
 
 from utils import encryption
+from utils.byok import get_byok_keys, set_byok_keys
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
@@ -1346,11 +1347,14 @@ def _run_full_pipeline_background(
     job_dir: str,
     target_conversation_id: str = None,
     event_loop=None,
+    byok_keys: dict = None,
 ):
     """Background worker: runs the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
     Moved ALL heavy processing here so the v2 endpoint returns 202 immediately.
     """
+    if byok_keys:
+        set_byok_keys(byok_keys)
     segmented_paths = set()
     wav_paths = []
     stage_timings = {}
@@ -1622,6 +1626,9 @@ async def sync_local_files_v2(
         # Capture event loop for async calls from background thread
         loop_v2 = asyncio.get_running_loop()
 
+        # Capture BYOK keys from the request context before dispatching to thread
+        captured_byok = get_byok_keys()
+
         # Transfer ownership of raw paths to the background thread
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg thread
@@ -1638,6 +1645,7 @@ async def sync_local_files_v2(
             job_dir,
             conversation_id,
             loop_v2,
+            captured_byok,
         )
 
         return JSONResponse(
