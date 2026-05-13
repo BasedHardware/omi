@@ -47,6 +47,7 @@ from utils.stt.streaming import (
     make_stream_callback,
     modulate_languages,
     sort_segments_by_start,
+    sort_transcript_segments_in_place,
 )
 
 
@@ -1034,10 +1035,10 @@ class TestSegmentSortByStartMs(unittest.TestCase):
 class TestCrossBatchSegmentOrdering(unittest.TestCase):
     """Regression: late-arriving segment from a previous batch must be sorted into correct position.
 
-    Exercises TranscriptSegment.combine_segments + post-combine sort guard from transcribe.py:910.
+    Tests production sort_transcript_segments_in_place() used in transcribe.py after combine_segments.
     """
 
-    def test_late_arriving_earlier_segment_sorted_after_combine(self):
+    def test_production_sort_fixes_late_arrival_after_combine(self):
         from models.transcript_segment import TranscriptSegment
 
         existing = [
@@ -1061,38 +1062,22 @@ class TestCrossBatchSegmentOrdering(unittest.TestCase):
             ),
         ]
         combined, _, _ = TranscriptSegment.combine_segments(existing, late_arrival)
-        combined.sort(key=lambda s: s.start)
+        self.assertAlmostEqual(combined[0].start, 10.0, msg='combine_segments appends late arrival at end')
+        sort_transcript_segments_in_place(combined)
         self.assertEqual(len(combined), 2)
         self.assertAlmostEqual(combined[0].start, 2.0)
         self.assertAlmostEqual(combined[1].start, 10.0)
 
-    def test_without_sort_late_arrival_stays_appended(self):
+    def test_production_sort_is_stable_for_same_start(self):
         from models.transcript_segment import TranscriptSegment
 
-        existing = [
-            TranscriptSegment(
-                text='This is the later segment.',
-                speaker='SPEAKER_00',
-                speaker_id=0,
-                is_user=False,
-                start=15.0,
-                end=18.0,
-            ),
+        segments = [
+            TranscriptSegment(text='A.', speaker='SPEAKER_00', speaker_id=0, is_user=False, start=5.0, end=6.0),
+            TranscriptSegment(text='B.', speaker='SPEAKER_01', speaker_id=1, is_user=False, start=5.0, end=7.0),
         ]
-        late_arrival = [
-            TranscriptSegment(
-                text='This is the earlier segment.',
-                speaker='SPEAKER_01',
-                speaker_id=1,
-                is_user=False,
-                start=5.0,
-                end=8.0,
-            ),
-        ]
-        combined, _, _ = TranscriptSegment.combine_segments(existing, late_arrival)
-        self.assertAlmostEqual(combined[0].start, 15.0, msg='without sort, late arrival appended at end')
-        combined.sort(key=lambda s: s.start)
-        self.assertAlmostEqual(combined[0].start, 5.0, msg='sort guard fixes cross-batch order')
+        sort_transcript_segments_in_place(segments)
+        self.assertEqual(segments[0].text, 'A.')
+        self.assertEqual(segments[1].text, 'B.')
 
 
 class TestPassthroughSkipsRemap(unittest.TestCase):
