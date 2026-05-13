@@ -127,16 +127,21 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
 
-    if customer_id:
-        users_db.set_stripe_customer_id(uid, customer_id)
+    try:
+        if customer_id:
+            users_db.set_stripe_customer_id(uid, customer_id)
 
-    if subscription_id:
-        stripe_sub = stripe.Subscription.retrieve(subscription_id)
-        if stripe_sub:
-            new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
-            if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.dict())
-                logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+        if subscription_id:
+            stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            if stripe_sub:
+                new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                if new_subscription:
+                    users_db.update_user_subscription(uid, new_subscription.dict())
+                    logger.info(f"Subscription for user {uid} updated from session {session.id}.")
+    except FirestoreNotFound:
+        logger.warning(
+            f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
+        )
 
 
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
@@ -726,6 +731,15 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         f"Stripe webhook: user {uid} not found in Firestore, "
                         f"skipping subscription update for event {event['type']}"
                     )
+            else:
+                subscription_id = subscription_obj.get('id', 'unknown')
+                price_id = 'unknown'
+                if subscription_obj.get('items', {}).get('data'):
+                    price_id = subscription_obj['items']['data'][0].get('price', {}).get('id', 'unknown')
+                logger.warning(
+                    f"Stripe webhook: could not build subscription for user {uid}, "
+                    f"subscription {subscription_id}, price {price_id} — unknown price ID"
+                )
 
     # Handle subscription schedule events
     if event['type'] in [
