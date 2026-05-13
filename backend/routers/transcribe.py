@@ -2087,7 +2087,7 @@ async def _stream_handler(
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = list(realtime_segment_buffers)
+            segments_to_process = sorted(realtime_segment_buffers, key=lambda s: s.get('start', 0))
             realtime_segment_buffers.clear()
 
             photos_to_process = list(realtime_photo_buffers)
