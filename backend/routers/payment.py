@@ -90,7 +90,19 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     """Builds a Subscription object from a Stripe Subscription object."""
     stripe_status = stripe_sub['status']
 
-    # Get price ID from subscription items
+    # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
+    # regardless of price ID — ensures deleted/canceled users don't keep paid access
+    if stripe_status not in ('active', 'trialing'):
+        return Subscription(
+            plan=PlanType.basic,
+            status=SubscriptionStatus.active,
+            current_period_end=stripe_sub.get('current_period_end'),
+            stripe_subscription_id=stripe_sub['id'],
+            cancel_at_period_end=False,
+            limits=get_basic_plan_limits(),
+        )
+
+    # Active subscriptions: resolve plan from price ID
     price_id = stripe_sub['items']['data'][0]['price']['id'] if stripe_sub['items']['data'] else None
 
     if not price_id:
@@ -101,25 +113,13 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     except ValueError:
         return None
 
-    if stripe_status in ('active', 'trialing'):
-        status = SubscriptionStatus.active
-        limits = get_plan_limits(plan)
-        cancel_at_period_end = stripe_sub.get('cancel_at_period_end', False)
-    else:  # including 'canceled', 'unpaid', etc.
-        # When a Stripe subscription is not active anymore, fall back to Basic plan
-        # and mark it ACTIVE so the user retains free-tier access immediately.
-        plan = PlanType.basic
-        status = SubscriptionStatus.active
-        limits = get_basic_plan_limits()
-        cancel_at_period_end = False
-
     return Subscription(
         plan=plan,
-        status=status,
+        status=SubscriptionStatus.active,
         current_period_end=stripe_sub.get('current_period_end'),
         stripe_subscription_id=stripe_sub['id'],
-        cancel_at_period_end=cancel_at_period_end,
-        limits=limits,
+        cancel_at_period_end=stripe_sub.get('cancel_at_period_end', False),
+        limits=get_plan_limits(plan),
     )
 
 
@@ -634,6 +634,14 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             logger.info(
                 f"Processing subscription for user {uid} (from {'client_reference_id' if client_reference_id else 'metadata'})"
             )
+
+            # Verify user exists before processing — the subscription getter has
+            # create-on-miss behavior that would resurrect a deleted user's doc
+            if not users_db.get_user_profile(uid):
+                logger.warning(
+                    f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session processing"
+                )
+                return {"status": "success"}
 
             # Check if user already has an active subscription to prevent duplicates
             existing_subscription = users_db.get_user_valid_subscription(uid)
