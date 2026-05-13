@@ -1399,8 +1399,13 @@ def _run_full_pipeline_background(
         _cleanup_files(wav_paths)
         wav_paths = []
 
-        if vad_errors and not segmented_paths:
-            mark_job_failed(job_id, f'VAD failed for all files: {"; ".join(vad_errors[:3])}')
+        if vad_errors:
+            error_detail = f'VAD failed for {len(vad_errors)} file(s): {"; ".join(vad_errors[:3])}'
+            if len(vad_errors) > 3:
+                error_detail += f' (and {len(vad_errors) - 3} more)'
+            _cleanup_files(list(segmented_paths))
+            segmented_paths = set()
+            mark_job_failed(job_id, error_detail)
             return
 
         # --- Phase 3: Speech metrics & fair-use ---
@@ -1430,7 +1435,10 @@ def _run_full_pipeline_background(
             if triggered_caps:
                 logger.info(f'sync_v2 bg: soft caps triggered for {uid}: {triggered_caps}')
                 if event_loop:
-                    asyncio.run_coroutine_threadsafe(trigger_classifier_if_needed(uid, triggered_caps), event_loop)
+                    try:
+                        asyncio.run_coroutine_threadsafe(trigger_classifier_if_needed(uid, triggered_caps), event_loop)
+                    except Exception as e:
+                        logger.error(f'sync_v2 bg: classifier scheduling failed for {uid}: {e}')
 
         # DG budget gate
         fair_use_restrict_dg = False
