@@ -8,27 +8,15 @@ inputs:
   telegram_chat_id:
     description: Telegram chat ID that receives the notification.
     required: true
-  workflow_name:
-    description: Pipeline or workflow name to show in the Telegram message.
-    required: true
   environment:
     description: Deployment environment to show in the Telegram message.
-    required: true
-  branch:
-    description: Deployment branch to show in the Telegram message.
     required: true
   release_version:
     description: Optional release version to show in the Telegram message.
     required: false
     default: ''
-  actor:
-    description: User or actor that triggered the deployment.
-    required: true
   status:
     description: Deployment status to show in the Telegram message.
-    required: true
-  run_id:
-    description: GitHub Actions run ID to link to the logs.
     required: true
   job_id:
     description: GitHub Actions job ID to link to the logs.
@@ -53,28 +41,21 @@ runs:
       if: always()
       shell: bash
       run: |
-        WORKFLOW_NAME="${{ inputs.workflow_name }}"
+        WORKFLOW_NAME="${{ github.workflow }}"
         ENVIRONMENT="${{ inputs.environment }}"
-        DEPLOY_BRANCH="${{ inputs.branch }}"
+        DEPLOY_BRANCH="${{ github.ref_name }}"
         DEPLOY_TAG="${GITHUB_SHA::7}"
-        RELEASE_VERSION="${{ inputs.release_version }}"
-        ACTOR="${{ inputs.actor }}"
+        [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-r${{ github.run_number }}"
+        ACTOR="${{ github.actor }}"
         FINISH_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
         GITHUB_URL="https://github.com/BasedHardware/omi"
-        DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${{ inputs.run_id }}"
-        JOB_URL="${GITHUB_URL}/actions/runs/${{ inputs.run_id }}/job/${{ inputs.job_id }}"
-
+        DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}"
+        JOB_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}/job/${{ inputs.job_id }}"
         MESSAGE="🚀 <b>$WORKFLOW_NAME</b>: $ICON $STATUS
 
         ⚡️ <b>Environment:</b> $ENVIRONMENT
-        🌿 <b>Branch:</b> $DEPLOY_BRANCH"
-
-        if [ -n "$RELEASE_VERSION" ]; then
-          MESSAGE+="
-        📦 <b>Release version:</b> $RELEASE_VERSION"
-        fi
-
-        MESSAGE+="
+        🌿 <b>Branch:</b> $DEPLOY_BRANCH
+        📦 <b>Release version:</b> $RELEASE_VERSION
         🏷️ <b>Tag:</b> $DEPLOY_TAG
         👤 <b>Triggered by:</b> $ACTOR
         🕐 <b>Finished at:</b> $FINISH_TIME
