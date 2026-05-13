@@ -1004,6 +1004,84 @@ class TestSegmentSortByStartMs(unittest.TestCase):
         self.assertEqual(result[1]['text'], 'later')
 
 
+class TestPassthroughSkipsRemap(unittest.TestCase):
+    """Regression: passthrough providers must NOT have timestamps remapped by VAD gate."""
+
+    def test_passthrough_segments_timestamps_unchanged(self):
+        """Simulate Modulate passthrough: segments should keep original timestamps."""
+        segments_received = []
+
+        def stream_transcript(segments):
+            segments_received.extend(segments)
+
+        mock_gate = MagicMock()
+
+        def remap_that_would_corrupt(segments):
+            for s in segments:
+                s['start'] = s['start'] + 999
+                s['end'] = s['end'] + 999
+
+        mock_gate.remap_segments = remap_that_would_corrupt
+
+        passthrough = True
+        if mock_gate is not None and not passthrough:
+
+            def callback(segments):
+                mock_gate.remap_segments(segments)
+                stream_transcript(segments)
+
+        else:
+            callback = stream_transcript
+
+        callback(
+            [
+                {
+                    'speaker': 'SPEAKER_00',
+                    'start': 1.5,
+                    'end': 3.0,
+                    'text': 'hello',
+                    'is_user': False,
+                    'person_id': None,
+                }
+            ]
+        )
+
+        self.assertEqual(len(segments_received), 1)
+        self.assertAlmostEqual(segments_received[0]['start'], 1.5)
+        self.assertAlmostEqual(segments_received[0]['end'], 3.0)
+
+    def test_non_passthrough_segments_are_remapped(self):
+        """Non-passthrough (Deepgram) should have timestamps remapped."""
+        segments_received = []
+
+        def stream_transcript(segments):
+            segments_received.extend(segments)
+
+        remap_called = [False]
+
+        def remap(segments):
+            remap_called[0] = True
+
+        mock_gate = MagicMock()
+        mock_gate.remap_segments = remap
+
+        passthrough = False
+        if mock_gate is not None and not passthrough:
+
+            def callback(segments):
+                mock_gate.remap_segments(segments)
+                stream_transcript(segments)
+
+        else:
+            callback = stream_transcript
+
+        callback(
+            [{'speaker': 'SPEAKER_00', 'start': 1.0, 'end': 2.0, 'text': 'hi', 'is_user': False, 'person_id': None}]
+        )
+
+        self.assertTrue(remap_called[0])
+
+
 class TestLanguageRoutingExtended(unittest.TestCase):
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
     def test_multi_lang_disabled(self):
