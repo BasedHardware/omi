@@ -1,9 +1,9 @@
 """
-Tests for v2 async sync-local-files endpoints (#5941).
+Tests for v2 async sync-local-files endpoints (#5941, #7281).
 
-v2 does fast-path work (decode, VAD) inline, then hands off STT+LLM to a
-background thread. The app polls GET /v2/sync-local-files/{job_id} until
-the job reaches a terminal status.
+v2 saves raw files and returns 202 immediately, then runs the full pipeline
+(decode → VAD → fair-use → STT → LLM) in a background thread. The app
+polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 
 v1 remains completely unchanged.
 """
@@ -65,8 +65,8 @@ class TestSyncV2Structure:
         assert "'job_id'" in func_body, "v2 response must include job_id"
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
-    def test_v2_submits_to_critical_executor(self):
-        """v2 must submit background work to the shared critical_executor."""
+    def test_v2_submits_to_default_executor(self):
+        """v2 must submit background work via run_in_executor(None, ...) to avoid deadlock."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -75,19 +75,15 @@ class TestSyncV2Structure:
         func_body = source[start:next_section]
 
         assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
-        assert '_process_segments_background' in func_body, "v2 must submit the background worker function"
-        # The coordinator dispatch must use run_in_executor with None (default executor),
-        # not critical_executor, to avoid deadlock when the coordinator itself submits to
-        # critical_executor internally.
-        # Accept both inline and multi-line forms: run_in_executor(None, and run_in_executor(\n..None,
+        assert '_run_full_pipeline_background' in func_body, "v2 must submit the full pipeline background worker"
         none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
         assert none_executor_pattern.search(func_body), (
             "v2 coordinator dispatch must use run_in_executor(None, ...) — "
             "passing critical_executor would nest executors and cause deadlock"
         )
 
-    def test_v2_has_fair_use_gates(self):
-        """v2 must check fair-use and DG budget (same gates as v1)."""
+    def test_v2_has_hard_restriction_gate(self):
+        """v2 inline path must check hard restriction (fast 429 for restricted users)."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -95,8 +91,20 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'is_hard_restricted' in func_body, "v2 must check hard restriction"
-        assert 'is_dg_budget_exhausted' in func_body, "v2 must check DG budget"
+        assert 'is_hard_restricted' in func_body, "v2 must check hard restriction inline"
+
+    def test_v2_does_not_decode_inline(self):
+        """v2 fast path must NOT run decode/VAD inline (#7281)."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert 'decode_files_to_wav' not in func_body, "v2 must NOT decode inline"
+        assert 'retrieve_vad_segments' not in func_body, "v2 must NOT run VAD inline"
+        assert 'build_person_embeddings_cache' not in func_body, "v2 must NOT build embeddings inline"
 
     def test_v2_uses_job_specific_directory(self):
         """v2 must use syncing/{uid}/{job_id}/ to avoid concurrency conflicts."""
@@ -113,8 +121,7 @@ class TestSyncV2Structure:
     def test_v2_background_has_cleanup(self):
         """Background worker must clean up files in finally block."""
         source = self._read_sync_source()
-        start = source.index('def _process_segments_background')
-        # Find next top-level def or decorator
+        start = source.index('def _run_full_pipeline_background')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
@@ -127,16 +134,42 @@ class TestSyncV2Structure:
     def test_v2_background_records_dg_after_processing(self):
         """DG usage must be recorded after processing, not before."""
         source = self._read_sync_source()
-        start = source.index('def _process_segments_background')
+        start = source.index('def _run_full_pipeline_background')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
         func_body = source[start:next_boundary]
 
-        # record_dg_usage_ms must come after critical_executor.submit / future.result processing
         dg_pos = func_body.index('record_dg_usage_ms')
         processing_pos = func_body.index('future.result()')
         assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
+
+    def test_v2_background_does_decode_and_vad(self):
+        """Background worker must run decode and VAD (#7281 — moved from inline)."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        func_body = source[start:next_boundary]
+
+        assert 'decode_files_to_wav' in func_body, "Background must decode files"
+        assert 'retrieve_vad_segments' in func_body, "Background must run VAD"
+        assert 'build_person_embeddings_cache' in func_body, "Background must build person embeddings"
+        assert 'is_dg_budget_exhausted' in func_body, "Background must check DG budget"
+
+    def test_v2_background_has_stage_heartbeats(self):
+        """Background worker must heartbeat with stage info during decode and VAD."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        func_body = source[start:next_boundary]
+
+        assert "'stage': 'decoding'" in func_body, "Background must heartbeat decode stage"
+        assert "'stage': 'vad'" in func_body, "Background must heartbeat VAD stage"
+        assert "'stage': 'processing'" in func_body, "Background must heartbeat processing stage"
 
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
@@ -155,8 +188,20 @@ class TestSyncV2Structure:
 
         assert '404' in func_body, "GET must return 404 for missing job"
 
-    def test_v2_fetches_prefs_and_cache_before_executor_submit(self):
-        """v2 must fetch transcription_prefs and build person_embeddings_cache before submitting to executor."""
+    def test_v2_bg_worker_fetches_prefs_and_cache(self):
+        """Background worker must fetch transcription prefs and build person embeddings cache."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        func_body = source[start:next_boundary]
+
+        assert 'get_user_transcription_preferences' in func_body, "bg worker must fetch prefs"
+        assert 'build_person_embeddings_cache' in func_body, "bg worker must build embeddings cache"
+
+    def test_v2_fast_path_only_saves_files(self):
+        """v2 fast path must only save raw files — no decode, no VAD, no prefs/cache fetch."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -164,44 +209,10 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'get_user_transcription_preferences' in func_body, "v2 must fetch transcription preferences"
-        assert 'build_person_embeddings_cache' in func_body, "v2 must build person embeddings cache"
-
-        # Both must appear before the background worker dispatch
-        prefs_pos = func_body.index('get_user_transcription_preferences')
-        cache_pos = func_body.index('build_person_embeddings_cache')
-        submit_pos = func_body.index('_process_segments_background')
-        assert prefs_pos < submit_pos, "Prefs must be fetched before background worker dispatch"
-        assert cache_pos < submit_pos, "Cache must be built before background worker dispatch"
-
-    def test_v2_bg_worker_accepts_prefs_and_cache_params(self):
-        """_process_segments_background must accept transcription_prefs and person_embeddings_cache."""
-        source = self._read_sync_source()
-        start = source.index('def _process_segments_background')
-        # Find the closing paren of the signature (handles multi-line)
-        sig_end = source.index('):', start)
-        func_sig = source[start : sig_end + 2]
-
-        assert 'transcription_prefs' in func_sig, "bg worker must accept transcription_prefs param"
-        assert 'person_embeddings_cache' in func_sig, "bg worker must accept person_embeddings_cache param"
-
-    def test_v2_passes_prefs_and_cache_to_executor_submit(self):
-        """v2 must pass transcription_prefs and person_embeddings_cache in executor submit args."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files_v2')
-        next_section = source.find('\n@router.', start + 1)
-        if next_section == -1:
-            next_section = len(source)
-        func_body = source[start:next_section]
-
-        # Find the background worker dispatch block
-        submit_start = func_body.index('_process_segments_background')
-        # Find the closing — look for the return statement after it
-        submit_end = func_body.index('return JSONResponse', submit_start)
-        submit_block = func_body[submit_start:submit_end]
-
-        assert 'transcription_prefs' in submit_block, "v2 must pass transcription_prefs to background worker"
-        assert 'person_embeddings_cache' in submit_block, "v2 must pass person_embeddings_cache to background worker"
+        assert '_retrieve_file_paths_v2' in func_body, "v2 must save raw files"
+        assert 'create_sync_job' in func_body, "v2 must create Redis job"
+        assert 'get_user_transcription_preferences' not in func_body, "prefs fetch moved to bg"
+        assert 'build_person_embeddings_cache' not in func_body, "cache build moved to bg"
 
 
 # ---------------------------------------------------------------------------
@@ -376,15 +387,15 @@ class TestSyncJobsRedis:
 # ---------------------------------------------------------------------------
 
 
-class TestProcessSegmentsBackground:
-    """Test _process_segments_background worker function."""
+class TestFullPipelineBackground:
+    """Test _run_full_pipeline_background worker function."""
 
     @staticmethod
     def _get_bg_func_body():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
         with open(sync_path) as f:
             source = f.read()
-        start = source.index('def _process_segments_background')
+        start = source.index('def _run_full_pipeline_background')
         next_boundary = source.find('\n@router.', start + 1)
         if next_boundary == -1:
             next_boundary = len(source)
@@ -418,10 +429,18 @@ class TestProcessSegmentsBackground:
         """Worker must heartbeat (update_sync_job) during processing to prevent stale detection."""
         body = self._get_bg_func_body()
         assert 'update_sync_job(' in body, "Worker must call update_sync_job for heartbeat"
-        # Heartbeat must be inside the chunk loop, after futures are resolved
-        heartbeat_pos = body.index('update_sync_job(')
+        heartbeat_pos = body.rindex('update_sync_job(')
         result_pos = body.index('future.result()')
         assert heartbeat_pos > result_pos, "Heartbeat must come after future.result()"
+
+    def test_background_pipeline_order(self):
+        """Worker must run: decode → VAD → fair-use → STT in correct order."""
+        body = self._get_bg_func_body()
+        decode_pos = body.index('decode_files_to_wav')
+        vad_pos = body.index('retrieve_vad_segments')
+        speech_pos = body.index('record_speech_ms')
+        segment_pos = body.index('process_segment')
+        assert decode_pos < vad_pos < speech_pos < segment_pos
 
 
 # ---------------------------------------------------------------------------
@@ -513,23 +532,11 @@ class TestV2EndpointContract:
             next_section = len(source)
         return source[start:next_section]
 
-    def test_v2_handles_empty_segments(self):
-        """v2 must return 200 immediately when no segments found (no job needed)."""
-        body = self._get_v2_post_body()
-        assert 'total_segments == 0' in body
-        assert "'new_memories': []" in body
-
     def test_v2_transfers_file_ownership_to_bg_thread(self):
-        """v2 must transfer segmented_paths ownership to prevent double cleanup."""
+        """v2 must transfer raw path ownership to prevent double cleanup."""
         body = self._get_v2_post_body()
-        assert 'owned_paths = list(segmented_paths)' in body
-        assert 'segmented_paths = set()' in body
-
-    def test_v2_handles_429_dg_budget(self):
-        """v2 must return 429 when DG budget is exhausted."""
-        body = self._get_v2_post_body()
-        assert 'dg_budget_exhausted' in body
-        assert 'status_code=429' in body
+        assert 'owned_paths = list(paths)' in body
+        assert 'paths = []' in body
 
     def test_v2_handles_429_hard_restricted(self):
         """v2 must check hard restriction at the top."""
@@ -543,12 +550,11 @@ class TestV2EndpointContract:
         assert 'raise' in body[body.index('except HTTPException:') :]
 
     def test_v2_finally_cleans_up_on_fast_path_failure(self):
-        """v2 finally block must clean up files if fast-path fails."""
+        """v2 finally block must clean up raw files if fast-path fails."""
         body = self._get_v2_post_body()
         finally_idx = body.rindex('finally:')
         finally_block = body[finally_idx:]
         assert '_cleanup_files(paths)' in finally_block
-        assert '_cleanup_files(wav_paths)' in finally_block
 
 
 # ---------------------------------------------------------------------------
@@ -728,7 +734,7 @@ class TestSyncJobsRedisBoundary:
 
 
 class TestBackgroundWorkerBehavioral:
-    """Behavioral tests for _process_segments_background using mocks."""
+    """Behavioral tests for _run_full_pipeline_background using mocks."""
 
     @staticmethod
     def _load_bg_worker():
@@ -737,7 +743,6 @@ class TestBackgroundWorkerBehavioral:
         mock_sync_jobs = MagicMock()
 
         saved_modules = {}
-        # Core deps
         heavy_deps = [
             'redis',
             'database',
@@ -753,13 +758,14 @@ class TestBackgroundWorkerBehavioral:
             'pydub',
             'models',
             'models.conversation',
+            'models.conversation_enums',
             'models.transcript_segment',
         ]
-        # utils namespace — must stub all submodules sync.py imports
         utils_subs = [
             'utils',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.conversations.factory',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -771,10 +777,12 @@ class TestBackgroundWorkerBehavioral:
             'utils.subscription',
             'utils.observability',
             'utils.log_sanitizer',
+            'utils.analytics',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
             'utils.executors',
+            'utils.http_client',
         ]
         heavy_deps.extend(utils_subs)
 
@@ -782,17 +790,19 @@ class TestBackgroundWorkerBehavioral:
             saved_modules[mod] = sys.modules.get(mod)
             sys.modules[mod] = MagicMock()
 
-        # Provide a working critical_executor stub (submit runs the function synchronously)
         from concurrent.futures import ThreadPoolExecutor
 
         _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='test')
         sys.modules['utils.executors'].critical_executor = _test_executor
         sys.modules['utils.executors'].storage_executor = _test_executor
 
-        # Set up specific mocks
         sys.modules['database.redis_db'] = MagicMock(r=mock_redis)
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
         sys.modules['database.sync_jobs'] = mock_sync_jobs
+
+        # Fair-use defaults
+        sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
+        sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
 
         try:
             import importlib.util
@@ -803,6 +813,21 @@ class TestBackgroundWorkerBehavioral:
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+
+            # Mock decode+VAD to pass through paths as segments
+            def _mock_decode(paths):
+                return list(paths)
+
+            def _mock_vad(path, segmented_paths, errors=None):
+                segmented_paths.add(path)
+
+            module.decode_files_to_wav = _mock_decode
+            module.retrieve_vad_segments = _mock_vad
+            module.get_wav_duration = lambda p: 5.0
+            module.build_person_embeddings_cache = MagicMock(return_value={})
+            module.users_db = MagicMock()
+            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+
             return module, mock_sync_jobs
         except Exception:
             return None, None
@@ -822,14 +847,12 @@ class TestBackgroundWorkerBehavioral:
         # Mock process_segment to do nothing
         mod.process_segment = MagicMock()
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='test-job',
             uid='test-uid',
-            segmented_paths=['/tmp/fake1.wav', '/tmp/fake2.wav'],
+            raw_paths=['/tmp/fake1.wav', '/tmp/fake2.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=10.0,
+            should_lock=False,
             job_dir='/tmp/fake-job-dir',
         )
 
@@ -847,14 +870,12 @@ class TestBackgroundWorkerBehavioral:
         # Make mark_job_processing raise to simulate early failure
         mock_sync_jobs.mark_job_processing.side_effect = Exception("Redis down")
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='test-job',
             uid='test-uid',
-            segmented_paths=['/tmp/fake.wav'],
+            raw_paths=['/tmp/fake.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=5.0,
+            should_lock=False,
             job_dir='/tmp/fake-dir',
         )
 
@@ -872,14 +893,12 @@ class TestBackgroundWorkerBehavioral:
         # Use enough segments to trigger at least one heartbeat (chunk_size=5)
         paths = [f'/tmp/seg{i}.wav' for i in range(6)]
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='hb-job',
             uid='uid',
-            segmented_paths=paths,
+            raw_paths=paths,
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=30.0,
+            should_lock=False,
             job_dir='/tmp/hb-dir',
         )
 
@@ -907,14 +926,12 @@ class TestBackgroundWorkerBehavioral:
 
         mod.process_segment = mock_process_segment
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='partial-job',
             uid='test-uid',
-            segmented_paths=['/tmp/s1.wav', '/tmp/s2.wav', '/tmp/s3.wav', '/tmp/s4.wav'],
+            raw_paths=['/tmp/s1.wav', '/tmp/s2.wav', '/tmp/s3.wav', '/tmp/s4.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=20.0,
+            should_lock=False,
             job_dir='/tmp/partial-dir',
         )
 
@@ -938,14 +955,12 @@ class TestBackgroundWorkerBehavioral:
 
         mod.process_segment = mock_process_segment
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='allfail-job',
             uid='test-uid',
-            segmented_paths=['/tmp/f1.wav', '/tmp/f2.wav'],
+            raw_paths=['/tmp/f1.wav', '/tmp/f2.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=10.0,
+            should_lock=False,
             job_dir='/tmp/allfail-dir',
         )
 
@@ -956,7 +971,7 @@ class TestBackgroundWorkerBehavioral:
         assert len(result_arg['errors']) == 2
 
     def test_bg_worker_records_dg_usage_when_enabled(self):
-        """Worker must call record_dg_usage_ms when fair_use_restrict_dg=True."""
+        """Worker must call record_dg_usage_ms when FAIR_USE_ENABLED and enforcement=restrict."""
         mod, mock_sync_jobs = self._load_bg_worker()
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
@@ -964,22 +979,27 @@ class TestBackgroundWorkerBehavioral:
         mod.process_segment = MagicMock()
         mock_record_dg = MagicMock()
         mod.record_dg_usage_ms = mock_record_dg
+        mod.FAIR_USE_ENABLED = True
+        mod.FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
+        mod.get_enforcement_stage = MagicMock(return_value='restrict')
+        mod.is_dg_budget_exhausted = MagicMock(return_value=False)
+        mod.record_speech_ms = MagicMock()
+        mod.get_rolling_speech_ms = MagicMock(return_value={})
+        mod.check_soft_caps = MagicMock(return_value=[])
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='dg-job',
             uid='test-uid',
-            segmented_paths=['/tmp/d1.wav'],
+            raw_paths=['/tmp/d1.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=True,
-            total_speech_seconds=15.5,
+            should_lock=False,
             job_dir='/tmp/dg-dir',
         )
 
-        mock_record_dg.assert_called_once_with('test-uid', 15500)
+        mock_record_dg.assert_called_once_with('test-uid', 5000)
 
     def test_bg_worker_skips_dg_recording_when_disabled(self):
-        """Worker must NOT call record_dg_usage_ms when fair_use_restrict_dg=False."""
+        """Worker must NOT call record_dg_usage_ms when FAIR_USE_ENABLED=False."""
         mod, mock_sync_jobs = self._load_bg_worker()
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
@@ -987,15 +1007,14 @@ class TestBackgroundWorkerBehavioral:
         mod.process_segment = MagicMock()
         mock_record_dg = MagicMock()
         mod.record_dg_usage_ms = mock_record_dg
+        mod.FAIR_USE_ENABLED = False
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='no-dg-job',
             uid='test-uid',
-            segmented_paths=['/tmp/d1.wav'],
+            raw_paths=['/tmp/d1.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=15.5,
+            should_lock=False,
             job_dir='/tmp/no-dg-dir',
         )
 
@@ -1015,14 +1034,12 @@ class TestBackgroundWorkerBehavioral:
         job_dir = tempfile.mkdtemp(prefix='sync_v2_test_')
         assert os.path.isdir(job_dir)
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='cleanup-job',
             uid='test-uid',
-            segmented_paths=[],
+            raw_paths=[],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=0.0,
+            should_lock=False,
             job_dir=job_dir,
         )
 
@@ -1041,21 +1058,19 @@ class TestBackgroundWorkerBehavioral:
         job_dir = tempfile.mkdtemp(prefix='sync_v2_test_fail_')
         assert os.path.isdir(job_dir)
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='cleanup-fail-job',
             uid='test-uid',
-            segmented_paths=[],
+            raw_paths=[],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=0.0,
+            should_lock=False,
             job_dir=job_dir,
         )
 
         assert not os.path.exists(job_dir), "Job directory must be cleaned up even on failure"
 
-    def test_bg_worker_forwards_prefs_and_cache_to_process_segment(self):
-        """Worker must forward transcription_prefs and person_embeddings_cache to each process_segment call."""
+    def test_bg_worker_fetches_and_forwards_prefs_to_process_segment(self):
+        """Worker must fetch prefs/cache internally and forward to each process_segment call."""
         mod, mock_sync_jobs = self._load_bg_worker()
         if mod is None:
             pytest.skip("Cannot load sync router due to import chain")
@@ -1071,54 +1086,22 @@ class TestBackgroundWorkerBehavioral:
 
         test_prefs = {'language': 'es', 'model': 'nova-3'}
         test_cache = {'p-alice': {'name': 'Alice', 'embedding': [0.1, 0.2]}}
+        mod.users_db.get_user_transcription_preferences = MagicMock(return_value=test_prefs)
+        mod.build_person_embeddings_cache = MagicMock(return_value=test_cache)
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='prefs-job',
             uid='test-uid',
-            segmented_paths=['/tmp/p1.wav', '/tmp/p2.wav'],
+            raw_paths=['/tmp/p1.wav', '/tmp/p2.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=10.0,
+            should_lock=False,
             job_dir='/tmp/prefs-dir',
-            transcription_prefs=test_prefs,
-            person_embeddings_cache=test_cache,
         )
 
         assert len(received_args) == 2
         for args in received_args:
             assert args['prefs'] is test_prefs
             assert args['cache'] is test_cache
-
-    def test_bg_worker_defaults_prefs_and_cache_to_none(self):
-        """Worker must default transcription_prefs and person_embeddings_cache to None when not provided."""
-        mod, mock_sync_jobs = self._load_bg_worker()
-        if mod is None:
-            pytest.skip("Cannot load sync router due to import chain")
-
-        received_args = []
-
-        def mock_process_segment(
-            path, uid, response, lock, errors, source, is_locked, prefs=None, cache=None, target_conversation_id=None
-        ):
-            received_args.append({'prefs': prefs, 'cache': cache})
-
-        mod.process_segment = mock_process_segment
-
-        mod._process_segments_background(
-            job_id='noprefs-job',
-            uid='test-uid',
-            segmented_paths=['/tmp/n1.wav'],
-            source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=5.0,
-            job_dir='/tmp/noprefs-dir',
-        )
-
-        assert len(received_args) == 1
-        assert received_args[0]['prefs'] is None
-        assert received_args[0]['cache'] is None
 
     def test_bg_worker_forwards_target_conversation_id_to_process_segment(self):
         """Worker must forward target_conversation_id to each process_segment call."""
@@ -1135,14 +1118,12 @@ class TestBackgroundWorkerBehavioral:
 
         mod.process_segment = mock_process_segment
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='target-conv-job',
             uid='test-uid',
-            segmented_paths=['/tmp/tc1.wav', '/tmp/tc2.wav'],
+            raw_paths=['/tmp/tc1.wav', '/tmp/tc2.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=10.0,
+            should_lock=False,
             job_dir='/tmp/target-conv-dir',
             target_conversation_id='conv-123',
         )
@@ -1166,14 +1147,12 @@ class TestBackgroundWorkerBehavioral:
 
         mod.process_segment = mock_process_segment
 
-        mod._process_segments_background(
+        mod._run_full_pipeline_background(
             job_id='no-target-conv-job',
             uid='test-uid',
-            segmented_paths=['/tmp/nt1.wav'],
+            raw_paths=['/tmp/nt1.wav'],
             source='omi',
-            is_locked=False,
-            fair_use_restrict_dg=False,
-            total_speech_seconds=5.0,
+            should_lock=False,
             job_dir='/tmp/no-target-conv-dir',
         )
 
@@ -1212,10 +1191,13 @@ class TestV2EndpointExecution:
             'pydub',
             'models',
             'models.conversation',
+            'models.conversation_enums',
             'models.transcript_segment',
             'utils',
+            'utils.analytics',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.conversations.factory',
             'utils.other',
             'utils.other.endpoints',
             'utils.other.storage',
@@ -1227,6 +1209,7 @@ class TestV2EndpointExecution:
             'utils.subscription',
             'utils.observability',
             'utils.log_sanitizer',
+            'utils.http_client',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
