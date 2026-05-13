@@ -51,8 +51,8 @@ def test_catches_firestore_not_found_at_all_update_sites():
 def test_logs_uid_in_firestore_not_found_warning():
     """FirestoreNotFound catches must include 'not found in Firestore' for debugging."""
     source = _read_source()
-    # All four handlers should log a warning with the user context
-    assert source.count('not found in Firestore') >= 4
+    # All handlers should log a warning with the user context (4 FirestoreNotFound + 1 checkout existence check)
+    assert source.count('not found in Firestore') >= 5
 
 
 # ── Fix 2: None-guard for _build_subscription_from_stripe_object ─────────────
@@ -154,3 +154,44 @@ def test_customer_subscription_logs_none_subscription():
     assert (
         'unknown price ID' in handler_section
     ), "customer.subscription.* handler must log when subscription build returns None"
+
+
+# ── Fix 5: Inactive subscriptions downgrade without needing valid price ID ──
+
+
+def test_build_subscription_downgrades_inactive_without_price_check():
+    """_build_subscription_from_stripe_object must downgrade inactive subs to Basic
+    without requiring a known price ID — prevents stale paid access on deletion."""
+    source = _read_source()
+    func_start = source.index('def _build_subscription_from_stripe_object')
+    next_func = source.index('\ndef ', func_start + 1)
+    func_body = source[func_start:next_func]
+
+    # The inactive branch must come BEFORE the price ID resolution
+    inactive_check_pos = func_body.index("not in ('active', 'trialing')")
+    price_resolve_pos = func_body.index('get_plan_type_from_price_id')
+    assert inactive_check_pos < price_resolve_pos, (
+        "Inactive status check must precede price ID resolution so deleted/canceled "
+        "subscriptions downgrade to Basic even with unknown price IDs"
+    )
+
+
+# ── Fix 6: Checkout path user existence check prevents doc resurrection ────
+
+
+def test_checkout_path_checks_user_exists_before_processing():
+    """checkout.session.completed handler must verify user exists before calling
+    get_user_valid_subscription (which has create-on-miss behavior)."""
+    source = _read_source()
+    # Find the regular user subscription branch within checkout handler
+    branch_start = source.index("# Regular user subscription")
+    branch_section = source[branch_start : branch_start + 1500]
+
+    # Must have user existence check before get_user_valid_subscription
+    assert 'get_user_profile' in branch_section, (
+        "Checkout handler must check user exists (via get_user_profile) "
+        "before get_user_valid_subscription to prevent doc resurrection"
+    )
+    profile_pos = branch_section.index('get_user_profile')
+    valid_sub_pos = branch_section.index('get_user_valid_subscription')
+    assert profile_pos < valid_sub_pos, "User existence check must come before get_user_valid_subscription"
