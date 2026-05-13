@@ -44,6 +44,7 @@ from utils.stt.streaming import (
     SafeModulateSocket,
     _build_wav_header,
     get_stt_service_for_language,
+    make_stream_callback,
     modulate_languages,
     sort_segments_by_start,
 )
@@ -1005,10 +1006,12 @@ class TestSegmentSortByStartMs(unittest.TestCase):
 
 
 class TestPassthroughSkipsRemap(unittest.TestCase):
-    """Regression: passthrough providers must NOT have timestamps remapped by VAD gate."""
+    """Regression: passthrough providers must NOT have timestamps remapped by VAD gate.
+
+    Tests the production make_stream_callback() function directly.
+    """
 
     def test_passthrough_segments_timestamps_unchanged(self):
-        """Simulate Modulate passthrough: segments should keep original timestamps."""
         segments_received = []
 
         def stream_transcript(segments):
@@ -1021,17 +1024,9 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
                 s['start'] = s['start'] + 999
                 s['end'] = s['end'] + 999
 
-        mock_gate.remap_segments = remap_that_would_corrupt
+        mock_gate.remap_segments = MagicMock(side_effect=remap_that_would_corrupt)
 
-        passthrough = True
-        if mock_gate is not None and not passthrough:
-
-            def callback(segments):
-                mock_gate.remap_segments(segments)
-                stream_transcript(segments)
-
-        else:
-            callback = stream_transcript
+        callback = make_stream_callback(stream_transcript, mock_gate, passthrough=True)
 
         callback(
             [
@@ -1049,37 +1044,30 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
         self.assertEqual(len(segments_received), 1)
         self.assertAlmostEqual(segments_received[0]['start'], 1.5)
         self.assertAlmostEqual(segments_received[0]['end'], 3.0)
+        mock_gate.remap_segments.assert_not_called()
 
     def test_non_passthrough_segments_are_remapped(self):
-        """Non-passthrough (Deepgram) should have timestamps remapped."""
         segments_received = []
 
         def stream_transcript(segments):
             segments_received.extend(segments)
 
-        remap_called = [False]
-
-        def remap(segments):
-            remap_called[0] = True
-
         mock_gate = MagicMock()
-        mock_gate.remap_segments = remap
-
-        passthrough = False
-        if mock_gate is not None and not passthrough:
-
-            def callback(segments):
-                mock_gate.remap_segments(segments)
-                stream_transcript(segments)
-
-        else:
-            callback = stream_transcript
+        callback = make_stream_callback(stream_transcript, mock_gate, passthrough=False)
 
         callback(
             [{'speaker': 'SPEAKER_00', 'start': 1.0, 'end': 2.0, 'text': 'hi', 'is_user': False, 'person_id': None}]
         )
 
-        self.assertTrue(remap_called[0])
+        mock_gate.remap_segments.assert_called_once()
+        self.assertEqual(len(segments_received), 1)
+
+    def test_no_gate_returns_original_callback(self):
+        def stream_transcript(segments):
+            pass
+
+        callback = make_stream_callback(stream_transcript, None, passthrough=False)
+        self.assertIs(callback, stream_transcript)
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
