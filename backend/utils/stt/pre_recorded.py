@@ -12,7 +12,7 @@ from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 import logging
 
-_DG_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
+_DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
 
