@@ -1038,8 +1038,10 @@ async def _stream_handler(
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
 
+            passthrough = stt_service == STTService.modulate
+
             def _make_stream_callback(callback):
-                if vad_gate is not None:
+                if vad_gate is not None and not passthrough:
 
                     def wrapped(segments):
                         vad_gate.remap_segments(segments)
@@ -1057,7 +1059,6 @@ async def _stream_handler(
                 active_check=lambda: websocket_active,
             )
             if vad_gate is not None and raw_socket is not None:
-                passthrough = stt_service == STTService.modulate
                 stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate, passthrough_audio=passthrough)
             else:
                 stt_socket = raw_socket
