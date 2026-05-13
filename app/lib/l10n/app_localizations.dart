@@ -12894,7 +12894,7 @@ abstract class AppLocalizations {
   /// No description provided for @batteryFullyChargedTitle.
   ///
   /// In en, this message translates to:
-  /// **'Omi is charged fully'**
+  /// **'Omi is fully charged'**
   String get batteryFullyChargedTitle;
 
   /// No description provided for @batteryFullyChargedBody.
