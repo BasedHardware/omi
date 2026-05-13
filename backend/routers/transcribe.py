@@ -78,6 +78,7 @@ from utils.stt.streaming import (
     process_audio_dg,
     process_audio_modulate,
     sort_segments_by_start,
+    sort_transcript_segments_in_place,
 )
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -930,7 +931,7 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            conversation.transcript_segments.sort(key=lambda s: s.start)
+            sort_transcript_segments_in_place(conversation.transcript_segments)
             if speaker_map_dirty:
                 # A new speaker match was found — retroactively fix all earlier segments once
                 process_speaker_assigned_segments(
