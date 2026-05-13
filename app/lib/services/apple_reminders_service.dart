@@ -80,12 +80,13 @@ class AppleRemindersService {
     }
 
     try {
-      final result = await _channel.invokeMethod('addReminder', {
+      final args = <String, dynamic>{
         'title': title,
         'notes': notes,
         'dueDate': dueDate?.millisecondsSinceEpoch,
-        'listName': listName ?? 'Reminders',
-      });
+      };
+      if (listName != null) args['listName'] = listName;
+      final result = await _channel.invokeMethod('addReminder', args);
 
       if (result is String) {
         return result;
@@ -224,7 +225,7 @@ class AppleRemindersService {
       }
     }
 
-    final calendarItemId = await addReminder(title: actionItemDescription, notes: 'From Omi', listName: 'Reminders');
+    final calendarItemId = await addReminder(title: actionItemDescription, notes: 'From Omi');
     return calendarItemId != null ? AppleRemindersResult.success : AppleRemindersResult.failed;
   }
 }
