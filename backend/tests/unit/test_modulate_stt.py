@@ -1031,6 +1031,70 @@ class TestSegmentSortByStartMs(unittest.TestCase):
         self.assertEqual(result[1]['text'], 'later')
 
 
+class TestCrossBatchSegmentOrdering(unittest.TestCase):
+    """Regression: late-arriving segment from a previous batch must be sorted into correct position.
+
+    Exercises TranscriptSegment.combine_segments + post-combine sort guard from transcribe.py:910.
+    """
+
+    def test_late_arriving_earlier_segment_sorted_after_combine(self):
+        from models.transcript_segment import TranscriptSegment
+
+        existing = [
+            TranscriptSegment(
+                text='This is the second utterance.',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=False,
+                start=10.0,
+                end=12.0,
+            ),
+        ]
+        late_arrival = [
+            TranscriptSegment(
+                text='This is the first utterance.',
+                speaker='SPEAKER_01',
+                speaker_id=1,
+                is_user=False,
+                start=2.0,
+                end=5.0,
+            ),
+        ]
+        combined, _, _ = TranscriptSegment.combine_segments(existing, late_arrival)
+        combined.sort(key=lambda s: s.start)
+        self.assertEqual(len(combined), 2)
+        self.assertAlmostEqual(combined[0].start, 2.0)
+        self.assertAlmostEqual(combined[1].start, 10.0)
+
+    def test_without_sort_late_arrival_stays_appended(self):
+        from models.transcript_segment import TranscriptSegment
+
+        existing = [
+            TranscriptSegment(
+                text='This is the later segment.',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=False,
+                start=15.0,
+                end=18.0,
+            ),
+        ]
+        late_arrival = [
+            TranscriptSegment(
+                text='This is the earlier segment.',
+                speaker='SPEAKER_01',
+                speaker_id=1,
+                is_user=False,
+                start=5.0,
+                end=8.0,
+            ),
+        ]
+        combined, _, _ = TranscriptSegment.combine_segments(existing, late_arrival)
+        self.assertAlmostEqual(combined[0].start, 15.0, msg='without sort, late arrival appended at end')
+        combined.sort(key=lambda s: s.start)
+        self.assertAlmostEqual(combined[0].start, 5.0, msg='sort guard fixes cross-batch order')
+
+
 class TestPassthroughSkipsRemap(unittest.TestCase):
     """Regression: passthrough providers must NOT have timestamps remapped by VAD gate.
 
