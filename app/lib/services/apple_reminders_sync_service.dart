@@ -57,7 +57,6 @@ class AppleRemindersSyncService {
         title: item.description,
         notes: 'From Omi',
         dueDate: item.dueAt,
-        listName: 'Reminders',
       );
 
       if (calendarItemId != null) {
