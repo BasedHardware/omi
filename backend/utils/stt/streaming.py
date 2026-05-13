@@ -610,10 +610,6 @@ class SafeModulateSocket(STTSocket):
                 if data == b'':
                     break
                 if data == _EOS_SENTINEL:
-                    try:
-                        await self._ws.send(b'')
-                    except Exception:
-                        pass
                     break
                 await self._ws.send(data)
         except websockets.exceptions.ConnectionClosed as e:
