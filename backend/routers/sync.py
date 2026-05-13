@@ -1400,7 +1400,7 @@ def _run_full_pipeline_background(
             except Exception as e:
                 vad_errors.append(f'{path}: {e}')
 
-        futures = [sync_executor.submit(_run_vad_bg, path) for path in wav_paths]
+        futures = [submit_with_context(sync_executor, _run_vad_bg, path) for path in wav_paths]
         for future in futures:
             try:
                 future.result(timeout=300)
