@@ -102,7 +102,7 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     cache_key = _hash_key(api_key)
     inst = _anthropic_cache.get(cache_key)
     if inst is None:
-        inst = anthropic.AsyncAnthropic(api_key=api_key)
+        inst = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
         _anthropic_cache[cache_key] = inst
     return inst
 
@@ -137,7 +137,7 @@ def _create_byok_client(
 
 
 # Anthropic client for chat agent (module-level, BYOK-aware)
-_default_anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+_default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
 anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
 
 
@@ -624,7 +624,7 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
 # Legacy module-level alias (kept for test compatibility).
 # Production code should use get_llm(feature) exclusively.
 # ---------------------------------------------------------------------------
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
 
 # ---------------------------------------------------------------------------
 # Embeddings, parser, utilities
