@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
+from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
 from pydantic import BaseModel
 from typing import List, Optional
@@ -672,20 +673,23 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 except Exception as e:
                     logger.error(f"Error updating subscription metadata: {e}")
 
-                # Get subscription details
-                stripe_sub = stripe.Subscription.retrieve(subscription_id)
-                if stripe_sub:
-                    subscription_obj = stripe_sub.to_dict()
-                    if subscription_obj and subscription_obj['items']['data']:
-                        price_id = subscription_obj['items']['data'][0]['price']['id']
-                        try:
-                            plan_type = get_plan_type_from_price_id(price_id)
-                            if is_paid_plan(plan_type):
-                                await send_subscription_paid_personalized_notification(uid)
-                        except ValueError:
-                            logger.warning(
-                                f"Ignoring checkout session for subscription with unknown price_id: {price_id}"
-                            )
+                # Send paid notification if applicable
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                    if stripe_sub:
+                        subscription_obj = stripe_sub.to_dict()
+                        if subscription_obj and subscription_obj['items']['data']:
+                            price_id = subscription_obj['items']['data'][0]['price']['id']
+                            try:
+                                plan_type = get_plan_type_from_price_id(price_id)
+                                if is_paid_plan(plan_type):
+                                    await send_subscription_paid_personalized_notification(uid)
+                            except ValueError:
+                                logger.warning(
+                                    f"Ignoring checkout session for subscription with unknown price_id: {price_id}"
+                                )
+                except Exception as e:
+                    logger.error(f"Error retrieving subscription for notification: {sanitize(str(e))}")
 
     if event['type'] in [
         'customer.subscription.updated',
@@ -707,15 +711,21 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             if new_subscription:
-                if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                    conversations_db.unlock_all_conversations(uid)
-                    memories_db.unlock_all_memories(uid)
-                    action_items_db.unlock_all_action_items(uid)
-                users_db.update_user_subscription(uid, new_subscription.dict())
-                set_credits_invalidation_signal(uid)
-                if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                    clear_fair_use_on_upgrade(uid)
-                logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
+                try:
+                    if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
+                        conversations_db.unlock_all_conversations(uid)
+                        memories_db.unlock_all_memories(uid)
+                        action_items_db.unlock_all_action_items(uid)
+                    users_db.update_user_subscription(uid, new_subscription.dict())
+                    set_credits_invalidation_signal(uid)
+                    if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
+                        clear_fair_use_on_upgrade(uid)
+                    logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
+                except FirestoreNotFound:
+                    logger.warning(
+                        f"Stripe webhook: user {uid} not found in Firestore, "
+                        f"skipping subscription update for event {event['type']}"
+                    )
 
     # Handle subscription schedule events
     if event['type'] in [
@@ -733,13 +743,23 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_subscription_id = schedule_obj['subscription']
                         new_stripe_sub = stripe.Subscription.retrieve(new_subscription_id)
                         new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
-                        users_db.update_user_subscription(uid, new_subscription.dict())
-                        set_credits_invalidation_signal(uid)
-                        if new_subscription and is_paid_plan(new_subscription.plan):
-                            clear_fair_use_on_upgrade(uid)
-                        logger.info(
-                            f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
-                        )
+                        if not new_subscription:
+                            logger.warning(
+                                f"Could not build subscription from scheduled upgrade for user {uid}, "
+                                f"subscription {new_subscription_id} — unknown price ID"
+                            )
+                        else:
+                            users_db.update_user_subscription(uid, new_subscription.dict())
+                            set_credits_invalidation_signal(uid)
+                            if is_paid_plan(new_subscription.plan):
+                                clear_fair_use_on_upgrade(uid)
+                            logger.info(
+                                f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
+                            )
+                except FirestoreNotFound:
+                    logger.warning(
+                        f"Stripe webhook: user {uid} not found in Firestore, " f"skipping scheduled upgrade update"
+                    )
                 except Exception as e:
                     logger.error(f"Error updating subscription after scheduled upgrade: {e}")
             elif schedule_obj.get('status') == 'canceled':
@@ -752,11 +772,22 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
                         # Build subscription object with cancellation status
                         new_subscription = _build_subscription_from_stripe_object(subscription_obj)
-                        new_subscription.cancel_at_period_end = True
-
-                        users_db.update_user_subscription(uid, new_subscription.dict())
-                        set_credits_invalidation_signal(uid)
-                        logger.info(f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}")
+                        if not new_subscription:
+                            logger.warning(
+                                f"Could not build subscription from schedule cancellation for user {uid}, "
+                                f"subscription {subscription_id} — unknown price ID"
+                            )
+                        else:
+                            new_subscription.cancel_at_period_end = True
+                            users_db.update_user_subscription(uid, new_subscription.dict())
+                            set_credits_invalidation_signal(uid)
+                            logger.info(
+                                f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
+                            )
+                except FirestoreNotFound:
+                    logger.warning(
+                        f"Stripe webhook: user {uid} not found in Firestore, " f"skipping schedule cancellation update"
+                    )
                 except Exception as e:
                     logger.error(f"Error updating subscription after schedule cancellation: {e}")
 
