@@ -1699,3 +1699,274 @@ class TestPusherCoordinatorExecutor:
             "pusher._process_conversation_task must NOT pass critical_executor for process_conversation — "
             "use None (default executor) to prevent deadlock"
         )
+
+
+# ---------------------------------------------------------------------------
+# 14. Bulkhead executor infrastructure tests
+# ---------------------------------------------------------------------------
+
+
+class TestBulkheadExecutors:
+    """Verify bulkhead executor configuration in utils/executors.py."""
+
+    @staticmethod
+    def _read_executors_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'executors.py')
+        with open(path) as f:
+            return f.read()
+
+    def test_sync_executor_exists(self):
+        source = self._read_executors_source()
+        assert 'sync_executor' in source
+        assert "thread_name_prefix=\"sync\"" in source or "thread_name_prefix='sync'" in source
+
+    def test_postprocess_executor_exists(self):
+        source = self._read_executors_source()
+        assert 'postprocess_executor' in source
+        assert "thread_name_prefix=\"postproc\"" in source or "thread_name_prefix='postproc'" in source
+
+    def test_executor_worker_counts(self):
+        source = self._read_executors_source()
+        assert 'sync_executor = ThreadPoolExecutor(max_workers=12' in source
+        assert 'postprocess_executor = ThreadPoolExecutor(max_workers=8' in source
+
+    def test_all_executors_in_shutdown(self):
+        source = self._read_executors_source()
+        for name in ['critical', 'sync', 'postprocess', 'storage']:
+            assert f"'{name}'" in source or f'"{name}"' in source, f"Executor '{name}' must be in shutdown_executors"
+
+    def test_submit_with_context_exists(self):
+        source = self._read_executors_source()
+        assert 'def submit_with_context(' in source
+        assert 'contextvars.copy_context()' in source
+
+    def test_submit_with_context_propagates_contextvars(self):
+        """submit_with_context must propagate ContextVar values to the submitted thread."""
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+
+        test_var = contextvars.ContextVar('test_key', default=None)
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='test_ctx')
+
+        try:
+            test_var.set('hello')
+            ctx = contextvars.copy_context()
+            future = executor.submit(ctx.run, test_var.get)
+            assert future.result(timeout=5) == 'hello'
+
+            test_var.set('different')
+            ctx2 = contextvars.copy_context()
+            future2 = executor.submit(ctx2.run, test_var.get)
+            assert future2.result(timeout=5) == 'different'
+        finally:
+            executor.shutdown(wait=False)
+
+    def test_executor_isolation_different_pools(self):
+        """sync_executor and postprocess_executor must be distinct objects."""
+        source = self._read_executors_source()
+        lines = source.strip().split('\n')
+        sync_lines = [l for l in lines if l.startswith('sync_executor')]
+        post_lines = [l for l in lines if l.startswith('postprocess_executor')]
+        assert len(sync_lines) >= 1, "sync_executor must be defined at module level"
+        assert len(post_lines) >= 1, "postprocess_executor must be defined at module level"
+        assert sync_lines[0] != post_lines[0], "sync and postprocess executors must be separate"
+
+
+# ---------------------------------------------------------------------------
+# 15. BYOK context propagation tests
+# ---------------------------------------------------------------------------
+
+
+class TestBYOKContextPropagation:
+    """Verify BYOK context lifecycle in the sync pipeline."""
+
+    @staticmethod
+    def _read_sync_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(path) as f:
+            return f.read()
+
+    def test_v2_captures_byok_before_dispatch(self):
+        """v2 endpoint must capture BYOK keys before run_in_executor dispatch."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert 'get_byok_keys()' in func_body, "v2 must capture BYOK keys before dispatch"
+        assert 'captured_byok' in func_body, "v2 must store captured BYOK in a variable"
+
+    def test_v2_passes_byok_to_background(self):
+        """v2 must pass captured BYOK keys as an argument to the background worker."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert 'captured_byok' in func_body
+        dispatch_section = func_body[func_body.index('run_in_executor') :]
+        assert 'captured_byok' in dispatch_section, "captured BYOK must be passed to run_in_executor call"
+
+    def test_background_worker_accepts_byok_parameter(self):
+        """_run_full_pipeline_background must accept a byok_keys parameter."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_def = source.find('\ndef ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+        assert 'byok_keys' in func_body, "Background worker must accept byok_keys parameter"
+
+    def test_background_worker_sets_byok_unconditionally(self):
+        """Background worker must call set_byok_keys unconditionally (not guarded by if)."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_def = source.find('\ndef ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert (
+            'set_byok_keys(byok_keys or {})' in func_body
+        ), "Worker must set BYOK unconditionally with empty dict fallback"
+
+    def test_background_worker_clears_byok_in_finally(self):
+        """Background worker must clear BYOK context in its finally block."""
+        source = self._read_sync_source()
+        start = source.index('def _run_full_pipeline_background')
+        next_def = source.find('\ndef ', start + 1)
+        if next_def == -1:
+            next_def = len(source)
+        func_body = source[start:next_def]
+
+        assert 'set_byok_keys({})' in func_body, "Worker must clear BYOK keys (expected in finally block)"
+
+    def test_no_plain_submit_in_sync(self):
+        """All executor .submit() calls in sync.py must use submit_with_context."""
+        source = self._read_sync_source()
+        import re as _re
+
+        plain_submits = _re.findall(
+            r'(?:critical_executor|sync_executor|storage_executor|postprocess_executor)\.submit\(', source
+        )
+        assert (
+            len(plain_submits) == 0
+        ), f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+
+    def test_no_plain_submit_in_process_conversation(self):
+        """All executor .submit() calls in process_conversation.py must use submit_with_context."""
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'process_conversation.py')
+        with open(path) as f:
+            source = f.read()
+        import re as _re
+
+        plain_submits = _re.findall(
+            r'(?:critical_executor|sync_executor|storage_executor|postprocess_executor)\.submit\(', source
+        )
+        assert (
+            len(plain_submits) == 0
+        ), f"Found {len(plain_submits)} plain .submit() calls — must use submit_with_context"
+
+
+# ---------------------------------------------------------------------------
+# 16. Timeout configuration tests
+# ---------------------------------------------------------------------------
+
+
+class TestTimeoutConfiguration:
+    """Verify timeout settings on LLM and STT clients."""
+
+    @staticmethod
+    def _read_clients_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'clients.py')
+        with open(path) as f:
+            return f.read()
+
+    @staticmethod
+    def _read_pre_recorded_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'stt', 'pre_recorded.py')
+        with open(path) as f:
+            return f.read()
+
+    @staticmethod
+    def _read_classifier_source():
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'fair_use_classifier.py')
+        with open(path) as f:
+            return f.read()
+
+    def test_llm_mini_has_timeout(self):
+        source = self._read_clients_source()
+        llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
+        assert 'request_timeout=120' in llm_mini_line
+        assert 'max_retries=1' in llm_mini_line
+
+    def test_anthropic_default_has_timeout(self):
+        source = self._read_clients_source()
+        default_line = [l for l in source.split('\n') if '_default_anthropic_client' in l and 'AsyncAnthropic' in l][0]
+        assert 'timeout=120' in default_line
+        assert 'max_retries=1' in default_line
+
+    def test_anthropic_byok_has_timeout(self):
+        source = self._read_clients_source()
+        start = source.index('def _cached_anthropic')
+        end = source.find('\ndef ', start + 1)
+        func_body = source[start:end]
+        assert 'timeout=120' in func_body
+        assert 'max_retries=1' in func_body
+
+    def test_byok_client_has_timeout(self):
+        source = self._read_clients_source()
+        start = source.index('def _create_byok_client')
+        end = source.find('\ndef ', start + 1)
+        func_body = source[start:end]
+        assert "'request_timeout': 120" in func_body
+        assert "'max_retries': 1" in func_body
+
+    def test_classifier_llm_has_timeout(self):
+        source = self._read_classifier_source()
+        start = source.index('_classifier_llm')
+        end = source.index('\n', source.index(')', start))
+        constructor_call = source[start:end]
+        assert 'request_timeout=120' in constructor_call
+        assert 'max_retries=1' in constructor_call
+
+    def test_dg_timeout_read_within_budget(self):
+        """DG read timeout must be <= 150s so 2 attempts fit within 300s segment budget."""
+        source = self._read_pre_recorded_source()
+        assert 'read=120.0' in source, "DG read timeout must be 120s"
+
+    def test_dg_timeout_connect_reasonable(self):
+        source = self._read_pre_recorded_source()
+        assert 'connect=10.0' in source
+
+    def test_dg_max_two_attempts(self):
+        """Deepgram prerecorded must retry at most once (2 total attempts)."""
+        source = self._read_pre_recorded_source()
+        start = source.index('def deepgram_prerecorded(')
+        end = source.find('\ndef ', start + 1)
+        func_body = source[start:end]
+        assert 'attempts < 1' in func_body, "DG url transcription must use attempts < 1 (max 2 attempts)"
+
+    def test_dg_from_bytes_max_two_attempts(self):
+        """Deepgram prerecorded_from_bytes must retry at most once (2 total attempts)."""
+        source = self._read_pre_recorded_source()
+        start = source.index('def deepgram_prerecorded_from_bytes(')
+        end = source.find('\ndef ', start + 1)
+        if end == -1:
+            end = len(source)
+        func_body = source[start:end]
+        assert 'attempts < 1' in func_body, "DG bytes transcription must use attempts < 1 (max 2 attempts)"
+
+    def test_segment_future_timeout_budget(self):
+        """Segment futures in v2 background must use timeout=300."""
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            source = f.read()
+        start = source.index('def _run_full_pipeline_background')
+        end = source.find('\ndef ', start + 1)
+        func_body = source[start:end]
+        assert 'future.result(timeout=300)' in func_body, "Segment futures must have 300s timeout"
