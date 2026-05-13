@@ -288,7 +288,7 @@ class AppleRemindersService {
         }
 
         let notes = args["notes"] as? String
-        let listName = args["listName"] as? String ?? "Reminders"
+        let listName = args["listName"] as? String
         let dueDate: Date? = {
             if let dueDateMs = args["dueDate"] as? Int64 {
                 return Date(timeIntervalSince1970: TimeInterval(dueDateMs) / 1000.0)
@@ -301,29 +301,18 @@ class AppleRemindersService {
             return
         }
 
-        // Find or create the calendar
+        // Never auto-create a list: title matching ("Reminders") fails on
+        // non-English systems (e.g. "提醒事项") and used to spawn one list per task.
         var targetCalendar: EKCalendar?
-        let calendars = eventStore.calendars(for: .reminder)
-        targetCalendar = calendars.first { $0.title == listName }
-
+        if let name = listName, !name.isEmpty {
+            targetCalendar = eventStore.calendars(for: .reminder).first { $0.title == name }
+        }
         if targetCalendar == nil {
-            targetCalendar = EKCalendar(for: .reminder, eventStore: eventStore)
-            targetCalendar?.title = listName
-            targetCalendar?.cgColor = UIColor.systemBlue.cgColor
-
-            if let defaultSource = eventStore.defaultCalendarForNewReminders()?.source {
-                targetCalendar?.source = defaultSource
-            }
-
-            do {
-                try eventStore.saveCalendar(targetCalendar!, commit: true)
-            } catch {
-                targetCalendar = eventStore.defaultCalendarForNewReminders()
-            }
+            targetCalendar = eventStore.defaultCalendarForNewReminders()
         }
 
         guard let calendar = targetCalendar else {
-            result(FlutterError(code: "NO_CALENDAR", message: "Could not find or create calendar", details: nil))
+            result(FlutterError(code: "NO_CALENDAR", message: "No reminders calendar available", details: nil))
             return
         }
 
