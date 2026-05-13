@@ -102,7 +102,7 @@ jobs:
           service: ${{ env.SERVICE }}
 
       - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
+        if: always() && github.event.inputs.environment == 'development'
         uses: ./.github/actions/deployment-notifier
         with:
           environment: ${{ github.event.inputs.environment }}
