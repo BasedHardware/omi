@@ -260,8 +260,8 @@ sequenceDiagram
 | `last_activity_time` timeout | 90s | transcribe.py | WS inactivity disconnect |
 | `SPEAKER_SAMPLE_MIN_AGE` | 120s | pusher.py | Wait before extracting embedding (skipped on shutdown) |
 | `SPEAKER_SAMPLE_PROCESS_INTERVAL` | 15s | pusher.py | Queue poll interval |
-| `WS_RECEIVE_TIMEOUT` | 300s | pusher.py | No-data timeout on pusher WebSocket receive; detects dead upstream connections |
-| `BG_DRAIN_TIMEOUT` | 30s | pusher.py | Grace period for background tasks to drain after disconnect before force-cancel |
+| `WS_RECEIVE_TIMEOUT` | 300s | pusher.py, transcribe.py | No-data timeout on WebSocket receive; detects dead connections |
+| `BG_DRAIN_TIMEOUT` | 30s | pusher.py, transcribe.py | Grace period for background tasks to drain after disconnect before force-cancel |
 | `lifecycle_manager` poll | 5s | transcribe.py:1683 | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
 | Speaker match threshold | 0.45 | transcribe.py | Cosine distance cutoff |
