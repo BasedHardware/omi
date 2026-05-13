@@ -549,6 +549,71 @@ class TestRecvLoop(unittest.TestCase):
         self.assertAlmostEqual(self.segments[0]['end'], 0.7)
 
 
+class TestDrainAndClosePartialFlush(unittest.TestCase):
+    def setUp(self):
+        self.loop = asyncio.new_event_loop()
+        self.segments = []
+
+    def tearDown(self):
+        self.loop.close()
+
+    def test_drain_flushes_partial_when_done_never_arrives(self):
+        """drain_and_close must flush pending partial text when done_event times out."""
+        ws = AsyncMock()
+        ws.close = AsyncMock()
+
+        async def aiter_never():
+            await asyncio.sleep(999)
+            yield ''
+
+        ws.__aiter__ = lambda s: aiter_never()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: self.segments.extend(s), self.loop, preseconds=0)
+            sock._send_task.cancel()
+            sock._prev_partial_text = 'trailing speech'
+            sock._prev_partial_start_ms = 5000
+            sock._prev_partial_word_count = 2
+            # Patch done_event.wait to always time out
+            original_wait = sock._done_event.wait
+
+            async def timeout_wait():
+                raise asyncio.TimeoutError()
+
+            sock._done_event.wait = timeout_wait
+            await sock.drain_and_close()
+            return sock
+
+        self.loop.run_until_complete(run())
+        self.assertEqual(len(self.segments), 1)
+        self.assertEqual(self.segments[0]['text'], 'trailing speech')
+        self.assertAlmostEqual(self.segments[0]['start'], 5.0)
+
+    def test_drain_no_flush_when_no_pending_partial(self):
+        """drain_and_close should not produce segments when no partial is pending."""
+        ws = AsyncMock()
+        ws.close = AsyncMock()
+
+        async def aiter_never():
+            await asyncio.sleep(999)
+            yield ''
+
+        ws.__aiter__ = lambda s: aiter_never()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: self.segments.extend(s), self.loop, preseconds=0)
+            sock._send_task.cancel()
+
+            async def timeout_wait():
+                raise asyncio.TimeoutError()
+
+            sock._done_event.wait = timeout_wait
+            await sock.drain_and_close()
+
+        self.loop.run_until_complete(run())
+        self.assertEqual(len(self.segments), 0)
+
+
 class TestProcessAudioModulate(unittest.TestCase):
     @patch.dict('os.environ', {}, clear=False)
     def test_missing_api_key_raises(self):
