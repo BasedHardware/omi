@@ -324,13 +324,16 @@ async def _websocket_util_trigger(
                 continue
 
             current_time = time.time()
+            is_shutdown = not websocket_active
 
-            # Separate ready and pending requests
+            # Separate ready and pending requests.
+            # On shutdown, skip the age check — process everything so pending
+            # samples aren't silently dropped when the drain timeout fires.
             ready_requests = []
             pending_requests = []
 
             for request in list(speaker_sample_queue):
-                if current_time - request['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
+                if is_shutdown or current_time - request['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
                     ready_requests.append(request)
                 else:
                     pending_requests.append(request)
@@ -635,7 +638,15 @@ async def _websocket_util_trigger(
                 timeout=BG_DRAIN_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            logger.warning(f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid}")
+            dropped_speaker = len(speaker_sample_queue)
+            dropped_transcript = len(transcript_queue)
+            dropped_audio = len(audio_bytes_queue)
+            dropped_cloud = len(private_cloud_queue)
+            logger.warning(
+                f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid} "
+                f"(dropped: speaker={dropped_speaker} transcript={dropped_transcript} "
+                f"audio={dropped_audio} cloud={dropped_cloud})"
+            )
             for task in bg_main_tasks:
                 task.cancel()
             await asyncio.gather(*bg_main_tasks, return_exceptions=True)
