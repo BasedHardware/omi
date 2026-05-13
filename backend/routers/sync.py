@@ -1387,14 +1387,17 @@ def _run_full_pipeline_background(
         vad_errors = []
 
         def _run_vad_bg(path):
-            retrieve_vad_segments(path, segmented_paths, vad_errors)
+            try:
+                retrieve_vad_segments(path, segmented_paths, vad_errors)
+            except Exception as e:
+                vad_errors.append(f'{path}: {e}')
 
         futures = [critical_executor.submit(_run_vad_bg, path) for path in wav_paths]
         for future in futures:
             try:
                 future.result()
             except Exception as e:
-                logger.error(f'sync_v2 bg: VAD error: {e}')
+                vad_errors.append(f'VAD executor error: {e}')
 
         _cleanup_files(wav_paths)
         wav_paths = []
