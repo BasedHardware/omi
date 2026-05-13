@@ -215,7 +215,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             loop.close()
 
     def test_send_then_drain_ordering(self):
-        """Audio sent via send() must arrive at ws.send(); EOS sentinel is NOT forwarded to ws."""
+        """Audio sent via send() must arrive at ws.send(); drain sends empty EOS frame to provider."""
         sent_data = []
         ws = AsyncMock()
         ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
@@ -234,8 +234,34 @@ class TestSafeModulateSocket(unittest.TestCase):
         try:
             result = loop.run_until_complete(run())
             self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
-            self.assertNotIn(b'', result, 'empty EOS must not be forwarded to ws')
+            self.assertIn(b'', result, 'empty EOS frame must be sent to provider')
             self.assertNotIn(b'__EOS__', result, 'EOS sentinel must not be forwarded to ws')
+        finally:
+            loop.close()
+
+    def test_close_does_not_send_eos_frame(self):
+        """close() is an abrupt stop — no EOS frame sent to provider."""
+        sent_data = []
+        ws = AsyncMock()
+        ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
+        ws.close = AsyncMock()
+
+        loop = asyncio.new_event_loop()
+
+        async def run():
+            sock = SafeModulateSocket(ws, lambda s: None, loop, preseconds=0)
+            sock.set_wav_header(b'')
+            sock._recv_task.cancel()
+            sock.send(b'audio_chunk')
+            await asyncio.sleep(0.05)
+            sock.finish()
+            await asyncio.sleep(0.05)
+            return sent_data
+
+        try:
+            result = loop.run_until_complete(run())
+            self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
+            self.assertNotIn(b'', result, 'close() must not send EOS frame')
         finally:
             loop.close()
 
