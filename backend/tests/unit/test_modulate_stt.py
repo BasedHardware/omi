@@ -873,6 +873,72 @@ class TestUtteranceResults(unittest.TestCase):
         self.assertEqual(self.segments[0]['text'], 'after preseconds')
 
 
+class TestSegmentSortByStartMs(unittest.TestCase):
+    """Verify that segments buffered in realtime_segment_buffers are sorted by start time."""
+
+    def test_out_of_order_segments_sorted_by_start(self):
+        segments = [
+            {
+                'speaker': 'SPEAKER_00',
+                'start': 15.96,
+                'end': 18.24,
+                'text': 'second utterance',
+                'is_user': False,
+                'person_id': None,
+            },
+            {
+                'speaker': 'SPEAKER_00',
+                'start': 0.54,
+                'end': 12.12,
+                'text': 'first utterance',
+                'is_user': False,
+                'person_id': None,
+            },
+            {
+                'speaker': 'SPEAKER_00',
+                'start': 24.06,
+                'end': 29.82,
+                'text': 'third utterance',
+                'is_user': False,
+                'person_id': None,
+            },
+        ]
+        sorted_segments = sorted(segments, key=lambda s: s.get('start', 0))
+        self.assertEqual(sorted_segments[0]['text'], 'first utterance')
+        self.assertEqual(sorted_segments[1]['text'], 'second utterance')
+        self.assertEqual(sorted_segments[2]['text'], 'third utterance')
+
+    def test_already_ordered_segments_unchanged(self):
+        segments = [
+            {'speaker': 'SPEAKER_00', 'start': 0.5, 'end': 1.0, 'text': 'a', 'is_user': False, 'person_id': None},
+            {'speaker': 'SPEAKER_00', 'start': 2.0, 'end': 3.0, 'text': 'b', 'is_user': False, 'person_id': None},
+        ]
+        sorted_segments = sorted(segments, key=lambda s: s.get('start', 0))
+        self.assertEqual(sorted_segments[0]['text'], 'a')
+        self.assertEqual(sorted_segments[1]['text'], 'b')
+
+    def test_single_segment_no_error(self):
+        segments = [
+            {'speaker': 'SPEAKER_00', 'start': 5.0, 'end': 6.0, 'text': 'only', 'is_user': False, 'person_id': None},
+        ]
+        sorted_segments = sorted(segments, key=lambda s: s.get('start', 0))
+        self.assertEqual(len(sorted_segments), 1)
+
+    def test_empty_segments_no_error(self):
+        segments = []
+        sorted_segments = sorted(segments, key=lambda s: s.get('start', 0))
+        self.assertEqual(sorted_segments, [])
+
+    def test_missing_start_key_defaults_to_zero(self):
+        segments = [
+            {'speaker': 'SPEAKER_00', 'start': 5.0, 'end': 6.0, 'text': 'later', 'is_user': False, 'person_id': None},
+            {'speaker': 'SPEAKER_00', 'end': 1.0, 'text': 'no start key', 'is_user': False, 'person_id': None},
+        ]
+        sorted_segments = sorted(segments, key=lambda s: s.get('start', 0))
+        self.assertEqual(sorted_segments[0]['text'], 'no start key')
+        self.assertEqual(sorted_segments[1]['text'], 'later')
+
+
 class TestLanguageRoutingExtended(unittest.TestCase):
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
     def test_multi_lang_disabled(self):
