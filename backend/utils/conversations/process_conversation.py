@@ -404,7 +404,7 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    futures = [critical_executor.submit(execute_app, app) for app in filtered_apps]
+    futures = [submit_with_context(critical_executor, execute_app, app) for app in filtered_apps]
     for future in futures:
         try:
             future.result()
@@ -624,7 +624,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        critical_executor.submit(_run_auto_sync)
+        submit_with_context(critical_executor, _run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
