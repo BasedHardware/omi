@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import httpx
 
-from utils.executors import critical_executor, storage_executor
+from utils.executors import critical_executor, storage_executor, sync_executor, submit_with_context
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -1139,7 +1139,7 @@ async def sync_local_files(
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
         loop = asyncio.get_running_loop()
-        await asyncio.gather(*[loop.run_in_executor(critical_executor, _run_vad, path) for path in wav_paths])
+        await asyncio.gather(*[loop.run_in_executor(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1218,7 +1218,7 @@ async def sync_local_files(
         await asyncio.gather(
             *[
                 loop.run_in_executor(
-                    critical_executor,
+                    sync_executor,
                     process_segment,
                     path,
                     uid,
@@ -1353,11 +1353,14 @@ def _run_full_pipeline_background(
     """
     segmented_paths = set()
     wav_paths = []
+    stage_timings = {}
+    pipeline_start = time.monotonic()
     try:
         mark_job_processing(job_id)
 
         # --- Phase 1: Decode ---
         update_sync_job(job_id, {'stage': 'decoding'})
+        t0 = time.monotonic()
         try:
             wav_paths = decode_files_to_wav(raw_paths)
         except HTTPException as e:
@@ -1368,6 +1371,7 @@ def _run_full_pipeline_background(
             return
         finally:
             _cleanup_files(raw_paths)
+        stage_timings['decode_ms'] = int((time.monotonic() - t0) * 1000)
 
         if not wav_paths:
             mark_job_completed(
@@ -1384,6 +1388,7 @@ def _run_full_pipeline_background(
 
         # --- Phase 2: VAD ---
         update_sync_job(job_id, {'stage': 'vad'})
+        t0 = time.monotonic()
         vad_errors = []
 
         def _run_vad_bg(path):
@@ -1392,13 +1397,14 @@ def _run_full_pipeline_background(
             except Exception as e:
                 vad_errors.append(f'{path}: {e}')
 
-        futures = [critical_executor.submit(_run_vad_bg, path) for path in wav_paths]
+        futures = [sync_executor.submit(_run_vad_bg, path) for path in wav_paths]
         for future in futures:
             try:
-                future.result()
+                future.result(timeout=300)
             except Exception as e:
                 vad_errors.append(f'VAD executor error: {e}')
 
+        stage_timings['vad_ms'] = int((time.monotonic() - t0) * 1000)
         _cleanup_files(wav_paths)
         wav_paths = []
 
@@ -1471,6 +1477,8 @@ def _run_full_pipeline_background(
             person_embeddings_cache = {}
 
         # --- Phase 5: Process segments (STT + LLM) ---
+        update_sync_job(job_id, {'stage': 'stt_llm'})
+        t0 = time.monotonic()
         response = {'updated_memories': set(), 'new_memories': set()}
         segment_errors = []
         segment_lock = threading.Lock()
@@ -1493,16 +1501,21 @@ def _run_full_pipeline_background(
         segment_list = list(segmented_paths)
         for i in range(0, len(segment_list), chunk_size):
             chunk = segment_list[i : i + chunk_size]
-            seg_futures = [critical_executor.submit(_process_one_segment, path) for path in chunk]
+            seg_futures = [submit_with_context(sync_executor, _process_one_segment, path) for path in chunk]
             for future in seg_futures:
                 try:
-                    future.result()
+                    future.result(timeout=300)
+                except TimeoutError:
+                    segment_errors.append(f'Segment timed out after 300s')
+                    logger.error(f'sync_v2 bg: segment timed out job={job_id}')
                 except Exception as e:
                     logger.error(f'sync_v2 bg: segment error: {e}')
             try:
                 update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(segment_list))})
             except Exception:
                 pass
+
+        stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 
         # Record DG usage after processing
         if fair_use_restrict_dg:
@@ -1533,6 +1546,7 @@ def _run_full_pipeline_background(
             except Exception as e:
                 logger.error(f'sync_v2 bg: usage record error for {uid}: {e}')
 
+        stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
         mark_job_completed(
             job_id,
             {
@@ -1541,10 +1555,15 @@ def _run_full_pipeline_background(
                 'failed_segments': failed_segments,
                 'total_segments': total_segments,
                 'errors': segment_errors[:10] if segment_errors else [],
+                'stage_timings': stage_timings,
             },
         )
 
-        logger.info(f'sync_v2 bg complete job={job_id} uid={uid} ' f'success={successful_segments}/{total_segments}')
+        logger.info(
+            f'sync_v2 bg complete job={job_id} uid={uid} '
+            f'success={successful_segments}/{total_segments} '
+            f'timings={stage_timings}'
+        )
     except Exception as e:
         logger.error(f'sync_v2 bg failed job={job_id} uid={uid}: {e}')
         try:
