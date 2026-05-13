@@ -74,6 +74,7 @@ from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
+    make_stream_callback,
     process_audio_dg,
     process_audio_modulate,
     sort_segments_by_start,
@@ -1040,18 +1041,8 @@ async def _stream_handler(
 
             passthrough = stt_service == STTService.modulate
 
-            def _make_stream_callback(callback):
-                if vad_gate is not None and not passthrough:
-
-                    def wrapped(segments):
-                        vad_gate.remap_segments(segments)
-                        callback(segments)
-
-                    return wrapped
-                return callback
-
             raw_socket = await _create_stt_socket(
-                _make_stream_callback(stream_transcript),
+                make_stream_callback(stream_transcript, vad_gate, passthrough),
                 stt_language,
                 sample_rate,
                 stt_model,
