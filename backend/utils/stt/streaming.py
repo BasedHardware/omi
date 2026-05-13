@@ -750,3 +750,14 @@ async def process_audio_modulate(
 
 def sort_segments_by_start(segments: list) -> list:
     return sorted(segments, key=lambda s: s.get('start', 0))
+
+
+def make_stream_callback(callback, vad_gate, passthrough: bool):
+    if vad_gate is not None and not passthrough:
+
+        def wrapped(segments):
+            vad_gate.remap_segments(segments)
+            callback(segments)
+
+        return wrapped
+    return callback
