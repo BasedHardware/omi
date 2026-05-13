@@ -590,8 +590,12 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._done_event.wait(), timeout=60)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 logger.warning('Modulate drain timed out waiting for done message')
+                if self._prev_partial_text:
+                    self._flush_partial()
         except Exception:
             pass
+        if self._prev_partial_text:
+            self._flush_partial()
         self._recv_task.cancel()
         try:
             await self._ws.close()
@@ -742,3 +746,7 @@ async def process_audio_modulate(
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds)
     logger.info('Modulate Velma-2 streaming connection established')
     return sock
+
+
+def sort_segments_by_start(segments: list) -> list:
+    return sorted(segments, key=lambda s: s.get('start', 0))
