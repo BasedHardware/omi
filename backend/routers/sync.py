@@ -1453,18 +1453,7 @@ def _run_full_pipeline_background(
                     if is_dg_budget_exhausted(uid):
                         _cleanup_files(list(segmented_paths))
                         segmented_paths = set()
-                        mark_job_completed(
-                            job_id,
-                            {
-                                'new_memories': [],
-                                'updated_memories': [],
-                                'failed_segments': 0,
-                                'total_segments': total_segments,
-                                'errors': [],
-                                'dg_budget_exhausted': True,
-                                'skipped_segments': total_segments,
-                            },
-                        )
+                        mark_job_failed(job_id, 'DG budget exhausted — audio retained for retry')
                         return
             except Exception as e:
                 logger.error(f'sync_v2 bg: DG budget check error for {uid}: {e}')
