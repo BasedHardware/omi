@@ -64,6 +64,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get copySummary => 'Salin ringkasan';
 
   @override
+  String get copyConversationId => 'Salin ID perbualan';
+
+  @override
+  String get conversationIdCopied => 'ID perbualan disalin ke papan klip';
+
+  @override
   String get testPrompt => 'Uji Gesaan';
 
   @override
@@ -9252,6 +9258,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Nyahpilih semua';
+
+  @override
+  String get bulkExportAlreadyExported => 'Semua tugasan yang dipilih telah dieksport';
+
+  @override
+  String get bulkDeleteFailed => 'Tidak dapat memadam tugasan. Sila cuba lagi.';
 
   @override
   String get dailyReflection => 'Refleksi Harian';

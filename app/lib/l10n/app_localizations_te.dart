@@ -64,6 +64,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get copySummary => 'సారాంశాన్ని కాపీ చేయండి';
 
   @override
+  String get copyConversationId => 'సంభాషణ ID కాపీ చేయండి';
+
+  @override
+  String get conversationIdCopied => 'సంభాషణ ID క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది';
+
+  @override
   String get testPrompt => 'ప్రాంప్ట్‌ను పరీక్షించండి';
 
   @override
@@ -4549,12 +4555,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'మీ ప్లాన్ $date న ముగిసింది.\\nఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - కొత్త బిల్లింగ్ వ్యవధి కోసం ఛార్జ్ చేయబడుతారు.';
+    return 'మీ ప్లాన్ $date న ముగిసింది.\nఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - కొత్త బిల్లింగ్ వ్యవధి కోసం ఛార్జ్ చేయబడుతారు.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'మీ ప్లాన్ $date న రద్దు చేయడానికి సెట్ చేయబడింది.\\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - $date వరకు ఛార్జ్ లేదు.';
+    return 'మీ ప్లాన్ $date న రద్దు చేయడానికి సెట్ చేయబడింది.\nమీ ప్రయోజనాలను ఉంచడానికి ఇప్పుడే సబ్‌స్క్రిప్ట్ చేయండి - $date వరకు ఛార్జ్ లేదు.';
   }
 
   @override
@@ -5126,8 +5132,7 @@ class AppLocalizationsTe extends AppLocalizations {
       'కొనసాగించడం ద్వారా, మీ సంభాషణలు, రికార్డింగ్‌లు మరియు వ్యక్తిగత సమాచారం మా సర్వర్‌లలో సురక్షితంగా నిల్వ చేయబడతాయి. మీ ఆడియో రికార్డింగ్‌లు మరియు ట్రాన్‌స్క్రిప్ట్‌లు థర్డ్-పార్టీ AI సేవల ద్వారా ప్రాసెస్ చేయబడతాయి (ట్రాన్‌స్క్రిప్షన్ కోసం Deepgram మరియు విశ్లేషణ కోసం OpenAI సహా) AI-ఆధారిత అంతర్దృష్టులను అందించడానికి మరియు అన్ని యాప్ ఫీచర్‌లను ప్రారంభించడానికి.';
 
   @override
-  String get tasksEmptyStateMessage =>
-      'మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.';
+  String get tasksEmptyStateMessage => 'మీ సంభాషణల నుండి చర్యలు ఇక్కడ కనిపిస్తాయి.\n+ నిర్ణయం చేయడానికి ట్యాప్ చేయండి.';
 
   @override
   String get clearChatAction => 'చాట్‌ను క్లియర్ చేయండి';
@@ -5160,14 +5165,14 @@ class AppLocalizationsTe extends AppLocalizations {
   String get checkingAppleWatch => 'Apple Watch ని తనిఖీ చేస్తోంది...';
 
   @override
-  String get installOmiOnAppleWatch => 'Omi ని మీ\\nApple Watch లో ఇన్‌స్టాల్ చేయండి';
+  String get installOmiOnAppleWatch => 'Omi ని మీ\nApple Watch లో ఇన్‌స్టాల్ చేయండి';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'మీ Apple Watch ని Omi ఉపయోగించడానికి, మీరు ముందుగా మీ గడియారం మీద Omi అనువర్తనాన్ని ఇన్‌స్టాల్ చేయాలి.';
 
   @override
-  String get openOmiOnAppleWatch => 'Omi ని మీ\\nApple Watch లో తెరవండి';
+  String get openOmiOnAppleWatch => 'Omi ని మీ\nApple Watch లో తెరవండి';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5422,10 +5427,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get wrappedProcessingDefault => 'ప్రక్రియ చేయడం...';
 
   @override
-  String get wrappedCreatingYourStory => 'మీ\\n2025 కథను సృష్టిస్తోంది...';
+  String get wrappedCreatingYourStory => 'మీ\n2025 కథను సృష్టిస్తోంది...';
 
   @override
-  String get wrappedSomethingWentWrong => 'ఏదో\\nపొరపాటు జరిగింది';
+  String get wrappedSomethingWentWrong => 'ఏదో\nపొరపాటు జరిగింది';
 
   @override
   String get wrappedAnErrorOccurred => 'ఎర్రర్ సంభవించింది';
@@ -6579,7 +6584,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName ను మీ డిఫాల్ట్ సంక్షేపణ ఆ్యాప్‌గా సెట్ చేయాలా?\\n\\nఈ ఆ్యాప్ అన్ని భవిష్యత్ సంభాషణ సారాంశాల కోసం స్వయంచాలకంగా ఉపయోగించబడుతుంది.';
+    return '$appName ను మీ డిఫాల్ట్ సంక్షేపణ ఆ్యాప్‌గా సెట్ చేయాలా?\n\nఈ ఆ్యాప్ అన్ని భవిష్యత్ సంభాషణ సారాంశాల కోసం స్వయంచాలకంగా ఉపయోగించబడుతుంది.';
   }
 
   @override
@@ -9279,6 +9284,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'అన్ని ఎంపికలు తొలగించు';
+
+  @override
+  String get bulkExportAlreadyExported => 'ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి';
+
+  @override
+  String get bulkDeleteFailed => 'పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

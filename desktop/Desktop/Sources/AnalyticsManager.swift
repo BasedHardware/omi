@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// Unified analytics manager that sends events to PostHog (with Heap dispatch for select events)
+/// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
 class AnalyticsManager {
@@ -25,19 +25,16 @@ class AnalyticsManager {
       return
     }
     PostHogManager.shared.initialize()
-    HeapManager.shared.initialize()
   }
 
   // MARK: - User Identification
 
   func identify() {
     PostHogManager.shared.identify()
-    HeapManager.shared.identify()
   }
 
   func reset() {
     PostHogManager.shared.reset()
-    HeapManager.shared.reset()
   }
 
   // MARK: - Opt In/Out
@@ -54,19 +51,15 @@ class AnalyticsManager {
 
   func onboardingStepCompleted(step: Int, stepName: String) {
     PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
-    HeapManager.shared.track(
-      "Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
   }
 
   func onboardingHowDidYouHear(source: String) {
     let props: [String: Any] = ["source": source, "is_referral": source == "Friend"]
     PostHogManager.shared.track("Onboarding How Did You Hear", properties: props)
-    HeapManager.shared.track("Onboarding How Did You Hear", properties: ["source": source, "is_referral": "\(source == "Friend")"])
   }
 
   func onboardingCompleted() {
     PostHogManager.shared.onboardingCompleted()
-    HeapManager.shared.track("Onboarding Completed")
   }
 
   func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
@@ -100,22 +93,18 @@ class AnalyticsManager {
 
   func signInStarted(provider: String) {
     PostHogManager.shared.signInStarted(provider: provider)
-    HeapManager.shared.track("Sign In Started", properties: ["provider": provider])
   }
 
   func signInCompleted(provider: String) {
     PostHogManager.shared.signInCompleted(provider: provider)
-    HeapManager.shared.track("Sign In Completed", properties: ["provider": provider])
   }
 
   func signInFailed(provider: String, error: String) {
     PostHogManager.shared.signInFailed(provider: provider, error: error)
-    HeapManager.shared.track("Sign In Failed", properties: ["provider": provider, "error": error])
   }
 
   func signedOut() {
     PostHogManager.shared.signedOut()
-    HeapManager.shared.track("Signed Out")
   }
 
   // MARK: - Monitoring Events
@@ -263,7 +252,6 @@ class AnalyticsManager {
 
   func appLaunched() {
     PostHogManager.shared.appLaunched()
-    HeapManager.shared.track("App Launched")
   }
 
   func trackStartupTiming(
@@ -302,7 +290,6 @@ class AnalyticsManager {
 
     // Track in all analytics systems
     PostHogManager.shared.firstLaunch(diagnostics: diagnostics)
-    HeapManager.shared.track("First Launch")
 
     log("Analytics: First launch diagnostics tracked")
   }
@@ -398,7 +385,6 @@ class AnalyticsManager {
     var props = properties
     props["category"] = category
     PostHogManager.shared.track("Share Action", properties: props)
-    HeapManager.shared.track("Share Action", properties: ["category": category])
   }
 
   func memoryListItemClicked(conversationId: String) {
@@ -442,7 +428,6 @@ class AnalyticsManager {
 
   func deleteAccountConfirmed() {
     PostHogManager.shared.deleteAccountConfirmed()
-    HeapManager.shared.track("Delete Account Confirmed")
   }
 
   func deleteAccountCancelled() {

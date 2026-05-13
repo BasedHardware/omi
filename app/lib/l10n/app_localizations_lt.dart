@@ -64,6 +64,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get copySummary => 'Kopijuoti santrauką';
 
   @override
+  String get copyConversationId => 'Kopijuoti pokalbio ID';
+
+  @override
+  String get conversationIdCopied => 'Pokalbio ID nukopijuotas į mainų sritį';
+
+  @override
   String get testPrompt => 'Testuoti užklausą';
 
   @override
@@ -9237,6 +9243,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Atžymėti viską';
+
+  @override
+  String get bulkExportAlreadyExported => 'Visos pasirinktos užduotys jau eksportuotos';
+
+  @override
+  String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
 
   @override
   String get dailyReflection => 'Dienos refleksija';

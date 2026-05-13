@@ -63,6 +63,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copySummary => '复制摘要';
 
   @override
+  String get copyConversationId => '复制对话 ID';
+
+  @override
+  String get conversationIdCopied => '对话 ID 已复制到剪贴板';
+
+  @override
   String get testPrompt => '测试提示词';
 
   @override
@@ -9065,6 +9071,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => '取消全选';
+
+  @override
+  String get bulkExportAlreadyExported => '所选任务已全部导出';
+
+  @override
+  String get bulkDeleteFailed => '无法删除任务，请重试。';
 
   @override
   String get dailyReflection => '每日反思';

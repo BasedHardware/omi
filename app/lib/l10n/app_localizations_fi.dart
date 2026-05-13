@@ -64,6 +64,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get copySummary => 'Kopioi tiivistelmä';
 
   @override
+  String get copyConversationId => 'Kopioi keskustelun tunnus';
+
+  @override
+  String get conversationIdCopied => 'Keskustelun tunnus kopioitu leikepöydälle';
+
+  @override
   String get testPrompt => 'Testaa kehotetta';
 
   @override
@@ -9227,6 +9233,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Poista kaikkien valinta';
+
+  @override
+  String get bulkExportAlreadyExported => 'Kaikki valitut tehtävät on jo viety';
+
+  @override
+  String get bulkDeleteFailed => 'Tehtävien poistaminen epäonnistui. Yritä uudelleen.';
 
   @override
   String get dailyReflection => 'Päivittäinen reflektio';

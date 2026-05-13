@@ -24,6 +24,7 @@ from utils.notifications import (
     send_action_item_data_message,
     send_action_item_update_message,
     send_action_item_deletion_message,
+    send_action_items_batch_deletion_message,
 )
 from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field
@@ -419,6 +420,27 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
 
     return {"status": "Ok"}
+
+
+class BatchDeleteActionItemsRequest(BaseModel):
+    ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=500)
+
+
+@router.post("/v1/action-items/batch-delete", tags=['action-items'])
+def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete multiple action items in one request.
+
+    Firestore deletes go through chunked batched commits in the DB layer; the
+    vector store delete and the FCM cancellation message both use their batch
+    helpers — no per-id loop on this hot path.
+    """
+    deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
+
+    if deleted_ids:
+        delete_action_item_vectors_batch(uid, deleted_ids)
+        send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
+
+    return {"status": "Ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
 
 
 # *****************************

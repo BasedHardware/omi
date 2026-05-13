@@ -64,6 +64,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get copySummary => 'Kopiuj podsumowanie';
 
   @override
+  String get copyConversationId => 'Kopiuj ID rozmowy';
+
+  @override
+  String get conversationIdCopied => 'ID rozmowy skopiowane do schowka';
+
+  @override
   String get testPrompt => 'Testuj prompt';
 
   @override
@@ -9248,6 +9254,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Odznacz wszystkie';
+
+  @override
+  String get bulkExportAlreadyExported => 'Wszystkie wybrane zadania zostały już wyeksportowane';
+
+  @override
+  String get bulkDeleteFailed => 'Nie udało się usunąć zadań. Spróbuj ponownie.';
 
   @override
   String get dailyReflection => 'Codzienna refleksja';

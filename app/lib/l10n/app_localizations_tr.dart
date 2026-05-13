@@ -64,6 +64,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get copySummary => 'Özeti kopyala';
 
   @override
+  String get copyConversationId => 'Konuşma kimliğini kopyala';
+
+  @override
+  String get conversationIdCopied => 'Konuşma kimliği panoya kopyalandı';
+
+  @override
   String get testPrompt => 'İstemi Test Et';
 
   @override
@@ -9241,6 +9247,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Tümünün seçimini kaldır';
+
+  @override
+  String get bulkExportAlreadyExported => 'Seçilen tüm görevler zaten dışa aktarıldı';
+
+  @override
+  String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
 
   @override
   String get dailyReflection => 'Günlük Düşünce';

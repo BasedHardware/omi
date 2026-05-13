@@ -64,6 +64,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get copySummary => 'সারসংক্ষেপ কপি করুন';
 
   @override
+  String get copyConversationId => 'কথোপকথন আইডি কপি করুন';
+
+  @override
+  String get conversationIdCopied => 'কথোপকথন আইডি ক্লিপবোর্ডে কপি হয়েছে';
+
+  @override
   String get testPrompt => 'পরীক্ষা প্রম্পট';
 
   @override
@@ -4528,12 +4534,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'আপনার পরিকল্পনা $date তে শেষ হয়েছে।\\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।';
+    return 'আপনার পরিকল্পনা $date তে শেষ হয়েছে।\nএখনই পুনরায় সাবস্ক্রাইব করুন - একটি নতুন বিলিং সময়কালের জন্য অবিলম্বে চার্জ করা হবে।';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'আপনার পরিকল্পনা $date তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
+    return 'আপনার পরিকল্পনা $date তে বাতিল হওয়ার জন্য নির্ধারিত হয়েছে।\nআপনার সুবিধা রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - $date পর্যন্ত কোনও চার্জ নেই।';
   }
 
   @override
@@ -5103,7 +5109,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
+      'আপনার কথোপকথন থেকে কাজগুলি এখানে উপস্থিত হবে।\nম্যানুয়ালি একটি তৈরি করতে + ট্যাপ করুন।';
 
   @override
   String get clearChatAction => 'চ্যাট সাফ করুন';
@@ -5398,10 +5404,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get wrappedProcessingDefault => 'প্রক্রিয়াজনীকরণ...';
 
   @override
-  String get wrappedCreatingYourStory => 'আপনার তৈরি করা হচ্ছে\\n২০২৫ গল্প...';
+  String get wrappedCreatingYourStory => 'আপনার তৈরি করা হচ্ছে\n২০২৫ গল্প...';
 
   @override
-  String get wrappedSomethingWentWrong => 'কিছু\\nগলত হয়েছে';
+  String get wrappedSomethingWentWrong => 'কিছু\nগলত হয়েছে';
 
   @override
   String get wrappedAnErrorOccurred => 'একটি ত্রুটি ঘটেছে';
@@ -6547,7 +6553,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\\n\\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।';
+    return '$appName কে আপনার ডিফল্ট সারসংক্ষেপ অ্যাপ হিসাবে সেট করুন?\n\nএই অ্যাপ সমস্ত ভবিষ্যত কথোপকথন সারসংক্ষেপের জন্য স্বয়ংক্রিয়ভাবে ব্যবহার করা হবে।';
   }
 
   @override
@@ -9237,6 +9243,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'সমস্ত নির্বাচন বাতিল';
+
+  @override
+  String get bulkExportAlreadyExported => 'নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে';
+
+  @override
+  String get bulkDeleteFailed => 'কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।';
 
   @override
   String get dailyReflection => 'Daily Reflection';

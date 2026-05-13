@@ -64,6 +64,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get copySummary => 'Kopeeri kokkuvõte';
 
   @override
+  String get copyConversationId => 'Kopeeri vestluse ID';
+
+  @override
+  String get conversationIdCopied => 'Vestluse ID kopeeriti lõikelauale';
+
+  @override
   String get testPrompt => 'Testi käsku';
 
   @override
@@ -9225,6 +9231,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Tühista kõigi valik';
+
+  @override
+  String get bulkExportAlreadyExported => 'Kõik valitud ülesanded on juba eksporditud';
+
+  @override
+  String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
 
   @override
   String get dailyReflection => 'Igapäevane refleksioon';

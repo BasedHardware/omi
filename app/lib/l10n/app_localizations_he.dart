@@ -64,6 +64,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get copySummary => 'העתק סיכום';
 
   @override
+  String get copyConversationId => 'העתק מזהה שיחה';
+
+  @override
+  String get conversationIdCopied => 'מזהה השיחה הועתק ללוח';
+
+  @override
   String get testPrompt => 'בדוק הנושא';
 
   @override
@@ -4488,12 +4494,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'התוכנית שלך הסתיימה ב-$date.\\nהירשם מחדש כעת - תחויב מיד לתקופת חיוב חדשה.';
+    return 'התוכנית שלך הסתיימה ב-$date.\nהירשם מחדש כעת - תחויב מיד לתקופת חיוב חדשה.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'התוכנית שלך מוגדרת להיות מבוטלת ב-$date.\\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
+    return 'התוכנית שלך מוגדרת להיות מבוטלת ב-$date.\nהירשם מחדש כעת כדי לשמור על ההטבות שלך - לא תחויב עד $date.';
   }
 
   @override
@@ -5054,7 +5060,7 @@ class AppLocalizationsHe extends AppLocalizations {
       'בהמשך, השיחות, ההקלטות והמידע האישי שלך יאוחסנו בצורה מאובטחת בשרתים שלנו. הקלטות האודיו והתמלולים שלך מעובדים על ידי שירותי AI של צד שלישי (כולל Deepgram לתמלול ו-OpenAI לניתוח) כדי לספק לך תובנות מבוססות AI ולאפשר את כל תכונות האפליקציה.';
 
   @override
-  String get tasksEmptyStateMessage => 'משימות משיחותיך יופיעו כאן.\\nלחץ + כדי ליצור אחת ידנית.';
+  String get tasksEmptyStateMessage => 'משימות משיחותיך יופיעו כאן.\nלחץ + כדי ליצור אחת ידנית.';
 
   @override
   String get clearChatAction => 'נקה שיחה';
@@ -5087,14 +5093,14 @@ class AppLocalizationsHe extends AppLocalizations {
   String get checkingAppleWatch => 'בדוק Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'התקן Omi ב-\\nApple Watch';
+  String get installOmiOnAppleWatch => 'התקן Omi ב-\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'כדי להשתמש ב-Apple Watch שלך עם Omi, תחילה עליך להתקין את אפליקציית Omi בשעון שלך.';
 
   @override
-  String get openOmiOnAppleWatch => 'פתח Omi ב-\\nApple Watch';
+  String get openOmiOnAppleWatch => 'פתח Omi ב-\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5347,10 +5353,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get wrappedProcessingDefault => 'בעיבוד...';
 
   @override
-  String get wrappedCreatingYourStory => 'יצירת הסיפור שלך\\n2025...';
+  String get wrappedCreatingYourStory => 'יצירת הסיפור שלך\n2025...';
 
   @override
-  String get wrappedSomethingWentWrong => 'משהו\\nהלך לא בסדר';
+  String get wrappedSomethingWentWrong => 'משהו\nהלך לא בסדר';
 
   @override
   String get wrappedAnErrorOccurred => 'ארעה שגיאה';
@@ -6486,7 +6492,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'הגדר את $appName כאפליקציית הסיכום ברירת המחדל שלך?\\n\\nאפליקציה זו תשמש באופן אוטומטי לכל סיכומי השיחות בעתיד.';
+    return 'הגדר את $appName כאפליקציית הסיכום ברירת המחדל שלך?\n\nאפליקציה זו תשמש באופן אוטומטי לכל סיכומי השיחות בעתיד.';
   }
 
   @override
@@ -9156,6 +9162,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'בטל בחירת הכל';
+
+  @override
+  String get bulkExportAlreadyExported => 'כל המשימות שנבחרו כבר יוצאו';
+
+  @override
+  String get bulkDeleteFailed => 'לא ניתן למחוק את המשימות. אנא נסה שוב.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

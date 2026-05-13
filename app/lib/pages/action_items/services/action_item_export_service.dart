@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
@@ -6,7 +7,6 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -45,16 +45,16 @@ class ActionItemExportService {
     if (!service.isAuthenticated) return ExportResult.failed;
 
     try {
-      final ok = await service.createTask(
-        content: item.description,
-        description: 'From Omi',
-        dueDate: item.dueAt,
-      );
+      final ok = await service.createTask(content: item.description, description: 'From Omi', dueDate: item.dueAt);
       if (!ok) return ExportResult.failed;
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'todoist');
-      MixpanelManager().actionItemExported(actionItemId: item.id, appName: 'Todoist', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Todoist',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Todoist bulk export failed for ${item.id}: $e');
@@ -67,16 +67,16 @@ class ActionItemExportService {
     if (!service.isAuthenticated) return ExportResult.failed;
 
     try {
-      final ok = await service.createTask(
-        name: item.description,
-        notes: 'From Omi',
-        dueDate: item.dueAt,
-      );
+      final ok = await service.createTask(name: item.description, notes: 'From Omi', dueDate: item.dueAt);
       if (!ok) return ExportResult.failed;
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'asana');
-      MixpanelManager().actionItemExported(actionItemId: item.id, appName: 'Asana', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Asana',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Asana bulk export failed for ${item.id}: $e');
@@ -89,16 +89,16 @@ class ActionItemExportService {
     if (!service.isAuthenticated) return ExportResult.failed;
 
     try {
-      final ok = await service.createTask(
-        title: item.description,
-        notes: 'From Omi',
-        dueDate: item.dueAt,
-      );
+      final ok = await service.createTask(title: item.description, notes: 'From Omi', dueDate: item.dueAt);
       if (!ok) return ExportResult.failed;
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'google_tasks');
-      MixpanelManager().actionItemExported(actionItemId: item.id, appName: 'Google Tasks', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Google Tasks',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Google Tasks bulk export failed for ${item.id}: $e');
@@ -111,16 +111,16 @@ class ActionItemExportService {
     if (!service.isAuthenticated) return ExportResult.failed;
 
     try {
-      final ok = await service.createTask(
-        name: item.description,
-        description: 'From Omi',
-        dueDate: item.dueAt,
-      );
+      final ok = await service.createTask(name: item.description, description: 'From Omi', dueDate: item.dueAt);
       if (!ok) return ExportResult.failed;
 
       final exportTime = DateTime.now();
       await updateActionItem(item.id, exported: true, exportDate: exportTime, exportPlatform: 'clickup');
-      MixpanelManager().actionItemExported(actionItemId: item.id, appName: 'ClickUp', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'ClickUp',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('ClickUp bulk export failed for ${item.id}: $e');
@@ -152,7 +152,11 @@ class ActionItemExportService {
         exportPlatform: 'apple_reminders',
         appleReminderId: calendarItemId,
       );
-      MixpanelManager().actionItemExported(actionItemId: item.id, appName: 'Apple Reminders', timestamp: exportTime);
+      PlatformManager.instance.analytics.actionItemExported(
+        actionItemId: item.id,
+        appName: 'Apple Reminders',
+        timestamp: exportTime,
+      );
       return ExportResult.success;
     } catch (e) {
       Logger.debug('Apple Reminders bulk export failed for ${item.id}: $e');

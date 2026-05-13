@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
@@ -206,7 +206,7 @@ class ConversationProvider extends ChangeNotifier {
       fetchConversations();
     }
 
-    MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
+    PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
   }
 
   void toggleShortConversations() {
@@ -961,7 +961,7 @@ class ConversationProvider extends ChangeNotifier {
   void enterSelectionMode() {
     isSelectionModeActive = true;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeEntered();
+    PlatformManager.instance.analytics.conversationMergeSelectionModeEntered();
     notifyListeners();
   }
 
@@ -969,7 +969,7 @@ class ConversationProvider extends ChangeNotifier {
   void exitSelectionMode() {
     isSelectionModeActive = false;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeExited();
+    PlatformManager.instance.analytics.conversationMergeSelectionModeExited();
     notifyListeners();
   }
 
@@ -996,7 +996,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       selectedConversationIds.add(conversationId);
-      MixpanelManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
+      PlatformManager.instance.analytics.conversationSelectedForMerge(conversationId, selectedConversationIds.length);
     }
     notifyListeners();
   }
@@ -1042,10 +1042,10 @@ class ConversationProvider extends ChangeNotifier {
 
     // Call merge API
     final response = await mergeConversations(idsToMerge);
-    MixpanelManager().conversationMergeInitiated(idsToMerge);
+    PlatformManager.instance.analytics.conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
-      MixpanelManager().conversationMergeFailed(idsToMerge);
+      PlatformManager.instance.analytics.conversationMergeFailed(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
@@ -1069,7 +1069,7 @@ class ConversationProvider extends ChangeNotifier {
       mergingConversationIds.remove(id);
     }
 
-    MixpanelManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
+    PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {

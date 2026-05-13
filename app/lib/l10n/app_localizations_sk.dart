@@ -64,6 +64,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get copySummary => 'Kopírovať zhrnutie';
 
   @override
+  String get copyConversationId => 'Kopírovať ID konverzácie';
+
+  @override
+  String get conversationIdCopied => 'ID konverzácie skopírované do schránky';
+
+  @override
   String get testPrompt => 'Otestovať výzvu';
 
   @override
@@ -9216,6 +9222,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Zrušiť výber všetkých';
+
+  @override
+  String get bulkExportAlreadyExported => 'Všetky vybrané úlohy už boli exportované';
+
+  @override
+  String get bulkDeleteFailed => 'Úlohy sa nepodarilo odstrániť. Skúste to znova.';
 
   @override
   String get dailyReflection => 'Denná reflexia';

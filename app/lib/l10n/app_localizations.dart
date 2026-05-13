@@ -297,6 +297,18 @@ abstract class AppLocalizations {
   /// **'Copy Summary'**
   String get copySummary;
 
+  /// Menu item to copy conversation ID to clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Conversation ID'**
+  String get copyConversationId;
+
+  /// Snackbar message when conversation ID is copied
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation ID copied to clipboard'**
+  String get conversationIdCopied;
+
   /// Menu item for testing prompts
   ///
   /// In en, this message translates to:
@@ -17222,6 +17234,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Deselect all'**
   String get deselectAllTasksMenu;
+
+  /// Snackbar shown when every selected task is already exported and Export is tapped
+  ///
+  /// In en, this message translates to:
+  /// **'All selected tasks already exported'**
+  String get bulkExportAlreadyExported;
+
+  /// Snackbar shown when the bulk delete request fails and the local list is restored
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete tasks. Please try again.'**
+  String get bulkDeleteFailed;
 
   /// Section header for daily reflection settings
   ///

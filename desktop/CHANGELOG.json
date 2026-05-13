@@ -2,6 +2,125 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.393",
+      "date": "2026-05-13",
+      "changes": [
+        "Fixed push-to-talk ignoring auto-detect language setting, causing non-English (e.g. Russian) speech to be force-transcribed as English"
+      ]
+    },
+    {
+      "version": "0.11.392",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.391",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed notification frequency setting being ignored, and replaced the dropdown with a stepped slider in Settings"
+      ]
+    },
+    {
+      "version": "0.11.389",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.388",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.387",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly when the Haiku router wraps its decision JSON in markdown code fences"
+      ]
+    },
+    {
+      "version": "0.11.386",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly from voice/typed Ask Omi prompts (router was 400ing server-side)"
+      ]
+    },
+    {
+      "version": "0.11.385",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.384",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.383",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.382",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.380",
+      "date": "2026-05-10",
+      "changes": [
+        "Beta builds now talk to the development backend for faster fixes \u2014 your data still lives in production"
+      ]
+    },
+    {
+      "version": "0.11.379",
+      "date": "2026-05-07",
+      "changes": [
+        "Reduced AI processing costs with thinking budget controls"
+      ]
+    },
+    {
+      "version": "0.11.378",
+      "date": "2026-05-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.377",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.376",
+      "date": "2026-05-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.375",
+      "date": "2026-05-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.374",
       "date": "2026-05-03",
       "changes": [
@@ -312,7 +431,7 @@
       "version": "0.11.319",
       "date": "2026-04-16",
       "changes": [
-        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+        "Added a voice picker in the floating bar settings"
       ]
     },
     {

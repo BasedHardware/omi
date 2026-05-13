@@ -64,6 +64,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get copySummary => 'คัดลอกสรุป';
 
   @override
+  String get copyConversationId => 'คัดลอก ID การสนทนา';
+
+  @override
+  String get conversationIdCopied => 'คัดลอก ID การสนทนาไปยังคลิปบอร์ดแล้ว';
+
+  @override
   String get testPrompt => 'ทดสอบคำสั่ง';
 
   @override
@@ -9182,6 +9188,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'ยกเลิกเลือกทั้งหมด';
+
+  @override
+  String get bulkExportAlreadyExported => 'งานที่เลือกทั้งหมดถูกส่งออกแล้ว';
+
+  @override
+  String get bulkDeleteFailed => 'ลบงานไม่สำเร็จ โปรดลองอีกครั้ง';
 
   @override
   String get dailyReflection => 'การทบทวนรายวัน';

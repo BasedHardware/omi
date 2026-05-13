@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopiraj ID razgovora",
+    "conversationIdCopied": "ID razgovora kopiran u međuspremnik",
     "testPrompt": "Testiraj upit",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -5255,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Vaš plan je završio {date}.\\nPrenazovite se sada - bit će vam odmah naplaćeno novo razdoblje naplate.",
+    "planEndedOn": "Vaš plan je završio {date}.\nPrenazovite se sada - bit će vam odmah naplaćeno novo razdoblje naplate.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5265,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\\nPrenazovite se sada kako biste zadržali svoju korist - bez naplate do {date}.",
+    "planSetToCancelOn": "Vaš plan je postavljen da se otkaže {date}.\nPrenazovite se sada kako biste zadržali svoju korist - bez naplate do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6038,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojavljati ovdje.\\nDodirnite + da biste ručno kreirali jedan.",
+    "tasksEmptyStateMessage": "Zadaci iz vaših razgovora će se pojavljati ovdje.\nDodirnite + da biste ručno kreirali jedan.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -7998,7 +8000,7 @@
     "defaultLabel": "Zadano",
     "lastUsedLabel": "Zadnje korišteno",
     "setDefaultApp": "Postavi zadanu aplikaciju",
-    "setDefaultAppContent": "Postavi {appName} kao zadanu aplikaciju za sažimanje?\\n\\nOva aplikacija će biti automatski korištena za sve budućne sažetke razgovora.",
+    "setDefaultAppContent": "Postavi {appName} kao zadanu aplikaciju za sažimanje?\n\nOva aplikacija će biti automatski korištena za sve budućne sažetke razgovora.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -10721,5 +10723,7 @@
     "selectAllTasksMenu": "Odaberi sve",
     "showCompletedTasks": "Prikaži dovršene",
     "startCallRecording": "Pokreni snimanje poziva",
-    "startVoiceRecording": "Pokreni glasovno snimanje"
+    "startVoiceRecording": "Pokreni glasovno snimanje",
+    "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
+    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno."
 }

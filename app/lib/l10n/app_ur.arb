@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "گفتگو کی ID کاپی کریں",
+    "conversationIdCopied": "گفتگو کی ID کلپ بورڈ پر کاپی ہو گئی",
     "testPrompt": "ٹیسٹ پروپٹ",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -7998,7 +8000,7 @@
     "defaultLabel": "ڈیفالٹ",
     "lastUsedLabel": "آخری استعمال",
     "setDefaultApp": "ڈیفالٹ ایپ سیٹ کریں",
-    "setDefaultAppContent": "{appName} کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\\n\\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔",
+    "setDefaultAppContent": "{appName} کو اپنی ڈیفالٹ خلاصہ کاری ایپ کے طور پر سیٹ کریں؟\n\nیہ ایپ تمام مستقبل کی بات چیت کے خلاصوں کے لیے خودکار طور پر استعمال کی جائے گی۔",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -10721,5 +10723,7 @@
     "selectAllTasksMenu": "سب منتخب کریں",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
-    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں"
+    "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
+    "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
 }

@@ -64,6 +64,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get copySummary => 'Összefoglaló másolása';
 
   @override
+  String get copyConversationId => 'Társalgás azonosítójának másolása';
+
+  @override
+  String get conversationIdCopied => 'A társalgás azonosítója vágólapra másolva';
+
+  @override
   String get testPrompt => 'Prompt tesztelése';
 
   @override
@@ -9267,6 +9273,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Összes kijelölés törlése';
+
+  @override
+  String get bulkExportAlreadyExported => 'Az összes kiválasztott feladat már exportálva van';
+
+  @override
+  String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
 
   @override
   String get dailyReflection => 'Napi reflexió';

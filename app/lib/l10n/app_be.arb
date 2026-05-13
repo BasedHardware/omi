@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Скапіраваць ID размовы",
+    "conversationIdCopied": "ID размовы скапіраваны ў буфер абмену",
     "testPrompt": "Тэставаць запыт",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -10721,5 +10723,7 @@
     "selectAllTasksMenu": "Выбраць усе",
     "showCompletedTasks": "Паказаць завершаныя",
     "startCallRecording": "Пачаць запіс званка",
-    "startVoiceRecording": "Пачаць галасавы запіс"
+    "startVoiceRecording": "Пачаць галасавы запіс",
+    "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
 }

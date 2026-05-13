@@ -64,6 +64,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get copySummary => 'Kopier opsummering';
 
   @override
+  String get copyConversationId => 'Kopiér samtale-ID';
+
+  @override
+  String get conversationIdCopied => 'Samtale-ID kopieret til udklipsholder';
+
+  @override
   String get testPrompt => 'Test prompt';
 
   @override
@@ -9214,6 +9220,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Fravælg alle';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alle valgte opgaver er allerede eksporteret';
+
+  @override
+  String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
 
   @override
   String get dailyReflection => 'Daglig refleksion';

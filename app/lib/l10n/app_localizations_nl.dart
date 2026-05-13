@@ -64,6 +64,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get copySummary => 'Kopieer samenvatting';
 
   @override
+  String get copyConversationId => 'Gesprek-ID kopiëren';
+
+  @override
+  String get conversationIdCopied => 'Gesprek-ID gekopieerd naar klembord';
+
+  @override
   String get testPrompt => 'Prompt testen';
 
   @override
@@ -9256,6 +9262,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Alles deselecteren';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alle geselecteerde taken zijn al geëxporteerd';
+
+  @override
+  String get bulkDeleteFailed => 'Taken konden niet worden verwijderd. Probeer het opnieuw.';
 
   @override
   String get dailyReflection => 'Dagelijkse reflectie';

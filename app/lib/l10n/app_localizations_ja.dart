@@ -63,6 +63,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get copySummary => '要約をコピー';
 
   @override
+  String get copyConversationId => '会話IDをコピー';
+
+  @override
+  String get conversationIdCopied => '会話IDをクリップボードにコピーしました';
+
+  @override
   String get testPrompt => 'プロンプトをテスト';
 
   @override
@@ -9079,6 +9085,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'すべて選択解除';
+
+  @override
+  String get bulkExportAlreadyExported => '選択したタスクはすべてエクスポート済みです';
+
+  @override
+  String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
 
   @override
   String get dailyReflection => 'デイリー振り返り';

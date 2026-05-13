@@ -64,6 +64,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get copySummary => 'சாரம் நகலெடுக்கவும்';
 
   @override
+  String get copyConversationId => 'உரையாடல் ID நகலெடு';
+
+  @override
+  String get conversationIdCopied => 'உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது';
+
+  @override
   String get testPrompt => 'தேர்வு கேட்டுகோள்';
 
   @override
@@ -4555,12 +4561,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் முடிந்துவிட்டது।\\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.';
+    return 'உங்கள் திட்டம் $date இல் முடிந்துவிட்டது।\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
+    return 'உங்கள் திட்டம் $date இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - $date வரை எந்த கட்டணமும் இல்லை.';
   }
 
   @override
@@ -5132,7 +5138,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
+      'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
 
   @override
   String get clearChatAction => 'உரையாடலைத் தெளிக்கவும்';
@@ -5426,10 +5432,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get wrappedProcessingDefault => 'செயலாக்கம் செய்யப்படுகிறது...';
 
   @override
-  String get wrappedCreatingYourStory => 'உங்கள் உருவாக்கம்\\n2025 கதை...';
+  String get wrappedCreatingYourStory => 'உங்கள் உருவாக்கம்\n2025 கதை...';
 
   @override
-  String get wrappedSomethingWentWrong => 'ஏதோ\\nத் தவறாக நடந்தது';
+  String get wrappedSomethingWentWrong => 'ஏதோ\nத் தவறாக நடந்தது';
 
   @override
   String get wrappedAnErrorOccurred => 'ஒரு பிழை ஏற்பட்டது';
@@ -6583,7 +6589,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\\n\\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.';
+    return '$appName ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\n\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.';
   }
 
   @override
@@ -9297,6 +9303,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'அனைத்தையும் தேர்வு நீக்கு';
+
+  @override
+  String get bulkExportAlreadyExported => 'தேர்ந்தெடுக்கப்பட்ட அனைத்து பணிகளும் ஏற்கனவே ஏற்றுமதி செய்யப்பட்டுள்ளன';
+
+  @override
+  String get bulkDeleteFailed => 'பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

@@ -64,6 +64,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get copySummary => 'Copiar resumen';
 
   @override
+  String get copyConversationId => 'Copiar ID de conversación';
+
+  @override
+  String get conversationIdCopied => 'ID de conversación copiado al portapapeles';
+
+  @override
   String get testPrompt => 'Probar prompt';
 
   @override
@@ -9249,6 +9255,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Deseleccionar todo';
+
+  @override
+  String get bulkExportAlreadyExported => 'Todas las tareas seleccionadas ya están exportadas';
+
+  @override
+  String get bulkDeleteFailed => 'No se pudieron eliminar las tareas. Inténtalo de nuevo.';
 
   @override
   String get dailyReflection => 'Reflexión diaria';

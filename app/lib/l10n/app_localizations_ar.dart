@@ -64,6 +64,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get copySummary => 'نسخ الملخص';
 
   @override
+  String get copyConversationId => 'نسخ معرّف المحادثة';
+
+  @override
+  String get conversationIdCopied => 'تم نسخ معرّف المحادثة إلى الحافظة';
+
+  @override
   String get testPrompt => 'اختبار الأمر';
 
   @override
@@ -9167,6 +9173,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'إلغاء تحديد الكل';
+
+  @override
+  String get bulkExportAlreadyExported => 'تم تصدير جميع المهام المحددة بالفعل';
+
+  @override
+  String get bulkDeleteFailed => 'تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.';
 
   @override
   String get dailyReflection => 'التأمل اليومي';

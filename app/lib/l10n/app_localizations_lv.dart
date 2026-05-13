@@ -64,6 +64,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get copySummary => 'Kopēt kopsavilkumu';
 
   @override
+  String get copyConversationId => 'Kopēt sarakstes ID';
+
+  @override
+  String get conversationIdCopied => 'Sarakstes ID nokopēts starpliktuvē';
+
+  @override
   String get testPrompt => 'Testēt uzvedni';
 
   @override
@@ -9246,6 +9252,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Noņemt visu atlasi';
+
+  @override
+  String get bulkExportAlreadyExported => 'Visi atlasītie uzdevumi jau ir eksportēti';
+
+  @override
+  String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
 
   @override
   String get dailyReflection => 'Ikdienas pārdomu';

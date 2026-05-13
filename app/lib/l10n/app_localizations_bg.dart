@@ -64,6 +64,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get copySummary => 'Копирай обобщение';
 
   @override
+  String get copyConversationId => 'Копиране на ID на разговора';
+
+  @override
+  String get conversationIdCopied => 'ID на разговора е копирано в клипборда';
+
+  @override
   String get testPrompt => 'Тествай подсказка';
 
   @override
@@ -9263,6 +9269,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Премахване на избора';
+
+  @override
+  String get bulkExportAlreadyExported => 'Всички избрани задачи вече са експортирани';
+
+  @override
+  String get bulkDeleteFailed => 'Задачите не можаха да бъдат изтрити. Моля, опитайте отново.';
 
   @override
   String get dailyReflection => 'Дневна рефлексия';

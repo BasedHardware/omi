@@ -64,6 +64,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get copySummary => 'Kopiraj povzetek';
 
   @override
+  String get copyConversationId => 'Kopiraj ID pogovora';
+
+  @override
+  String get conversationIdCopied => 'ID pogovora je bil kopiran v odložišče';
+
+  @override
   String get testPrompt => 'Testiraj poziv';
 
   @override
@@ -4530,12 +4536,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Vaš načrt se je končal $date.\\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.';
+    return 'Vaš načrt se je končal $date.\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Vaš načrt je nastavljen na preklic $date.\\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
+    return 'Vaš načrt je nastavljen na preklic $date.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do $date.';
   }
 
   @override
@@ -5107,7 +5113,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\\nTapnite + za ročno ustvarjanje.';
+      'Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.';
 
   @override
   String get clearChatAction => 'Počistite klepet';
@@ -5140,14 +5146,14 @@ class AppLocalizationsSl extends AppLocalizations {
   String get checkingAppleWatch => 'Preverjanje Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Namestite Omi na vaš\\nApple Watch';
+  String get installOmiOnAppleWatch => 'Namestite Omi na vaš\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Za uporabo vašega Apple Watch z Omijem morali najprej namestiti aplikacijo Omi na uro.';
 
   @override
-  String get openOmiOnAppleWatch => 'Odprite Omi na vašem\\nApple Watch';
+  String get openOmiOnAppleWatch => 'Odprite Omi na vašem\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5402,10 +5408,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get wrappedProcessingDefault => 'Obdelava...';
 
   @override
-  String get wrappedCreatingYourStory => 'Ustvarjanje vaše\\n2025 zgodbe...';
+  String get wrappedCreatingYourStory => 'Ustvarjanje vaše\n2025 zgodbe...';
 
   @override
-  String get wrappedSomethingWentWrong => 'Nekaj\\nje šlo narobe';
+  String get wrappedSomethingWentWrong => 'Nekaj\nje šlo narobe';
 
   @override
   String get wrappedAnErrorOccurred => 'Prišlo je do napake';
@@ -6552,7 +6558,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Nastavite $appName kot privzeto aplikacijo za povzemanje?\\n\\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.';
+    return 'Nastavite $appName kot privzeto aplikacijo za povzemanje?\n\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.';
   }
 
   @override
@@ -9252,6 +9258,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Prekliči izbor vseh';
+
+  @override
+  String get bulkExportAlreadyExported => 'Vse izbrane naloge so že izvožene';
+
+  @override
+  String get bulkDeleteFailed => 'Nalog ni bilo mogoče izbrisati. Poskusite znova.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

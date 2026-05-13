@@ -590,7 +590,8 @@ actor InsightAssistant: ProactiveAssistant {
                         contents: iterContents,
                         systemPrompt: iterSystemPrompt,
                         tools: iterTools,
-                        forceToolCall: iterForce
+                        forceToolCall: iterForce,
+                        thinkingBudget: 1024
                     )
                 }
             } catch {
@@ -739,7 +740,8 @@ actor InsightAssistant: ProactiveAssistant {
                         contents: p2Contents,
                         systemPrompt: p2SystemPrompt,
                         tools: p2Tools,
-                        forceToolCall: p2Force
+                        forceToolCall: p2Force,
+                        thinkingBudget: 1024
                     )
                 }
             } catch {

@@ -1,0 +1,48 @@
+name: Deployment Summary
+description: Writes a deployment summary table to the GitHub Step Summary
+
+inputs:
+  workflow_name:
+    description: Name of the workflow
+    required: true
+  environment:
+    description: Deployment environment (e.g. development, prod)
+    required: true
+  branch:
+    description: Branch that was deployed
+    required: true
+  status:
+    description: Job status (success, failure, cancelled)
+    required: true
+  release_version:
+    description: Optional release version
+    required: false
+    default: ''
+  service:
+    description: Name of the service being deployed (e.g. backend, pusher)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Write deployment summary
+      shell: bash
+      run: |
+        RELEASE_VERSION="${{ inputs.release_version }}"
+        ENVIRONMENT="${{ inputs.environment }}"
+        DEPLOY_BRANCH="${{ inputs.branch }}"
+        DEPLOY_TAG="${GITHUB_SHA::7}"
+        STATUS="${{ inputs.status }}"
+
+        {
+          echo "### Deployment Summary"
+          echo ""
+          echo "| Service | ${{ inputs.service }} |"
+          echo "|---|---|"
+          echo "| **Name** | ${{ inputs.workflow_name }} |"
+          echo "| **Environment** | \`$ENVIRONMENT\` |"
+          [[ -n "$RELEASE_VERSION" ]] && echo "| **Release version** | \`$RELEASE_VERSION\` |"
+          echo "| **Branch** | \`$DEPLOY_BRANCH\` |"
+          echo "| **Tag** | \`$DEPLOY_TAG\` |"
+          [[ $STATUS == "success" ]] && echo "| **Status** | ${STATUS^} ✅ |" || echo "| **Status** | ${STATUS^} ❌ |"
+        } >> "$GITHUB_STEP_SUMMARY"

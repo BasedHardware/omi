@@ -64,6 +64,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get copySummary => 'सारांश कॉपी करें';
 
   @override
+  String get copyConversationId => 'बातचीत ID कॉपी करें';
+
+  @override
+  String get conversationIdCopied => 'बातचीत ID क्लिपबोर्ड पर कॉपी हो गई';
+
+  @override
   String get testPrompt => 'टेस्ट प्रॉम्प्ट';
 
   @override
@@ -9208,6 +9214,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'सभी का चयन हटाएं';
+
+  @override
+  String get bulkExportAlreadyExported => 'सभी चयनित कार्य पहले ही निर्यात किए जा चुके हैं';
+
+  @override
+  String get bulkDeleteFailed => 'कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।';
 
   @override
   String get dailyReflection => 'दैनिक चिंतन';

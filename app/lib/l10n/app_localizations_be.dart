@@ -64,6 +64,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get copySummary => 'Скапіяваць рэзюмэ';
 
   @override
+  String get copyConversationId => 'Скапіраваць ID размовы';
+
+  @override
+  String get conversationIdCopied => 'ID размовы скапіраваны ў буфер абмену';
+
+  @override
   String get testPrompt => 'Тэставаць запыт';
 
   @override
@@ -9254,6 +9260,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Зняць выбар усіх';
+
+  @override
+  String get bulkExportAlreadyExported => 'Усе выбраныя задачы ўжо экспартаваны';
+
+  @override
+  String get bulkDeleteFailed => 'Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

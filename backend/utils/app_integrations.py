@@ -22,6 +22,7 @@ from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
+from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -189,10 +190,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
+async def trigger_realtime_integrations(
+    uid: str,
+    segments: list[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    return await _async_trigger_realtime_integrations(uid, segments, conversation_id)
+    return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -539,7 +545,18 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
     return {}
 
 
-async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+async def _async_trigger_realtime_integrations(
+    uid: str,
+    segments: List[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+) -> dict:
+    # Paywall: skip mentor + third-party proactive notifications when this
+    # transcription session belongs to a paywalled desktop user.
+    # Reactivates automatically when the user upgrades or activates BYOK.
+    if is_trial_paywalled(uid, source):
+        return {}
+
     # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
     loop = asyncio.get_running_loop()

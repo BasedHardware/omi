@@ -642,14 +642,6 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
         shell_bt_nus_enable(conn);
     }
 
-#if defined(CONFIG_BT_SMP)
-    /* Request bonding so link keys are persisted by BT settings backend. */
-    int sec_err = bt_conn_set_security(conn, BT_SECURITY_L2);
-    if (sec_err && sec_err != -EALREADY) {
-        LOG_WRN("bt_conn_set_security failed (err %d)", sec_err);
-    }
-#endif
-
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
@@ -910,6 +902,56 @@ static void update_mtu(struct bt_conn *conn)
     }
 
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
+}
+
+static void log_local_ble_addresses(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+
+    if (count == 0U) {
+        LOG_WRN("No local BLE identity address found");
+        printk("BLE_ADDR: unavailable (count=0)\n");
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        char addr[BT_ADDR_LE_STR_LEN];
+
+        bt_addr_le_to_str(&addrs[i], addr, sizeof(addr));
+        LOG_INF("BLE identity[%u]: %s", (unsigned int) i, addr);
+        printk("BLE_ADDR[%u]: %s\n", (unsigned int) i, addr);
+    }
+}
+
+static int ensure_local_ble_identity(void)
+{
+#if defined(CONFIG_BT_SETTINGS)
+    int err = settings_load();
+    if (err && err != -ENOENT) {
+        LOG_ERR("Failed to load BT settings (err %d)", err);
+        return err;
+    }
+#endif
+
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+    if (count > 0U) {
+        return 0;
+    }
+
+    int id = bt_id_create(NULL, NULL);
+    if (id < 0) {
+        LOG_ERR("Failed to create local BLE identity (err %d)", id);
+        return id;
+    }
+
+    LOG_INF("Created local BLE identity %d", id);
+    return 0;
 }
 
 //
@@ -1264,22 +1306,15 @@ int transport_start()
         return err;
     }
 
-#if defined(CONFIG_BT_SETTINGS)
-    err = settings_load_subtree("bt");
-    if (err == -ENOENT) {
-        LOG_INF("No persisted BT bond keys yet");
-    } else if (err) {
-        LOG_WRN("Failed to load BT settings (err %d)", err);
-    }
-#endif
-
     LOG_INF("Transport bluetooth initialized");
 
-    // Load settings AFTER bt_enable so BLE identity address is available
-    err = settings_load();
+    err = ensure_local_ble_identity();
     if (err) {
-        LOG_WRN("BLE settings_load failed (err %d), advertising may fail", err);
+        LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
     }
+
+    // Production-line helper: emit local BLE addresses on UART for fixture parsing.
+    log_local_ble_addresses();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();

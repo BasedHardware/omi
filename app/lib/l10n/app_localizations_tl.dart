@@ -64,6 +64,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get copySummary => 'Kopyahin ang Buod';
 
   @override
+  String get copyConversationId => 'Kopyahin ang ID ng usapan';
+
+  @override
+  String get conversationIdCopied => 'Nakopya na ang ID ng usapan sa clipboard';
+
+  @override
   String get testPrompt => 'Subukan ang Prompt';
 
   @override
@@ -4562,12 +4568,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Ang iyong plano ay nagtapos noong $date.\\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.';
+    return 'Ang iyong plano ay nagtapos noong $date.\nMag-subscribe muli ngayon - ikaw ay agad na babayaran para sa bagong billing period.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
+    return 'Ang iyong plano ay nakatakda na kanselahin sa $date.\nMag-subscribe muli upang mapanatili ang iyong mga benepisyo - walang bayad hanggang $date.';
   }
 
   @override
@@ -5139,7 +5145,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\\nI-tap ang + upang lumikha ng isa nang manual.';
+      'Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -5172,14 +5178,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get checkingAppleWatch => 'Kumikita ng Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'I-install ang Omi sa iyong\\nApple Watch';
+  String get installOmiOnAppleWatch => 'I-install ang Omi sa iyong\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Upang gamitin ang iyong Apple Watch kasama ang Omi, kailangan mo munang i-install ang Omi app sa iyong watch.';
 
   @override
-  String get openOmiOnAppleWatch => 'Buksan ang Omi sa iyong\\nApple Watch';
+  String get openOmiOnAppleWatch => 'Buksan ang Omi sa iyong\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5435,10 +5441,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get wrappedProcessingDefault => 'Processing...';
 
   @override
-  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\\n2025 story...';
+  String get wrappedCreatingYourStory => 'Lumilikha ng iyong\n2025 story...';
 
   @override
-  String get wrappedSomethingWentWrong => 'Isang bagay\\nay nagkamali';
+  String get wrappedSomethingWentWrong => 'Isang bagay\nay nagkamali';
 
   @override
   String get wrappedAnErrorOccurred => 'Isang error ang nangyari';
@@ -6594,7 +6600,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Itakda ang $appName bilang iyong default na summarization app?\\n\\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.';
+    return 'Itakda ang $appName bilang iyong default na summarization app?\n\nAng app na ito ay awtomatikong gagamitin para sa lahat ng susunod na conversation summaries.';
   }
 
   @override
@@ -9313,6 +9319,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'I-deselect lahat';
+
+  @override
+  String get bulkExportAlreadyExported => 'Lahat ng napiling gawain ay na-export na';
+
+  @override
+  String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

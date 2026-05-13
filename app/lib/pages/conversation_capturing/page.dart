@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,7 +16,6 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -63,7 +63,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.streamRecording();
-        MixpanelManager().phoneMicRecordingStarted();
+        PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
     } else {
       // Mute - pause recording with interesting haptic
@@ -80,7 +80,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       } else {
         // Phone mic
         await provider.stopStreamRecording();
-        MixpanelManager().phoneMicRecordingStopped();
+        PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     }
   }
@@ -220,6 +220,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
+        final effectivelyMuted = _isMuted || provider.isCallActive;
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -244,7 +245,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   Text(
                     provider.photos.isNotEmpty
                         ? "📸"
-                        : _isMuted
+                        : effectivelyMuted
                             ? "🔇"
                             : "🎙️",
                   ),
@@ -253,7 +254,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     child: Text(
                       provider.photos.isNotEmpty
                           ? 'Capturing'
-                          : (_isMuted ? context.l10n.muted : context.l10n.listening),
+                          : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
                     ),
                   ),
                 ],
@@ -410,7 +411,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                            color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(

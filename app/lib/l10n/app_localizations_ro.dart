@@ -64,6 +64,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get copySummary => 'Copiază rezumatul';
 
   @override
+  String get copyConversationId => 'Copiază ID-ul conversației';
+
+  @override
+  String get conversationIdCopied => 'ID-ul conversației a fost copiat în clipboard';
+
+  @override
   String get testPrompt => 'Testează promptul';
 
   @override
@@ -9271,6 +9277,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Deselectați tot';
+
+  @override
+  String get bulkExportAlreadyExported => 'Toate sarcinile selectate sunt deja exportate';
+
+  @override
+  String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
 
   @override
   String get dailyReflection => 'Reflecție zilnică';

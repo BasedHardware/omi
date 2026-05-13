@@ -59,6 +59,7 @@ for attr in [
     "update_vector_metadata",
     "upsert_action_item_vectors_batch",
     "delete_action_item_vectors_batch",
+    "find_similar_action_items",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 

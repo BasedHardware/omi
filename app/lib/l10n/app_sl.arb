@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "Kopiraj ID pogovora",
+    "conversationIdCopied": "ID pogovora je bil kopiran v odložišče",
     "testPrompt": "Testiraj poziv",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -5255,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Vaš načrt se je končal {date}.\\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.",
+    "planEndedOn": "Vaš načrt se je končal {date}.\nPrekvalificira se sedaj - obračunani boste takoj za novo obračunsko obdobje.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5265,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Vaš načrt je nastavljen na preklic {date}.\\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
+    "planSetToCancelOn": "Vaš načrt je nastavljen na preklic {date}.\nPrekvalificira se sedaj, da obdržite prednosti - brez napolnitve do {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6038,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Naloge iz vaših pogovorov se bodo prikazale tukaj.\\nTapnite + za ročno ustvarjanje.",
+    "tasksEmptyStateMessage": "Naloge iz vaših pogovorov se bodo prikazale tukaj.\nTapnite + za ročno ustvarjanje.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6082,7 +6084,7 @@
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
-    "installOmiOnAppleWatch": "Namestite Omi na vaš\\nApple Watch",
+    "installOmiOnAppleWatch": "Namestite Omi na vaš\nApple Watch",
     "@installOmiOnAppleWatch": {
         "description": "Title prompting user to install Omi on Apple Watch"
     },
@@ -6090,7 +6092,7 @@
     "@installOmiOnAppleWatchDescription": {
         "description": "Description explaining need to install Omi app on watch"
     },
-    "openOmiOnAppleWatch": "Odprite Omi na vašem\\nApple Watch",
+    "openOmiOnAppleWatch": "Odprite Omi na vašem\nApple Watch",
     "@openOmiOnAppleWatch": {
         "description": "Title prompting user to open Omi on Apple Watch"
     },
@@ -6457,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "Ustvarjanje vaše\\n2025 zgodbe...",
+    "wrappedCreatingYourStory": "Ustvarjanje vaše\n2025 zgodbe...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "Nekaj\\nje šlo narobe",
+    "wrappedSomethingWentWrong": "Nekaj\nje šlo narobe",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7998,7 +8000,7 @@
     "defaultLabel": "Privzeto",
     "lastUsedLabel": "Zadnja uporaba",
     "setDefaultApp": "Nastavite privzeto aplikacijo",
-    "setDefaultAppContent": "Nastavite {appName} kot privzeto aplikacijo za povzemanje?\\n\\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.",
+    "setDefaultAppContent": "Nastavite {appName} kot privzeto aplikacijo za povzemanje?\n\nTa aplikacija bo samodejno uporabljena za vse prihodnje povzetke pogovorov.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -10721,5 +10723,7 @@
     "selectAllTasksMenu": "Izberi vse",
     "showCompletedTasks": "Prikaži dokončane",
     "startCallRecording": "Začni snemanje klica",
-    "startVoiceRecording": "Začni glasovno snemanje"
+    "startVoiceRecording": "Začni glasovno snemanje",
+    "bulkExportAlreadyExported": "Vse izbrane naloge so že izvožene",
+    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova."
 }

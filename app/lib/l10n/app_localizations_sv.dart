@@ -64,6 +64,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get copySummary => 'Kopiera sammanfattning';
 
   @override
+  String get copyConversationId => 'Kopiera konversations-ID';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID kopierat till urklipp';
+
+  @override
   String get testPrompt => 'Testa prompt';
 
   @override
@@ -9232,6 +9238,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Avmarkera alla';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alla valda uppgifter är redan exporterade';
+
+  @override
+  String get bulkDeleteFailed => 'Det gick inte att ta bort uppgifterna. Försök igen.';
 
   @override
   String get dailyReflection => 'Daglig reflektion';

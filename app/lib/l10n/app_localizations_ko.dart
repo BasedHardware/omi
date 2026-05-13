@@ -63,6 +63,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get copySummary => '요약 복사';
 
   @override
+  String get copyConversationId => '대화 ID 복사';
+
+  @override
+  String get conversationIdCopied => '대화 ID가 클립보드에 복사되었습니다';
+
+  @override
   String get testPrompt => '프롬프트 테스트';
 
   @override
@@ -9080,6 +9086,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => '모두 선택 해제';
+
+  @override
+  String get bulkExportAlreadyExported => '선택한 모든 작업이 이미 내보내졌습니다';
+
+  @override
+  String get bulkDeleteFailed => '작업을 삭제할 수 없습니다. 다시 시도해 주세요.';
 
   @override
   String get dailyReflection => '일일 성찰';

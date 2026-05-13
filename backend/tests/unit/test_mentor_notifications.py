@@ -59,12 +59,16 @@ for submodule in [
     "daily_summaries",
     "mem_db",
     "notifications",
+    "user_usage",
+    "announcements",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
 
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
+sys.modules["database.announcements"].compare_versions = MagicMock(return_value=0)
+sys.modules["database.user_usage"].get_monthly_chat_usage = MagicMock(return_value=0)
 
 # Stub _client.db for auth.py top-level import
 sys.modules["database._client"].db = MagicMock()

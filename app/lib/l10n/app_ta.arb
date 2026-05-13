@@ -73,6 +73,8 @@
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
     },
+    "copyConversationId": "உரையாடல் ID நகலெடு",
+    "conversationIdCopied": "உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது",
     "testPrompt": "தேர்வு கேட்டுகோள்",
     "@testPrompt": {
         "description": "Menu item for testing prompts"
@@ -5255,7 +5257,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "உங்கள் திட்டம் {date} இல் முடிந்துவிட்டது।\\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.",
+    "planEndedOn": "உங்கள் திட்டம் {date} இல் முடிந்துவிட்டது।\nअब மீண்டும் சந்தா செய்யவும் - புதிய பணம் செலுத்தும் காலத்திற்கு உடனே கட்டணம் செலுத்தப்படும்.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5265,7 +5267,7 @@
             }
         }
     },
-    "planSetToCancelOn": "உங்கள் திட்டம் {date} இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
+    "planSetToCancelOn": "உங்கள் திட்டம் {date} இல் ரத்து செய்ய திட்டமிடப்பட்டுள்ளது।\nஉங்கள் சலுகைகளை தொடர்ந்து வைக்க இப்போது மீண்டும் சந்தா செய்யவும் - {date} வரை எந்த கட்டணமும் இல்லை.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -6038,7 +6040,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।",
+    "tasksEmptyStateMessage": "உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -6457,11 +6459,11 @@
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "உங்கள் உருவாக்கம்\\n2025 கதை...",
+    "wrappedCreatingYourStory": "உங்கள் உருவாக்கம்\n2025 கதை...",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
-    "wrappedSomethingWentWrong": "ஏதோ\\nத் தவறாக நடந்தது",
+    "wrappedSomethingWentWrong": "ஏதோ\nத் தவறாக நடந்தது",
     "@wrappedSomethingWentWrong": {
         "description": "Error header text, includes newline"
     },
@@ -7998,7 +8000,7 @@
     "defaultLabel": "இயல்பு",
     "lastUsedLabel": "கடைசியில் பயன்படுத்திய",
     "setDefaultApp": "இயல்பு பயன்பாட்டை அமைக்கவும்",
-    "setDefaultAppContent": "{appName} ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\\n\\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.",
+    "setDefaultAppContent": "{appName} ஐ உங்கள் இயல்பு சுருக்க பயன்பாட்டாக அமைக்கவும்?\n\nஇந்த பயன்பாடு அனைத்து வருங்கால உரையாடல் சுருக்கத்திற்கு தானாகவே பயன்படுத்தப்படும்.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -10721,5 +10723,7 @@
     "selectAllTasksMenu": "அனைத்தையும் தேர்ந்தெடு",
     "showCompletedTasks": "முடிந்தவற்றைக் காட்டு",
     "startCallRecording": "அழைப்பு பதிவைத் தொடங்கு",
-    "startVoiceRecording": "குரல் பதிவைத் தொடங்கு"
+    "startVoiceRecording": "குரல் பதிவைத் தொடங்கு",
+    "bulkExportAlreadyExported": "தேர்ந்தெடுக்கப்பட்ட அனைத்து பணிகளும் ஏற்கனவே ஏற்றுமதி செய்யப்பட்டுள்ளன",
+    "bulkDeleteFailed": "பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்."
 }

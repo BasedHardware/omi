@@ -64,6 +64,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get copySummary => 'ಸಾರಾಂಶ ನಕಲಿ ಮಾಡಿ';
 
   @override
+  String get copyConversationId => 'ಸಂಭಾಷಣೆ ID ನಕಲಿಸಿ';
+
+  @override
+  String get conversationIdCopied => 'ಸಂಭಾಷಣೆ ID ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಗಿದೆ';
+
+  @override
   String get testPrompt => 'ಪ್ರಯೋಗ ನಿರ್ದೇಶನ';
 
   @override
@@ -4541,12 +4547,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.';
+    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಅನ್ನು ಕೊನೆಗೊಂಡಿತು.\nಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - ನಿಮಗೆ ಹೊಸ ಬಿಲಿಂಗ್ ಅವಧಿಗೆ ತಕ್ಷಣವೇ ಶುಲ್ಕ ವಿಧಿಸಲಾಗುವುದು.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
+    return 'ನಿಮ್ಮ ಯೋಜನೆ $date ಮೇಲೆ ರದ್ದುಗೊಳಿಸುವ ನಿರ್ಧಾರವನ್ನು ಹೊಂದಿದೆ.\nನಿಮ್ಮ ಪ್ರಯೋಜನಗಳನ್ನು ಮುಂದುವರಿಸಲು ಈಗ ಮರುಸದಸ್ಯಗೊಳಿಸಿ - $date ವರೆಗೆ ಯಾವುದೇ ಶುಲ್ಕ ಇಲ್ಲ.';
   }
 
   @override
@@ -5117,7 +5123,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get tasksEmptyStateMessage =>
-      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
+      'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -5150,14 +5156,14 @@ class AppLocalizationsKn extends AppLocalizations {
   String get checkingAppleWatch => 'Apple Watch ಪರಿಶೀಲಿಸುತ್ತಿದೆ...';
 
   @override
-  String get installOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ';
+  String get installOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ಸ್ಥಾಪಿಸಿ';
 
   @override
   String get installOmiOnAppleWatchDescription =>
       'Omi ನೊಂದಿಗೆ ಆಪಲ್ ಗಡಿಯಾರವನ್ನು ಬಳಸಲು, ನೀವು ಮೊದಲು ನಿಮ್ಮ ಗಡಿಯಾರದಲ್ಲಿ Omi ಅಪ್ಲಿಕೇಶನ ಸ್ಥಾಪಿಸಬೇಕು.';
 
   @override
-  String get openOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ';
+  String get openOmiOnAppleWatch => 'Omi ಅನ್ನು ನಿಮ್ಮ\nApple Watch ನಲ್ಲಿ ತೆರೆಯಿರಿ';
 
   @override
   String get openOmiOnAppleWatchDescription =>
@@ -5411,7 +5417,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get wrappedProcessingDefault => 'ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ...';
 
   @override
-  String get wrappedCreatingYourStory => 'ನಿಮ್ಮ\\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...';
+  String get wrappedCreatingYourStory => 'ನಿಮ್ಮ\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...';
 
   @override
   String get wrappedSomethingWentWrong => 'ಏನೋ ತಪ್ಪಾಗಿದೆ';
@@ -6562,7 +6568,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\\n\\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.';
+    return '$appName ನಿಮ್ಮ ಡಿಫಾಲ್ಟ್ ಸಾರಾಂಶ ಅಪ್ಲಿಕೇಶನ್ ಹೊಂದಿಸುವುದೇ?\n\nಈ ಅಪ್ಲಿಕೇಶನ್ ಭವಿಷ್ಯತ್ತಿನ ಎಲ್ಲಾ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳಿಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಬಳಸಲಾಗುವುದು.';
   }
 
   @override
@@ -9260,6 +9266,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ';
+
+  @override
+  String get bulkExportAlreadyExported => 'ಆಯ್ಕೆಮಾಡಿದ ಎಲ್ಲಾ ಕಾರ್ಯಗಳು ಈಗಾಗಲೇ ರಫ್ತಾಗಿವೆ';
+
+  @override
+  String get bulkDeleteFailed => 'ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
   String get dailyReflection => 'Daily Reflection';

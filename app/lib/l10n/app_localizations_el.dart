@@ -64,6 +64,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get copySummary => 'Αντιγραφή σύνοψης';
 
   @override
+  String get copyConversationId => 'Αντιγραφή ID συνομιλίας';
+
+  @override
+  String get conversationIdCopied => 'Το ID συνομιλίας αντιγράφηκε στο πρόχειρο';
+
+  @override
   String get testPrompt => 'Δοκιμή Εντολής';
 
   @override
@@ -9293,6 +9299,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Αποεπιλογή όλων';
+
+  @override
+  String get bulkExportAlreadyExported => 'Όλες οι επιλεγμένες εργασίες έχουν ήδη εξαχθεί';
+
+  @override
+  String get bulkDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.';
 
   @override
   String get dailyReflection => 'Ημερήσιος αναστοχασμός';

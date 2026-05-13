@@ -64,6 +64,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get copySummary => 'Sao chép tóm tắt';
 
   @override
+  String get copyConversationId => 'Sao chép ID cuộc trò chuyện';
+
+  @override
+  String get conversationIdCopied => 'Đã sao chép ID cuộc trò chuyện vào clipboard';
+
+  @override
   String get testPrompt => 'Thử nghiệm';
 
   @override
@@ -9228,6 +9234,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Bỏ chọn tất cả';
+
+  @override
+  String get bulkExportAlreadyExported => 'Tất cả các tác vụ đã chọn đều đã được xuất';
+
+  @override
+  String get bulkDeleteFailed => 'Không thể xóa các tác vụ. Vui lòng thử lại.';
 
   @override
   String get dailyReflection => 'Suy ngẫm hàng ngày';

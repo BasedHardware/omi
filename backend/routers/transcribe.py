@@ -89,7 +89,7 @@ from utils.fair_use import (
     is_dg_budget_exhausted,
     record_dg_usage_ms,
 )
-from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
+from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds, is_trial_paywalled
 from utils.translation import TranslationService, resolve_translation_language
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
@@ -276,7 +276,12 @@ async def _stream_handler(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid)
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
+    # Computed once: only the desktop trial paywall path should also drop
+    # audio at the Deepgram-send gate. Mobile over-freemium users keep their
+    # pre-existing behavior (audio still forwarded; transcripts already
+    # suppressed elsewhere).
+    is_paywalled_desktop = is_trial_paywalled(uid, source)
     if not user_has_credits:
         try:
             await send_credit_limit_notification(uid)
@@ -418,6 +423,21 @@ async def _stream_handler(
 
     freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
 
+    # Push the freemium threshold event upfront for already-exhausted users so
+    # the desktop popup appears immediately on connect, instead of waiting for
+    # the periodic loop's first 60s tick (typical desktop session is shorter).
+    if not user_has_credits:
+        try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
+            freemium_threshold_sent = True
+        except Exception as e:
+            logger.error(f"Error sending freemium threshold event on connect: {e} {uid} {session_id}")
+
     # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
     CREDITS_REFRESH_SECONDS = 900  # 15 min
     remaining_seconds_cache: Optional[int] = None  # None = not yet fetched (distinct from unlimited)
@@ -557,7 +577,7 @@ async def _stream_handler(
                 )
             )
             if needs_refresh:
-                remaining_seconds_cache = get_remaining_transcription_seconds(uid)
+                remaining_seconds_cache = get_remaining_transcription_seconds(uid, source=source)
                 remaining_seconds_cache_ts = now
                 remaining_seconds_cache_initialized = True
             elif remaining_seconds_cache is not None and transcription_seconds > 0:
@@ -2164,7 +2184,10 @@ async def _stream_handler(
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
-                            uid, [s.dict() for s in transcript_segments], current_conversation_id
+                            uid,
+                            [s.dict() for s in transcript_segments],
+                            current_conversation_id,
+                            source=source,
                         )
                     except Exception as e:
                         logger.error(f"Error triggering realtime integrations: {e} {uid} {session_id}")
@@ -2398,9 +2421,12 @@ async def _stream_handler(
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
-                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
-                if fair_use_dg_budget_exhausted:
-                    pass  # Audio not forwarded to DG — budget/credits exhausted
+                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083),
+                # or if this is a desktop trial-paywalled session. Mobile users over
+                # the existing freemium quota keep their pre-existing behavior so this
+                # rollout doesn't change anything on mobile.
+                if fair_use_dg_budget_exhausted or is_paywalled_desktop:
+                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
                 else:
                     dg_socket.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)

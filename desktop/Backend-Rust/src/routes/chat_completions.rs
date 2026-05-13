@@ -70,6 +70,12 @@ fn model_cost(upstream_model: &str) -> ModelCost {
             cache_read_per_token: 1.50 / 1_000_000.0,
             cache_write_per_token: 18.75 / 1_000_000.0,
         },
+        "claude-haiku-4-5" => ModelCost {
+            input_per_token: 1.0 / 1_000_000.0,
+            output_per_token: 5.0 / 1_000_000.0,
+            cache_read_per_token: 0.10 / 1_000_000.0,
+            cache_write_per_token: 1.25 / 1_000_000.0,
+        },
         _ => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
@@ -942,6 +948,18 @@ mod tests {
 
         let route = resolve_model("claude-sonnet-4-20250514").unwrap();
         assert_eq!(route.upstream_model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn test_resolve_model_haiku() {
+        // The AgentPill router classifier sends this exact dated ID; without
+        // it the /v2/chat/completions endpoint 400s and agent pills never
+        // spawn from natural-language prompts.
+        let route = resolve_model("claude-haiku-4-5-20251001").unwrap();
+        assert_eq!(route.upstream_model, "claude-haiku-4-5");
+
+        let route = resolve_model("claude-haiku-4-5").unwrap();
+        assert_eq!(route.upstream_model, "claude-haiku-4-5");
     }
 
     #[test]
