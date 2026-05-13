@@ -141,7 +141,7 @@ class TestSyncV2Structure:
         func_body = source[start:next_boundary]
 
         dg_pos = func_body.index('record_dg_usage_ms')
-        processing_pos = func_body.index('future.result()')
+        processing_pos = func_body.index('future.result(')
         assert dg_pos > processing_pos, "DG usage must be recorded AFTER segment processing"
 
     def test_v2_background_does_decode_and_vad(self):
@@ -430,7 +430,7 @@ class TestFullPipelineBackground:
         body = self._get_bg_func_body()
         assert 'update_sync_job(' in body, "Worker must call update_sync_job for heartbeat"
         heartbeat_pos = body.rindex('update_sync_job(')
-        result_pos = body.index('future.result()')
+        result_pos = body.index('future.result(')
         assert heartbeat_pos > result_pos, "Heartbeat must come after future.result()"
 
     def test_background_pipeline_order(self):
@@ -484,7 +484,7 @@ class TestV1Unchanged:
         body = self._get_v1_body()
         assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
         assert 'run_in_executor' in body, "v1 must use run_in_executor for blocking segment work"
-        assert 'critical_executor' in body, "v1 must use critical_executor (Lane 2 architecture)"
+        assert 'sync_executor' in body, "v1 must use sync_executor for segment work"
 
     def test_v1_cleanup_in_finally(self):
         """v1 must still clean up files in finally block."""
@@ -790,11 +790,20 @@ class TestBackgroundWorkerBehavioral:
             saved_modules[mod] = sys.modules.get(mod)
             sys.modules[mod] = MagicMock()
 
-        from concurrent.futures import ThreadPoolExecutor
+        import contextvars
+        from concurrent.futures import Future, ThreadPoolExecutor
 
         _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix='test')
+
+        def _submit_with_context(executor, fn, *args, **kwargs):
+            ctx = contextvars.copy_context()
+            return executor.submit(ctx.run, fn, *args, **kwargs)
+
         sys.modules['utils.executors'].critical_executor = _test_executor
+        sys.modules['utils.executors'].sync_executor = _test_executor
+        sys.modules['utils.executors'].postprocess_executor = _test_executor
         sys.modules['utils.executors'].storage_executor = _test_executor
+        sys.modules['utils.executors'].submit_with_context = _submit_with_context
 
         sys.modules['database.redis_db'] = MagicMock(r=mock_redis)
         saved_modules['database.sync_jobs'] = sys.modules.get('database.sync_jobs')
@@ -1334,10 +1343,19 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
-        # Stub utils.executors with a real-ish critical_executor mock
+        # Stub utils.executors with real-ish executor mocks
+        import contextvars
+
+        def _submit_with_context(executor, fn, *args, **kwargs):
+            ctx = contextvars.copy_context()
+            return executor.submit(ctx.run, fn, *args, **kwargs)
+
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
+        mock_executors.sync_executor = MagicMock()
+        mock_executors.postprocess_executor = MagicMock()
         mock_executors.storage_executor = MagicMock()
+        mock_executors.submit_with_context = _submit_with_context
         saved_modules['utils.executors'] = sys.modules.get('utils.executors')
         sys.modules['utils.executors'] = mock_executors
 
