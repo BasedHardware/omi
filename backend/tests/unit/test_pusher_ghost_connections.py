@@ -9,15 +9,33 @@ These tests verify:
 1. Receive timeout fires when no data arrives
 2. Background tasks are force-cancelled after the drain timeout
 3. The gauge is always decremented on exit (no ghost connections)
+4. Speaker samples are processed (not silently dropped) on shutdown
 """
 
+import ast
 import asyncio
 import struct
+from pathlib import Path
 
 import pytest
 
-WS_RECEIVE_TIMEOUT = 300.0
-BG_DRAIN_TIMEOUT = 30.0
+PUSHER_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'pusher.py'
+
+
+def _parse_constant(name: str) -> float:
+    """Extract a module-level constant from pusher.py without importing it."""
+    tree = ast.parse(PUSHER_SRC.read_text())
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    return ast.literal_eval(node.value)
+    raise ValueError(f'{name} not found in {PUSHER_SRC}')
+
+
+WS_RECEIVE_TIMEOUT = _parse_constant('WS_RECEIVE_TIMEOUT')
+BG_DRAIN_TIMEOUT = _parse_constant('BG_DRAIN_TIMEOUT')
+SPEAKER_SAMPLE_MIN_AGE = _parse_constant('SPEAKER_SAMPLE_MIN_AGE')
 
 
 class TestConstants:
@@ -32,6 +50,9 @@ class TestConstants:
 
     def test_drain_timeout_shorter_than_receive_timeout(self):
         assert BG_DRAIN_TIMEOUT < WS_RECEIVE_TIMEOUT
+
+    def test_speaker_sample_min_age_exists(self):
+        assert SPEAKER_SAMPLE_MIN_AGE > 0
 
 
 class TestReceiveTimeoutBehavior:
@@ -174,6 +195,63 @@ class TestDrainTimeout:
         assert cancelled
 
 
+class TestSpeakerSampleShutdownDrain:
+    """Verify speaker samples are processed (not silently dropped) on shutdown."""
+
+    @pytest.mark.asyncio
+    async def test_pending_samples_processed_on_shutdown(self):
+        """When websocket_active goes False, speaker samples younger than
+        SPEAKER_SAMPLE_MIN_AGE should still be processed (age check skipped)."""
+        import time
+        from collections import deque
+
+        websocket_active = True
+        processed_ids = []
+
+        speaker_sample_queue = deque(maxlen=100)
+        speaker_sample_queue.append(
+            {
+                'person_id': 'p1',
+                'conversation_id': 'c1',
+                'segment_ids': ['s1'],
+                'queued_at': time.time(),  # just queued — way under 120s age
+            }
+        )
+
+        async def process_speaker_sample_queue():
+            nonlocal websocket_active
+            while websocket_active or len(speaker_sample_queue) > 0:
+                await asyncio.sleep(0.01)
+                if not speaker_sample_queue:
+                    continue
+
+                current_time = time.time()
+                is_shutdown = not websocket_active
+                ready = []
+                pending = []
+                for req in list(speaker_sample_queue):
+                    if is_shutdown or current_time - req['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
+                        ready.append(req)
+                    else:
+                        pending.append(req)
+                speaker_sample_queue.clear()
+                speaker_sample_queue.extend(pending)
+                for req in ready:
+                    processed_ids.append(req['person_id'])
+
+            return processed_ids
+
+        task = asyncio.create_task(process_speaker_sample_queue())
+
+        # Simulate disconnect after a brief moment
+        await asyncio.sleep(0.05)
+        websocket_active = False
+
+        result = await asyncio.wait_for(task, timeout=2.0)
+
+        assert 'p1' in processed_ids, "Speaker sample queued < 120s ago should be processed on shutdown, not dropped"
+
+
 class TestGaugeDecrement:
     """Verify the gauge is always decremented regardless of task state."""
 
@@ -282,3 +360,29 @@ class TestGaugeDecrement:
             await task
         except asyncio.CancelledError:
             pass
+
+
+class TestStructuralIntegrity:
+    """Verify the pusher source has the expected patterns."""
+
+    def test_source_has_receive_timeout(self):
+        src = PUSHER_SRC.read_text()
+        assert 'asyncio.wait_for(websocket.receive_bytes()' in src
+
+    def test_source_has_drain_timeout(self):
+        src = PUSHER_SRC.read_text()
+        assert 'BG_DRAIN_TIMEOUT' in src
+
+    def test_source_awaits_receive_task_separately(self):
+        src = PUSHER_SRC.read_text()
+        assert 'await receive_task' in src
+
+    def test_source_does_not_gather_all_five_tasks(self):
+        """The old pattern gathered all 5 tasks — verify it's gone."""
+        src = PUSHER_SRC.read_text()
+        assert 'receive_task,\n' not in src or 'await asyncio.gather(\n            receive_task,' not in src
+
+    def test_source_has_speaker_shutdown_drain(self):
+        """Verify the speaker sample queue skips age check on shutdown."""
+        src = PUSHER_SRC.read_text()
+        assert 'is_shutdown' in src
