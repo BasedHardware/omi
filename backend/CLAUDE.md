@@ -168,6 +168,54 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 - **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
 - **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
 
+## WebSocket Concurrency (Long-Lived Connections)
+
+WebSocket handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per connection. These rules prevent ghost connections, memory leaks, and gauge drift.
+
+### Task lifecycle: receive-then-drain
+
+Never `asyncio.gather()` the receive task with background tasks. If any bg task hangs, the gather blocks forever and the `finally` block (gauge dec, cleanup) never executes.
+
+```python
+bg_main_tasks = []
+try:
+    GAUGE.inc()
+    receive_task = asyncio.create_task(receive_loop())
+    bg_main_tasks = [asyncio.create_task(bg1()), asyncio.create_task(bg2())]
+    await receive_task                    # exits when client disconnects
+    try:
+        await asyncio.wait_for(asyncio.gather(*bg_main_tasks, return_exceptions=True), timeout=BG_DRAIN_TIMEOUT)
+    except asyncio.TimeoutError:
+        for t in bg_main_tasks:
+            if not t.done(): t.cancel()
+        await asyncio.gather(*bg_main_tasks, return_exceptions=True)
+finally:
+    all_to_cancel = [t for t in bg_main_tasks if not t.done()]
+    for t in all_to_cancel: t.cancel()
+    if all_to_cancel: await asyncio.gather(*all_to_cancel, return_exceptions=True)
+    GAUGE.dec()
+```
+
+### Receive timeouts
+
+Every `websocket.receive()` / `websocket.receive_bytes()` must be wrapped in `asyncio.wait_for(..., timeout=WS_RECEIVE_TIMEOUT)`. Dead TCP connections (mobile killed, network drop) block indefinitely without this.
+
+### Gauge placement
+
+`GAUGE.inc()` inside the `try` body, `GAUGE.dec()` in the `finally` — always paired, never separated by code that can raise. Initialize `bg_main_tasks = []` BEFORE the `try` so the `finally` can reference it.
+
+### Task tracking
+
+Never bare `asyncio.create_task()` without tracking the task for cancellation. Use `spawn()` (which adds to `bg_tasks`) or add to `bg_main_tasks`. Untracked tasks leak on disconnect.
+
+### Executor bounds
+
+`critical_executor` (8 workers) and `storage_executor` (16 workers) have bounded pools. The default executor (`None`) is unbounded — avoid it for user-triggered work. If you must use it (e.g., to avoid deadlock with `critical_executor`), document why and consider the thread count under load.
+
+### Process-scoped dict cleanup
+
+Module-level dicts (`proactive_noti_sent_at`, caches) grow forever if cleanup is lazy-only. Add TTL-based eviction or cap size with `maxlen`.
+
 ## Common Gotchas
 
 1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)
