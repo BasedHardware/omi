@@ -42,11 +42,17 @@ class TestConstants:
     def test_receive_timeout_is_positive(self):
         assert WS_RECEIVE_TIMEOUT > 0
 
+    def test_receive_timeout_exact_value(self):
+        assert WS_RECEIVE_TIMEOUT == 300.0, f"WS_RECEIVE_TIMEOUT should be 300s, got {WS_RECEIVE_TIMEOUT}"
+
     def test_receive_timeout_longer_than_heartbeat_interval(self):
         assert WS_RECEIVE_TIMEOUT >= 60
 
     def test_drain_timeout_is_positive(self):
         assert BG_DRAIN_TIMEOUT > 0
+
+    def test_drain_timeout_exact_value(self):
+        assert BG_DRAIN_TIMEOUT == 30.0, f"BG_DRAIN_TIMEOUT should be 30s, got {BG_DRAIN_TIMEOUT}"
 
     def test_drain_timeout_shorter_than_receive_timeout(self):
         assert BG_DRAIN_TIMEOUT < WS_RECEIVE_TIMEOUT
@@ -362,6 +368,36 @@ class TestGaugeDecrement:
             pass
 
 
+def _parse_handler_ast():
+    """Parse _websocket_util_trigger and return key AST info about the try/finally structure."""
+    tree = ast.parse(PUSHER_SRC.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == '_websocket_util_trigger':
+            return node
+    raise ValueError('_websocket_util_trigger not found in pusher.py')
+
+
+def _find_try_blocks(func_node):
+    """Find all Try nodes (direct and nested) within a function."""
+    blocks = []
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Try):
+            blocks.append(node)
+    return blocks
+
+
+def _find_calls_in_body(body):
+    """Find all function/attribute call names in a list of AST statements."""
+    calls = []
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute):
+                calls.append(node.func.attr)
+            elif isinstance(node.func, ast.Name):
+                calls.append(node.func.id)
+    return calls
+
+
 class TestStructuralIntegrity:
     """Verify the pusher source has the expected patterns."""
 
@@ -386,3 +422,143 @@ class TestStructuralIntegrity:
         """Verify the speaker sample queue skips age check on shutdown."""
         src = PUSHER_SRC.read_text()
         assert 'is_shutdown' in src
+
+
+class TestProductionFlowStructure:
+    """AST-based verification of the actual production code flow in _websocket_util_trigger.
+
+    These tests parse the real pusher.py source and verify structural invariants
+    that prevent ghost connections — not reimplementations, but proofs about the
+    actual code paths.
+    """
+
+    def test_handler_exists(self):
+        handler = _parse_handler_ast()
+        assert handler.name == '_websocket_util_trigger'
+
+    def test_gauge_inc_in_try_dec_in_finally(self):
+        """PUSHER_ACTIVE_WS_CONNECTIONS.inc() must be in try body,
+        .dec() must be in finally — this is the core gauge-leak prevention."""
+        handler = _parse_handler_ast()
+        try_blocks = _find_try_blocks(handler)
+
+        found_inc_in_try = False
+        found_dec_in_finally = False
+
+        for tb in try_blocks:
+            try_calls = _find_calls_in_body(tb.body)
+            finally_calls = _find_calls_in_body(tb.finalbody) if tb.finalbody else []
+
+            if 'inc' in try_calls:
+                found_inc_in_try = True
+            if 'dec' in finally_calls:
+                found_dec_in_finally = True
+
+        assert found_inc_in_try, "PUSHER_ACTIVE_WS_CONNECTIONS.inc() must be in try body"
+        assert found_dec_in_finally, "PUSHER_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
+
+    def test_receive_task_awaited_before_bg_drain(self):
+        """'await receive_task' must appear before 'timeout=BG_DRAIN_TIMEOUT' usage —
+        proving we wait for receive first, then drain bg tasks."""
+        src = PUSHER_SRC.read_text()
+        receive_pos = src.find('await receive_task')
+        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
+
+        assert receive_pos != -1, "'await receive_task' not found in source"
+        assert drain_pos != -1, "'timeout=BG_DRAIN_TIMEOUT' not found in source"
+        assert receive_pos < drain_pos, (
+            f"'await receive_task' (pos {receive_pos}) must appear before "
+            f"'timeout=BG_DRAIN_TIMEOUT' (pos {drain_pos}) — receive-then-drain ordering"
+        )
+
+    def test_receive_task_not_in_gather_with_bg_tasks(self):
+        """receive_task must NOT appear in the same gather() as bg_main_tasks.
+        This was the root cause of ghost connections."""
+        src = PUSHER_SRC.read_text()
+        lines = src.split('\n')
+
+        for i, line in enumerate(lines):
+            if 'asyncio.gather(' in line:
+                gather_block = '\n'.join(lines[i : i + 6])
+                assert not (
+                    'receive_task' in gather_block and 'bg_main_tasks' in gather_block
+                ), f"receive_task must not be gathered with bg_main_tasks (line {i + 1})"
+
+    def test_force_cancel_in_timeout_except(self):
+        """After BG_DRAIN_TIMEOUT fires, tasks must be cancelled — verify
+        cancel() appears in the TimeoutError handler that follows BG_DRAIN_TIMEOUT."""
+        src = PUSHER_SRC.read_text()
+
+        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
+        assert drain_pos != -1, "timeout=BG_DRAIN_TIMEOUT not found"
+
+        after_drain = src[drain_pos:]
+        timeout_pos = after_drain.find('except asyncio.TimeoutError:')
+        assert timeout_pos != -1, "except asyncio.TimeoutError not found after BG_DRAIN_TIMEOUT"
+
+        after_timeout = after_drain[timeout_pos:]
+        lines = after_timeout.split('\n')[1:]
+
+        found_cancel = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('except ') or stripped.startswith('finally:') or stripped.startswith('else:'):
+                break
+            if '.cancel()' in stripped:
+                found_cancel = True
+                break
+
+        assert found_cancel, "task.cancel() must follow asyncio.TimeoutError in drain path"
+
+    def test_finally_cancels_remaining_tasks(self):
+        """The finally block must cancel any remaining un-done tasks (bg_tasks + bg_main_tasks)."""
+        handler = _parse_handler_ast()
+        try_blocks = _find_try_blocks(handler)
+
+        found_cancel_in_finally = False
+        for tb in try_blocks:
+            if tb.finalbody:
+                finally_calls = _find_calls_in_body(tb.finalbody)
+                if 'cancel' in finally_calls:
+                    found_cancel_in_finally = True
+
+        assert found_cancel_in_finally, "finally block must cancel remaining tasks"
+
+    def test_bg_main_tasks_has_four_tasks(self):
+        """bg_main_tasks list literal should have exactly 4 tasks (not 5 — receive is separate)."""
+        src = PUSHER_SRC.read_text()
+        lines = src.split('\n')
+
+        in_bg_list = False
+        task_count = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('bg_main_tasks = [') and stripped != 'bg_main_tasks = []':
+                in_bg_list = True
+                continue
+            if in_bg_list:
+                if 'create_task(' in stripped:
+                    task_count += 1
+                if ']' in stripped:
+                    break
+
+        assert task_count == 4, f"bg_main_tasks should have 4 tasks (receive separate), found {task_count}"
+
+    def test_is_shutdown_guards_speaker_sample_age_check(self):
+        """In process_speaker_sample_queue, is_shutdown must be checked
+        in the same conditional as SPEAKER_SAMPLE_MIN_AGE."""
+        src = PUSHER_SRC.read_text()
+        lines = src.split('\n')
+
+        for line in lines:
+            if 'is_shutdown' in line and 'SPEAKER_SAMPLE_MIN_AGE' in line:
+                return
+        pytest.fail("is_shutdown must guard the SPEAKER_SAMPLE_MIN_AGE check in process_speaker_sample_queue")
+
+    def test_dropped_counts_logged_on_drain_timeout(self):
+        """When drain timeout fires, per-queue drop counts must be logged."""
+        src = PUSHER_SRC.read_text()
+        assert 'dropped_speaker' in src, "Must log dropped speaker sample count"
+        assert 'dropped_transcript' in src, "Must log dropped transcript count"
+        assert 'dropped_audio' in src, "Must log dropped audio count"
+        assert 'dropped_cloud' in src, "Must log dropped cloud count"
