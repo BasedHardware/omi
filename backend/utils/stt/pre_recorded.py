@@ -4,12 +4,15 @@ from io import BytesIO
 from typing import List, Optional, Sequence, Tuple, Union
 
 import fal_client
+import httpx
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 import logging
+
+_DG_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +193,11 @@ def deepgram_prerecorded(
             else:
                 options["keywords"] = list(keywords)
 
-        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_url({"url": audio_url}, options)
+        response = (
+            _deepgram_client_for_request()
+            .listen.rest.v("1")
+            .transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
+        )
 
         # Extract words from response
         result = response.to_dict()
@@ -322,7 +329,9 @@ def deepgram_prerecorded_from_bytes(
         mimetype = "audio/raw" if encoding else "audio/wav"
         source = {"buffer": audio_buffer, "mimetype": mimetype}
 
-        response = _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options)
+        response = (
+            _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options, timeout=_DG_TIMEOUT)
+        )
 
         # Extract words from response
         result = response.to_dict()
