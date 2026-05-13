@@ -244,7 +244,7 @@ def deepgram_prerecorded(
 
     except Exception as e:
         logger.error(f'Deepgram prerecorded error: {e}')
-        if attempts < 2:
+        if attempts < 1:
             return deepgram_prerecorded(
                 audio_url,
                 speakers_count,
@@ -376,7 +376,7 @@ def deepgram_prerecorded_from_bytes(
 
     except Exception as e:
         logger.error(f'Deepgram prerecorded from bytes error: {e}')
-        if attempts < 2:
+        if attempts < 1:
             return deepgram_prerecorded_from_bytes(
                 audio_bytes,
                 sample_rate,
