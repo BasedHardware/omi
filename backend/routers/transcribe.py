@@ -76,6 +76,7 @@ from utils.stt.streaming import (
     get_stt_service_for_language,
     process_audio_dg,
     process_audio_modulate,
+    sort_segments_by_start,
 )
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -2087,7 +2088,7 @@ async def _stream_handler(
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = sorted(realtime_segment_buffers, key=lambda s: s.get('start', 0))
+            segments_to_process = sort_segments_by_start(realtime_segment_buffers)
             realtime_segment_buffers.clear()
 
             photos_to_process = list(realtime_photo_buffers)
