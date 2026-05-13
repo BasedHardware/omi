@@ -930,6 +930,7 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
+            conversation.transcript_segments.sort(key=lambda s: s.start)
             if speaker_map_dirty:
                 # A new speaker match was found — retroactively fix all earlier segments once
                 process_speaker_assigned_segments(
