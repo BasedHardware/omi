@@ -63,6 +63,17 @@ TRANSCRIPT_QUEUE_WARN_SIZE = 50
 # Constants for audio bytes queue
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
 
+# Receive timeout: if no data arrives for this long, the connection is considered dead.
+# Backend-listen sends heartbeats every ~30s, so 5 minutes without ANY data means the
+# upstream connection is gone.  Without this, half-open TCP connections hang forever,
+# leaking the gauge + ~15 MB per ghost connection.
+WS_RECEIVE_TIMEOUT = 300.0  # seconds
+
+# After receive_task exits, background tasks get this long to drain their queues
+# before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
+# blocking cleanup indefinitely.
+BG_DRAIN_TIMEOUT = 30.0  # seconds
+
 
 async def _process_conversation_task(
     uid: str,
@@ -412,7 +423,12 @@ async def _websocket_util_trigger(
 
         try:
             while websocket_active:
-                data = await websocket.receive_bytes()
+                try:
+                    data = await asyncio.wait_for(websocket.receive_bytes(), timeout=WS_RECEIVE_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.warning(f"WebSocket receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid}")
+                    websocket_close_code = 1000
+                    break
                 header_type = struct.unpack('<I', data[:4])[0]
 
                 # Heartbeat (data-frame keepalive from backend to reset GKE ILB idle timer)
@@ -594,32 +610,47 @@ async def _websocket_util_trigger(
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             websocket_active = False
 
+    bg_main_tasks = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
         receive_task = asyncio.create_task(receive_tasks())
-        speaker_sample_task = asyncio.create_task(process_speaker_sample_queue())
-        private_cloud_task = asyncio.create_task(process_private_cloud_queue())
-        transcript_task = asyncio.create_task(process_transcript_queue())
-        audio_bytes_task = asyncio.create_task(process_audio_bytes_queue())
-        await asyncio.gather(
-            receive_task,
-            speaker_sample_task,
-            private_cloud_task,
-            transcript_task,
-            audio_bytes_task,
-        )
+        bg_main_tasks = [
+            asyncio.create_task(process_speaker_sample_queue()),
+            asyncio.create_task(process_private_cloud_queue()),
+            asyncio.create_task(process_transcript_queue()),
+            asyncio.create_task(process_audio_bytes_queue()),
+        ]
+
+        # Wait for receive_task — it exits on disconnect, error, or receive timeout.
+        # Previous code used asyncio.gather() for ALL 5 tasks, which meant a hung
+        # background task (e.g. stuck GCS upload) would block cleanup forever,
+        # leaking ~15 MB per ghost connection and inflating the gauge.
+        await receive_task
+
+        # receive_tasks() already set websocket_active = False.
+        # Give background tasks a grace period to drain their queues.
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*bg_main_tasks, return_exceptions=True),
+                timeout=BG_DRAIN_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid}")
+            for task in bg_main_tasks:
+                task.cancel()
+            await asyncio.gather(*bg_main_tasks, return_exceptions=True)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
     finally:
         websocket_active = False
 
-        # Cancel all tracked background tasks to prevent memory leaks
-        tasks_to_cancel = list(bg_tasks)
-        for task in tasks_to_cancel:
+        # Cancel background tasks from both spawn() and main task lists
+        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        for task in all_to_cancel:
             task.cancel()
-        if tasks_to_cancel:
-            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        if all_to_cancel:
+            await asyncio.gather(*all_to_cancel, return_exceptions=True)
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
