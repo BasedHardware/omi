@@ -18,9 +18,6 @@ inputs:
   status:
     description: Deployment status to show in the Telegram message.
     required: true
-  job_id:
-    description: GitHub Actions job ID to link to the logs.
-    required: true
 
 runs:
   using: composite
@@ -45,12 +42,11 @@ runs:
         ENVIRONMENT="${{ inputs.environment }}"
         DEPLOY_BRANCH="${{ github.ref_name }}"
         DEPLOY_TAG="${GITHUB_SHA::7}"
-        [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-r${{ github.run_number }}"
+        [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-${{ github.run_number }}"
         ACTOR="${{ github.actor }}"
         FINISH_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
         GITHUB_URL="https://github.com/BasedHardware/omi"
         DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}"
-        JOB_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}/job/${{ inputs.job_id }}"
         MESSAGE="🚀 <b>$WORKFLOW_NAME</b>: $ICON $STATUS
 
         ⚡️ <b>Environment:</b> $ENVIRONMENT
@@ -60,7 +56,7 @@ runs:
         👤 <b>Triggered by:</b> $ACTOR
         🕐 <b>Finished at:</b> $FINISH_TIME
 
-        📝 <a href=\"$DEPLOY_SUMMARY_URL\">Summary</a> | 📋 <a href=\"$JOB_URL\">Logs</a>"
+        📝 <a href=\"$DEPLOY_SUMMARY_URL\">Deployment Summary</a>"
 
         curl -s -X POST "https://api.telegram.org/bot${{ inputs.telegram_bot_token }}/sendMessage" \
           -d chat_id="${{ inputs.telegram_chat_id }}" \

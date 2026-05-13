@@ -124,9 +124,7 @@ jobs:
         if: always() # Ensure this step runs even if previous steps fail
         uses: ./.github/actions/deployment-summary
         with:
-          workflow_name: ${{ github.workflow }}
           environment: ${{ github.event.inputs.environment }}
-          branch: ${{ github.event.inputs.branch }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
