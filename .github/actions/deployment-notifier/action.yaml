@@ -23,7 +23,6 @@ runs:
   using: composite
   steps:
     - name: Set deploy status
-      if: always()
       shell: bash
       run: |
         if [ "${{ inputs.status }}" == "success" ]; then
@@ -35,8 +34,10 @@ runs:
         fi
 
     - name: Notify Telegram
-      if: always()
       shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_bot_token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
       run: |
         WORKFLOW_NAME="${{ github.workflow }}"
         ENVIRONMENT="${{ inputs.environment }}"
@@ -58,8 +59,8 @@ runs:
 
         📝 <a href=\"$DEPLOY_SUMMARY_URL\">Deployment Summary</a>"
 
-        curl -s -X POST "https://api.telegram.org/bot${{ inputs.telegram_bot_token }}/sendMessage" \
-          -d chat_id="${{ inputs.telegram_chat_id }}" \
+        curl -s --fail -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
           -d parse_mode="HTML" \
           -d disable_web_page_preview=true \
           --data-urlencode text="$MESSAGE"
