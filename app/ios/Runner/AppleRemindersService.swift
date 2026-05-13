@@ -342,20 +342,26 @@ class AppleRemindersService {
             return
         }
 
-        let listName = args["listName"] as? String ?? "Reminders"
+        let listName = args["listName"] as? String
 
         guard hasRemindersAccess() else {
             result([])
             return
         }
 
-        let calendars = eventStore.calendars(for: .reminder)
-        guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+        var targetCalendar: EKCalendar?
+        if let name = listName, !name.isEmpty {
+            targetCalendar = eventStore.calendars(for: .reminder).first { $0.title == name }
+        }
+        if targetCalendar == nil {
+            targetCalendar = eventStore.defaultCalendarForNewReminders()
+        }
+        guard let calendar = targetCalendar else {
             result([])
             return
         }
 
-        let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+        let predicate = eventStore.predicateForReminders(in: [calendar])
 
         eventStore.fetchReminders(matching: predicate) { reminders in
             DispatchQueue.main.async {
@@ -376,20 +382,26 @@ class AppleRemindersService {
             return
         }
 
-        let listName = args["listName"] as? String ?? "Reminders"
+        let listName = args["listName"] as? String
 
         guard hasRemindersAccess() else {
             result(false)
             return
         }
 
-        let calendars = eventStore.calendars(for: .reminder)
-        guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
+        var targetCalendar: EKCalendar?
+        if let name = listName, !name.isEmpty {
+            targetCalendar = eventStore.calendars(for: .reminder).first { $0.title == name }
+        }
+        if targetCalendar == nil {
+            targetCalendar = eventStore.defaultCalendarForNewReminders()
+        }
+        guard let calendar = targetCalendar else {
             result(false)
             return
         }
 
-        let predicate = eventStore.predicateForReminders(in: [targetCalendar])
+        let predicate = eventStore.predicateForReminders(in: [calendar])
 
         eventStore.fetchReminders(matching: predicate) { reminders in
             DispatchQueue.main.async {
