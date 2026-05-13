@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed push-to-talk ignoring auto-detect language setting, causing non-English (e.g. Russian) speech to be force-transcribed as English"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.393",
+      "date": "2026-05-13",
+      "changes": [
+        "Fixed push-to-talk ignoring auto-detect language setting, causing non-English (e.g. Russian) speech to be force-transcribed as English"
+      ]
+    },
     {
       "version": "0.11.392",
       "date": "2026-05-12",
