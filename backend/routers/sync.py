@@ -1353,8 +1353,7 @@ def _run_full_pipeline_background(
 
     Moved ALL heavy processing here so the v2 endpoint returns 202 immediately.
     """
-    if byok_keys:
-        set_byok_keys(byok_keys)
+    set_byok_keys(byok_keys or {})
     segmented_paths = set()
     wav_paths = []
     stage_timings = {}
@@ -1575,6 +1574,7 @@ def _run_full_pipeline_background(
         except Exception:
             pass
     finally:
+        set_byok_keys({})
         _cleanup_files(list(segmented_paths))
         _cleanup_files(wav_paths)
         try:
