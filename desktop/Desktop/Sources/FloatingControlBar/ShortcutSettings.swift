@@ -478,10 +478,12 @@ class ShortcutSettings: ObservableObject {
         ),
     ]
 
-    static let defaultVoiceID = openAIOnyxVoiceID
+    static let defaultVoiceID = openAIShimmerVoiceID
 
     static func voiceOption(for id: String) -> VoiceOption {
-        availableVoices.first(where: { $0.id == id }) ?? availableVoices[0]
+        availableVoices.first(where: { $0.id == id })
+            ?? availableVoices.first(where: { $0.id == defaultVoiceID })
+            ?? availableVoices[0]
     }
 
     /// Selected voice ID for floating-bar TTS replies.

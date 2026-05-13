@@ -4,14 +4,15 @@ import XCTest
 @MainActor
 final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
 
-    func testDefaultVoiceIsOnyxOpenAIHumanVoice() {
-        XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIOnyxVoiceID)
+    func testDefaultVoiceIsShimmerOpenAIHumanVoice() {
+        XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIShimmerVoiceID)
 
         let voice = ShortcutSettings.voiceOption(for: ShortcutSettings.defaultVoiceID)
-        XCTAssertEqual(voice.name, "Onyx")
+        XCTAssertEqual(voice.name, "Shimmer")
+        XCTAssertEqual(voice.gender, .female)
         XCTAssertTrue(voice.isOpenAI)
         XCTAssertEqual(voice.provider, .openAI)
-        XCTAssertEqual(voice.openAIVoice, "onyx")
+        XCTAssertEqual(voice.openAIVoice, "shimmer")
     }
 
     func testShimmerVoiceHasNeutralDisplayName() {
@@ -37,7 +38,7 @@ final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
         let voice = ShortcutSettings.voiceOption(for: "missing")
         XCTAssertEqual(voice.id, ShortcutSettings.defaultVoiceID)
         XCTAssertTrue(voice.isOpenAI)
-        XCTAssertEqual(voice.openAIVoice, "onyx")
+        XCTAssertEqual(voice.openAIVoice, "shimmer")
     }
 
     func testVoiceQueryUsesVoiceToggle() {
