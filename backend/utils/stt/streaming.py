@@ -607,7 +607,13 @@ class SafeModulateSocket(STTSocket):
         try:
             while not self._closed and not self._dead:
                 data = await self._send_queue.get()
-                if data == b'' or data == _EOS_SENTINEL:
+                if data == b'':
+                    break
+                if data == _EOS_SENTINEL:
+                    try:
+                        await self._ws.send(b'')
+                    except Exception:
+                        pass
                     break
                 await self._ws.send(data)
         except websockets.exceptions.ConnectionClosed as e:
