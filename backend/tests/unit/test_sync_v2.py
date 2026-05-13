@@ -1575,6 +1575,52 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
+    def test_post_returns_202_and_schedules_background(self):
+        """POST /v2/sync-local-files must return 202, create job, and schedule background work."""
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        mock_sync_jobs.create_sync_job = MagicMock(
+            return_value={
+                'job_id': 'created-job',
+                'uid': 'test-uid',
+                'status': 'queued',
+                'total_files': 1,
+                'total_segments': 0,
+            }
+        )
+
+        try:
+            sys.modules.pop('routers.sync', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_post_202',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'),
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
+            module._run_full_pipeline_background = MagicMock()
+
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+
+            app = FastAPI()
+            app.include_router(module.router)
+            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
+
+            client = TestClient(app)
+            resp = client.post('/v2/sync-local-files', files=[('files', ('test.opus', b'\x00' * 10, 'audio/opus'))])
+
+            assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
+            body = resp.json()
+            assert 'job_id' in body
+            assert body['status'] == 'queued'
+            assert body['poll_after_ms'] == 3000
+            mock_sync_jobs.create_sync_job.assert_called_once()
+        finally:
+            self._cleanup_modules(saved)
+
 
 # ---------------------------------------------------------------------------
 # Pusher coordinator executor pattern
