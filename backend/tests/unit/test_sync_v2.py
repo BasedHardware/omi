@@ -1159,6 +1159,121 @@ class TestBackgroundWorkerBehavioral:
         assert len(received_args) == 1
         assert received_args[0]['target_conversation_id'] is None
 
+    def test_bg_worker_decode_failure_marks_job_failed(self):
+        """Worker must mark_job_failed when decode_files_to_wav raises."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.decode_files_to_wav = MagicMock(side_effect=Exception("corrupt opus frame"))
+
+        mod._run_full_pipeline_background(
+            job_id='decode-fail-job',
+            uid='test-uid',
+            raw_paths=['/tmp/bad.opus'],
+            source='omi',
+            should_lock=False,
+            job_dir='/tmp/decode-fail-dir',
+        )
+
+        mock_sync_jobs.mark_job_failed.assert_called_once()
+        assert 'corrupt opus frame' in mock_sync_jobs.mark_job_failed.call_args[0][1]
+
+    def test_bg_worker_vad_error_aborts_job(self):
+        """Worker must fail the job when retrieve_vad_segments produces errors."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        def _bad_vad(path, segmented_paths, errors=None):
+            if errors is not None:
+                errors.append(f'VAD failed: {path}')
+
+        mod.retrieve_vad_segments = _bad_vad
+
+        mod._run_full_pipeline_background(
+            job_id='vad-fail-job',
+            uid='test-uid',
+            raw_paths=['/tmp/v1.wav'],
+            source='omi',
+            should_lock=False,
+            job_dir='/tmp/vad-fail-dir',
+        )
+
+        mock_sync_jobs.mark_job_failed.assert_called_once()
+        assert 'VAD failed' in mock_sync_jobs.mark_job_failed.call_args[0][1]
+        mock_sync_jobs.mark_job_completed.assert_not_called()
+
+    def test_bg_worker_vad_exception_aborts_job(self):
+        """Worker must fail the job when retrieve_vad_segments raises an exception."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.retrieve_vad_segments = MagicMock(side_effect=RuntimeError("AudioSegment export failed"))
+
+        mod._run_full_pipeline_background(
+            job_id='vad-exc-job',
+            uid='test-uid',
+            raw_paths=['/tmp/v1.wav'],
+            source='omi',
+            should_lock=False,
+            job_dir='/tmp/vad-exc-dir',
+        )
+
+        mock_sync_jobs.mark_job_failed.assert_called_once()
+        assert 'AudioSegment export failed' in mock_sync_jobs.mark_job_failed.call_args[0][1]
+
+    def test_bg_worker_dg_budget_exhausted_fails_job(self):
+        """Worker must mark_job_failed when DG budget is exhausted."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.FAIR_USE_ENABLED = True
+        mod.FAIR_USE_RESTRICT_DAILY_DG_MS = 1000
+        mod.get_enforcement_stage = MagicMock(return_value='restrict')
+        mod.is_dg_budget_exhausted = MagicMock(return_value=True)
+        mod.record_speech_ms = MagicMock()
+        mod.get_rolling_speech_ms = MagicMock(return_value={})
+        mod.check_soft_caps = MagicMock(return_value=[])
+        mod.process_segment = MagicMock()
+
+        mod._run_full_pipeline_background(
+            job_id='dg-exhaust-job',
+            uid='test-uid',
+            raw_paths=['/tmp/e1.wav'],
+            source='omi',
+            should_lock=False,
+            job_dir='/tmp/dg-exhaust-dir',
+        )
+
+        mock_sync_jobs.mark_job_failed.assert_called_once()
+        assert 'budget exhausted' in mock_sync_jobs.mark_job_failed.call_args[0][1].lower()
+        mod.process_segment.assert_not_called()
+
+    def test_bg_worker_empty_wav_paths_completes_with_zero(self):
+        """Worker must complete with zero segments when decode returns empty list."""
+        mod, mock_sync_jobs = self._load_bg_worker()
+        if mod is None:
+            pytest.skip("Cannot load sync router due to import chain")
+
+        mod.decode_files_to_wav = MagicMock(return_value=[])
+
+        mod._run_full_pipeline_background(
+            job_id='empty-job',
+            uid='test-uid',
+            raw_paths=['/tmp/empty.opus'],
+            source='omi',
+            should_lock=False,
+            job_dir='/tmp/empty-dir',
+        )
+
+        mock_sync_jobs.mark_job_completed.assert_called_once()
+        result = mock_sync_jobs.mark_job_completed.call_args[0][1]
+        assert result['total_segments'] == 0
+        assert result['failed_segments'] == 0
+
 
 # ---------------------------------------------------------------------------
 # 8. v2 endpoint execution tests via FastAPI TestClient
