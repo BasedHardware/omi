@@ -146,6 +146,9 @@ PUSHER_DEGRADED_COOLDOWN = 60.0  # seconds before probing from DEGRADED
 PUSHER_RECONNECT_BASE_DELAY = 1.0  # seconds
 PUSHER_RECONNECT_MAX_DELAY = 60.0  # seconds
 
+WS_RECEIVE_TIMEOUT = 300.0  # seconds — no-data timeout on client WebSocket receive
+BG_DRAIN_TIMEOUT = 30.0  # seconds — grace period for bg tasks to drain after disconnect
+
 
 # ---- Multi-channel support ----
 
@@ -2405,7 +2408,11 @@ async def _stream_handler(
 
         try:
             while websocket_active:
-                message = await websocket.receive()
+                try:
+                    message = await asyncio.wait_for(websocket.receive(), timeout=WS_RECEIVE_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.warning(f"WS receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid} {session_id}")
+                    break
                 last_activity_time = time.time()
 
                 # Handle client disconnect
@@ -2617,7 +2624,7 @@ async def _stream_handler(
 
     # Start
     #
-    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
+    bg_main_tasks = []
     try:
         # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
@@ -2673,8 +2680,7 @@ async def _stream_handler(
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
-        tasks = [
-            data_process_task,
+        bg_main_tasks = [
             stream_transcript_task,
             heartbeat_task,
             record_usage_task,
@@ -2689,9 +2695,24 @@ async def _stream_handler(
             lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
             pending_conversations_task = asyncio.create_task(process_pending_conversations(timed_out_conversation_id))
             speaker_id_task = asyncio.create_task(speaker_identification_task())
-            tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
+            bg_main_tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
 
-        await asyncio.gather(*tasks)
+        await data_process_task
+
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*bg_main_tasks, return_exceptions=True),
+                timeout=BG_DRAIN_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            hung_count = sum(1 for t in bg_main_tasks if not t.done())
+            logger.warning(
+                f"BG drain timeout ({BG_DRAIN_TIMEOUT}s), force-cancelling {hung_count} tasks {uid} {session_id}"
+            )
+            for task in bg_main_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*bg_main_tasks, return_exceptions=True)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
@@ -2777,12 +2798,11 @@ async def _stream_handler(
             onboarding_handler.cleanup()
 
         # Cancel all tracked background tasks to prevent memory leaks
-        # Snapshot to avoid mutation during iteration
-        tasks_to_cancel = list(bg_tasks)
-        for task in tasks_to_cancel:
+        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        for task in all_to_cancel:
             task.cancel()
-        if tasks_to_cancel:
-            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        if all_to_cancel:
+            await asyncio.gather(*all_to_cancel, return_exceptions=True)
         bg_tasks.clear()
 
         # Flush any remaining mixed audio to pusher
