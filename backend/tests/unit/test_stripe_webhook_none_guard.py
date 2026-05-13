@@ -5,9 +5,11 @@ The update_user_subscription() call uses Firestore .update() which requires the 
 to exist — deleted or never-created users cause google.api_core.exceptions.NotFound.
 
 Fixes verified via source-level analysis (no heavy imports needed):
-1. FirestoreNotFound catch at all update_user_subscription call sites
+1. FirestoreNotFound catch at all update_user_subscription call sites (4 total:
+   checkout session, customer.subscription.*, schedule completed, schedule canceled)
 2. None-guard for _build_subscription_from_stripe_object in schedule handlers
 3. try/except for notification stripe.Subscription.retrieve
+4. Logging when _build_subscription_from_stripe_object returns None
 """
 
 from pathlib import Path
@@ -29,18 +31,19 @@ def test_imports_firestore_not_found():
 
 
 def test_catches_firestore_not_found_at_all_update_sites():
-    """All three webhook paths that call update_user_subscription must catch FirestoreNotFound.
+    """All four webhook paths that call update_user_subscription must catch FirestoreNotFound.
 
     Call sites:
-    1. customer.subscription.* handler (the actual crash site from logs)
-    2. subscription_schedule.completed handler
-    3. subscription_schedule.canceled handler
+    1. _update_subscription_from_session (checkout.session.completed path)
+    2. customer.subscription.* handler (the actual crash site from logs)
+    3. subscription_schedule.completed handler
+    4. subscription_schedule.canceled handler
     """
     source = _read_source()
     catches = source.count('except FirestoreNotFound:')
-    assert catches >= 3, (
-        f"Expected at least 3 FirestoreNotFound catches "
-        f"(subscription update, schedule completion, schedule cancellation), "
+    assert catches >= 4, (
+        f"Expected at least 4 FirestoreNotFound catches "
+        f"(checkout session, subscription update, schedule completion, schedule cancellation), "
         f"found {catches}"
     )
 
@@ -48,8 +51,8 @@ def test_catches_firestore_not_found_at_all_update_sites():
 def test_logs_uid_in_firestore_not_found_warning():
     """FirestoreNotFound catches must include 'not found in Firestore' for debugging."""
     source = _read_source()
-    # All three handlers should log a warning with the user context
-    assert source.count('not found in Firestore') >= 3
+    # All four handlers should log a warning with the user context
+    assert source.count('not found in Firestore') >= 4
 
 
 # ── Fix 2: None-guard for _build_subscription_from_stripe_object ─────────────
@@ -121,3 +124,33 @@ def test_webhook_returns_success():
     func_section = source[func_start:]
     # The function should end with return {"status": "success"}
     assert 'return {"status": "success"}' in func_section
+
+
+# ── Fix 4: Checkout path FirestoreNotFound guard (CODEx-identified gap) ────
+
+
+def test_checkout_session_path_guarded():
+    """_update_subscription_from_session must catch FirestoreNotFound for deleted users.
+
+    This function is called from checkout.session.completed (line 654) and writes
+    via set_stripe_customer_id() and update_user_subscription() — both use .update().
+    """
+    source = _read_source()
+    func_start = source.index('def _update_subscription_from_session')
+    next_func = source.index('\ndef ', func_start + 1)
+    func_body = source[func_start:next_func]
+
+    assert 'except FirestoreNotFound:' in func_body, "_update_subscription_from_session must catch FirestoreNotFound"
+    assert 'not found in Firestore' in func_body
+
+
+def test_customer_subscription_logs_none_subscription():
+    """customer.subscription.* handler must log when _build_subscription_from_stripe_object returns None."""
+    source = _read_source()
+    handler_start = source.index("'customer.subscription.updated'")
+    handler_section = source[handler_start : handler_start + 2500]
+
+    # Must log unknown price ID when subscription build fails
+    assert (
+        'unknown price ID' in handler_section
+    ), "customer.subscription.* handler must log when subscription build returns None"
