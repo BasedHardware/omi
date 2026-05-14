@@ -187,17 +187,20 @@ try:
         asyncio.create_task(bg1(), name=f"ws:{uid}:bg1"),
         asyncio.create_task(bg2(), name=f"ws:{uid}:bg2"),
     ]
-    # Supervisor: exits on disconnect OR bg crash
-    done, _ = await asyncio.wait({receive_task, *bg_main_tasks}, return_when=asyncio.FIRST_COMPLETED)
-    # Log bg failures, re-raise receive errors
-    for task in done:
-        if task is not receive_task and not task.cancelled():
-            exc = task.exception()
-            if exc: logger.error(f"BG task {task.get_name()} crashed: {exc}")
-    if receive_task in done and not receive_task.cancelled():
-        exc = receive_task.exception()
-        if exc: raise exc
-    # Cancel receive if bg crash triggered exit
+    # Supervisor loop: exits on disconnect OR bg crash, ignores finite tasks
+    monitored = {receive_task, *bg_main_tasks}
+    supervisor_exit = None
+    while monitored:
+        done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            if task is receive_task:
+                supervisor_exit = "disconnect"; break
+            if not task.cancelled():
+                exc = task.exception()
+                if exc:
+                    logger.error(f"BG task {task.get_name()} crashed: {exc}")
+                    supervisor_exit = "crash"; break
+        if supervisor_exit: break
     if not receive_task.done():
         receive_task.cancel()
     # Drain remaining bg tasks with timeout
@@ -226,7 +229,7 @@ Every `websocket.receive()` / `websocket.receive_bytes()` must be wrapped in `as
 
 ### Task tracking and naming
 
-Every `asyncio.create_task()` must: (1) include `name=f"ws:{uid}:{task_name}"` for production debugging, (2) be tracked for cancellation via `spawn()` (adds to `bg_tasks`) or `bg_main_tasks`. Untracked/unnamed tasks leak on disconnect and are invisible in logs.
+WebSocket lifetime tasks (those in the supervisor set or `bg_main_tasks`) must: (1) include `name=f"ws:{uid}:{task_name}"` for production debugging, (2) be tracked for cancellation via `spawn()` (adds to `bg_tasks`) or `bg_main_tasks`. Untracked lifetime tasks leak on disconnect and are invisible in logs.
 
 ### Executor bounds
 
