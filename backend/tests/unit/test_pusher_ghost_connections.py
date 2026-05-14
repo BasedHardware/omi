@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 PUSHER_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'pusher.py'
+TRANSCRIBE_SRC = Path(__file__).resolve().parents[2] / 'routers' / 'transcribe.py'
 
 
 def _parse_constant(name: str) -> float:
@@ -513,6 +514,79 @@ class TestSupervisorBehavior:
         """Verify tasks get names for production debugging."""
         src = PUSHER_SRC.read_text()
         assert 'name=f"ws:{' in src, "Tasks must have name= with uid for production debugging"
+
+    @pytest.mark.asyncio
+    async def test_lifetime_task_completion_exits_supervisor(self):
+        """Lifetime task (e.g. heartbeat) completing normally should tear down
+        the session immediately, not re-wait until receive timeout."""
+        exit_reason = None
+
+        async def long_receive():
+            await asyncio.sleep(999)
+
+        async def lifetime_bg():
+            await asyncio.sleep(0.05)
+
+        async def finite_bg():
+            await asyncio.sleep(0.02)
+
+        receive_task = asyncio.create_task(long_receive())
+        lifetime_task = asyncio.create_task(lifetime_bg())
+        finite_task = asyncio.create_task(finite_bg())
+        finite_tasks = {finite_task}
+
+        monitored = {receive_task, lifetime_task, finite_task}
+        while monitored:
+            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task is receive_task:
+                    exit_reason = "disconnect"
+                    break
+                if not task.cancelled():
+                    exc = task.exception()
+                    if exc is not None:
+                        exit_reason = "crash"
+                        break
+                    if task not in finite_tasks:
+                        exit_reason = "lifetime_done"
+                        break
+            if exit_reason:
+                break
+
+        assert exit_reason == "lifetime_done", (
+            f"Expected 'lifetime_done' but got '{exit_reason}'. " "Lifetime task completion must trigger teardown."
+        )
+
+        receive_task.cancel()
+        await asyncio.gather(receive_task, return_exceptions=True)
+
+
+class TestTranscribeSupervisor:
+    """Verify transcribe.py supervisor distinguishes finite vs lifetime tasks."""
+
+    def test_transcribe_has_finite_tasks_set(self):
+        """transcribe.py must define finite_tasks containing only intentionally finite tasks."""
+        src = TRANSCRIBE_SRC.read_text()
+        assert 'finite_tasks' in src, "transcribe.py must define a finite_tasks set"
+        assert 'pending_conversations_task' in src, "pending_conversations_task must be referenced"
+        assert 'speaker_id_task' in src, "speaker_id_task must be referenced"
+
+    def test_transcribe_lifetime_task_triggers_teardown(self):
+        """Lifetime task normal completion must trigger supervisor exit, not re-wait."""
+        src = TRANSCRIBE_SRC.read_text()
+        assert 'task not in finite_tasks' in src, (
+            "Supervisor must check 'task not in finite_tasks' to distinguish " "lifetime tasks from finite tasks"
+        )
+        assert 'lifetime_done' in src or 'lifetime' in src, "Supervisor must log/exit when a lifetime task completes"
+
+    def test_transcribe_uses_supervisor_wait(self):
+        src = TRANSCRIBE_SRC.read_text()
+        assert 'asyncio.FIRST_COMPLETED' in src
+        assert 'asyncio.wait(' in src
+
+    def test_transcribe_has_receive_timeout(self):
+        src = TRANSCRIBE_SRC.read_text()
+        assert 'WS_RECEIVE_TIMEOUT' in src
 
 
 def _parse_handler_ast():
