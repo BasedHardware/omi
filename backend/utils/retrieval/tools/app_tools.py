@@ -12,8 +12,13 @@ from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
-from database.redis_db import get_cached_user_geolocation
-from database.webhook_health import record_app_webhook_failure, record_app_webhook_success, is_app_webhook_disabled
+from database.redis_db import get_cached_user_geolocation, delete_app_cache_by_id
+from database.webhook_health import (
+    record_app_webhook_failure,
+    record_app_webhook_success,
+    is_app_webhook_disabled,
+    disable_app_in_firestore,
+)
 from models.app import ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
@@ -24,9 +29,6 @@ logger = logging.getLogger(__name__)
 
 def _handle_app_webhook_disable(app_id: str, action: int, error: str):
     if action == 3:
-        from database.apps import delete_app_cache_by_id
-        from database.webhook_health import disable_app_in_firestore
-
         logger.warning(f'App {app_id} auto-disabled after 72h of webhook failures: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
