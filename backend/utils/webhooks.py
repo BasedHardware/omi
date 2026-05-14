@@ -10,6 +10,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     set_user_webhook_db,
 )
+from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
@@ -20,6 +21,12 @@ from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):
+    if should_disable:
+        logger.warning(f'Dev webhook auto-disabled: uid={uid} type={wtype} after {100} consecutive failures')
+        disable_user_webhook_db(uid, wtype)
 
 
 async def conversation_created_webhook(uid, memory: Conversation):
@@ -49,9 +56,19 @@ async def conversation_created_webhook(uid, memory: Conversation):
                     headers={'Content-Type': 'application/json'},
                 )
             logger.info(f'memory_created_webhook: {webhook_url} {response.status_code}')
-            cb.record_success()
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                record_dev_webhook_success(uid, WebhookType.memory_created)
+            else:
+                cb.record_failure()
+                should_disable = record_dev_webhook_failure(
+                    uid, WebhookType.memory_created, response.status_code, f'HTTP {response.status_code}'
+                )
+                _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
         except Exception as e:
             cb.record_failure()
+            should_disable = record_dev_webhook_failure(uid, WebhookType.memory_created, 0, type(e).__name__)
+            _handle_dev_webhook_disable(uid, WebhookType.memory_created, should_disable)
             logger.error(f"Error sending memory created to developer webhook: {e}")
     else:
         return
@@ -77,9 +94,19 @@ async def day_summary_webhook(uid, summary: str):
                     headers={'Content-Type': 'application/json'},
                 )
             logger.info(f'day_summary_webhook: {webhook_url} {response.status_code}')
-            cb.record_success()
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                record_dev_webhook_success(uid, WebhookType.day_summary)
+            else:
+                cb.record_failure()
+                should_disable = record_dev_webhook_failure(
+                    uid, WebhookType.day_summary, response.status_code, f'HTTP {response.status_code}'
+                )
+                _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
         except Exception as e:
             cb.record_failure()
+            should_disable = record_dev_webhook_failure(uid, WebhookType.day_summary, 0, type(e).__name__)
+            _handle_dev_webhook_disable(uid, WebhookType.day_summary, should_disable)
             logger.error(f"Error sending day summary to developer webhook: {e}")
     else:
         return
@@ -107,16 +134,26 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                     headers={'Content-Type': 'application/json'},
                 )
             logger.info(f'realtime_transcript_webhook: {webhook_url} {response.status_code}')
-            cb.record_success()
-            if response.status_code == 200:
-                response_data = response.json()
-                if not response_data:
-                    return
-                message = response_data.get('message', '')
-                if len(message) > 5:
-                    send_webhook_notification(uid, message)
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                record_dev_webhook_success(uid, WebhookType.realtime_transcript)
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if not response_data:
+                        return
+                    message = response_data.get('message', '')
+                    if len(message) > 5:
+                        send_webhook_notification(uid, message)
+            else:
+                cb.record_failure()
+                should_disable = record_dev_webhook_failure(
+                    uid, WebhookType.realtime_transcript, response.status_code, f'HTTP {response.status_code}'
+                )
+                _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
         except Exception as e:
             cb.record_failure()
+            should_disable = record_dev_webhook_failure(uid, WebhookType.realtime_transcript, 0, type(e).__name__)
+            _handle_dev_webhook_disable(uid, WebhookType.realtime_transcript, should_disable)
             logger.error(f"Error sending realtime transcript to developer webhook: {e}")
     else:
         return
@@ -162,9 +199,19 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                     webhook_url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
                 )
             logger.info(f'send_audio_bytes_developer_webhook: {webhook_url} {response.status_code}')
-            cb.record_success()
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                record_dev_webhook_success(uid, WebhookType.audio_bytes)
+            else:
+                cb.record_failure()
+                should_disable = record_dev_webhook_failure(
+                    uid, WebhookType.audio_bytes, response.status_code, f'HTTP {response.status_code}'
+                )
+                _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
         except Exception as e:
             cb.record_failure()
+            should_disable = record_dev_webhook_failure(uid, WebhookType.audio_bytes, 0, type(e).__name__)
+            _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
             logger.error(f"Error sending audio bytes to developer webhook: {e}")
     else:
         return
