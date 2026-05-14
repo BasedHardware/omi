@@ -430,6 +430,24 @@ async def _stream_handler(
         except Exception as e:
             logger.error(f"Error sending freemium threshold event on connect: {e} {uid} {session_id}")
 
+    # Hard-close the WS for paywalled DESKTOP users only — keeps GKE pods free
+    # and prevents bandwidth/audio buffering. Mobile freemium users (source!=desktop)
+    # are not affected: the gate above is desktop-scoped. The freemium event we just
+    # sent gives the client a chance to render the paywall popup before close.
+    if is_paywalled_desktop:
+        logger.info(
+            "trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired",
+            uid,
+            session_id,
+        )
+        try:
+            await asyncio.sleep(0.5)  # let the freemium event flush before close
+            await websocket.close(code=1008, reason="trial_expired")
+        except Exception as e:
+            logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
+        websocket_active = False
+        return
+
     # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
     CREDITS_REFRESH_SECONDS = 900  # 15 min
     remaining_seconds_cache: Optional[int] = None  # None = not yet fetched (distinct from unlimited)
