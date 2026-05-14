@@ -21,7 +21,7 @@ local error_msg = ARGV[3]
 local ttl = tonumber(ARGV[4])
 
 local first = redis.call('HGET', key, 'first_failure_at')
-if not first then
+if not first or first == '' then
     redis.call('HSET', key,
         'first_failure_at', now_ts,
         'last_failure_at', now_ts,
