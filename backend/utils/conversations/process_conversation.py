@@ -42,6 +42,7 @@ from models.conversation import (
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
+from utils.subscription import is_trial_paywalled
 from models.other import Person
 from models.structured import Structured
 from utils.notifications import send_important_conversation_message
@@ -687,6 +688,34 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
+    # Trial paywall: skip ALL post-processing (summaries, memories, action
+    # items, embeddings, app integrations) for paywalled desktop users.
+    # Without this, any segments that did get through before the trial gate
+    # (e.g. buffered transcripts, retroactive `/v1/conversations` create) still
+    # trigger expensive LLM + Pinecone work.
+    #
+    # `conversation.source` carries the originating client (desktop / omi / etc).
+    # Non-desktop sources flow through untouched — paywall is desktop-only.
+    if (
+        hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+        and is_trial_paywalled(uid, 'macos')
+    ):
+        logger.info(
+            "trial paywall: skipping post-processing for uid=%s conv=%s source=desktop",
+            uid,
+            getattr(conversation, 'id', '?'),
+        )
+        # Return the conversation as-is with no LLM work performed. If it has
+        # a status field, mark it processed so the client doesn't show a stuck
+        # "processing" state forever.
+        if hasattr(conversation, 'status'):
+            try:
+                conversation.status = ConversationStatus.completed
+            except Exception:
+                pass
+        return conversation
+
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
     if hasattr(conversation, 'id') and conversation.id:
         meeting_id = redis_db.get_conversation_meeting_id(conversation.id)

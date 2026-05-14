@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
+from utils.subscription import is_trial_paywalled
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
@@ -77,6 +78,17 @@ def _get_timezones_grouped_by_hour() -> dict[int, list[str]]:
 def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
+
+    # Trial paywall: skip the daily-summary LLM job entirely for paywalled
+    # desktop users. We don't know the originating platform here (this is a
+    # server-initiated cron), so we conservatively check both desktop and
+    # macos — if either trips the paywall, skip. Mobile users with the same
+    # uid still get their daily summary because `is_trial_paywalled` requires
+    # the platform check to pass; passing `macos` is the right gate here
+    # because the desktop trial is the paid-tier we're enforcing.
+    if is_trial_paywalled(uid, 'macos'):
+        logger.info(f'trial paywall: skipping daily summary for uid={uid}')
+        return
 
     # Calculate local day boundaries for conversation fetching
     # date_str is set based on current hour:
