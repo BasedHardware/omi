@@ -295,7 +295,7 @@ class TestGaugeDecrement:
 
     @pytest.mark.asyncio
     async def test_gauge_decremented_with_hung_bg_tasks(self):
-        """The new pattern: await receive first, then drain bg with timeout.
+        """Supervisor pattern: asyncio.wait(FIRST_COMPLETED) then drain with timeout.
         Gauge must dec even when bg tasks hang."""
         gauge_value = 0
 
@@ -310,18 +310,29 @@ class TestGaugeDecrement:
             bg_tasks = []
             gauge_value += 1
             try:
+                receive_task = asyncio.create_task(asyncio.sleep(0.01))
                 bg_tasks = [asyncio.create_task(hung_bg())]
-                await asyncio.sleep(0.01)
 
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*bg_tasks, return_exceptions=True),
-                        timeout=0.1,
-                    )
-                except asyncio.TimeoutError:
-                    for t in bg_tasks:
-                        t.cancel()
-                    await asyncio.gather(*bg_tasks, return_exceptions=True)
+                done, _ = await asyncio.wait(
+                    {receive_task, *bg_tasks},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                if not receive_task.done():
+                    receive_task.cancel()
+
+                remaining = [t for t in bg_tasks if not t.done()]
+                if remaining:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*remaining, return_exceptions=True),
+                            timeout=0.1,
+                        )
+                    except asyncio.TimeoutError:
+                        for t in remaining:
+                            if not t.done():
+                                t.cancel()
+                        await asyncio.gather(*remaining, return_exceptions=True)
             except Exception:
                 pass
             finally:
@@ -368,6 +379,94 @@ class TestGaugeDecrement:
             pass
 
 
+class TestSupervisorBehavior:
+    """Verify the supervisor detects bg task crashes during active sessions."""
+
+    @pytest.mark.asyncio
+    async def test_bg_crash_detected_immediately(self):
+        """If a bg task crashes during an active session, the supervisor
+        exits immediately instead of waiting for client disconnect."""
+        crash_detected_at = None
+        start_time = None
+
+        async def long_receive():
+            await asyncio.sleep(999)
+
+        async def crashing_bg():
+            await asyncio.sleep(0.05)
+            raise RuntimeError("bg task crashed")
+
+        async def supervisor():
+            nonlocal crash_detected_at, start_time
+            start_time = asyncio.get_event_loop().time()
+            receive_task = asyncio.create_task(long_receive())
+            bg_tasks = [asyncio.create_task(crashing_bg())]
+
+            done, _ = await asyncio.wait(
+                {receive_task, *bg_tasks},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            crash_detected_at = asyncio.get_event_loop().time()
+
+            for task in done:
+                if task is not receive_task and not task.cancelled():
+                    exc = task.exception()
+                    if exc is not None:
+                        pass  # logged in production
+
+            if not receive_task.done():
+                receive_task.cancel()
+                try:
+                    await receive_task
+                except asyncio.CancelledError:
+                    pass
+
+        await asyncio.wait_for(supervisor(), timeout=2.0)
+
+        elapsed = crash_detected_at - start_time
+        assert elapsed < 0.5, f"Supervisor should detect bg crash in <0.5s, took {elapsed:.2f}s"
+
+    @pytest.mark.asyncio
+    async def test_normal_disconnect_still_works(self):
+        """Normal client disconnect (receive ends) still triggers clean drain."""
+        drained = False
+
+        async def short_receive():
+            await asyncio.sleep(0.05)
+
+        async def bg_worker():
+            nonlocal drained
+            try:
+                await asyncio.sleep(999)
+            except asyncio.CancelledError:
+                drained = True
+                raise
+
+        receive_task = asyncio.create_task(short_receive())
+        bg_tasks = [asyncio.create_task(bg_worker())]
+
+        done, _ = await asyncio.wait(
+            {receive_task, *bg_tasks},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        assert receive_task in done, "Receive task should complete first on normal disconnect"
+
+        remaining = [t for t in bg_tasks if not t.done()]
+        for t in remaining:
+            t.cancel()
+        await asyncio.gather(*remaining, return_exceptions=True)
+
+        assert drained, "BG worker should be cancelled and cleaned up on normal disconnect"
+
+    @pytest.mark.asyncio
+    async def test_task_names_assigned(self):
+        """Verify tasks get names for production debugging."""
+        src = PUSHER_SRC.read_text()
+        assert 'name=f"ws:{' in src, "Tasks must have name= with uid for production debugging"
+
+
 def _parse_handler_ast():
     """Parse _websocket_util_trigger and return key AST info about the try/finally structure."""
     tree = ast.parse(PUSHER_SRC.read_text())
@@ -409,9 +508,11 @@ class TestStructuralIntegrity:
         src = PUSHER_SRC.read_text()
         assert 'BG_DRAIN_TIMEOUT' in src
 
-    def test_source_awaits_receive_task_separately(self):
+    def test_source_uses_supervisor_wait(self):
+        """The supervisor uses asyncio.wait(FIRST_COMPLETED) to detect bg crashes."""
         src = PUSHER_SRC.read_text()
-        assert 'await receive_task' in src
+        assert 'asyncio.FIRST_COMPLETED' in src
+        assert 'asyncio.wait(' in src
 
     def test_source_does_not_gather_all_five_tasks(self):
         """The old pattern gathered all 5 tasks — verify it's gone."""
@@ -457,18 +558,18 @@ class TestProductionFlowStructure:
         assert found_inc_in_try, "PUSHER_ACTIVE_WS_CONNECTIONS.inc() must be in try body"
         assert found_dec_in_finally, "PUSHER_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
 
-    def test_receive_task_awaited_before_bg_drain(self):
-        """'await receive_task' must appear before 'timeout=BG_DRAIN_TIMEOUT' usage —
-        proving we wait for receive first, then drain bg tasks."""
+    def test_supervisor_before_bg_drain(self):
+        """asyncio.wait(FIRST_COMPLETED) supervisor must appear before BG_DRAIN_TIMEOUT —
+        proving we detect disconnect/crash first, then drain."""
         src = PUSHER_SRC.read_text()
-        receive_pos = src.find('await receive_task')
+        wait_pos = src.find('asyncio.FIRST_COMPLETED')
         drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
 
-        assert receive_pos != -1, "'await receive_task' not found in source"
+        assert wait_pos != -1, "'asyncio.FIRST_COMPLETED' not found in source"
         assert drain_pos != -1, "'timeout=BG_DRAIN_TIMEOUT' not found in source"
-        assert receive_pos < drain_pos, (
-            f"'await receive_task' (pos {receive_pos}) must appear before "
-            f"'timeout=BG_DRAIN_TIMEOUT' (pos {drain_pos}) — receive-then-drain ordering"
+        assert wait_pos < drain_pos, (
+            f"'asyncio.FIRST_COMPLETED' (pos {wait_pos}) must appear before "
+            f"'timeout=BG_DRAIN_TIMEOUT' (pos {drain_pos}) — supervisor-then-drain ordering"
         )
 
     def test_receive_task_not_in_gather_with_bg_tasks(self):
