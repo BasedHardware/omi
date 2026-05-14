@@ -87,11 +87,15 @@ actor TaskPromotionService {
                         let message = "New task: \(promotedTask.description)"
                         let context = Self.buildNotificationContext(from: promotedTask)
                         await MainActor.run {
+                            // Tasks bypass the ambient frequency throttle — they're explicit
+                            // commitments the user agreed to, not background chatter. A user on
+                            // Balanced (1/10min) still wants to see every real task land.
                             NotificationService.shared.sendNotification(
                                 title: "Task",
                                 message: message,
                                 assistantId: "task",
-                                context: context
+                                context: context,
+                                respectFrequency: false
                             )
                         }
                     }

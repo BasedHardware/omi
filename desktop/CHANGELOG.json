@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Smarter task analyzer dedupe \u2014 per-chat/window throttle instead of one global 60s cooldown, so opening multiple chats in quick succession no longer drops tasks"
+  ],
   "releases": [
     {
       "version": "0.11.397",

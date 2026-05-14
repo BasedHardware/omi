@@ -76,6 +76,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var lastDistributionTime: Date = .distantPast
     /// Fallback interval: re-distribute even without context change to catch visual-only updates.
     private let distributionFallbackInterval: TimeInterval = 60
+    private let messagingDistributionFallbackInterval: TimeInterval = 15
+
+    /// Apps where new content can arrive while the user stays focused. Reusing the same
+    /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
+        "Slack", "Discord", "Messenger",
+    ]
 
     /// Apps whose primary purpose is video/audio calls.
     private static let videoCallApps: Set<String> = [
@@ -936,7 +944,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         )
 
         let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
-        let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
+        // Messaging apps get a much shorter same-context fallback so a new chat message
+        // reaches the analyzer in ~15s, even when you stay in the app the whole time.
+        let activeFallbackInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? messagingDistributionFallbackInterval
+            : distributionFallbackInterval
+        let fallbackDue = timeSinceLastDistribution >= activeFallbackInterval
 
         if contextChanged {
             // Update tracking immediately so subsequent captures in the same new context
