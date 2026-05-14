@@ -154,6 +154,8 @@ class AppBaseModel(BaseModel):
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
     source_code_url: Optional[str] = None
+    disabled: Optional[bool] = False
+    disabled_reason: Optional[str] = None
 
 
 class App(AppBaseModel):
