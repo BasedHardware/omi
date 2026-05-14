@@ -714,7 +714,7 @@ async def _stream_handler(
             websocket_active = False
 
     # Start heart beat
-    heartbeat_task = asyncio.create_task(send_heartbeat())
+    heartbeat_task = asyncio.create_task(send_heartbeat(), name=f"ws:{uid}:heartbeat")
 
     _send_message_event(
         MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
@@ -2666,17 +2666,17 @@ async def _stream_handler(
 
             # Pusher tasks (always started — they handle disconnected state gracefully)
             if transcript_consume is not None:
-                pusher_tasks.append(asyncio.create_task(transcript_consume()))
+                pusher_tasks.append(asyncio.create_task(transcript_consume(), name=f"ws:{uid}:pusher_transcript"))
             if audio_bytes_consume is not None:
-                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+                pusher_tasks.append(asyncio.create_task(audio_bytes_consume(), name=f"ws:{uid}:pusher_audio"))
             if pusher_receive is not None:
-                pusher_tasks.append(asyncio.create_task(pusher_receive()))
-            pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
+                pusher_tasks.append(asyncio.create_task(pusher_receive(), name=f"ws:{uid}:pusher_receive"))
+            pusher_tasks.append(asyncio.create_task(pusher_heartbeat(), name=f"ws:{uid}:pusher_heartbeat"))
 
         # Tasks
-        data_process_task = asyncio.create_task(receive_data(deepgram_socket))
-        stream_transcript_task = asyncio.create_task(stream_transcript_process())
-        record_usage_task = asyncio.create_task(_record_usage_periodically())
+        data_process_task = asyncio.create_task(receive_data(deepgram_socket), name=f"ws:{uid}:receive")
+        stream_transcript_task = asyncio.create_task(stream_transcript_process(), name=f"ws:{uid}:stream_transcript")
+        record_usage_task = asyncio.create_task(_record_usage_periodically(), name=f"ws:{uid}:record_usage")
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -2692,27 +2692,58 @@ async def _stream_handler(
 
         if not is_multi_channel:
             # Single-channel: conversation lifecycle (timeout splitting), pending processing, speaker ID
-            lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
-            pending_conversations_task = asyncio.create_task(process_pending_conversations(timed_out_conversation_id))
-            speaker_id_task = asyncio.create_task(speaker_identification_task())
+            lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager(), name=f"ws:{uid}:lifecycle")
+            pending_conversations_task = asyncio.create_task(
+                process_pending_conversations(timed_out_conversation_id), name=f"ws:{uid}:pending_convos"
+            )
+            speaker_id_task = asyncio.create_task(speaker_identification_task(), name=f"ws:{uid}:speaker_id")
             bg_main_tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
 
-        await data_process_task
+        # Supervisor: wait for client disconnect OR any bg task failure.
+        # asyncio.wait(FIRST_COMPLETED) detects bg task crashes immediately,
+        # not hours later at drain time.
+        done, _ = await asyncio.wait(
+            {data_process_task, *bg_main_tasks},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
 
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*bg_main_tasks, return_exceptions=True),
-                timeout=BG_DRAIN_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            hung_count = sum(1 for t in bg_main_tasks if not t.done())
-            logger.warning(
-                f"BG drain timeout ({BG_DRAIN_TIMEOUT}s), force-cancelling {hung_count} tasks {uid} {session_id}"
-            )
-            for task in bg_main_tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*bg_main_tasks, return_exceptions=True)
+        for task in done:
+            if task is not data_process_task and not task.cancelled():
+                exc = task.exception()
+                if exc is not None:
+                    logger.error(f"BG task {task.get_name()} crashed: {exc} {uid} {session_id}")
+
+        if data_process_task in done and not data_process_task.cancelled():
+            exc = data_process_task.exception()
+            if exc is not None:
+                raise exc
+
+        # If receive is still running (bg task crashed first), cancel it
+        if not data_process_task.done():
+            websocket_active = False
+            data_process_task.cancel()
+            try:
+                await data_process_task
+            except asyncio.CancelledError:
+                pass
+
+        # Drain remaining bg tasks with timeout
+        remaining = [t for t in bg_main_tasks if not t.done()]
+        if remaining:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*remaining, return_exceptions=True),
+                    timeout=BG_DRAIN_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                hung_count = sum(1 for t in remaining if not t.done())
+                logger.warning(
+                    f"BG drain timeout ({BG_DRAIN_TIMEOUT}s), force-cancelling {hung_count} tasks {uid} {session_id}"
+                )
+                for task in remaining:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*remaining, return_exceptions=True)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
