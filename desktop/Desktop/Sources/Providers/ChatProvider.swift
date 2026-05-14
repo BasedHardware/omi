@@ -597,6 +597,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     private var sessionGroupingObserver: AnyCancellable?
     private var activationObserver: AnyCancellable?
     private var systemWakeObserver: AnyCancellable?
+    private var signOutObserver: AnyCancellable?
 
     private var refreshAllObserver: AnyCancellable?
 
@@ -741,6 +742,29 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     } catch {
                         logError("ChatProvider: bridge restart after wake failed", error: error)
                     }
+                }
+            }
+
+        // Tear down the agent bridge on sign-out. The pi-mono subprocess
+        // bakes OMI_API_KEY (Firebase ID token) at spawn and holds an
+        // in-memory `piSessions` map keyed only by sessionKey ("main"). When
+        // the user signs out + back in with a different account, the next
+        // message would otherwise reuse the previous user's session and the
+        // omi-account proxy returns 402 against the old token. Stopping the
+        // subprocess drops both the token and the session map; the next
+        // sendMessage will spawn a fresh subprocess via ensureBridgeStarted.
+        signOutObserver = NotificationCenter.default.publisher(for: .userDidSignOut)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    guard self.agentBridgeStarted else { return }
+                    log("ChatProvider: userDidSignOut — stopping agent bridge so the next user gets a fresh subprocess")
+                    await self.agentBridge.stop()
+                    self.agentBridgeStarted = false
+                    self.messages.removeAll()
+                    self.pendingAttachments.removeAll()
+                    self.sessions.removeAll()
+                    self.currentSession = nil
                 }
             }
 
