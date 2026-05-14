@@ -587,6 +587,69 @@ class TestTranscribeSupervisor:
         src = TRANSCRIBE_SRC.read_text()
         assert 'WS_RECEIVE_TIMEOUT' in src
 
+    def test_transcribe_gauge_in_try_finally(self):
+        """BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc() must be in try body,
+        .dec() in finally — verified via AST on _stream_handler."""
+        tree = ast.parse(TRANSCRIBE_SRC.read_text())
+        handler = None
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == '_stream_handler':
+                handler = node
+                break
+        assert handler is not None, '_stream_handler not found in transcribe.py'
+
+        found_inc_in_try = False
+        found_dec_in_finally = False
+        for node in ast.walk(handler):
+            if isinstance(node, ast.Try):
+                try_calls = []
+                for sub in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+                    if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+                        try_calls.append(sub.func.attr)
+                finally_calls = []
+                if node.finalbody:
+                    for sub in ast.walk(ast.Module(body=node.finalbody, type_ignores=[])):
+                        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+                            finally_calls.append(sub.func.attr)
+                if 'inc' in try_calls:
+                    found_inc_in_try = True
+                if 'dec' in finally_calls:
+                    found_dec_in_finally = True
+
+        assert found_inc_in_try, "BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc() must be in try body"
+        assert found_dec_in_finally, "BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
+
+    def test_transcribe_supervisor_before_drain(self):
+        """asyncio.wait(FIRST_COMPLETED) must appear before BG_DRAIN_TIMEOUT in transcribe.py."""
+        src = TRANSCRIBE_SRC.read_text()
+        wait_pos = src.find('asyncio.FIRST_COMPLETED')
+        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
+        assert wait_pos != -1, "'asyncio.FIRST_COMPLETED' not found in transcribe.py"
+        assert drain_pos != -1, "'timeout=BG_DRAIN_TIMEOUT' not found in transcribe.py"
+        assert wait_pos < drain_pos, "Supervisor must appear before drain timeout in transcribe.py"
+
+    def test_transcribe_no_gauge_before_try(self):
+        """Gauge inc must NOT appear before the main try block to prevent leak on early return."""
+        src = TRANSCRIBE_SRC.read_text()
+        lines = src.split('\n')
+        in_stream_handler = False
+        try_line = None
+        inc_lines = []
+        for i, line in enumerate(lines, 1):
+            if 'def _stream_handler(' in line:
+                in_stream_handler = True
+            if in_stream_handler:
+                if line.strip().startswith('try:') and try_line is None:
+                    try_line = i
+                if 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' in line:
+                    inc_lines.append(i)
+        assert try_line is not None, "try block not found in _stream_handler"
+        assert inc_lines, "No gauge inc found in _stream_handler"
+        for inc_line in inc_lines:
+            assert inc_line > try_line, (
+                f"Gauge inc at line {inc_line} must be after try at line {try_line} " "to prevent leak on early return"
+            )
+
 
 def _parse_handler_ast():
     """Parse _websocket_util_trigger and return key AST info about the try/finally structure."""
