@@ -16,7 +16,7 @@ use axum::{
 use futures::StreamExt;
 use serde_json::json;
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::chat_completions::*;
 use crate::AppState;
 
@@ -448,9 +448,10 @@ fn make_chunk(
 
 async fn chat_completions(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
     Json(req): Json<ChatCompletionRequest>,
 ) -> Result<Response, StatusCode> {
+    let user: AuthUser = user.into();
     // Validate model
     let route = resolve_model(&req.model).ok_or_else(|| {
         tracing::warn!(

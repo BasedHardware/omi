@@ -71,6 +71,7 @@ from utils.subscription import (
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
+    is_trial_paywalled,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
     should_show_new_plans,
@@ -1077,6 +1078,31 @@ def get_user_chat_usage_quota(
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
     )
+
+
+class PaywallStatusResponse(BaseModel):
+    paywalled: bool
+
+
+@router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
+def get_user_paywall_status(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    platform: Optional[str] = Query(None),
+):
+    """Trial-paywall status for the calling user on the given platform.
+
+    Used by the Rust desktop-backend middleware to decide whether to proxy
+    paid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of
+    `is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth
+    account >3d old + platform in {macos, desktop}. Mobile platforms always
+    return `paywalled=false`.
+
+    Platform comes from `X-App-Platform` header (preferred) or `platform`
+    query param (fallback). Unknown / missing platforms are never paywalled.
+    """
+    resolved_platform = x_app_platform or platform
+    return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
 
 
 # **************************************

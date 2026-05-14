@@ -11,7 +11,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::AppState;
 
 const OPENAI_TTS_MODEL_ID: &str = "gpt-4o-mini-tts";
@@ -86,10 +86,11 @@ impl IntoResponse for TtsProxyError {
 
 async fn tts_synthesize(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
     headers: HeaderMap,
     Json(request): Json<TtsSynthesizeRequest>,
 ) -> Result<Response, TtsProxyError> {
+    let user: AuthUser = user.into();
     let text = request.text.trim();
     if text.is_empty() {
         return Err(TtsProxyError::BadRequest("text is required"));

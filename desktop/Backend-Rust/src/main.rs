@@ -27,11 +27,13 @@ mod config;
 mod encryption;
 mod llm;
 mod models;
+mod paywall;
 mod routes;
 mod services;
 mod vertex;
 
-use auth::{firebase_auth_extension, FirebaseAuth};
+use auth::{firebase_auth_extension, paywall_checker_extension, FirebaseAuth};
+use paywall::PaywallChecker;
 use config::Config;
 use routes::{
     // Active (real traffic from current app)
@@ -229,6 +231,9 @@ async fn main() {
         });
     }
 
+    // Paywall checker — calls Python `/v1/users/me/paywall`, caches 5min.
+    let paywall_checker = Arc::new(PaywallChecker::new(config.python_api_base.clone()));
+
     let state = AppState {
         firestore,
         integrations,
@@ -270,6 +275,7 @@ async fn main() {
     let app = main_router
         .merge(auth_router)
         .layer(firebase_auth_extension(firebase_auth))
+        .layer(paywall_checker_extension(paywall_checker))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

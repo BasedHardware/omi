@@ -66,7 +66,12 @@ struct JwkKey {
     alg: Option<String>,
 }
 
-/// Auth error response
+/// Auth error response.
+///
+/// Status codes:
+/// - `trial_expired` → 402 Payment Required (so clients can distinguish paywall
+///   from auth failure and show the upgrade UI)
+/// - any other error string → 401 Unauthorized
 #[derive(Debug, Serialize)]
 pub struct AuthError {
     pub error: String,
@@ -75,7 +80,12 @@ pub struct AuthError {
 
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
-        (StatusCode::UNAUTHORIZED, Json(self)).into_response()
+        let status = if self.error == "trial_expired" {
+            StatusCode::PAYMENT_REQUIRED
+        } else {
+            StatusCode::UNAUTHORIZED
+        };
+        (status, Json(self)).into_response()
     }
 }
 
@@ -210,4 +220,94 @@ where
 /// Create a layer that adds Firebase auth to request extensions
 pub fn firebase_auth_extension(auth: Arc<FirebaseAuth>) -> axum::Extension<FirebaseAuthExt> {
     axum::Extension(FirebaseAuthExt(auth))
+}
+
+impl From<PaywalledAuthUser> for AuthUser {
+    fn from(p: PaywalledAuthUser) -> Self {
+        AuthUser {
+            uid: p.uid,
+            name: p.name,
+            email: p.email,
+        }
+    }
+}
+
+/// Authenticated user extractor that ALSO enforces the desktop trial paywall.
+///
+/// Same token-verification flow as `AuthUser`, then a follow-up call to the
+/// Python `/v1/users/me/paywall` endpoint (cached 5min in-memory). If the
+/// user is past their trial, the extractor short-circuits with
+/// `error: "trial_expired"` which `AuthError::IntoResponse` maps to HTTP 402.
+///
+/// Use this for every $-incurring route handler in the Rust backend:
+/// proxy.rs (Gemini), chat_completions.rs (Anthropic), screen_activity.rs
+/// (Pinecone), tts.rs, agent.rs.
+#[derive(Debug, Clone)]
+pub struct PaywalledAuthUser {
+    pub uid: String,
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for PaywalledAuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AuthError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // Get + extract bearer token (we'll forward it to the paywall endpoint)
+        let auth_header = parts
+            .headers
+            .get("Authorization")
+            .and_then(|h| h.to_str().ok())
+            .ok_or_else(|| AuthError {
+                error: "missing_token".to_string(),
+                message: "Authorization header required".to_string(),
+            })?;
+
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| AuthError {
+                error: "invalid_token".to_string(),
+                message: "Invalid Authorization header format".to_string(),
+            })?;
+
+        // Verify Firebase token (same flow AuthUser uses)
+        let firebase_auth = parts
+            .extensions
+            .get::<FirebaseAuthExt>()
+            .ok_or_else(|| AuthError {
+                error: "server_error".to_string(),
+                message: "Firebase auth not configured".to_string(),
+            })?;
+
+        let (uid, name, email) = firebase_auth.0.verify_token(token).await?;
+
+        // Paywall check — fail open if Python is unreachable so a backend
+        // outage never makes paying users look paywalled.
+        if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
+            if checker.0.is_paywalled(&uid, token).await {
+                return Err(AuthError {
+                    error: "trial_expired".to_string(),
+                    message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),
+                });
+            }
+        } else {
+            tracing::warn!(
+                "PaywalledAuthUser: PaywallChecker extension missing, falling open for uid={}",
+                uid
+            );
+        }
+
+        Ok(PaywalledAuthUser { uid, name, email })
+    }
+}
+
+/// Layer that adds the paywall checker to request extensions.
+pub fn paywall_checker_extension(
+    checker: Arc<crate::paywall::PaywallChecker>,
+) -> axum::Extension<crate::paywall::PaywallCheckerExt> {
+    axum::Extension(crate::paywall::PaywallCheckerExt(checker))
 }
