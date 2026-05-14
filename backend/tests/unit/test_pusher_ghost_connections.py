@@ -15,6 +15,8 @@ These tests verify:
 import ast
 import asyncio
 import struct
+import time
+from collections import deque
 from pathlib import Path
 
 import pytest
@@ -209,9 +211,6 @@ class TestSpeakerSampleShutdownDrain:
     async def test_pending_samples_processed_on_shutdown(self):
         """When websocket_active goes False, speaker samples younger than
         SPEAKER_SAMPLE_MIN_AGE should still be processed (age check skipped)."""
-        import time
-        from collections import deque
-
         websocket_active = True
         processed_ids = []
 
