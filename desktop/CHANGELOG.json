@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added file/screenshot attachments to chat (paperclip + drag-drop)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.400",
+      "date": "2026-05-14",
+      "changes": [
+        "Added file/screenshot attachments to chat (paperclip + drag-drop)"
+      ]
+    },
     {
       "version": "0.11.398",
       "date": "2026-05-14",
