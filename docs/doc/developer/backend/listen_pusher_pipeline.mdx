@@ -270,3 +270,17 @@ sequenceDiagram
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | transcribe.py | Reconnect attempts before DEGRADED |
 | `MAX_PENDING_REQUESTS` | 100 | transcribe.py | Max buffered conversations per session |
 
+## 8. WebSocket Task Supervision
+
+Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supervisor loop instead of `asyncio.gather()` to manage background tasks. This prevents ghost connections where a hung background task blocks cleanup forever.
+
+**Supervisor exits on:**
+- Client disconnect (receive task completes)
+- Background task crash (exception)
+- Lifetime task normal completion (e.g. heartbeat inactivity timeout)
+
+**Supervisor re-waits on:**
+- Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
+
+After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
+
