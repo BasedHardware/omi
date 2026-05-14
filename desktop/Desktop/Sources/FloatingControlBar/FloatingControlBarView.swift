@@ -222,8 +222,15 @@ struct FloatingControlBarView: View {
                         let model = ShortcutSettings.shared.selectedModel.isEmpty
                             ? "claude-sonnet-4-6"
                             : ShortcutSettings.shared.selectedModel
-                        let query = "Handle this notification: \(notification.title). \(notification.message)"
-                        AgentPillsManager.shared.spawn(query: query, model: model)
+                        let query = ProactiveTaskExecute.buildQuery(
+                            title: notification.title,
+                            message: notification.message
+                        )
+                        _ = AgentPillsManager.shared.spawn(
+                            query: query,
+                            model: model,
+                            systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix
+                        )
                         FloatingControlBarManager.shared.dismissCurrentNotification()
                     } label: {
                         HStack(spacing: 4) {
