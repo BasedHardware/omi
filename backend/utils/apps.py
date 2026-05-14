@@ -260,6 +260,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
+        if app.get('disabled'):
+            continue
         # Copy dict to avoid mutating cached objects
         app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
