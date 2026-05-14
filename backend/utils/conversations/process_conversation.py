@@ -49,7 +49,7 @@ from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
-from utils.executors import critical_executor
+from utils.executors import critical_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -404,7 +404,7 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    futures = [critical_executor.submit(execute_app, app) for app in filtered_apps]
+    futures = [submit_with_context(critical_executor, execute_app, app) for app in filtered_apps]
     for future in futures:
         try:
             future.result()
@@ -624,7 +624,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        critical_executor.submit(_run_auto_sync)
+        submit_with_context(critical_executor, _run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -772,11 +772,11 @@ def process_conversation(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
         if not is_reprocess:
-            critical_executor.submit(save_structured_vector, uid, conversation)
-        critical_executor.submit(_extract_memories, uid, conversation)
-        critical_executor.submit(_extract_trends, uid, conversation)
-        critical_executor.submit(_save_action_items, uid, conversation)
-        critical_executor.submit(_update_goal_progress, uid, conversation)
+            submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+        submit_with_context(postprocess_executor, _extract_trends, uid, conversation)
+        submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
+        submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -804,9 +804,8 @@ def process_conversation(
         def _run_webhook():
             asyncio.run(conversation_created_webhook(uid, conversation))
 
-        critical_executor.submit(_run_webhook)
-        # Update persona prompts with new conversation
-        critical_executor.submit(update_personas_async, uid)
+        submit_with_context(postprocess_executor, _run_webhook)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
