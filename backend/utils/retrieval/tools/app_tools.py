@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
+from database.apps import get_app_by_id_db
 from database.redis_db import get_cached_user_geolocation, delete_app_cache_by_id
 from database.webhook_health import (
     record_app_webhook_failure,
@@ -22,16 +23,49 @@ from database.webhook_health import (
 from models.app import ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
+from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+def _notify_app_owner(app_id: str, title: str, body: str):
+    """Send a push notification to the app owner about webhook health."""
+    try:
+        app_data = get_app_by_id_db(app_id)
+        if app_data and app_data.get('uid'):
+            send_notification(app_data['uid'], title, body)
+    except Exception as e:
+        logger.warning(f'Failed to notify app owner for {app_id}: {e}')
+
+
 def _handle_app_webhook_disable(app_id: str, action: int, error: str):
-    if action == 3:
+    if action == 1:
+        logger.warning(f'App {app_id} webhook failing for 24h+ (day 1 warning): {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Failing',
+            f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 48 hours if failures continue.',
+        )
+    elif action == 2:
+        logger.warning(f'App {app_id} webhook failing for 48h+ (day 2 final warning): {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Final Warning',
+            f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 24 hours if failures continue.',
+        )
+    elif action == 3:
         logger.warning(f'App {app_id} auto-disabled after 72h of webhook failures: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
+        _notify_app_owner(
+            app_id,
+            'Webhook Auto-Disabled',
+            f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
+            'Please fix your endpoint and re-enable from your developer dashboard.',
+        )
 
 
 # Import agent_config_context for accessing user context
