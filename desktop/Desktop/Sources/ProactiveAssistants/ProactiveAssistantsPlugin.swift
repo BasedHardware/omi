@@ -232,6 +232,21 @@ public class ProactiveAssistantsPlugin: NSObject {
             return
         }
 
+        // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+        // when the user is past their trial. `AppState` writes
+        // `desktop_isPaywalled` to UserDefaults whenever it flips so other
+        // singletons can synchronously check. Toggle UI also gates on this.
+        if UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+            log("Paywall: refusing startMonitoring (trial expired)")
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "trial_expired"]
+            )
+            completion(false, "trial_expired")
+            return
+        }
+
         // Set flag synchronously before async call to prevent race condition
         isStartingMonitoring = true
 
