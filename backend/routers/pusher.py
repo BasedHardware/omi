@@ -624,21 +624,29 @@ async def _websocket_util_trigger(
             asyncio.create_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
         ]
 
-        # Supervisor: wait for client disconnect OR any bg task failure.
-        # asyncio.wait(FIRST_COMPLETED) returns as soon as ANY task finishes,
-        # so a crashed bg task is detected immediately — not hours later at drain.
-        done, _ = await asyncio.wait(
-            {receive_task, *bg_main_tasks},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+        # Supervisor loop: wait for client disconnect OR any bg task crash.
+        # Finite bg tasks that complete normally are removed from the monitored
+        # set — only disconnect or crash exits the loop.
+        monitored = {receive_task, *bg_main_tasks}
+        supervisor_exit = None
+        while monitored:
+            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
 
-        for task in done:
-            if task is not receive_task and not task.cancelled():
-                exc = task.exception()
-                if exc is not None:
-                    logger.error(f"BG task {task.get_name()} crashed: {exc} {uid}")
+            for task in done:
+                if task is receive_task:
+                    supervisor_exit = "disconnect"
+                    break
+                if not task.cancelled():
+                    exc = task.exception()
+                    if exc is not None:
+                        logger.error(f"BG task {task.get_name()} crashed: {exc} {uid}")
+                        supervisor_exit = "crash"
+                        break
 
-        if receive_task in done and not receive_task.cancelled():
+            if supervisor_exit:
+                break
+
+        if receive_task.done() and not receive_task.cancelled():
             exc = receive_task.exception()
             if exc is not None:
                 raise exc
