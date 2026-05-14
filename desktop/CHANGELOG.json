@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added file/screenshot attachments to chat (paperclip + drag-drop)"
+  ],
   "releases": [
     {
       "version": "0.11.398",
