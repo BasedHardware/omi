@@ -2699,9 +2699,15 @@ async def _stream_handler(
             speaker_id_task = asyncio.create_task(speaker_identification_task(), name=f"ws:{uid}:speaker_id")
             bg_main_tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
 
-        # Supervisor loop: wait for client disconnect OR any bg task crash.
-        # Some bg tasks are finite (process_pending_conversations, speaker_id)
-        # and complete normally during the session — the loop re-waits for those.
+        # Finite tasks complete normally during active sessions (e.g. pending_conversations
+        # finishes after ~7s, speaker_id returns immediately when disabled). Their normal
+        # completion should NOT tear down the session. All other bg tasks are lifetime tasks —
+        # if they complete, it means the session is ending (e.g. heartbeat inactivity timeout).
+        finite_tasks = set()
+        if not is_multi_channel:
+            finite_tasks = {pending_conversations_task, speaker_id_task}
+
+        # Supervisor loop: wait for client disconnect, bg crash, or lifetime task completion.
         monitored = {data_process_task, *bg_main_tasks}
         supervisor_exit = None
         while monitored:
@@ -2716,6 +2722,10 @@ async def _stream_handler(
                     if exc is not None:
                         logger.error(f"BG task {task.get_name()} crashed: {exc} {uid} {session_id}")
                         supervisor_exit = "crash"
+                        break
+                    if task not in finite_tasks:
+                        logger.info(f"Lifetime task {task.get_name()} completed, tearing down {uid} {session_id}")
+                        supervisor_exit = "lifetime_done"
                         break
 
             if supervisor_exit:
