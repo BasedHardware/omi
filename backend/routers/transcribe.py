@@ -2699,21 +2699,29 @@ async def _stream_handler(
             speaker_id_task = asyncio.create_task(speaker_identification_task(), name=f"ws:{uid}:speaker_id")
             bg_main_tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
 
-        # Supervisor: wait for client disconnect OR any bg task failure.
-        # asyncio.wait(FIRST_COMPLETED) detects bg task crashes immediately,
-        # not hours later at drain time.
-        done, _ = await asyncio.wait(
-            {data_process_task, *bg_main_tasks},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+        # Supervisor loop: wait for client disconnect OR any bg task crash.
+        # Some bg tasks are finite (process_pending_conversations, speaker_id)
+        # and complete normally during the session — the loop re-waits for those.
+        monitored = {data_process_task, *bg_main_tasks}
+        supervisor_exit = None
+        while monitored:
+            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
 
-        for task in done:
-            if task is not data_process_task and not task.cancelled():
-                exc = task.exception()
-                if exc is not None:
-                    logger.error(f"BG task {task.get_name()} crashed: {exc} {uid} {session_id}")
+            for task in done:
+                if task is data_process_task:
+                    supervisor_exit = "disconnect"
+                    break
+                if not task.cancelled():
+                    exc = task.exception()
+                    if exc is not None:
+                        logger.error(f"BG task {task.get_name()} crashed: {exc} {uid} {session_id}")
+                        supervisor_exit = "crash"
+                        break
 
-        if data_process_task in done and not data_process_task.cancelled():
+            if supervisor_exit:
+                break
+
+        if data_process_task.done() and not data_process_task.cancelled():
             exc = data_process_task.exception()
             if exc is not None:
                 raise exc
