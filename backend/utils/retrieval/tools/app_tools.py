@@ -13,8 +13,10 @@ from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
 from database.redis_db import get_cached_user_geolocation
+from database.webhook_health import record_app_webhook_failure, record_app_webhook_success, is_app_webhook_disabled
 from models.app import ChatTool
 from utils.mcp_client import call_mcp_tool
+from utils.http_client import get_webhook_circuit_breaker
 import logging
 
 logger = logging.getLogger(__name__)
@@ -117,7 +119,6 @@ def create_app_tool(
         args_schema = create_model(model_name)
 
     if app_tool.is_mcp and mcp_server_url:
-        # MCP tool — call via JSON-RPC instead of HTTP endpoint
         _mcp_url = mcp_server_url
         _mcp_tokens = mcp_oauth_tokens
         _access_token = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
@@ -126,7 +127,24 @@ def create_app_tool(
         async def mcp_tool_function(**kwargs) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
-            return await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+            if is_app_webhook_disabled(app_id):
+                return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
+            cb = get_webhook_circuit_breaker(_mcp_url)
+            if not cb.allow_request():
+                return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+            try:
+                result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+                if result.startswith('Error') or result.startswith('MCP error'):
+                    cb.record_failure()
+                    record_app_webhook_failure(app_id, 0, result[:200])
+                else:
+                    cb.record_success()
+                    record_app_webhook_success(app_id)
+                return result
+            except Exception as e:
+                cb.record_failure()
+                record_app_webhook_failure(app_id, 0, type(e).__name__)
+                return f"Error calling MCP tool {app_tool.name}: {e}"
 
         return StructuredTool(
             name=tool_name,
@@ -207,9 +225,14 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
         # In the future, you might want to store app-specific tokens
         pass
 
+    if is_app_webhook_disabled(app_id):
+        return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
+
+    cb = get_webhook_circuit_breaker(app_tool.endpoint)
+    if not cb.allow_request():
+        return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+
     try:
-        # Call the app's endpoint asynchronously
-        # Increased timeout to 120s for AI-powered tools that need more time (code generation, etc.)
         async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
             request_kwargs = {
@@ -223,8 +246,9 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
             response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
 
-            if response.status_code == 200:
-                # Try to parse JSON response, fallback to text
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                record_app_webhook_success(app_id)
                 try:
                     result = response.json()
                     if isinstance(result, dict) and 'result' in result:
@@ -238,10 +262,15 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                 except ValueError:
                     return response.text
             else:
-                # Auth errors (401/403) almost always mean the app's API key or
-                # credentials are misconfigured on the app developer's side.
-                # Return a clean message so Claude doesn't echo raw API key errors
-                # (like "Invalid API key · Fix external API key") back to the user.
+                cb.record_failure()
+                action = record_app_webhook_failure(app_id, response.status_code, f'HTTP {response.status_code}')
+                if action == 3:
+                    from database.apps import delete_app_cache_by_id
+                    from database.webhook_health import disable_app_in_firestore
+
+                    disable_app_in_firestore(app_id, f'HTTP {response.status_code}', 72)
+                    delete_app_cache_by_id(app_id)
+
                 if response.status_code in (401, 403):
                     return (
                         f"The {app_tool.name} tool is temporarily unavailable due to a "
@@ -259,10 +288,16 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                 return error_msg
 
     except httpx.TimeoutException:
+        cb.record_failure()
+        record_app_webhook_failure(app_id, 0, 'TimeoutException')
         return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 120 seconds."
     except httpx.ConnectError:
+        cb.record_failure()
+        record_app_webhook_failure(app_id, 0, 'ConnectError')
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
+        cb.record_failure()
+        record_app_webhook_failure(app_id, 0, type(e).__name__)
         return f"Error calling {app_tool.name}: {str(e)}"
 
 
