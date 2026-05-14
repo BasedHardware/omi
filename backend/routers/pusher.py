@@ -616,40 +616,64 @@ async def _websocket_util_trigger(
     bg_main_tasks = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = asyncio.create_task(receive_tasks())
+        receive_task = asyncio.create_task(receive_tasks(), name=f"ws:{uid}:receive")
         bg_main_tasks = [
-            asyncio.create_task(process_speaker_sample_queue()),
-            asyncio.create_task(process_private_cloud_queue()),
-            asyncio.create_task(process_transcript_queue()),
-            asyncio.create_task(process_audio_bytes_queue()),
+            asyncio.create_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+            asyncio.create_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+            asyncio.create_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+            asyncio.create_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
         ]
 
-        # Wait for receive_task — it exits on disconnect, error, or receive timeout.
-        # Previous code used asyncio.gather() for ALL 5 tasks, which meant a hung
-        # background task (e.g. stuck GCS upload) would block cleanup forever,
-        # leaking ~15 MB per ghost connection and inflating the gauge.
-        await receive_task
+        # Supervisor: wait for client disconnect OR any bg task failure.
+        # asyncio.wait(FIRST_COMPLETED) returns as soon as ANY task finishes,
+        # so a crashed bg task is detected immediately — not hours later at drain.
+        done, _ = await asyncio.wait(
+            {receive_task, *bg_main_tasks},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
 
-        # receive_tasks() already set websocket_active = False.
-        # Give background tasks a grace period to drain their queues.
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*bg_main_tasks, return_exceptions=True),
-                timeout=BG_DRAIN_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            dropped_speaker = len(speaker_sample_queue)
-            dropped_transcript = len(transcript_queue)
-            dropped_audio = len(audio_bytes_queue)
-            dropped_cloud = len(private_cloud_queue)
-            logger.warning(
-                f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid} "
-                f"(dropped: speaker={dropped_speaker} transcript={dropped_transcript} "
-                f"audio={dropped_audio} cloud={dropped_cloud})"
-            )
-            for task in bg_main_tasks:
-                task.cancel()
-            await asyncio.gather(*bg_main_tasks, return_exceptions=True)
+        for task in done:
+            if task is not receive_task and not task.cancelled():
+                exc = task.exception()
+                if exc is not None:
+                    logger.error(f"BG task {task.get_name()} crashed: {exc} {uid}")
+
+        if receive_task in done and not receive_task.cancelled():
+            exc = receive_task.exception()
+            if exc is not None:
+                raise exc
+
+        # If receive_task is still running (bg task crashed first), cancel it
+        if not receive_task.done():
+            websocket_active = False
+            receive_task.cancel()
+            try:
+                await receive_task
+            except asyncio.CancelledError:
+                pass
+
+        # Drain remaining bg tasks with timeout
+        remaining = [t for t in bg_main_tasks if not t.done()]
+        if remaining:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*remaining, return_exceptions=True),
+                    timeout=BG_DRAIN_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                dropped_speaker = len(speaker_sample_queue)
+                dropped_transcript = len(transcript_queue)
+                dropped_audio = len(audio_bytes_queue)
+                dropped_cloud = len(private_cloud_queue)
+                logger.warning(
+                    f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid} "
+                    f"(dropped: speaker={dropped_speaker} transcript={dropped_transcript} "
+                    f"audio={dropped_audio} cloud={dropped_cloud})"
+                )
+                for task in remaining:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*remaining, return_exceptions=True)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
