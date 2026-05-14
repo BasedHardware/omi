@@ -63,10 +63,15 @@ sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
 
 def _load_app_tools_module():
     """Load app_tools module directly, bypassing __init__.py which pulls in heavy deps."""
+    _db_redis_mod = sys.modules.get("database.redis_db")
+    if _db_redis_mod and not hasattr(_db_redis_mod, 'get_cached_user_geolocation'):
+        _db_redis_mod.get_cached_user_geolocation = MagicMock(return_value=None)
     for mod_name in ["utils.mcp_client", "utils.log_sanitizer", "utils.retrieval", "utils.retrieval.agentic"]:
         sys.modules.setdefault(mod_name, MagicMock())
     if "utils.retrieval" in sys.modules:
         sys.modules["utils.retrieval"].__path__ = []
+    if "utils.retrieval.tools.app_tools" in sys.modules:
+        return sys.modules["utils.retrieval.tools.app_tools"]
     spec = importlib.util.spec_from_file_location(
         "utils.retrieval.tools.app_tools",
         os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'retrieval', 'tools', 'app_tools.py'),
