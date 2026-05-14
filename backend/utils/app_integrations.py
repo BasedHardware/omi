@@ -204,7 +204,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                     url,
                     json=payload,
                 )
-            if response.status_code != 200:
+            if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
                 action = record_app_webhook_failure(app.id, response.status_code, error_str)
@@ -673,7 +673,7 @@ async def _async_trigger_realtime_integrations(
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(url, json={"session_id": uid, "segments": segments})
-            if response.status_code != 200:
+            if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
                 action = record_app_webhook_failure(app.id, response.status_code, error_str)
