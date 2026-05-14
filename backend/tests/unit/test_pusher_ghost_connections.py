@@ -461,6 +461,54 @@ class TestSupervisorBehavior:
         assert drained, "BG worker should be cancelled and cleaned up on normal disconnect"
 
     @pytest.mark.asyncio
+    async def test_finite_bg_task_does_not_kill_session(self):
+        """Finite bg tasks (like process_pending_conversations) that complete
+        normally during an active session must NOT tear down the connection.
+        The supervisor loop should re-wait for remaining tasks."""
+        session_torn_down = False
+
+        async def long_receive():
+            await asyncio.sleep(0.3)
+
+        async def finite_bg():
+            await asyncio.sleep(0.05)
+
+        async def long_bg():
+            try:
+                await asyncio.sleep(999)
+            except asyncio.CancelledError:
+                raise
+
+        receive_task = asyncio.create_task(long_receive())
+        bg_tasks = [asyncio.create_task(finite_bg()), asyncio.create_task(long_bg())]
+
+        monitored = {receive_task, *bg_tasks}
+        supervisor_exit = None
+        while monitored:
+            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                if task is receive_task:
+                    supervisor_exit = "disconnect"
+                    break
+                if not task.cancelled():
+                    exc = task.exception()
+                    if exc is not None:
+                        supervisor_exit = "crash"
+                        break
+            if supervisor_exit:
+                break
+
+        assert supervisor_exit == "disconnect", (
+            f"Supervisor should exit on disconnect, not '{supervisor_exit}'. "
+            "Finite bg task completing must not tear down the session."
+        )
+
+        for t in bg_tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*bg_tasks, return_exceptions=True)
+
+    @pytest.mark.asyncio
     async def test_task_names_assigned(self):
         """Verify tasks get names for production debugging."""
         src = PUSHER_SRC.read_text()
