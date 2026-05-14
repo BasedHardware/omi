@@ -4553,12 +4553,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Planul dvs. s-a încheiat pe $date.\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
+    return 'Planul dvs. s-a încheiat pe $date.\\nReabonați-vă acum - veți fi taxat imediat pentru o nouă perioadă de facturare.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Planul dvs. este setat să fie anulat pe $date.\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
+    return 'Planul dvs. este setat să fie anulat pe $date.\\nReabonați-vă acum pentru a vă păstra beneficiile - fără taxă până la $date.';
   }
 
   @override
@@ -6576,7 +6576,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Setați $appName ca aplicație implicită de rezumat?\n\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
+    return 'Setați $appName ca aplicație implicită de rezumat?\\n\\nAceastă aplicație va fi utilizată automat pentru toate rezumatele conversațiilor viitoare.';
   }
 
   @override
@@ -9283,4 +9283,38 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
+
+  @override
+  String get dailyReflection => 'Reflecție zilnică';
+
+  @override
+  String get get9PmReminderToReflect => 'Primește o reamintire la ora 21 pentru a reflecta asupra zilei tale';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'E timpul pentru reflecție zilnică';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Povestește-mi despre ziua ta';
+
+  @override
+  String get multiLanguageDetection => 'Detectare multilingvă';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detectează mai multe limbi vorbite';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

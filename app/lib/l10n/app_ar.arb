@@ -1407,8 +1407,8 @@
     "upgradeAlreadyScheduled": "تمت جدولة ترقيتك إلى الخطة السنوية بالفعل",
     "youAreOnUnlimitedPlan": "أنت مشترك في الخطة غير المحدودة.",
     "yourOmiUnleashed": "أطلق العنان لـ Omi الخاص بك. انطلق بلا حدود لإمكانيات لا نهائية.",
-    "planEndedOn": "انتهت خطتك في {date}.\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.",
-    "planSetToCancelOn": "تم تعيين خطتك للإلغاء في {date}.\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى {date}.",
+    "planEndedOn": "انتهت خطتك في {date}.\\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.",
+    "planSetToCancelOn": "تم تعيين خطتك للإلغاء في {date}.\\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى {date}.",
     "annualPlanStartsAutomatically": "ستبدأ خطتك السنوية تلقائياً عند انتهاء خطتك الشهرية.",
     "planRenewsOn": "يتم تجديد خطتك في {date}.",
     "unlimitedConversations": "محادثات غير محدودة",
@@ -2031,7 +2031,7 @@
     "defaultLabel": "افتراضي",
     "lastUsedLabel": "آخر استخدام",
     "setDefaultApp": "تعيين التطبيق الافتراضي",
-    "setDefaultAppContent": "هل تريد تعيين {appName} كتطبيق تلخيص افتراضي؟\n\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.",
+    "setDefaultAppContent": "هل تريد تعيين {appName} كتطبيق تلخيص افتراضي؟\\n\\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -2984,5 +2984,12 @@
     "startCallRecording": "بدء تسجيل المكالمة",
     "startVoiceRecording": "بدء التسجيل الصوتي",
     "bulkExportAlreadyExported": "تم تصدير جميع المهام المحددة بالفعل",
-    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى."
+    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.",
+    "dailyReflection": "التأمل اليومي",
+    "get9PmReminderToReflect": "احصل على تذكير في الساعة 9 مساءً للتأمل في يومك",
+    "dailyReflectionDescription": "احصل على تذكير في الساعة 9 مساءً للتأمل في يومك وتدوين أفكارك.",
+    "dailyReflectionNotificationTitle": "حان وقت التأمل اليومي",
+    "dailyReflectionNotificationBody": "أخبرني عن يومك",
+    "multiLanguageDetection": "كشف اللغات المتعددة",
+    "multiLanguageDetectionDesc": "كشف عدة لغات منطوقة"
 }

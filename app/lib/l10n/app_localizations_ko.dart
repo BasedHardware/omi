@@ -4449,12 +4449,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return '플랜이 $date에 종료되었습니다.\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
+    return '플랜이 $date에 종료되었습니다.\\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return '플랜이 $date에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
+    return '플랜이 $date에 취소될 예정입니다.\\n혜택을 유지하려면 지금 재구독하세요 - $date까지 요금이 청구되지 않습니다.';
   }
 
   @override
@@ -6432,7 +6432,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName을(를) 기본 요약 앱으로 설정하시겠습니까?\n\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.';
+    return '$appName을(를) 기본 요약 앱으로 설정하시겠습니까?\\n\\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.';
   }
 
   @override
@@ -9092,4 +9092,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '작업을 삭제할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get dailyReflection => '일일 성찰';
+
+  @override
+  String get get9PmReminderToReflect => '오후 9시에 하루를 되돌아보는 알림 받기';
+
+  @override
+  String get dailyReflectionDescription => '오후 9시에 하루를 되돌아보고 생각을 기록하라는 알림을 받습니다.';
+
+  @override
+  String get dailyReflectionNotificationTitle => '일일 성찰 시간입니다';
+
+  @override
+  String get dailyReflectionNotificationBody => '오늘 하루에 대해 말해주세요';
+
+  @override
+  String get multiLanguageDetection => '다국어 감지';
+
+  @override
+  String get multiLanguageDetectionDesc => '여러 음성 언어 감지';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

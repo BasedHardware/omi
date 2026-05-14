@@ -4523,12 +4523,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Tu plan terminó el $date.\nVuelve a suscribirte ahora - se te cobrará inmediatamente por un nuevo período de facturación.';
+    return 'Tu plan terminó el $date.\\nVuelve a suscribirte ahora - se te cobrará inmediatamente por un nuevo período de facturación.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Tu plan está configurado para cancelarse el $date.\nVuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta $date.';
+    return 'Tu plan está configurado para cancelarse el $date.\\nVuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta $date.';
   }
 
   @override
@@ -6548,7 +6548,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '¿Establecer $appName como tu app de resumen predeterminada?\n\nEsta app se usará automáticamente para todos los resúmenes de conversaciones futuras.';
+    return '¿Establecer $appName como tu app de resumen predeterminada?\\n\\nEsta app se usará automáticamente para todos los resúmenes de conversaciones futuras.';
   }
 
   @override
@@ -9261,4 +9261,38 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'No se pudieron eliminar las tareas. Inténtalo de nuevo.';
+
+  @override
+  String get dailyReflection => 'Reflexión diaria';
+
+  @override
+  String get get9PmReminderToReflect => 'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Recibe un recordatorio a las 9 PM para reflexionar sobre tu día y capturar tus pensamientos.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Hora de la reflexión diaria';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Cuéntame sobre tu día';
+
+  @override
+  String get multiLanguageDetection => 'Detección multilingüe';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detectar múltiples idiomas hablados';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

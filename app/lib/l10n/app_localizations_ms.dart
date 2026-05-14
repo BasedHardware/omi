@@ -4545,12 +4545,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Pelan anda tamat pada $date.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.';
+    return 'Pelan anda tamat pada $date.\\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
+    return 'Pelan anda ditetapkan untuk dibatalkan pada $date.\\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
 
   @override
@@ -6566,7 +6566,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Tetapkan $appName sebagai aplikasi ringkasan lalai anda?\n\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.';
+    return 'Tetapkan $appName sebagai aplikasi ringkasan lalai anda?\\n\\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.';
   }
 
   @override
@@ -9264,4 +9264,38 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tidak dapat memadam tugasan. Sila cuba lagi.';
+
+  @override
+  String get dailyReflection => 'Refleksi Harian';
+
+  @override
+  String get get9PmReminderToReflect => 'Dapatkan peringatan jam 9 malam untuk merenung hari anda';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Terima peringatan pada jam 9 malam untuk merenung hari anda dan mencatat fikiran anda.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Masa untuk Refleksi Harian';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Ceritakan tentang hari anda';
+
+  @override
+  String get multiLanguageDetection => 'Pengesanan berbilang bahasa';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Kesan pelbagai bahasa pertuturan';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

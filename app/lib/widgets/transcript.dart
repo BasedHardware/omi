@@ -29,6 +29,7 @@ class TranscriptWidget extends StatefulWidget {
   final Function(String, int)? editSegment;
   final Map<String, SpeakerLabelSuggestionEvent> suggestions;
   final List<String> taggingSegmentIds;
+  final Set<String> translatingSegmentIds;
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
   final String searchQuery;
   final int currentResultIndex;
@@ -36,6 +37,7 @@ class TranscriptWidget extends StatefulWidget {
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
   final Function(int segmentIndex)? onEditSegmentText;
+  final Function(TranscriptSegment)? onSegmentLongPress;
 
   const TranscriptWidget({
     super.key,
@@ -49,6 +51,7 @@ class TranscriptWidget extends StatefulWidget {
     this.editSegment,
     this.suggestions = const {},
     this.taggingSegmentIds = const [],
+    this.translatingSegmentIds = const {},
     this.onAcceptSuggestion,
     this.searchQuery = '',
     this.currentResultIndex = -1,
@@ -56,6 +59,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
     this.onEditSegmentText,
+    this.onSegmentLongPress,
   });
 
   @override
@@ -574,11 +578,42 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       widget.onEditSegmentText!(segmentIdx);
                                     }
                                   : null,
+                              onLongPress: widget.onSegmentLongPress != null
+                                  ? () {
+                                      HapticFeedback.mediumImpact();
+                                      widget.onSegmentLongPress!(data);
+                                    }
+                                  : null,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _buildSegmentText(data, segmentIdx, isUser),
+                                  if (widget.translatingSegmentIds.contains(data.id) && data.translations.isEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 12,
+                                          height: 12,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                            color: Colors.grey.shade400,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Translating...',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade400,
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   if (data.translations.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     ...data.translations.map(

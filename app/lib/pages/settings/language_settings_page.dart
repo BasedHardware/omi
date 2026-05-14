@@ -85,8 +85,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
             .key
         : context.l10n.notSet;
 
-    final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
-    final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
+    final isUpdatingMultiLanguage = userProvider.isUpdatingSingleLanguageMode;
+    final isMultiLanguageEnabled = !userProvider.singleLanguageMode;
+    final isUpdatingTranslation = userProvider.isUpdatingAutoTranslate;
+    final isAutoTranslationEnabled = userProvider.autoTranslateEnabled;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -154,7 +156,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.l10n.automaticTranslation,
+                      context.l10n.multiLanguageDetection,
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 2),
@@ -163,7 +165,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              if (isUpdatingTranslation)
+              if (isUpdatingMultiLanguage)
                 const SizedBox(
                   width: 24,
                   height: 24,
@@ -174,8 +176,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 )
               else
                 Switch(
-                  value: isAutoTranslationEnabled,
+                  value: isMultiLanguageEnabled,
                   onChanged: (value) async {
+                    // singleLanguageMode is inverted: toggle ON = multi-language = singleLanguageMode false
                     final success = await userProvider.setSingleLanguageMode(!value);
                     if (success && context.mounted) {
                       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
@@ -185,6 +188,51 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 ),
             ],
           ),
+
+          // Automatic Translation sub-option (only visible when multi-language is enabled)
+          if (isMultiLanguageEnabled) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Divider(height: 1, color: Colors.grey.shade800),
+            ),
+            Row(
+              children: [
+                const SizedBox(width: 54),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.automaticTranslation,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                if (isUpdatingTranslation)
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                else
+                  Switch(
+                    value: isAutoTranslationEnabled,
+                    onChanged: (value) async {
+                      final success = await userProvider.setAutoTranslateEnabled(value);
+                      if (success && context.mounted) {
+                        context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+                      }
+                    },
+                    activeColor: const Color(0xFF22C55E),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

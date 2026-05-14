@@ -4528,12 +4528,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Teie plaan lõppes $date.\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.';
+    return 'Teie plaan lõppes $date.\\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Teie plaan on seatud tühistuma $date.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
+    return 'Teie plaan on seatud tühistuma $date.\\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni $date.';
   }
 
   @override
@@ -6546,7 +6546,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Kas määrata $appName vaikimisi kokkuvõtte rakenduseks?\n\nSeda rakendust kasutatakse automaatselt kõigi tulevaste vestluste kokkuvõtete jaoks.';
+    return 'Kas määrata $appName vaikimisi kokkuvõtte rakenduseks?\\n\\nSeda rakendust kasutatakse automaatselt kõigi tulevaste vestluste kokkuvõtete jaoks.';
   }
 
   @override
@@ -9237,4 +9237,38 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get dailyReflection => 'Igapäevane refleksioon';
+
+  @override
+  String get get9PmReminderToReflect => 'Saa kell 21 meeldetuletus oma päeva üle mõtisklemiseks';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Aeg igapäevaseks refleksiooniks';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Räägi mulle oma päevast';
+
+  @override
+  String get multiLanguageDetection => 'Mitmekeelne tuvastus';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Tuvasta mitu räägitud keelt';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

@@ -4565,12 +4565,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Το πρόγραμμά σας έληξε στις $date.\nΕπανεγγραφείτε τώρα - θα χρεωθείτε αμέσως για μια νέα περίοδο χρέωσης.';
+    return 'Το πρόγραμμά σας έληξε στις $date.\\nΕπανεγγραφείτε τώρα - θα χρεωθείτε αμέσως για μια νέα περίοδο χρέωσης.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
+    return 'Το πρόγραμμά σας έχει ρυθμιστεί να ακυρωθεί στις $date.\\nΕπανεγγραφείτε τώρα για να διατηρήσετε τα οφέλη σας - χωρίς χρέωση μέχρι $date.';
   }
 
   @override
@@ -6591,7 +6591,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Να οριστεί το $appName ως προεπιλεγμένη εφαρμογή σύνοψης;\n\nΑυτή η εφαρμογή θα χρησιμοποιείται αυτόματα για όλες τις μελλοντικές συνόψεις συνομιλιών.';
+    return 'Να οριστεί το $appName ως προεπιλεγμένη εφαρμογή σύνοψης;\\n\\nΑυτή η εφαρμογή θα χρησιμοποιείται αυτόματα για όλες τις μελλοντικές συνόψεις συνομιλιών.';
   }
 
   @override
@@ -9305,4 +9305,38 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.';
+
+  @override
+  String get dailyReflection => 'Ημερήσιος αναστοχασμός';
+
+  @override
+  String get get9PmReminderToReflect => 'Λάβετε υπενθύμιση στις 9 μ.μ. για να αναλογιστείτε την ημέρα σας';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Λάβετε μια υπενθύμιση στις 9 μ.μ. για να αναστοχαστείτε την ημέρα σας και να καταγράψετε τις σκέψεις σας.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Ώρα για ημερήσιο αναστοχασμό';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Πες μου για την ημέρα σου';
+
+  @override
+  String get multiLanguageDetection => 'Πολυγλωσσική ανίχνευση';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Ανίχνευση πολλαπλών ομιλούμενων γλωσσών';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

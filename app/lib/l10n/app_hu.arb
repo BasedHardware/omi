@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Az éves csomagra való frissítése már ütemezve van",
     "youAreOnUnlimitedPlan": "Ön a Korlátlan csomagban van.",
     "yourOmiUnleashed": "Az Omi-ja, szabadjára engedve. Váljon korlátlanná a végtelen lehetőségekért.",
-    "planEndedOn": "A csomagja {date}-án lejárt.\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.",
-    "planSetToCancelOn": "A csomagja {date}-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
+    "planEndedOn": "A csomagja {date}-án lejárt.\\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.",
+    "planSetToCancelOn": "A csomagja {date}-án törlésre van beállítva.\\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj {date}-ig.",
     "annualPlanStartsAutomatically": "Az éves csomagja automatikusan elindul, amikor a havi csomagja lejár.",
     "planRenewsOn": "A csomagja {date}-án megújul.",
     "unlimitedConversations": "Korlátlan beszélgetések",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Alapértelmezett",
     "lastUsedLabel": "Utoljára használt",
     "setDefaultApp": "Alapértelmezett alkalmazás beállítása",
-    "setDefaultAppContent": "Beállítja a(z) {appName} alkalmazást alapértelmezett összefoglaló alkalmazásként?\n\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.",
+    "setDefaultAppContent": "Beállítja a(z) {appName} alkalmazást alapértelmezett összefoglaló alkalmazásként?\\n\\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3113,5 +3113,12 @@
     "startCallRecording": "Hívásfelvétel indítása",
     "startVoiceRecording": "Hangfelvétel indítása",
     "bulkExportAlreadyExported": "Az összes kiválasztott feladat már exportálva van",
-    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra."
+    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra.",
+    "dailyReflection": "Napi reflexió",
+    "dailyReflectionDescription": "Kapj emlékeztetőt este 9-kor, hogy elgondolkodj a napodról és rögzítsd gondolataidat.",
+    "get9PmReminderToReflect": "Kapjon emlékeztetőt este 9-kor, hogy elgondolkodjon a napján",
+    "dailyReflectionNotificationTitle": "Ideje a napi reflexiónak",
+    "dailyReflectionNotificationBody": "Mesélj a napodról",
+    "multiLanguageDetection": "Többnyelvű felismerés",
+    "multiLanguageDetectionDesc": "Több beszélt nyelv felismerése"
 }

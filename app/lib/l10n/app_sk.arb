@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Váš upgrade na ročný plán je už naplánovaný",
     "youAreOnUnlimitedPlan": "Ste na pláne Unlimited.",
     "yourOmiUnleashed": "Váš Omi, uvoľnený. Prejdite na neobmedzený pre nekonečné možnosti.",
-    "planEndedOn": "Váš plán skončil {date}.\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.",
-    "planSetToCancelOn": "Váš plán je nastavený na zrušenie {date}.\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do {date}.",
+    "planEndedOn": "Váš plán skončil {date}.\\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.",
+    "planSetToCancelOn": "Váš plán je nastavený na zrušenie {date}.\\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do {date}.",
     "annualPlanStartsAutomatically": "Váš ročný plán sa automaticky spustí po skončení mesačného plánu.",
     "planRenewsOn": "Váš plán sa obnovuje {date}.",
     "unlimitedConversations": "Neobmedzené konverzácie",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Predvolené",
     "lastUsedLabel": "Naposledy použité",
     "setDefaultApp": "Nastaviť predvolenú aplikáciu",
-    "setDefaultAppContent": "Nastaviť {appName} ako predvolenú aplikáciu na zhrnutia?\n\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.",
+    "setDefaultAppContent": "Nastaviť {appName} ako predvolenú aplikáciu na zhrnutia?\\n\\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3022,5 +3022,12 @@
     "startCallRecording": "Spustiť nahrávanie hovoru",
     "startVoiceRecording": "Spustiť hlasový záznam",
     "bulkExportAlreadyExported": "Všetky vybrané úlohy už boli exportované",
-    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova."
+    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova.",
+    "dailyReflection": "Denná reflexia",
+    "dailyReflectionDescription": "Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.",
+    "get9PmReminderToReflect": "Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom",
+    "dailyReflectionNotificationTitle": "Čas na dennú reflexiu",
+    "dailyReflectionNotificationBody": "Povedz mi o svojom dni",
+    "multiLanguageDetection": "Viacjazyčná detekcia",
+    "multiLanguageDetectionDesc": "Detekovať viacero hovorených jazykov"
 }

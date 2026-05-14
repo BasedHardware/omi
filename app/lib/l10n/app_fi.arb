@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Päivityksesi vuositilaukseen on jo ajoitettu",
     "youAreOnUnlimitedPlan": "Sinulla on Rajoittamaton tilaus.",
     "yourOmiUnleashed": "Omi vapaana. Siirry rajoittamattomaan loputtomien mahdollisuuksien saavuttamiseksi.",
-    "planEndedOn": "Tilauksesi päättyi {date}.\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.",
-    "planSetToCancelOn": "Tilauksesi on asetettu peruuntumaan {date}.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen {date}.",
+    "planEndedOn": "Tilauksesi päättyi {date}.\\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.",
+    "planSetToCancelOn": "Tilauksesi on asetettu peruuntumaan {date}.\\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen {date}.",
     "annualPlanStartsAutomatically": "Vuositilauksesi alkaa automaattisesti, kun kuukausitilauksesi päättyy.",
     "planRenewsOn": "Tilauksesi uusitaan {date}.",
     "unlimitedConversations": "Rajoittamattomat keskustelut",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Oletus",
     "lastUsedLabel": "Viimeksi käytetty",
     "setDefaultApp": "Aseta oletussovellus",
-    "setDefaultAppContent": "Asetetaanko {appName} oletusyhteenvetosovellukseksi?\n\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.",
+    "setDefaultAppContent": "Asetetaanko {appName} oletusyhteenvetosovellukseksi?\\n\\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Aloita puhelun nauhoitus",
     "startVoiceRecording": "Aloita ääninauhoitus",
     "bulkExportAlreadyExported": "Kaikki valitut tehtävät on jo viety",
-    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen."
+    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen.",
+    "dailyReflection": "Päivittäinen reflektio",
+    "dailyReflectionDescription": "Saa muistutus klo 21 reflektoidaksesi päivääsi ja tallentaaksesi ajatuksesi.",
+    "get9PmReminderToReflect": "Saa muistutus klo 21 päiväsi pohtimiseen",
+    "dailyReflectionNotificationTitle": "Aika päivittäiselle reflektiolle",
+    "dailyReflectionNotificationBody": "Kerro minulle päivästäsi",
+    "multiLanguageDetection": "Monikielinen tunnistus",
+    "multiLanguageDetectionDesc": "Tunnista useita puhuttuja kieliä"
 }

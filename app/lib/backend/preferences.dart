@@ -360,9 +360,13 @@ class SharedPreferencesUtil {
   set shortConversationThreshold(int value) => saveInt('v2/shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
-  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
+  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode', defaultValue: false);
 
   set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
+
+  bool get cachedAutoTranslateEnabled => getBool('cachedAutoTranslateEnabled', defaultValue: true);
+
+  set cachedAutoTranslateEnabled(bool value) => saveBool('cachedAutoTranslateEnabled', value);
 
   List<String> get cachedTranscriptionVocabulary => getStringList('cachedTranscriptionVocabulary');
 

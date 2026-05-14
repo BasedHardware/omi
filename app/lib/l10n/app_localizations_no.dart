@@ -4530,12 +4530,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Abonnementet ditt ble avsluttet $date.\nAbonner på nytt nå - du blir belastet umiddelbart for en ny faktureringsperiode.';
+    return 'Abonnementet ditt ble avsluttet $date.\\nAbonner på nytt nå - du blir belastet umiddelbart for en ny faktureringsperiode.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Abonnementet ditt er satt til å bli kansellert $date.\nAbonner på nytt nå for å beholde fordelene - ingen belastning til $date.';
+    return 'Abonnementet ditt er satt til å bli kansellert $date.\\nAbonner på nytt nå for å beholde fordelene - ingen belastning til $date.';
   }
 
   @override
@@ -6542,7 +6542,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Angi $appName som din standardapp for oppsummeringer?\n\nDenne appen vil automatisk bli brukt for alle fremtidige samtaleoppsummeringer.';
+    return 'Angi $appName som din standardapp for oppsummeringer?\\n\\nDenne appen vil automatisk bli brukt for alle fremtidige samtaleoppsummeringer.';
   }
 
   @override
@@ -9236,4 +9236,38 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Kunne ikke slette oppgavene. Prøv igjen.';
+
+  @override
+  String get dailyReflection => 'Daglig refleksjon';
+
+  @override
+  String get get9PmReminderToReflect => 'Få en påminnelse kl. 21 for å reflektere over dagen din';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Tid for daglig refleksjon';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Fortell meg om dagen din';
+
+  @override
+  String get multiLanguageDetection => 'Flerspråklig gjenkjenning';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Gjenkjenn flere talte språk';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

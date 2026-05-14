@@ -4529,12 +4529,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Tilauksesi päättyi $date.\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.';
+    return 'Tilauksesi päättyi $date.\\nTilaa uudelleen nyt - sinulta veloitetaan välittömästi uudesta laskutusjaksosta.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Tilauksesi on asetettu peruuntumaan $date.\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
+    return 'Tilauksesi on asetettu peruuntumaan $date.\\nTilaa uudelleen nyt säilyttääksesi edut - ei veloitusta ennen $date.';
   }
 
   @override
@@ -6546,7 +6546,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Asetetaanko $appName oletusyhteenvetosovellukseksi?\n\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.';
+    return 'Asetetaanko $appName oletusyhteenvetosovellukseksi?\\n\\nTätä sovellusta käytetään automaattisesti kaikkiin tuleviin keskusteluyhteenvetoihin.';
   }
 
   @override
@@ -9239,4 +9239,38 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tehtävien poistaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get dailyReflection => 'Päivittäinen reflektio';
+
+  @override
+  String get get9PmReminderToReflect => 'Saa muistutus klo 21 päiväsi pohtimiseen';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Saa muistutus klo 21 reflektoidaksesi päivääsi ja tallentaaksesi ajatuksesi.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Aika päivittäiselle reflektiolle';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Kerro minulle päivästäsi';
+
+  @override
+  String get multiLanguageDetection => 'Monikielinen tunnistus';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Tunnista useita puhuttuja kieliä';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

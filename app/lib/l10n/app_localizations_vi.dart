@@ -4537,12 +4537,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Gói của bạn đã kết thúc vào $date.\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.';
+    return 'Gói của bạn đã kết thúc vào $date.\\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Gói của bạn được đặt để hủy vào $date.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
+    return 'Gói của bạn được đặt để hủy vào $date.\\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override
@@ -6550,7 +6550,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Đặt $appName làm ứng dụng tóm tắt mặc định của bạn?\n\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.';
+    return 'Đặt $appName làm ứng dụng tóm tắt mặc định của bạn?\\n\\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.';
   }
 
   @override
@@ -9240,4 +9240,38 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Không thể xóa các tác vụ. Vui lòng thử lại.';
+
+  @override
+  String get dailyReflection => 'Suy ngẫm hàng ngày';
+
+  @override
+  String get get9PmReminderToReflect => 'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn và ghi lại suy nghĩ.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Đến giờ suy ngẫm hàng ngày';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Kể cho tôi nghe về ngày của bạn';
+
+  @override
+  String get multiLanguageDetection => 'Phát hiện đa ngôn ngữ';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Phát hiện nhiều ngôn ngữ nói';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

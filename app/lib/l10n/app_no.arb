@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Oppgraderingen din til årsabonnementet er allerede planlagt",
     "youAreOnUnlimitedPlan": "Du er på det ubegrensede abonnementet.",
     "yourOmiUnleashed": "Din Omi, frigjort. Bli ubegrenset for uendelige muligheter.",
-    "planEndedOn": "Abonnementet ditt ble avsluttet {date}.\nAbonner på nytt nå - du blir belastet umiddelbart for en ny faktureringsperiode.",
-    "planSetToCancelOn": "Abonnementet ditt er satt til å bli kansellert {date}.\nAbonner på nytt nå for å beholde fordelene - ingen belastning til {date}.",
+    "planEndedOn": "Abonnementet ditt ble avsluttet {date}.\\nAbonner på nytt nå - du blir belastet umiddelbart for en ny faktureringsperiode.",
+    "planSetToCancelOn": "Abonnementet ditt er satt til å bli kansellert {date}.\\nAbonner på nytt nå for å beholde fordelene - ingen belastning til {date}.",
     "annualPlanStartsAutomatically": "Ditt årlige abonnement starter automatisk når ditt månedlige abonnement avsluttes.",
     "planRenewsOn": "Abonnementet ditt fornyes {date}.",
     "unlimitedConversations": "Ubegrensede samtaler",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Standard",
     "lastUsedLabel": "Sist brukt",
     "setDefaultApp": "Angi standardapp",
-    "setDefaultAppContent": "Angi {appName} som din standardapp for oppsummeringer?\n\nDenne appen vil automatisk bli brukt for alle fremtidige samtaleoppsummeringer.",
+    "setDefaultAppContent": "Angi {appName} som din standardapp for oppsummeringer?\\n\\nDenne appen vil automatisk bli brukt for alle fremtidige samtaleoppsummeringer.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Start samtaleopptak",
     "startVoiceRecording": "Start stemmeopptak",
     "bulkExportAlreadyExported": "Alle valgte oppgaver er allerede eksportert",
-    "bulkDeleteFailed": "Kunne ikke slette oppgavene. Prøv igjen."
+    "bulkDeleteFailed": "Kunne ikke slette oppgavene. Prøv igjen.",
+    "dailyReflection": "Daglig refleksjon",
+    "dailyReflectionDescription": "Få en påminnelse kl. 21 for å reflektere over dagen din og fange tankene dine.",
+    "get9PmReminderToReflect": "Få en påminnelse kl. 21 for å reflektere over dagen din",
+    "dailyReflectionNotificationTitle": "Tid for daglig refleksjon",
+    "dailyReflectionNotificationBody": "Fortell meg om dagen din",
+    "multiLanguageDetection": "Flerspråklig gjenkjenning",
+    "multiLanguageDetectionDesc": "Gjenkjenn flere talte språk"
 }

@@ -8634,13 +8634,13 @@ abstract class AppLocalizations {
   /// Message when plan has ended
   ///
   /// In en, this message translates to:
-  /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
+  /// **'Your plan ended on {date}.\\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
   String planEndedOn(String date);
 
   /// Message when plan is set to cancel
   ///
   /// In en, this message translates to:
-  /// **'Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.'**
+  /// **'Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.'**
   String planSetToCancelOn(String date);
 
   /// Info that annual plan starts automatically
@@ -12378,7 +12378,7 @@ abstract class AppLocalizations {
   /// No description provided for @setDefaultAppContent.
   ///
   /// In en, this message translates to:
-  /// **'Set {appName} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.'**
+  /// **'Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.'**
   String setDefaultAppContent(String appName);
 
   /// No description provided for @setDefaultButton.
@@ -17246,6 +17246,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete tasks. Please try again.'**
   String get bulkDeleteFailed;
+
+  /// Section header for daily reflection settings
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Reflection'**
+  String get dailyReflection;
+
+  /// Description for daily reflection
+  ///
+  /// In en, this message translates to:
+  /// **'Get a 9 PM reminder to reflect on your day'**
+  String get get9PmReminderToReflect;
+
+  /// Description text for daily reflection section
+  ///
+  /// In en, this message translates to:
+  /// **'Get a reminder at 9 PM to reflect on your day and capture your thoughts.'**
+  String get dailyReflectionDescription;
+
+  /// Title for the daily reflection notification shown at 9 PM
+  ///
+  /// In en, this message translates to:
+  /// **'Time for Daily Reflection'**
+  String get dailyReflectionNotificationTitle;
+
+  /// Body text for the daily reflection notification
+  ///
+  /// In en, this message translates to:
+  /// **'Tell me about your day'**
+  String get dailyReflectionNotificationBody;
+
+  /// Title for multi-language transcription detection toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Multi-language Detection'**
+  String get multiLanguageDetection;
+
+  /// Description for multi-language detection toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Detect multiple spoken languages'**
+  String get multiLanguageDetectionDesc;
+
+  /// Button label to translate transcript segments
+  ///
+  /// In en, this message translates to:
+  /// **'Translate Transcript'**
+  String get translateTranscript;
+
+  /// Button label to stop translation
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Translation'**
+  String get stopTranslation;
+
+  /// Button label to pause translation when auto-translate is enabled in settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Translation'**
+  String get pauseTranslation;
+
+  /// Button label to resume translation when auto-translate is enabled in settings
+  ///
+  /// In en, this message translates to:
+  /// **'Resume Translation'**
+  String get resumeTranslation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

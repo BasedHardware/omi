@@ -4523,12 +4523,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Váš plán skončil $date.\nZnovu se přihlaste nyní - budete okamžitě účtováni za nové fakturační období.';
+    return 'Váš plán skončil $date.\\nZnovu se přihlaste nyní - budete okamžitě účtováni za nové fakturační období.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Váš plán je nastaven na zrušení $date.\nZnovu se přihlaste nyní, abyste si zachovali výhody - bez poplatku do $date.';
+    return 'Váš plán je nastaven na zrušení $date.\\nZnovu se přihlaste nyní, abyste si zachovali výhody - bez poplatku do $date.';
   }
 
   @override
@@ -6535,7 +6535,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Nastavit $appName jako výchozí aplikaci pro shrnutí?\n\nTato aplikace bude automaticky použita pro všechna budoucí shrnutí konverzací.';
+    return 'Nastavit $appName jako výchozí aplikaci pro shrnutí?\\n\\nTato aplikace bude automaticky použita pro všechna budoucí shrnutí konverzací.';
   }
 
   @override
@@ -9236,4 +9236,38 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Úkoly se nepodařilo smazat. Zkuste to prosím znovu.';
+
+  @override
+  String get dailyReflection => 'Denní reflexe';
+
+  @override
+  String get get9PmReminderToReflect => 'Získejte připomínku v 21:00 k zamyšlení nad svým dnem';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Získejte připomínku ve 21:00, abyste se zamysleli nad svým dnem a zachytili své myšlenky.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Čas na denní reflexi';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Pověz mi o svém dni';
+
+  @override
+  String get multiLanguageDetection => 'Detekce více jazyků';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detekovat více mluvených jazyků';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

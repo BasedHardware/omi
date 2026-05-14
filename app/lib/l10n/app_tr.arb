@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Yıllık plana yükseltmeniz zaten planlandı",
     "youAreOnUnlimitedPlan": "Sınırsız Plan'dasınız.",
     "yourOmiUnleashed": "Omi'niz, serbest bırakıldı. Sonsuz olasılıklar için sınırsız olun.",
-    "planEndedOn": "Planınız {date} tarihinde sona erdi.\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.",
-    "planSetToCancelOn": "Planınız {date} tarihinde iptal edilecek şekilde ayarlandı.\nAvantajlarınızı korumak için şimdi yeniden abone olun - {date} tarihine kadar ücret yok.",
+    "planEndedOn": "Planınız {date} tarihinde sona erdi.\\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.",
+    "planSetToCancelOn": "Planınız {date} tarihinde iptal edilecek şekilde ayarlandı.\\nAvantajlarınızı korumak için şimdi yeniden abone olun - {date} tarihine kadar ücret yok.",
     "annualPlanStartsAutomatically": "Aylık planınız sona erdiğinde yıllık planınız otomatik olarak başlayacak.",
     "planRenewsOn": "Planınız {date} tarihinde yenilenir.",
     "unlimitedConversations": "Sınırsız konuşmalar",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Varsayılan",
     "lastUsedLabel": "Son Kullanılan",
     "setDefaultApp": "Varsayılan Uygulamayı Ayarla",
-    "setDefaultAppContent": "{appName} varsayılan özet uygulamanız olarak ayarlansın mı?\n\nBu uygulama gelecekteki tüm konuşma özetleri için otomatik olarak kullanılacaktır.",
+    "setDefaultAppContent": "{appName} varsayılan özet uygulamanız olarak ayarlansın mı?\\n\\nBu uygulama gelecekteki tüm konuşma özetleri için otomatik olarak kullanılacaktır.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3052,5 +3052,12 @@
     "startCallRecording": "Arama kaydını başlat",
     "startVoiceRecording": "Ses kaydını başlat",
     "bulkExportAlreadyExported": "Seçilen tüm görevler zaten dışa aktarıldı",
-    "bulkDeleteFailed": "Görevler silinemedi. Lütfen tekrar deneyin."
+    "bulkDeleteFailed": "Görevler silinemedi. Lütfen tekrar deneyin.",
+    "dailyReflection": "Günlük Düşünce",
+    "dailyReflectionDescription": "Gününüzü değerlendirmek ve düşüncelerinizi kaydetmek için saat 21:00'da hatırlatıcı alın.",
+    "get9PmReminderToReflect": "Gününüzü değerlendirmek için saat 21:00 hatırlatıcısı alın",
+    "dailyReflectionNotificationTitle": "Günlük düşünce zamanı",
+    "dailyReflectionNotificationBody": "Bana gününü anlat",
+    "multiLanguageDetection": "Çok dilli algılama",
+    "multiLanguageDetectionDesc": "Birden fazla konuşulan dili algıla"
 }

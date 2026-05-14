@@ -4572,12 +4572,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Votre forfait s\'est terminé le $date.\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.';
+    return 'Votre forfait s\'est terminé le $date.\\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Votre forfait est programmé pour être annulé le $date.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
+    return 'Votre forfait est programmé pour être annulé le $date.\\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu\'au $date.';
   }
 
   @override
@@ -6602,7 +6602,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Définir $appName comme application de résumé par défaut ?\n\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.';
+    return 'Définir $appName comme application de résumé par défaut ?\\n\\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.';
   }
 
   @override
@@ -9323,4 +9323,38 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Impossible de supprimer les tâches. Veuillez réessayer.';
+
+  @override
+  String get dailyReflection => 'Réflexion quotidienne';
+
+  @override
+  String get get9PmReminderToReflect => 'Recevez un rappel à 21h pour réfléchir à votre journée';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Recevez un rappel à 21h pour réfléchir à votre journée et capturer vos pensées.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'L\'heure de la réflexion quotidienne';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Raconte-moi ta journée';
+
+  @override
+  String get multiLanguageDetection => 'Détection multilingue';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Détecter plusieurs langues parlées';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

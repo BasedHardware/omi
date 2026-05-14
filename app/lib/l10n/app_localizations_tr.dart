@@ -4538,12 +4538,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Planınız $date tarihinde sona erdi.\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.';
+    return 'Planınız $date tarihinde sona erdi.\\nŞimdi yeniden abone olun - yeni fatura dönemi için hemen ücretlendirileceksiniz.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Planınız $date tarihinde iptal edilecek şekilde ayarlandı.\nAvantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
+    return 'Planınız $date tarihinde iptal edilecek şekilde ayarlandı.\\nAvantajlarınızı korumak için şimdi yeniden abone olun - $date tarihine kadar ücret yok.';
   }
 
   @override
@@ -6556,7 +6556,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName varsayılan özet uygulamanız olarak ayarlansın mı?\n\nBu uygulama gelecekteki tüm konuşma özetleri için otomatik olarak kullanılacaktır.';
+    return '$appName varsayılan özet uygulamanız olarak ayarlansın mı?\\n\\nBu uygulama gelecekteki tüm konuşma özetleri için otomatik olarak kullanılacaktır.';
   }
 
   @override
@@ -9253,4 +9253,38 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get dailyReflection => 'Günlük Düşünce';
+
+  @override
+  String get get9PmReminderToReflect => 'Gününüzü değerlendirmek için saat 21:00 hatırlatıcısı alın';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Gününüzü değerlendirmek ve düşüncelerinizi kaydetmek için saat 21:00\'da hatırlatıcı alın.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Günlük düşünce zamanı';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Bana gününü anlat';
+
+  @override
+  String get multiLanguageDetection => 'Çok dilli algılama';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Birden fazla konuşulan dili algıla';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

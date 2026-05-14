@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Peningkatan Anda ke paket tahunan sudah dijadwalkan",
     "youAreOnUnlimitedPlan": "Anda berada di Paket Tak Terbatas.",
     "yourOmiUnleashed": "Omi Anda, dibebaskan. Pilih tak terbatas untuk kemungkinan tanpa akhir.",
-    "planEndedOn": "Paket Anda berakhir pada {date}.\nBerlangganan lagi sekarang - Anda akan dikenakan biaya segera untuk periode penagihan baru.",
-    "planSetToCancelOn": "Paket Anda diatur untuk dibatalkan pada {date}.\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
+    "planEndedOn": "Paket Anda berakhir pada {date}.\\nBerlangganan lagi sekarang - Anda akan dikenakan biaya segera untuk periode penagihan baru.",
+    "planSetToCancelOn": "Paket Anda diatur untuk dibatalkan pada {date}.\\nBerlangganan lagi sekarang untuk mempertahankan manfaat Anda - tidak ada biaya hingga {date}.",
     "annualPlanStartsAutomatically": "Paket tahunan Anda akan dimulai secara otomatis saat paket bulanan Anda berakhir.",
     "planRenewsOn": "Paket Anda diperbarui pada {date}.",
     "unlimitedConversations": "Percakapan tak terbatas",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Bawaan",
     "lastUsedLabel": "Terakhir Digunakan",
     "setDefaultApp": "Atur Aplikasi Default",
-    "setDefaultAppContent": "Atur {appName} sebagai aplikasi ringkasan default Anda?\n\nAplikasi ini akan otomatis digunakan untuk semua ringkasan percakapan di masa depan.",
+    "setDefaultAppContent": "Atur {appName} sebagai aplikasi ringkasan default Anda?\\n\\nAplikasi ini akan otomatis digunakan untuk semua ringkasan percakapan di masa depan.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3059,5 +3059,12 @@
     "startCallRecording": "Mulai rekaman panggilan",
     "startVoiceRecording": "Mulai rekaman suara",
     "bulkExportAlreadyExported": "Semua tugas yang dipilih sudah diekspor",
-    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi."
+    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi.",
+    "dailyReflection": "Refleksi Harian",
+    "dailyReflectionDescription": "Dapatkan pengingat pukul 21.00 untuk merefleksikan hari Anda dan mencatat pikiran Anda.",
+    "get9PmReminderToReflect": "Dapatkan pengingat jam 9 malam untuk merenungkan hari Anda",
+    "dailyReflectionNotificationTitle": "Refleksi Harian",
+    "dailyReflectionNotificationBody": "Saatnya untuk refleksi harian Anda",
+    "multiLanguageDetection": "Deteksi multibahasa",
+    "multiLanguageDetectionDesc": "Deteksi beberapa bahasa lisan"
 }

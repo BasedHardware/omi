@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Naik taraf anda ke pelan tahunan sudah dijadualkan",
     "youAreOnUnlimitedPlan": "Anda berada di Pelan Tanpa Had.",
     "yourOmiUnleashed": "Omi anda, dibebaskan. Pilih tanpa had untuk kemungkinan tanpa batas.",
-    "planEndedOn": "Pelan anda tamat pada {date}.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.",
-    "planSetToCancelOn": "Pelan anda ditetapkan untuk dibatalkan pada {date}.\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
+    "planEndedOn": "Pelan anda tamat pada {date}.\\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh pengebilan baharu.",
+    "planSetToCancelOn": "Pelan anda ditetapkan untuk dibatalkan pada {date}.\\nLanggan semula sekarang untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
     "annualPlanStartsAutomatically": "Pelan tahunan anda akan bermula secara automatik apabila pelan bulanan anda tamat.",
     "planRenewsOn": "Pelan anda diperbaharui pada {date}.",
     "unlimitedConversations": "Perbualan tanpa had",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Lalai",
     "lastUsedLabel": "Terakhir Digunakan",
     "setDefaultApp": "Tetapkan Aplikasi Lalai",
-    "setDefaultAppContent": "Tetapkan {appName} sebagai aplikasi ringkasan lalai anda?\n\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.",
+    "setDefaultAppContent": "Tetapkan {appName} sebagai aplikasi ringkasan lalai anda?\\n\\nAplikasi ini akan digunakan secara automatik untuk semua ringkasan perbualan pada masa hadapan.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Mula rakaman panggilan",
     "startVoiceRecording": "Mula rakaman suara",
     "bulkExportAlreadyExported": "Semua tugasan yang dipilih telah dieksport",
-    "bulkDeleteFailed": "Tidak dapat memadam tugasan. Sila cuba lagi."
+    "bulkDeleteFailed": "Tidak dapat memadam tugasan. Sila cuba lagi.",
+    "dailyReflection": "Refleksi Harian",
+    "dailyReflectionDescription": "Terima peringatan pada jam 9 malam untuk merenung hari anda dan mencatat fikiran anda.",
+    "get9PmReminderToReflect": "Dapatkan peringatan jam 9 malam untuk merenung hari anda",
+    "dailyReflectionNotificationTitle": "Masa untuk Refleksi Harian",
+    "dailyReflectionNotificationBody": "Ceritakan tentang hari anda",
+    "multiLanguageDetection": "Pengesanan berbilang bahasa",
+    "multiLanguageDetectionDesc": "Kesan pelbagai bahasa pertuturan"
 }

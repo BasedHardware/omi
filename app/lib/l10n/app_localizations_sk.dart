@@ -4526,12 +4526,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Váš plán skončil $date.\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.';
+    return 'Váš plán skončil $date.\\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Váš plán je nastavený na zrušenie $date.\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
+    return 'Váš plán je nastavený na zrušenie $date.\\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
   }
 
   @override
@@ -6544,7 +6544,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Nastaviť $appName ako predvolenú aplikáciu na zhrnutia?\n\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.';
+    return 'Nastaviť $appName ako predvolenú aplikáciu na zhrnutia?\\n\\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.';
   }
 
   @override
@@ -9228,4 +9228,38 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Úlohy sa nepodarilo odstrániť. Skúste to znova.';
+
+  @override
+  String get dailyReflection => 'Denná reflexia';
+
+  @override
+  String get get9PmReminderToReflect => 'Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Čas na dennú reflexiu';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
+
+  @override
+  String get multiLanguageDetection => 'Viacjazyčná detekcia';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detekovať viacero hovorených jazykov';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

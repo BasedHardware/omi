@@ -4531,12 +4531,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Din plan avslutades $date.\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
+    return 'Din plan avslutades $date.\\nPrenumerera igen nu - du debiteras omedelbart för en ny faktureringsperiod.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Din plan är inställd på att avbrytas $date.\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
+    return 'Din plan är inställd på att avbrytas $date.\\nPrenumerera igen nu för att behålla dina fördelar - ingen avgift till $date.';
   }
 
   @override
@@ -6548,7 +6548,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Ange $appName som din standardapp för sammanfattningar?\n\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.';
+    return 'Ange $appName som din standardapp för sammanfattningar?\\n\\nDenna app kommer automatiskt att användas för alla framtida konversationssammanfattningar.';
   }
 
   @override
@@ -9244,4 +9244,38 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Det gick inte att ta bort uppgifterna. Försök igen.';
+
+  @override
+  String get dailyReflection => 'Daglig reflektion';
+
+  @override
+  String get get9PmReminderToReflect => 'Få en påminnelse kl. 21 att reflektera över din dag';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Få en påminnelse kl. 21 för att reflektera över din dag och fånga dina tankar.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Dags för daglig reflektion';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Berätta om din dag';
+
+  @override
+  String get multiLanguageDetection => 'Flerspråkig igenkänning';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Identifiera flera talade språk';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

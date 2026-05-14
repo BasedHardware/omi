@@ -1393,8 +1393,8 @@
     "upgradeAlreadyScheduled": "La teva actualització al pla anual ja està programada",
     "youAreOnUnlimitedPlan": "Estàs al pla Il·limitat.",
     "yourOmiUnleashed": "El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.",
-    "planEndedOn": "El teu pla va acabar el {date}.\nTorna a subscriure't ara - se't cobrarà immediatament per un nou període de facturació.",
-    "planSetToCancelOn": "El teu pla està configurat per cancel·lar-se el {date}.\nTorna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
+    "planEndedOn": "El teu pla va acabar el {date}.\\nTorna a subscriure't ara - se't cobrarà immediatament per un nou període de facturació.",
+    "planSetToCancelOn": "El teu pla està configurat per cancel·lar-se el {date}.\\nTorna a subscriure't ara per mantenir els teus beneficis - sense càrrec fins {date}.",
     "annualPlanStartsAutomatically": "El teu pla anual començarà automàticament quan acabi el teu pla mensual.",
     "planRenewsOn": "El teu pla es renova el {date}.",
     "unlimitedConversations": "Converses il·limitades",
@@ -2033,7 +2033,7 @@
     "defaultLabel": "Predeterminada",
     "lastUsedLabel": "Últim ús",
     "setDefaultApp": "Establir aplicació predeterminada",
-    "setDefaultAppContent": "Establir {appName} com la teva aplicació de resum predeterminada?\n\nAquesta aplicació s'utilitzarà automàticament per a tots els resums de converses futures.",
+    "setDefaultAppContent": "Establir {appName} com la teva aplicació de resum predeterminada?\\n\\nAquesta aplicació s'utilitzarà automàticament per a tots els resums de converses futures.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -2986,5 +2986,12 @@
     "startCallRecording": "Inicia l'enregistrament de trucada",
     "startVoiceRecording": "Inicia l'enregistrament de veu",
     "bulkExportAlreadyExported": "Totes les tasques seleccionades ja s'han exportat",
-    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar."
+    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar.",
+    "dailyReflection": "Reflexió diària",
+    "dailyReflectionDescription": "Rep un recordatori a les 21:00 per reflexionar sobre el teu dia i capturar els teus pensaments.",
+    "get9PmReminderToReflect": "Rep un recordatori a les 21:00 per reflexionar sobre el teu dia",
+    "dailyReflectionNotificationTitle": "Hora de la reflexió diària",
+    "dailyReflectionNotificationBody": "Explica'm el teu dia",
+    "multiLanguageDetection": "Detecció multilingüe",
+    "multiLanguageDetectionDesc": "Detecta diversos idiomes parlats"
 }

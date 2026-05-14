@@ -1392,8 +1392,8 @@
     "upgradeAlreadyScheduled": "您升级到年度计划的安排已确定",
     "youAreOnUnlimitedPlan": "您正在使用无限版计划。",
     "yourOmiUnleashed": "您的Omi，解放了。选择无限版，开启无限可能。",
-    "planEndedOn": "您的计划于{date}结束。\n立即重新订阅 - 您将立即被收取新计费周期的费用。",
-    "planSetToCancelOn": "您的计划将于{date}取消。\n立即重新订阅以保留您的权益 - {date}之前不收费。",
+    "planEndedOn": "您的计划于{date}结束。\\n立即重新订阅 - 您将立即被收取新计费周期的费用。",
+    "planSetToCancelOn": "您的计划将于{date}取消。\\n立即重新订阅以保留您的权益 - {date}之前不收费。",
     "annualPlanStartsAutomatically": "您的年度计划将在月度计划结束时自动开始。",
     "planRenewsOn": "您的计划将于{date}续订。",
     "unlimitedConversations": "无限对话",
@@ -2051,7 +2051,7 @@
     "defaultLabel": "默认",
     "lastUsedLabel": "上次使用",
     "setDefaultApp": "设置默认应用",
-    "setDefaultAppContent": "将 {appName} 设为您的默认摘要应用？\n\n此应用将自动用于所有未来的对话摘要。",
+    "setDefaultAppContent": "将 {appName} 设为您的默认摘要应用？\\n\\n此应用将自动用于所有未来的对话摘要。",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3039,5 +3039,12 @@
     "startCallRecording": "开始通话录音",
     "startVoiceRecording": "开始语音录音",
     "bulkExportAlreadyExported": "所选任务已全部导出",
-    "bulkDeleteFailed": "无法删除任务，请重试。"
+    "bulkDeleteFailed": "无法删除任务，请重试。",
+    "dailyReflection": "每日反思",
+    "dailyReflectionDescription": "晚上 9 点收到提醒，反思您的一天并记录想法。",
+    "get9PmReminderToReflect": "在晚上 9 点收到提醒，回顾您的一天",
+    "dailyReflectionNotificationTitle": "每日反思时间",
+    "dailyReflectionNotificationBody": "告诉我你今天过得怎么样",
+    "multiLanguageDetection": "多语言检测",
+    "multiLanguageDetectionDesc": "检测多种口语"
 }

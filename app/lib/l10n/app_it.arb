@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Il tuo aggiornamento al piano annuale è già programmato",
     "youAreOnUnlimitedPlan": "Sei sul piano Illimitato.",
     "yourOmiUnleashed": "Il tuo Omi, liberato. Passa a illimitato per possibilità infinite.",
-    "planEndedOn": "Il tuo piano è terminato il {date}.\nRiabbonati ora - ti verrà addebitato immediatamente per un nuovo periodo di fatturazione.",
-    "planSetToCancelOn": "Il tuo piano è impostato per essere annullato il {date}.\nRiabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
+    "planEndedOn": "Il tuo piano è terminato il {date}.\\nRiabbonati ora - ti verrà addebitato immediatamente per un nuovo periodo di fatturazione.",
+    "planSetToCancelOn": "Il tuo piano è impostato per essere annullato il {date}.\\nRiabbonati ora per mantenere i tuoi benefici - nessun addebito fino al {date}.",
     "annualPlanStartsAutomatically": "Il tuo piano annuale inizierà automaticamente al termine del piano mensile.",
     "planRenewsOn": "Il tuo piano si rinnova il {date}.",
     "unlimitedConversations": "Conversazioni illimitate",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Predefinito",
     "lastUsedLabel": "Ultimo utilizzo",
     "setDefaultApp": "Imposta app predefinita",
-    "setDefaultAppContent": "Impostare {appName} come app di riepilogo predefinita?\n\nQuesta app verrà utilizzata automaticamente per tutti i futuri riepiloghi delle conversazioni.",
+    "setDefaultAppContent": "Impostare {appName} come app di riepilogo predefinita?\\n\\nQuesta app verrà utilizzata automaticamente per tutti i futuri riepiloghi delle conversazioni.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Avvia registrazione chiamata",
     "startVoiceRecording": "Avvia registrazione vocale",
     "bulkExportAlreadyExported": "Tutte le attività selezionate sono già state esportate",
-    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova."
+    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova.",
+    "dailyReflection": "Riflessione giornaliera",
+    "dailyReflectionDescription": "Ricevi un promemoria alle 21:00 per riflettere sulla tua giornata e catturare i tuoi pensieri.",
+    "get9PmReminderToReflect": "Ricevi un promemoria alle 21:00 per riflettere sulla tua giornata",
+    "dailyReflectionNotificationTitle": "È ora della riflessione quotidiana",
+    "dailyReflectionNotificationBody": "Raccontami della tua giornata",
+    "multiLanguageDetection": "Rilevamento multilingue",
+    "multiLanguageDetectionDesc": "Rileva più lingue parlate"
 }

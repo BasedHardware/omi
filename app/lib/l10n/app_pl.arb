@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Twoja aktualizacja do planu rocznego jest już zaplanowana",
     "youAreOnUnlimitedPlan": "Jesteś na planie Unlimited.",
     "yourOmiUnleashed": "Twoje Omi, uwolnione. Przejdź na unlimited dla nieskończonych możliwości.",
-    "planEndedOn": "Twój plan zakończył się {date}.\nSubskrybuj ponownie teraz - zostaniesz natychmiast obciążony za nowy okres rozliczeniowy.",
-    "planSetToCancelOn": "Twój plan jest ustawiony na anulowanie {date}.\nSubskrybuj ponownie teraz, aby zachować korzyści - bez opłat do {date}.",
+    "planEndedOn": "Twój plan zakończył się {date}.\\nSubskrybuj ponownie teraz - zostaniesz natychmiast obciążony za nowy okres rozliczeniowy.",
+    "planSetToCancelOn": "Twój plan jest ustawiony na anulowanie {date}.\\nSubskrybuj ponownie teraz, aby zachować korzyści - bez opłat do {date}.",
     "annualPlanStartsAutomatically": "Twój plan roczny rozpocznie się automatycznie po zakończeniu planu miesięcznego.",
     "planRenewsOn": "Twój plan odnawia się {date}.",
     "unlimitedConversations": "Nieograniczone rozmowy",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Domyślny",
     "lastUsedLabel": "Ostatnio używany",
     "setDefaultApp": "Ustaw domyślną aplikację",
-    "setDefaultAppContent": "Ustawić {appName} jako domyślną aplikację do podsumowań?\n\nTa aplikacja będzie automatycznie używana do wszystkich przyszłych podsumowań rozmów.",
+    "setDefaultAppContent": "Ustawić {appName} jako domyślną aplikację do podsumowań?\\n\\nTa aplikacja będzie automatycznie używana do wszystkich przyszłych podsumowań rozmów.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3052,5 +3052,12 @@
     "startCallRecording": "Rozpocznij nagrywanie rozmowy",
     "startVoiceRecording": "Rozpocznij nagrywanie głosu",
     "bulkExportAlreadyExported": "Wszystkie wybrane zadania zostały już wyeksportowane",
-    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie."
+    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie.",
+    "dailyReflection": "Codzienna refleksja",
+    "dailyReflectionDescription": "Otrzymuj przypomnienie o 21:00, aby przemyśleć swój dzień i zapisać swoje myśli.",
+    "get9PmReminderToReflect": "Otrzymuj przypomnienie o 21:00, aby przemyśleć swój dzień",
+    "dailyReflectionNotificationTitle": "Czas na codzienną refleksję",
+    "dailyReflectionNotificationBody": "Opowiedz mi o swoim dniu",
+    "multiLanguageDetection": "Wykrywanie wielu języków",
+    "multiLanguageDetectionDesc": "Wykrywaj wiele języków mówionych"
 }

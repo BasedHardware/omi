@@ -4552,12 +4552,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'A csomagja $date-án lejárt.\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.';
+    return 'A csomagja $date-án lejárt.\\nIratkozzon fel újra most - azonnal felszámítjuk az új számlázási időszakot.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'A csomagja $date-án törlésre van beállítva.\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
+    return 'A csomagja $date-án törlésre van beállítva.\\nIratkozzon fel újra most, hogy megtartsa előnyeit - nincs díj $date-ig.';
   }
 
   @override
@@ -6575,7 +6575,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Beállítja a(z) $appName alkalmazást alapértelmezett összefoglaló alkalmazásként?\n\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.';
+    return 'Beállítja a(z) $appName alkalmazást alapértelmezett összefoglaló alkalmazásként?\\n\\nEz az alkalmazás automatikusan használva lesz minden jövőbeli beszélgetés összefoglalásához.';
   }
 
   @override
@@ -9279,4 +9279,38 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
+
+  @override
+  String get dailyReflection => 'Napi reflexió';
+
+  @override
+  String get get9PmReminderToReflect => 'Kapjon emlékeztetőt este 9-kor, hogy elgondolkodjon a napján';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Kapj emlékeztetőt este 9-kor, hogy elgondolkodj a napodról és rögzítsd gondolataidat.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Ideje a napi reflexiónak';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Mesélj a napodról';
+
+  @override
+  String get multiLanguageDetection => 'Többnyelvű felismerés';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Több beszélt nyelv felismerése';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

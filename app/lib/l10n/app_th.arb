@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "การอัปเกรดของคุณไปยังแพ็คเกจรายปีถูกกำหนดไว้แล้ว",
     "youAreOnUnlimitedPlan": "คุณอยู่ในแพ็คเกจ Unlimited",
     "yourOmiUnleashed": "Omi ของคุณ ปลดปล่อย ไปสู่ Unlimited เพื่อความเป็นไปได้ไม่สิ้นสุด",
-    "planEndedOn": "แพ็คเกจของคุณสิ้นสุดเมื่อ {date}\nสมัครใหม่ตอนนี้ - คุณจะถูกเรียกเก็บเงินทันทีสำหรับรอบการเรียกเก็บเงินใหม่",
-    "planSetToCancelOn": "แพ็คเกจของคุณถูกตั้งค่าให้ยกเลิกในวันที่ {date}\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง {date}",
+    "planEndedOn": "แพ็คเกจของคุณสิ้นสุดเมื่อ {date}\\nสมัครใหม่ตอนนี้ - คุณจะถูกเรียกเก็บเงินทันทีสำหรับรอบการเรียกเก็บเงินใหม่",
+    "planSetToCancelOn": "แพ็คเกจของคุณถูกตั้งค่าให้ยกเลิกในวันที่ {date}\\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีค่าใช้จ่ายจนถึง {date}",
     "annualPlanStartsAutomatically": "แพ็คเกจรายปีของคุณจะเริ่มโดยอัตโนมัติเมื่อแพ็คเกจรายเดือนของคุณสิ้นสุด",
     "planRenewsOn": "แพ็คเกจของคุณต่ออายุในวันที่ {date}",
     "unlimitedConversations": "บทสนทนาไม่จำกัด",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "ค่าเริ่มต้น",
     "lastUsedLabel": "ใช้ล่าสุด",
     "setDefaultApp": "ตั้งแอปเริ่มต้น",
-    "setDefaultAppContent": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้นของคุณ?\n\nแอปนี้จะถูกใช้โดยอัตโนมัติสำหรับการสรุปการสนทนาทั้งหมดในอนาคต",
+    "setDefaultAppContent": "ตั้ง {appName} เป็นแอปสรุปเริ่มต้นของคุณ?\\n\\nแอปนี้จะถูกใช้โดยอัตโนมัติสำหรับการสรุปการสนทนาทั้งหมดในอนาคต",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "เริ่มบันทึกการโทร",
     "startVoiceRecording": "เริ่มบันทึกเสียง",
     "bulkExportAlreadyExported": "งานที่เลือกทั้งหมดถูกส่งออกแล้ว",
-    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง"
+    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง",
+    "dailyReflection": "การทบทวนรายวัน",
+    "dailyReflectionDescription": "รับการเตือนความจำเวลา 21.00 น. เพื่อทบทวนวันของคุณและบันทึกความคิด",
+    "get9PmReminderToReflect": "รับการแจ้งเตือนเวลา 21:00 น. เพื่อทบทวนวันของคุณ",
+    "dailyReflectionNotificationTitle": "ถึงเวลาทบทวนรายวัน",
+    "dailyReflectionNotificationBody": "เล่าให้ฟังเกี่ยวกับวันของคุณ",
+    "multiLanguageDetection": "การตรวจจับหลายภาษา",
+    "multiLanguageDetectionDesc": "ตรวจจับภาษาพูดหลายภาษา"
 }

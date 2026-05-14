@@ -363,13 +363,19 @@ static void process_write_data_req(const sd_req_t *req)
 
     if (should_rotate_file()) {
         LOG_INF("[SD_WORK] Rotating file after 30 min");
-        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
+        if (!spi_woken) {
+            sd_set_io_low_power(false);
+            spi_woken = true;
+        }
         flush_batch_buffer();
         create_audio_file_with_timestamp();
     }
 
     if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
-        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
+        if (!spi_woken) {
+            sd_set_io_low_power(false);
+            spi_woken = true;
+        }
         flush_batch_buffer();
         if (write_batch_offset + req->u.write.len > sizeof(write_batch_buffer)) {
             LOG_ERR("[SD_WORK] batch buffer overflow guard len=%u off=%u",
@@ -387,7 +393,10 @@ static void process_write_data_req(const sd_req_t *req)
     bool queue_pressure_high = queued_writes >= (SD_REQ_QUEUE_MSGS / 3);
 
     if (write_batch_counter >= WRITE_BATCH_COUNT || queue_pressure_high) {
-        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
+        if (!spi_woken) {
+            sd_set_io_low_power(false);
+            spi_woken = true;
+        }
         flush_batch_buffer();
     }
 
@@ -395,7 +404,10 @@ static void process_write_data_req(const sd_req_t *req)
         (bytes_since_sync > 0) && ((k_uptime_get() - last_file_sync_uptime_ms) >= SD_FSYNC_INTERVAL_MS);
 
     if (sync_due_to_interval) {
-        if (!spi_woken) { sd_set_io_low_power(false); spi_woken = true; }
+        if (!spi_woken) {
+            sd_set_io_low_power(false);
+            spi_woken = true;
+        }
         lfs_file_sync(&lfs_fs, &lfs_fil_data);
         data_sync_gen++;
         bytes_since_sync = 0;
@@ -1810,8 +1822,7 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     if (sd_shutdown_in_progress) {
         int64_t now = k_uptime_get();
         if (now - last_shutdown_drop_log_ms > 1000) {
-            LOG_WRN("write_to_file dropped: SD %s",
-                    sd_shutdown_in_progress ? "shutdown" : "paused");
+            LOG_WRN("write_to_file dropped: SD %s", sd_shutdown_in_progress ? "shutdown" : "paused");
             last_shutdown_drop_log_ms = now;
         }
         return 0;

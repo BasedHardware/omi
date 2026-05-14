@@ -5263,7 +5263,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Your plan ended on {date}.\nResubscribe now - you'll be charged immediately for a new billing period.",
+    "planEndedOn": "Your plan ended on {date}.\\nResubscribe now - you'll be charged immediately for a new billing period.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5273,7 +5273,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
+    "planSetToCancelOn": "Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -8004,7 +8004,7 @@
     "defaultLabel": "Default",
     "lastUsedLabel": "Last Used",
     "setDefaultApp": "Set Default App",
-    "setDefaultAppContent": "Set {appName} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.",
+    "setDefaultAppContent": "Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -11020,5 +11020,49 @@
     "bulkDeleteFailed": "Could not delete tasks. Please try again.",
     "@bulkDeleteFailed": {
         "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
+    },
+    "dailyReflection": "Daily Reflection",
+    "@dailyReflection": {
+        "description": "Section header for daily reflection settings"
+    },
+    "get9PmReminderToReflect": "Get a 9 PM reminder to reflect on your day",
+    "@get9PmReminderToReflect": {
+        "description": "Description for daily reflection"
+    },
+    "dailyReflectionDescription": "Get a reminder at 9 PM to reflect on your day and capture your thoughts.",
+    "@dailyReflectionDescription": {
+        "description": "Description text for daily reflection section"
+    },
+    "dailyReflectionNotificationTitle": "Time for Daily Reflection",
+    "@dailyReflectionNotificationTitle": {
+        "description": "Title for the daily reflection notification shown at 9 PM"
+    },
+    "dailyReflectionNotificationBody": "Tell me about your day",
+    "@dailyReflectionNotificationBody": {
+        "description": "Body text for the daily reflection notification"
+    },
+    "multiLanguageDetection": "Multi-language Detection",
+    "@multiLanguageDetection": {
+        "description": "Title for multi-language transcription detection toggle"
+    },
+    "multiLanguageDetectionDesc": "Detect multiple spoken languages",
+    "@multiLanguageDetectionDesc": {
+        "description": "Description for multi-language detection toggle"
+    },
+    "translateTranscript": "Translate Transcript",
+    "@translateTranscript": {
+        "description": "Button label to translate transcript segments"
+    },
+    "stopTranslation": "Stop Translation",
+    "@stopTranslation": {
+        "description": "Button label to stop translation"
+    },
+    "pauseTranslation": "Pause Translation",
+    "@pauseTranslation": {
+        "description": "Button label to pause translation when auto-translate is enabled in settings"
+    },
+    "resumeTranslation": "Resume Translation",
+    "@resumeTranslation": {
+        "description": "Button label to resume translation when auto-translate is enabled in settings"
     }
 }

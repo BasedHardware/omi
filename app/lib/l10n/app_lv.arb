@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Jūsu jaunināšana uz gada plānu jau ir ieplānota",
     "youAreOnUnlimitedPlan": "Jūs esat Neierobežotajā plānā.",
     "yourOmiUnleashed": "Jūsu Omi, atbrīvots. Kļūstiet neierobežots bezgalīgām iespējām.",
-    "planEndedOn": "Jūsu plāns beidzās {date}.\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.",
-    "planSetToCancelOn": "Jūsu plāns ir iestatīts atcelšanai {date}.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz {date}.",
+    "planEndedOn": "Jūsu plāns beidzās {date}.\\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.",
+    "planSetToCancelOn": "Jūsu plāns ir iestatīts atcelšanai {date}.\\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz {date}.",
     "annualPlanStartsAutomatically": "Jūsu gada plāns automātiski sāksies, kad beigsies jūsu mēneša plāns.",
     "planRenewsOn": "Jūsu plāns tiek atjaunots {date}.",
     "unlimitedConversations": "Neierobežotas sarunas",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Noklusējums",
     "lastUsedLabel": "Pēdējais lietotais",
     "setDefaultApp": "Iestatīt noklusējuma lietotni",
-    "setDefaultAppContent": "Vai iestatīt {appName} kā noklusējuma kopsavilkuma lietotni?\n\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.",
+    "setDefaultAppContent": "Vai iestatīt {appName} kā noklusējuma kopsavilkuma lietotni?\\n\\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Sākt zvana ierakstīšanu",
     "startVoiceRecording": "Sākt balss ierakstīšanu",
     "bulkExportAlreadyExported": "Visi atlasītie uzdevumi jau ir eksportēti",
-    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz."
+    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.",
+    "dailyReflection": "Ikdienas pārdomu",
+    "dailyReflectionDescription": "Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu un piefiksētu domas.",
+    "get9PmReminderToReflect": "Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu",
+    "dailyReflectionNotificationTitle": "Laiks ikdienas pārdomām",
+    "dailyReflectionNotificationBody": "Pastāsti man par savu dienu",
+    "multiLanguageDetection": "Daudzvalodu noteikšana",
+    "multiLanguageDetectionDesc": "Noteikt vairākas runātās valodas"
 }

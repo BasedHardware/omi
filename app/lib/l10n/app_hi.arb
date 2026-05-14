@@ -1392,8 +1392,8 @@
     "upgradeAlreadyScheduled": "आपका वार्षिक योजना में अपग्रेड पहले से निर्धारित है",
     "youAreOnUnlimitedPlan": "आप अनलिमिटेड प्लान पर हैं।",
     "yourOmiUnleashed": "आपका Omi, मुक्त। असीमित संभावनाओं के लिए अनलिमिटेड हो जाएं।",
-    "planEndedOn": "आपकी योजना {date} को समाप्त हो गई।\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।",
-    "planSetToCancelOn": "आपकी योजना {date} को रद्द होने के लिए सेट है।\nअपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - {date} तक कोई शुल्क नहीं।",
+    "planEndedOn": "आपकी योजना {date} को समाप्त हो गई।\\nअभी पुनः सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।",
+    "planSetToCancelOn": "आपकी योजना {date} को रद्द होने के लिए सेट है।\\nअपने लाभ बनाए रखने के लिए अभी पुनः सदस्यता लें - {date} तक कोई शुल्क नहीं।",
     "annualPlanStartsAutomatically": "जब आपकी मासिक योजना समाप्त होगी तो आपकी वार्षिक योजना स्वचालित रूप से शुरू हो जाएगी।",
     "planRenewsOn": "आपकी योजना {date} को नवीनीकृत होती है।",
     "unlimitedConversations": "असीमित बातचीत",
@@ -2051,7 +2051,7 @@
     "defaultLabel": "डिफ़ॉल्ट",
     "lastUsedLabel": "अंतिम उपयोग",
     "setDefaultApp": "डिफ़ॉल्ट ऐप सेट करें",
-    "setDefaultAppContent": "क्या {appName} को आपके डिफ़ॉल्ट सारांश ऐप के रूप में सेट करें?\n\nइस ऐप का उपयोग स्वचालित रूप से सभी भविष्य की बातचीत के सारांश के लिए किया जाएगा।",
+    "setDefaultAppContent": "क्या {appName} को आपके डिफ़ॉल्ट सारांश ऐप के रूप में सेट करें?\\n\\nइस ऐप का उपयोग स्वचालित रूप से सभी भविष्य की बातचीत के सारांश के लिए किया जाएगा।",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3018,5 +3018,12 @@
     "startCallRecording": "कॉल रिकॉर्डिंग शुरू करें",
     "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें",
     "bulkExportAlreadyExported": "सभी चयनित कार्य पहले ही निर्यात किए जा चुके हैं",
-    "bulkDeleteFailed": "कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।"
+    "bulkDeleteFailed": "कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।",
+    "dailyReflection": "दैनिक चिंतन",
+    "dailyReflectionDescription": "रात 9 बजे अपने दिन पर विचार करने और अपने विचारों को कैप्चर करने के लिए एक अनुस्मारक प्राप्त करें।",
+    "get9PmReminderToReflect": "अपने दिन पर विचार करने के लिए रात 9 बजे रिमाइंडर प्राप्त करें",
+    "dailyReflectionNotificationTitle": "दैनिक चिंतन का समय",
+    "dailyReflectionNotificationBody": "मुझे अपने दिन के बारे में बताओ",
+    "multiLanguageDetection": "बहुभाषी पहचान",
+    "multiLanguageDetectionDesc": "कई बोली जाने वाली भाषाओं का पता लगाएं"
 }

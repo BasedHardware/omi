@@ -192,7 +192,9 @@ def search_conversations(
         try:
             starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
+            )
     if end_date:
         try:
             ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())

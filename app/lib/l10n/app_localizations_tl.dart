@@ -9325,4 +9325,37 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
+
+  @override
+  String get dailyReflection => 'Daily Reflection';
+
+  @override
+  String get get9PmReminderToReflect => 'Get a 9 PM reminder to reflect on your day';
+
+  @override
+  String get dailyReflectionDescription => 'Get a reminder at 9 PM to reflect on your day and capture your thoughts.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Time for Daily Reflection';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Tell me about your day';
+
+  @override
+  String get multiLanguageDetection => 'Multi-language Detection';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detect multiple spoken languages';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

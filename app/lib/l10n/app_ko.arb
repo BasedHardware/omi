@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "연간 플랜으로의 업그레이드가 이미 예정되어 있습니다",
     "youAreOnUnlimitedPlan": "현재 Unlimited 플랜을 사용 중입니다.",
     "yourOmiUnleashed": "당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.",
-    "planEndedOn": "플랜이 {date}에 종료되었습니다.\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.",
-    "planSetToCancelOn": "플랜이 {date}에 취소될 예정입니다.\n혜택을 유지하려면 지금 재구독하세요 - {date}까지 요금이 청구되지 않습니다.",
+    "planEndedOn": "플랜이 {date}에 종료되었습니다.\\n지금 재구독하세요 - 새 청구 기간에 대해 즉시 청구됩니다.",
+    "planSetToCancelOn": "플랜이 {date}에 취소될 예정입니다.\\n혜택을 유지하려면 지금 재구독하세요 - {date}까지 요금이 청구되지 않습니다.",
     "annualPlanStartsAutomatically": "월간 플랜이 종료되면 연간 플랜이 자동으로 시작됩니다.",
     "planRenewsOn": "플랜이 {date}에 갱신됩니다.",
     "unlimitedConversations": "무제한 대화",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "기본값",
     "lastUsedLabel": "최근 사용",
     "setDefaultApp": "기본 앱 설정",
-    "setDefaultAppContent": "{appName}을(를) 기본 요약 앱으로 설정하시겠습니까?\n\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.",
+    "setDefaultAppContent": "{appName}을(를) 기본 요약 앱으로 설정하시겠습니까?\\n\\n이 앱은 향후 모든 대화 요약에 자동으로 사용됩니다.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "통화 녹음 시작",
     "startVoiceRecording": "음성 녹음 시작",
     "bulkExportAlreadyExported": "선택한 모든 작업이 이미 내보내졌습니다",
-    "bulkDeleteFailed": "작업을 삭제할 수 없습니다. 다시 시도해 주세요."
+    "bulkDeleteFailed": "작업을 삭제할 수 없습니다. 다시 시도해 주세요.",
+    "dailyReflection": "일일 성찰",
+    "dailyReflectionDescription": "오후 9시에 하루를 되돌아보고 생각을 기록하라는 알림을 받습니다.",
+    "get9PmReminderToReflect": "오후 9시에 하루를 되돌아보는 알림 받기",
+    "dailyReflectionNotificationTitle": "일일 성찰 시간입니다",
+    "dailyReflectionNotificationBody": "오늘 하루에 대해 말해주세요",
+    "multiLanguageDetection": "다국어 감지",
+    "multiLanguageDetectionDesc": "여러 음성 언어 감지"
 }

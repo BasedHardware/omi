@@ -110,6 +110,54 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
   }
 
+  void _showTranslateBottomSheet(BuildContext context, CaptureProvider provider) {
+    final isAutoTranslateOn = SharedPreferencesUtil().cachedAutoTranslateEnabled;
+    final isActive = provider.translationEnabled;
+
+    String label;
+    if (isActive) {
+      label = isAutoTranslateOn ? context.l10n.pauseTranslation : context.l10n.stopTranslation;
+    } else {
+      label = isAutoTranslateOn ? context.l10n.resumeTranslation : context.l10n.translateTranscript;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.translate,
+                  color: isActive ? const Color(0xFF4A90D9) : Colors.white,
+                ),
+                title: Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
+                onTap: () {
+                  provider.toggleTranslation();
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _stopConversation(CaptureProvider provider) async {
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
@@ -243,6 +291,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                           bottomMargin: 150,
                                           suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
+                                          translatingSegmentIds: provider.translatingSegmentIds,
                                           onAcceptSuggestion: (suggestion) {
                                             provider.assignSpeakerToConversation(
                                               suggestion.speakerId,
@@ -289,6 +338,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                                 );
                                               },
                                             );
+                                          },
+                                          onSegmentLongPress: (segment) {
+                                            _showTranslateBottomSheet(context, provider);
                                           },
                                         ),
                             ),

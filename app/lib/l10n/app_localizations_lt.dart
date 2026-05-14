@@ -4528,12 +4528,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Jūsų planas baigėsi $date.\nPersiregistruokite dabar - jums bus nedelsiant apmokestinta už naują atsiskaitymo laikotarpį.';
+    return 'Jūsų planas baigėsi $date.\\nPersiregistruokite dabar - jums bus nedelsiant apmokestinta už naują atsiskaitymo laikotarpį.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Jūsų planas nustatytas atšaukti $date.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
+    return 'Jūsų planas nustatytas atšaukti $date.\\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki $date.';
   }
 
   @override
@@ -6548,7 +6548,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Ar nustatyti $appName kaip numatytąją santraukų programą?\n\nŠi programa bus automatiškai naudojama visoms būsimoms pokalbių santraukoms.';
+    return 'Ar nustatyti $appName kaip numatytąją santraukų programą?\\n\\nŠi programa bus automatiškai naudojama visoms būsimoms pokalbių santraukoms.';
   }
 
   @override
@@ -9249,4 +9249,37 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
+
+  @override
+  String get dailyReflection => 'Dienos refleksija';
+
+  @override
+  String get get9PmReminderToReflect => 'Gaukite priminimą 21 val. apmąstyti savo dieną';
+
+  @override
+  String get dailyReflectionDescription => 'Gaukite priminimą 21 val. apmąstyti savo dieną ir užfiksuoti mintis.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Laikas dienos refleksijai';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Papasakok apie savo dieną';
+
+  @override
+  String get multiLanguageDetection => 'Daugiakalbis aptikimas';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Aptikti kelias kalbamas kalbas';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

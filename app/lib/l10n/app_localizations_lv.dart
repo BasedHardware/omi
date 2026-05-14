@@ -4537,12 +4537,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Jūsu plāns beidzās $date.\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.';
+    return 'Jūsu plāns beidzās $date.\\nAbonejiet atkārtoti tagad - jums nekavējoties tiks iekasēta maksa par jauno norēķinu periodu.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Jūsu plāns ir iestatīts atcelšanai $date.\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
+    return 'Jūsu plāns ir iestatīts atcelšanai $date.\\nAbonejiet atkārtoti tagad, lai saglabātu savus ieguvumus - bez maksas līdz $date.';
   }
 
   @override
@@ -6558,7 +6558,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Vai iestatīt $appName kā noklusējuma kopsavilkuma lietotni?\n\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.';
+    return 'Vai iestatīt $appName kā noklusējuma kopsavilkuma lietotni?\\n\\nŠī lietotne tiks automātiski izmantota visiem turpmākajiem sarunu kopsavilkumiem.';
   }
 
   @override
@@ -9258,4 +9258,38 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get dailyReflection => 'Ikdienas pārdomu';
+
+  @override
+  String get get9PmReminderToReflect => 'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Saņemiet atgādinājumu plkst. 21, lai pārdomātu savu dienu un piefiksētu domas.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Laiks ikdienas pārdomām';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Pastāsti man par savu dienu';
+
+  @override
+  String get multiLanguageDetection => 'Daudzvalodu noteikšana';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Noteikt vairākas runātās valodas';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

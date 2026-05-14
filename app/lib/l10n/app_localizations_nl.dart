@@ -4543,12 +4543,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Uw plan eindigde op $date.\nAbonneer nu opnieuw - u wordt direct belast voor een nieuwe factureringsperiode.';
+    return 'Uw plan eindigde op $date.\\nAbonneer nu opnieuw - u wordt direct belast voor een nieuwe factureringsperiode.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Uw plan wordt geannuleerd op $date.\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
+    return 'Uw plan wordt geannuleerd op $date.\\nAbonneer nu opnieuw om uw voordelen te behouden - geen kosten tot $date.';
   }
 
   @override
@@ -6565,7 +6565,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appName instellen als je standaard samenvattingsapp?\n\nDeze app wordt automatisch gebruikt voor alle toekomstige gesprekssamenvattingen.';
+    return '$appName instellen als je standaard samenvattingsapp?\\n\\nDeze app wordt automatisch gebruikt voor alle toekomstige gesprekssamenvattingen.';
   }
 
   @override
@@ -9268,4 +9268,38 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Taken konden niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get dailyReflection => 'Dagelijkse reflectie';
+
+  @override
+  String get get9PmReminderToReflect => 'Ontvang om 21:00 uur een herinnering om te reflecteren op je dag';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Ontvang om 21:00 een herinnering om te reflecteren op je dag en je gedachten vast te leggen.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Tijd voor dagelijkse reflectie';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Vertel me over je dag';
+
+  @override
+  String get multiLanguageDetection => 'Meertalige detectie';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Detecteer meerdere gesproken talen';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

@@ -44,7 +44,6 @@ static K_SEM_DEFINE(aad_sem, 0, 1);
 static atomic_t wake_pending = ATOMIC_INIT(0);
 static atomic_t wake_consumed = ATOMIC_INIT(0);
 
-
 /* ---- VAD state (mic callback context only) ---- */
 static bool vad_is_recording = false;
 static bool vad_sleeping = false;

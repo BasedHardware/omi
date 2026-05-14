@@ -55,14 +55,17 @@ import 'package:omi/backend/schema/message_event.dart'
         ConversationEvent,
         LastConversationEvent,
         SpeakerLabelSuggestionEvent,
+        TranslatingStartEvent,
         TranslationEvent,
         PhotoProcessingEvent,
         PhotoDescribedEvent,
         FreemiumThresholdReachedEvent,
-        SegmentsDeletedEvent;
+        SegmentsDeletedEvent,
+        TranslateToggleEvent,
+        ScreenStateEvent;
 
 class CaptureProvider extends ChangeNotifier
-    with MessageNotifierMixin
+    with MessageNotifierMixin, WidgetsBindingObserver
     implements ITransctiptSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
@@ -158,6 +161,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
+    WidgetsBinding.instance.addObserver(this);
     _startAudioInterruptionListener();
   }
 
@@ -401,6 +405,23 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  // Mid-session translation toggle (issue #6837)
+  bool _translationEnabled = false;
+  bool get translationEnabled => _translationEnabled;
+
+  // Segments currently being translated (loading indicator)
+  final Set<String> _translatingSegmentIds = {};
+  Set<String> get translatingSegmentIds => _translatingSegmentIds;
+
+  void toggleTranslation() {
+    _translationEnabled = !_translationEnabled;
+    if (!_translationEnabled) {
+      _translatingSegmentIds.clear();
+    }
+    _socket?.sendText(jsonEncode(TranslateToggleEvent(enabled: _translationEnabled).toJson()));
+    notifyListeners();
+  }
+
   bool _transcriptServiceReady = false;
 
   bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
@@ -545,6 +566,8 @@ class CaptureProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    // Sync toggle state with user's auto-translate preference
+    _translationEnabled = SharedPreferencesUtil().cachedAutoTranslateEnabled;
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
@@ -1020,6 +1043,7 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _bleBytesStream?.cancel();
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
@@ -1031,6 +1055,14 @@ class CaptureProvider extends ChangeNotifier
     _peopleRefreshFuture = null; // Clear in-flight tracker
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Notify backend when app is not visible — covers screen off, home button,
+    // and switching to another app. Defers translation while user can't see it.
+    final active = state == AppLifecycleState.resumed;
+    _socket?.sendText(jsonEncode(ScreenStateEvent(active: active).toJson()));
   }
 
   void updateRecordingState(RecordingState state) {
@@ -1330,6 +1362,12 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (event is TranslatingStartEvent) {
+      _translatingSegmentIds.addAll(event.segmentIds);
+      notifyListeners();
+      return;
+    }
+
     if (event is TranslationEvent) {
       _handleTranslationEvent(event.segments);
       return;
@@ -1574,6 +1612,11 @@ class CaptureProvider extends ChangeNotifier
       if (translatedSegments.isEmpty) return;
 
       Logger.debug("Received ${translatedSegments.length} translated segments");
+
+      // Clear translating indicator for segments that now have translations
+      for (final seg in translatedSegments) {
+        _translatingSegmentIds.remove(seg.id);
+      }
 
       // Update the segments with the translated ones
       var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);

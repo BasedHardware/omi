@@ -174,6 +174,17 @@ class FreemiumThresholdReachedEvent(MessageEvent):
         return j
 
 
+class TranslatingStartEvent(MessageEvent):
+    event_type: str = "translating_start"
+    segment_ids: List[str]
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
 class SegmentsDeletedEvent(MessageEvent):
     event_type: str = "segments_deleted"
     segment_ids: List[str]

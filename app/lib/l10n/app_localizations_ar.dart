@@ -4494,12 +4494,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'انتهت خطتك في $date.\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.';
+    return 'انتهت خطتك في $date.\\nأعد الاشتراك الآن - سيتم تحصيل الرسوم فوراً لفترة فوترة جديدة.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'تم تعيين خطتك للإلغاء في $date.\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى $date.';
+    return 'تم تعيين خطتك للإلغاء في $date.\\nأعد الاشتراك الآن للحفاظ على مزاياك - لن يتم تحصيل رسوم حتى $date.';
   }
 
   @override
@@ -6496,7 +6496,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'هل تريد تعيين $appName كتطبيق تلخيص افتراضي؟\n\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.';
+    return 'هل تريد تعيين $appName كتطبيق تلخيص افتراضي؟\\n\\nسيتم استخدام هذا التطبيق تلقائيًا لجميع ملخصات المحادثات المستقبلية.';
   }
 
   @override
@@ -9179,4 +9179,37 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get dailyReflection => 'التأمل اليومي';
+
+  @override
+  String get get9PmReminderToReflect => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك';
+
+  @override
+  String get dailyReflectionDescription => 'احصل على تذكير في الساعة 9 مساءً للتأمل في يومك وتدوين أفكارك.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'حان وقت التأمل اليومي';
+
+  @override
+  String get dailyReflectionNotificationBody => 'أخبرني عن يومك';
+
+  @override
+  String get multiLanguageDetection => 'كشف اللغات المتعددة';
+
+  @override
+  String get multiLanguageDetectionDesc => 'كشف عدة لغات منطوقة';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

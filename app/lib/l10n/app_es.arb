@@ -1392,8 +1392,8 @@
     "upgradeAlreadyScheduled": "Tu actualización al plan anual ya está programada",
     "youAreOnUnlimitedPlan": "Estás en el plan Ilimitado.",
     "yourOmiUnleashed": "Tu Omi, liberado. Hazte ilimitado para posibilidades infinitas.",
-    "planEndedOn": "Tu plan terminó el {date}.\nVuelve a suscribirte ahora - se te cobrará inmediatamente por un nuevo período de facturación.",
-    "planSetToCancelOn": "Tu plan está configurado para cancelarse el {date}.\nVuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta {date}.",
+    "planEndedOn": "Tu plan terminó el {date}.\\nVuelve a suscribirte ahora - se te cobrará inmediatamente por un nuevo período de facturación.",
+    "planSetToCancelOn": "Tu plan está configurado para cancelarse el {date}.\\nVuelve a suscribirte ahora para mantener tus beneficios - sin cargo hasta {date}.",
     "annualPlanStartsAutomatically": "Tu plan anual comenzará automáticamente cuando termine tu plan mensual.",
     "planRenewsOn": "Tu plan se renueva el {date}.",
     "unlimitedConversations": "Conversaciones ilimitadas",
@@ -2051,7 +2051,7 @@
     "defaultLabel": "Predeterminada",
     "lastUsedLabel": "Último uso",
     "setDefaultApp": "Establecer app predeterminada",
-    "setDefaultAppContent": "¿Establecer {appName} como tu app de resumen predeterminada?\n\nEsta app se usará automáticamente para todos los resúmenes de conversaciones futuras.",
+    "setDefaultAppContent": "¿Establecer {appName} como tu app de resumen predeterminada?\\n\\nEsta app se usará automáticamente para todos los resúmenes de conversaciones futuras.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3018,5 +3018,12 @@
     "startCallRecording": "Iniciar grabación de llamada",
     "startVoiceRecording": "Iniciar grabación de voz",
     "bulkExportAlreadyExported": "Todas las tareas seleccionadas ya están exportadas",
-    "bulkDeleteFailed": "No se pudieron eliminar las tareas. Inténtalo de nuevo."
+    "bulkDeleteFailed": "No se pudieron eliminar las tareas. Inténtalo de nuevo.",
+    "dailyReflection": "Reflexión diaria",
+    "dailyReflectionDescription": "Recibe un recordatorio a las 9 PM para reflexionar sobre tu día y capturar tus pensamientos.",
+    "get9PmReminderToReflect": "Recibe un recordatorio a las 9 PM para reflexionar sobre tu día",
+    "dailyReflectionNotificationTitle": "Hora de la reflexión diaria",
+    "dailyReflectionNotificationBody": "Cuéntame sobre tu día",
+    "multiLanguageDetection": "Detección multilingüe",
+    "multiLanguageDetectionDesc": "Detectar múltiples idiomas hablados"
 }

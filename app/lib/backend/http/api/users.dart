@@ -393,10 +393,17 @@ Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
   return null;
 }
 
-Future<bool> setTranscriptionPreferences({bool? singleLanguageMode, List<String>? vocabulary}) async {
+Future<bool> setTranscriptionPreferences({
+  bool? singleLanguageMode,
+  bool? autoTranslateEnabled,
+  List<String>? vocabulary,
+}) async {
   Map<String, dynamic> body = {};
   if (singleLanguageMode != null) {
     body['single_language_mode'] = singleLanguageMode;
+  }
+  if (autoTranslateEnabled != null) {
+    body['auto_translate_enabled'] = autoTranslateEnabled;
   }
   if (vocabulary != null) {
     body['vocabulary'] = vocabulary;

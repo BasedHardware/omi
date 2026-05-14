@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Votre mise à niveau vers le forfait annuel est déjà programmée",
     "youAreOnUnlimitedPlan": "Vous êtes sur le forfait Illimité.",
     "yourOmiUnleashed": "Votre Omi, libéré. Passez à l'illimité pour des possibilités infinies.",
-    "planEndedOn": "Votre forfait s'est terminé le {date}.\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.",
-    "planSetToCancelOn": "Votre forfait est programmé pour être annulé le {date}.\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu'au {date}.",
+    "planEndedOn": "Votre forfait s'est terminé le {date}.\\nRéabonnez-vous maintenant - vous serez facturé immédiatement pour une nouvelle période de facturation.",
+    "planSetToCancelOn": "Votre forfait est programmé pour être annulé le {date}.\\nRéabonnez-vous maintenant pour conserver vos avantages - pas de frais jusqu'au {date}.",
     "annualPlanStartsAutomatically": "Votre forfait annuel débutera automatiquement à la fin de votre forfait mensuel.",
     "planRenewsOn": "Votre forfait se renouvelle le {date}.",
     "unlimitedConversations": "Conversations illimitées",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Par défaut",
     "lastUsedLabel": "Dernière utilisation",
     "setDefaultApp": "Définir l'application par défaut",
-    "setDefaultAppContent": "Définir {appName} comme application de résumé par défaut ?\n\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.",
+    "setDefaultAppContent": "Définir {appName} comme application de résumé par défaut ?\\n\\nCette application sera automatiquement utilisée pour tous les futurs résumés de conversations.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3052,5 +3052,12 @@
     "startCallRecording": "Démarrer l'enregistrement d'appel",
     "startVoiceRecording": "Démarrer l'enregistrement vocal",
     "bulkExportAlreadyExported": "Toutes les tâches sélectionnées sont déjà exportées",
-    "bulkDeleteFailed": "Impossible de supprimer les tâches. Veuillez réessayer."
+    "bulkDeleteFailed": "Impossible de supprimer les tâches. Veuillez réessayer.",
+    "dailyReflection": "Réflexion quotidienne",
+    "dailyReflectionDescription": "Recevez un rappel à 21h pour réfléchir à votre journée et capturer vos pensées.",
+    "get9PmReminderToReflect": "Recevez un rappel à 21h pour réfléchir à votre journée",
+    "dailyReflectionNotificationTitle": "L'heure de la réflexion quotidienne",
+    "dailyReflectionNotificationBody": "Raconte-moi ta journée",
+    "multiLanguageDetection": "Détection multilingue",
+    "multiLanguageDetectionDesc": "Détecter plusieurs langues parlées"
 }

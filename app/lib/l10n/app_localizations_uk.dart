@@ -4534,12 +4534,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'Ваш план закінчився $date.\nПідпишіться знову зараз - з вас буде негайно списано за новий розрахунковий період.';
+    return 'Ваш план закінчився $date.\\nПідпишіться знову зараз - з вас буде негайно списано за новий розрахунковий період.';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'Ваш план налаштовано на скасування $date.\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
+    return 'Ваш план налаштовано на скасування $date.\\nПідпишіться знову, щоб зберегти переваги - без оплати до $date.';
   }
 
   @override
@@ -6553,7 +6553,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return 'Встановити $appName як додаток для підсумків за замовчуванням?\n\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.';
+    return 'Встановити $appName як додаток для підсумків за замовчуванням?\\n\\nЦей додаток буде автоматично використовуватися для всіх майбутніх підсумків розмов.';
   }
 
   @override
@@ -9254,4 +9254,37 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не вдалося видалити завдання. Спробуйте ще раз.';
+
+  @override
+  String get dailyReflection => 'Щоденна рефлексія';
+
+  @override
+  String get get9PmReminderToReflect => 'Отримуйте нагадування о 21:00, щоб обдумати свій день';
+
+  @override
+  String get dailyReflectionDescription => 'Отримуйте нагадування о 21:00 для роздумів про свій день та запису думок.';
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Час для щоденної рефлексії';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Розкажи мені про свій день';
+
+  @override
+  String get multiLanguageDetection => 'Багатомовне виявлення';
+
+  @override
+  String get multiLanguageDetectionDesc => 'Виявлення кількох розмовних мов';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }

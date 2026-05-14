@@ -206,12 +206,14 @@ getTranscriptWidget(
   Function(String, int)? editSegment,
   Map<String, SpeakerLabelSuggestionEvent> suggestions = const {},
   List<String> taggingSegmentIds = const [],
+  Set<String> translatingSegmentIds = const {},
   Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion,
   String searchQuery = '',
   int currentResultIndex = -1,
   VoidCallback? onTapWhenSearchEmpty,
   Function(TranscriptSegment)? onSegmentTap,
   Function(int)? onEditSegmentText,
+  Function(TranscriptSegment)? onSegmentLongPress,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -238,12 +240,14 @@ getTranscriptWidget(
       editSegment: editSegment,
       suggestions: suggestions,
       taggingSegmentIds: taggingSegmentIds,
+      translatingSegmentIds: translatingSegmentIds,
       onAcceptSuggestion: onAcceptSuggestion,
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
       onSegmentTap: onSegmentTap,
       onEditSegmentText: onEditSegmentText,
+      onSegmentLongPress: onSegmentLongPress,
     );
   }
 

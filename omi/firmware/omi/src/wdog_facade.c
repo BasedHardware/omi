@@ -1,6 +1,6 @@
 #include <zephyr/drivers/watchdog.h>
-#include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(wdog_facade, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -29,10 +29,10 @@ int watchdog_init(void)
     }
 
     // Configure watchdog timeout
-    wdt_config.flags = WDT_FLAG_RESET_SOC;         // Reset entire SoC on timeout
-    wdt_config.window.min = 0U;                    // No minimum window
+    wdt_config.flags = WDT_FLAG_RESET_SOC; // Reset entire SoC on timeout
+    wdt_config.window.min = 0U;            // No minimum window
     wdt_config.window.max = WATCHDOG_TIMEOUT_MS;
-    wdt_config.callback = NULL;                    // No callback, just reset
+    wdt_config.callback = NULL; // No callback, just reset
 
     // Install watchdog timeout
     wdt_channel_id = wdt_install_timeout(wdt_dev, &wdt_config);

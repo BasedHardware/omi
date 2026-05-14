@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Việc nâng cấp của bạn lên gói năm đã được lên lịch",
     "youAreOnUnlimitedPlan": "Bạn đang sử dụng gói Unlimited.",
     "yourOmiUnleashed": "Omi của bạn, được giải phóng. Trở nên unlimited cho khả năng vô tận.",
-    "planEndedOn": "Gói của bạn đã kết thúc vào {date}.\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.",
-    "planSetToCancelOn": "Gói của bạn được đặt để hủy vào {date}.\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
+    "planEndedOn": "Gói của bạn đã kết thúc vào {date}.\\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay lập tức cho kỳ thanh toán mới.",
+    "planSetToCancelOn": "Gói của bạn được đặt để hủy vào {date}.\\nĐăng ký lại ngay để giữ quyền lợi - không tính phí cho đến {date}.",
     "annualPlanStartsAutomatically": "Gói năm của bạn sẽ tự động bắt đầu khi gói tháng kết thúc.",
     "planRenewsOn": "Gói của bạn được gia hạn vào {date}.",
     "unlimitedConversations": "Cuộc trò chuyện không giới hạn",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Mặc định",
     "lastUsedLabel": "Sử dụng gần đây",
     "setDefaultApp": "Đặt ứng dụng mặc định",
-    "setDefaultAppContent": "Đặt {appName} làm ứng dụng tóm tắt mặc định của bạn?\n\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.",
+    "setDefaultAppContent": "Đặt {appName} làm ứng dụng tóm tắt mặc định của bạn?\\n\\nỨng dụng này sẽ được tự động sử dụng cho tất cả các bản tóm tắt cuộc trò chuyện trong tương lai.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3022,5 +3022,12 @@
     "startCallRecording": "Bắt đầu ghi âm cuộc gọi",
     "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
     "bulkExportAlreadyExported": "Tất cả các tác vụ đã chọn đều đã được xuất",
-    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại."
+    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại.",
+    "dailyReflection": "Suy ngẫm hàng ngày",
+    "dailyReflectionDescription": "Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn và ghi lại suy nghĩ.",
+    "get9PmReminderToReflect": "Nhận nhắc nhở lúc 9 giờ tối để suy ngẫm về ngày của bạn",
+    "dailyReflectionNotificationTitle": "Đến giờ suy ngẫm hàng ngày",
+    "dailyReflectionNotificationBody": "Kể cho tôi nghe về ngày của bạn",
+    "multiLanguageDetection": "Phát hiện đa ngôn ngữ",
+    "multiLanguageDetectionDesc": "Phát hiện nhiều ngôn ngữ nói"
 }

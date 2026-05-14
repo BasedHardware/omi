@@ -1391,8 +1391,8 @@
     "upgradeAlreadyScheduled": "Teie täiendus aastasele plaanile on juba planeeritud",
     "youAreOnUnlimitedPlan": "Olete Piiramatul plaanil.",
     "yourOmiUnleashed": "Teie Omi, vabastatud. Minge piiramatu juurde lõputute võimaluste jaoks.",
-    "planEndedOn": "Teie plaan lõppes {date}.\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.",
-    "planSetToCancelOn": "Teie plaan on seatud tühistuma {date}.\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
+    "planEndedOn": "Teie plaan lõppes {date}.\\nTellige uuesti kohe - teilt võetakse kohe tasu uue arveldusperioodi eest.",
+    "planSetToCancelOn": "Teie plaan on seatud tühistuma {date}.\\nTellige uuesti kohe, et säilitada oma eelised - tasu ei võeta kuni {date}.",
     "annualPlanStartsAutomatically": "Teie aastane plaan algab automaatselt, kui teie kuuplaan lõpeb.",
     "planRenewsOn": "Teie plaan uueneb {date}.",
     "unlimitedConversations": "Piiramatult vestlusi",
@@ -2050,7 +2050,7 @@
     "defaultLabel": "Vaikimisi",
     "lastUsedLabel": "Viimati kasutatud",
     "setDefaultApp": "Määra vaikerakendus",
-    "setDefaultAppContent": "Kas määrata {appName} vaikimisi kokkuvõtte rakenduseks?\n\nSeda rakendust kasutatakse automaatselt kõigi tulevaste vestluste kokkuvõtete jaoks.",
+    "setDefaultAppContent": "Kas määrata {appName} vaikimisi kokkuvõtte rakenduseks?\\n\\nSeda rakendust kasutatakse automaatselt kõigi tulevaste vestluste kokkuvõtete jaoks.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -3017,5 +3017,12 @@
     "startCallRecording": "Alusta kõne salvestamist",
     "startVoiceRecording": "Alusta häälsalvestust",
     "bulkExportAlreadyExported": "Kõik valitud ülesanded on juba eksporditud",
-    "bulkDeleteFailed": "Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti."
+    "bulkDeleteFailed": "Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.",
+    "dailyReflection": "Igapäevane refleksioon",
+    "dailyReflectionDescription": "Saa meeldetuletus kell 21, et mõtiskleda oma päeva üle ja jäädvustada oma mõtted.",
+    "get9PmReminderToReflect": "Saa kell 21 meeldetuletus oma päeva üle mõtisklemiseks",
+    "dailyReflectionNotificationTitle": "Aeg igapäevaseks refleksiooniks",
+    "dailyReflectionNotificationBody": "Räägi mulle oma päevast",
+    "multiLanguageDetection": "Mitmekeelne tuvastus",
+    "multiLanguageDetectionDesc": "Tuvasta mitu räägitud keelt"
 }

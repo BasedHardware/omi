@@ -4442,12 +4442,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return '您的计划于$date结束。\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
+    return '您的计划于$date结束。\\n立即重新订阅 - 您将立即被收取新计费周期的费用。';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
+    return '您的计划将于$date取消。\\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
@@ -6421,7 +6421,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '将 $appName 设为您的默认摘要应用？\n\n此应用将自动用于所有未来的对话摘要。';
+    return '将 $appName 设为您的默认摘要应用？\\n\\n此应用将自动用于所有未来的对话摘要。';
   }
 
   @override
@@ -9077,4 +9077,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '无法删除任务，请重试。';
+
+  @override
+  String get dailyReflection => '每日反思';
+
+  @override
+  String get get9PmReminderToReflect => '在晚上 9 点收到提醒，回顾您的一天';
+
+  @override
+  String get dailyReflectionDescription => '晚上 9 点收到提醒，反思您的一天并记录想法。';
+
+  @override
+  String get dailyReflectionNotificationTitle => '每日反思时间';
+
+  @override
+  String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
+
+  @override
+  String get multiLanguageDetection => '多语言检测';
+
+  @override
+  String get multiLanguageDetectionDesc => '检测多种口语';
+
+  @override
+  String get translateTranscript => 'Translate Transcript';
+
+  @override
+  String get stopTranslation => 'Stop Translation';
+
+  @override
+  String get pauseTranslation => 'Pause Translation';
+
+  @override
+  String get resumeTranslation => 'Resume Translation';
 }
