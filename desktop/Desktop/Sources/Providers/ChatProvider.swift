@@ -367,8 +367,10 @@ struct ChatMessage: Identifiable {
     var notificationContext: String?
     /// Screenshot JPEG data captured when a proactive notification was generated
     var notificationScreenshot: Data?
+    /// User-attached files (screenshots, images, documents) — populated for user messages.
+    var attachments: [ChatAttachment]
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil) {
+    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = []) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -381,6 +383,7 @@ struct ChatMessage: Identifiable {
         self.metadata = metadata
         self.notificationContext = notificationContext
         self.notificationScreenshot = notificationScreenshot
+        self.attachments = attachments
     }
 }
 
@@ -399,8 +402,34 @@ extension ChatMessage {
             sender: db.sender == "human" ? .user : .ai,
             isStreaming: false,
             rating: db.rating,
-            isSynced: true
+            isSynced: true,
+            attachments: ChatMessage.decodeAttachments(from: db.metadata)
         )
+    }
+
+    /// Parse the `attachments` array from a message's persisted metadata JSON.
+    /// Format (mirrors `MessageMetadata.attachmentsJSON()` on send):
+    ///   `{ "attachments": [ { "id": "...", "name": "...", "mime_type": "...", "thumbnail": "..." } ] }`
+    static func decodeAttachments(from metadataJSON: String?) -> [ChatAttachment] {
+        guard let json = metadataJSON, let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let raw = root["attachments"] as? [[String: Any]]
+        else { return [] }
+        return raw.compactMap { item -> ChatAttachment? in
+            guard let id = item["id"] as? String else { return nil }
+            let name = (item["name"] as? String) ?? "file"
+            let mime = (item["mime_type"] as? String) ?? "application/octet-stream"
+            let thumb = item["thumbnail"] as? String
+            return ChatAttachment(
+                id: id,
+                fileName: name,
+                mimeType: mime,
+                data: nil,
+                serverId: id,
+                thumbnailURL: thumb,
+                state: .uploaded
+            )
+        }
     }
 }
 
@@ -454,6 +483,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     // MARK: - Published State
     @Published var chatMode: ChatMode = .act
     @Published var draftText = ""
+    /// Files staged for attachment to the next message. Cleared when the message is sent.
+    @Published var pendingAttachments: [ChatAttachment] = []
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
@@ -2256,6 +2287,119 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         return aiMessage
     }
 
+    // MARK: - Pending Attachments
+
+    /// Stage attachments for the next message and kick off background upload.
+    /// Caps the total at `kMaxChatAttachments` (matches Flutter's 4-file limit).
+    func addAttachments(_ attachments: [ChatAttachment]) {
+        let room = max(0, kMaxChatAttachments - pendingAttachments.count)
+        guard room > 0 else {
+            errorMessage = "You can only attach up to \(kMaxChatAttachments) files."
+            return
+        }
+        let toAdd = Array(attachments.prefix(room))
+        pendingAttachments.append(contentsOf: toAdd)
+        let capturedAppId = overrideAppId ?? selectedAppId
+        for attachment in toAdd {
+            uploadAttachment(id: attachment.id, appId: capturedAppId)
+        }
+    }
+
+    func removePendingAttachment(id: String) {
+        pendingAttachments.removeAll { $0.id == id }
+    }
+
+    /// Upload a single staged attachment in the background. The user can send
+    /// the message before this completes — `sendMessage` will await the upload.
+    private func uploadAttachment(id: String, appId: String?) {
+        Task { [weak self] in
+            guard let self = self,
+                  let attachment = await MainActor.run(body: {
+                      self.pendingAttachments.first(where: { $0.id == id })
+                  })
+            else { return }
+
+            // For non-image files we still need bytes — load them lazily here
+            // (we skipped this at add-time to keep the UI responsive).
+            let data: Data? = attachment.data
+            guard let bytes = data else {
+                await MainActor.run {
+                    self.setAttachmentState(id: id, state: .failed("File could not be read"))
+                }
+                return
+            }
+            do {
+                let resp = try await APIClient.shared.uploadChatFiles(
+                    [(data: bytes, fileName: attachment.fileName, mimeType: attachment.mimeType)],
+                    appId: appId
+                )
+                guard let server = resp.first else {
+                    throw APIError.invalidResponse
+                }
+                await MainActor.run {
+                    if let idx = self.pendingAttachments.firstIndex(where: { $0.id == id }) {
+                        self.pendingAttachments[idx].serverId = server.id
+                        self.pendingAttachments[idx].thumbnailURL = server.thumbnail
+                        if let mime = server.mimeType { self.pendingAttachments[idx].mimeType = mime }
+                        if let name = server.name { self.pendingAttachments[idx].fileName = name }
+                        self.pendingAttachments[idx].state = .uploaded
+                    }
+                }
+            } catch {
+                logError("ChatProvider: attachment upload failed", error: error)
+                await MainActor.run {
+                    self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
+                }
+            }
+        }
+    }
+
+    private func setAttachmentState(id: String, state: ChatAttachment.State) {
+        guard let idx = pendingAttachments.firstIndex(where: { $0.id == id }) else { return }
+        pendingAttachments[idx].state = state
+    }
+
+    /// Serialize attachments to the JSON string stored in `metadata` on the
+    /// backend. Only the fields needed to re-render thumbnails are kept; image
+    /// bytes never travel through this channel.
+    private func encodeAttachmentsMetadata(_ attachments: [ChatAttachment]) -> String? {
+        let items: [[String: Any]] = attachments.map { att in
+            var dict: [String: Any] = [
+                "id": att.serverId ?? att.id,
+                "name": att.fileName,
+                "mime_type": att.mimeType,
+            ]
+            if let thumb = att.thumbnailURL { dict["thumbnail"] = thumb }
+            return dict
+        }
+        let root: [String: Any] = ["attachments": items]
+        guard let data = try? JSONSerialization.data(withJSONObject: root),
+              let str = String(data: data, encoding: .utf8)
+        else { return nil }
+        return str
+    }
+
+    /// Block until all currently-uploading attachments either succeed or fail.
+    /// Returns `false` if any failed — caller surfaces an error and aborts.
+    private func awaitPendingUploads() async -> Bool {
+        let timeoutNs: UInt64 = 60 * 1_000_000_000  // 60s safety bound
+        let start = DispatchTime.now().uptimeNanoseconds
+        while pendingAttachments.contains(where: {
+            if case .uploading = $0.state { return true }
+            return false
+        }) {
+            if DispatchTime.now().uptimeNanoseconds - start > timeoutNs {
+                errorMessage = "Attachment upload timed out."
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return !pendingAttachments.contains(where: {
+            if case .failed = $0.state { return true }
+            return false
+        })
+    }
+
     // MARK: - Send Message
 
     /// Send a message and get AI response via Claude Agent SDK bridge
@@ -2342,6 +2486,25 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
 
+        // Wait for staged attachments to finish uploading so we can include their
+        // server IDs in the saved-message metadata. The bubble shows immediately
+        // via the local thumbnail data — we only block sending until the upload
+        // settles so persistence stays consistent across sessions.
+        var attachmentsForMessage: [ChatAttachment] = []
+        if !pendingAttachments.isEmpty {
+            let ok = await awaitPendingUploads()
+            if !ok {
+                isSending = false
+                errorMessage = "Some attachments failed to upload. Remove them and try again."
+                return
+            }
+            attachmentsForMessage = pendingAttachments
+            pendingAttachments.removeAll()
+        }
+        let attachmentMetadataJSON = attachmentsForMessage.isEmpty
+            ? nil
+            : encodeAttachmentsMetadata(attachmentsForMessage)
+
         // Save user message to backend and add to UI.
         // (skip for follow-ups — sendFollowUp already did both)
         //
@@ -2361,7 +2524,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                         text: trimmedText,
                         sender: "human",
                         appId: capturedAppId,
-                        sessionId: capturedSessionId
+                        sessionId: capturedSessionId,
+                        metadata: attachmentMetadataJSON
                     )
                     // Adopt the server ID (local UUID → server ID) and mark synced.
                     // isSynced=true enables rating buttons on the message bubble.
@@ -2381,7 +2545,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let userMessage = ChatMessage(
                 id: userMessageId,
                 text: trimmedText,
-                sender: .user
+                sender: .user,
+                attachments: attachmentsForMessage
             )
             messages.append(userMessage)
 
@@ -2438,7 +2603,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // Auto-inject notification context: if the most recent AI message before
             // the user's new message is a proactive notification, tell Claude about it
             // so it can answer follow-up questions about the notification.
+            // If the caller didn't provide explicit imageData (e.g. screen-capture
+            // assistant), fall back to the first image attached by the user.
             var effectiveImageData = imageData
+            if effectiveImageData == nil {
+                effectiveImageData = attachmentsForMessage.first(where: { $0.isImage })?.data
+            }
             if systemPromptSuffix == nil {
                 // Find the last AI message before the user's current message
                 let aiMessages = messages.filter { $0.sender == .ai && !$0.isStreaming }
