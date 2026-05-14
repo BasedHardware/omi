@@ -13,14 +13,14 @@ from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
 from database.apps import get_app_by_id_db
-from database.redis_db import get_cached_user_geolocation, delete_app_cache_by_id
+from database.redis_db import get_cached_user_geolocation, delete_app_cache_by_id, get_enabled_apps
 from database.webhook_health import (
     record_app_webhook_failure,
     record_app_webhook_success,
     is_app_webhook_disabled,
     disable_app_in_firestore,
 )
-from models.app import ChatTool
+from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.notifications import send_notification
@@ -358,16 +358,15 @@ def load_app_tools(uid: str) -> List[Callable]:
     Returns:
         List of LangChain tool functions
     """
-    from database.redis_db import get_enabled_apps
-    from database.apps import get_app_by_id_db
-    from models.app import App
-
     enabled_app_ids = get_enabled_apps(uid)
     tools = []
 
     for app_id in enabled_app_ids:
         app_data = get_app_by_id_db(app_id)
         if not app_data:
+            continue
+
+        if app_data.get('disabled'):
             continue
 
         try:
