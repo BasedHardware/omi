@@ -21,6 +21,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _handle_app_webhook_disable(app_id: str, action: int, error: str):
+    if action == 3:
+        from database.apps import delete_app_cache_by_id
+        from database.webhook_health import disable_app_in_firestore
+
+        logger.warning(f'App {app_id} auto-disabled after 72h of webhook failures: {error}')
+        disable_app_in_firestore(app_id, error, 72)
+        delete_app_cache_by_id(app_id)
+
+
 # Import agent_config_context for accessing user context
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -136,14 +147,16 @@ def create_app_tool(
                 result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
-                    record_app_webhook_failure(app_id, 0, result[:200])
+                    action = record_app_webhook_failure(app_id, 0, result[:200])
+                    _handle_app_webhook_disable(app_id, action, result[:200])
                 else:
                     cb.record_success()
                     record_app_webhook_success(app_id)
                 return result
             except Exception as e:
                 cb.record_failure()
-                record_app_webhook_failure(app_id, 0, type(e).__name__)
+                action = record_app_webhook_failure(app_id, 0, type(e).__name__)
+                _handle_app_webhook_disable(app_id, action, type(e).__name__)
                 return f"Error calling MCP tool {app_tool.name}: {e}"
 
         return StructuredTool(
@@ -264,12 +277,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
             else:
                 cb.record_failure()
                 action = record_app_webhook_failure(app_id, response.status_code, f'HTTP {response.status_code}')
-                if action == 3:
-                    from database.apps import delete_app_cache_by_id
-                    from database.webhook_health import disable_app_in_firestore
-
-                    disable_app_in_firestore(app_id, f'HTTP {response.status_code}', 72)
-                    delete_app_cache_by_id(app_id)
+                _handle_app_webhook_disable(app_id, action, f'HTTP {response.status_code}')
 
                 if response.status_code in (401, 403):
                     return (
@@ -289,15 +297,18 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
     except httpx.TimeoutException:
         cb.record_failure()
-        record_app_webhook_failure(app_id, 0, 'TimeoutException')
+        action = record_app_webhook_failure(app_id, 0, 'TimeoutException')
+        _handle_app_webhook_disable(app_id, action, 'TimeoutException')
         return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 120 seconds."
     except httpx.ConnectError:
         cb.record_failure()
-        record_app_webhook_failure(app_id, 0, 'ConnectError')
+        action = record_app_webhook_failure(app_id, 0, 'ConnectError')
+        _handle_app_webhook_disable(app_id, action, 'ConnectError')
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
         cb.record_failure()
-        record_app_webhook_failure(app_id, 0, type(e).__name__)
+        action = record_app_webhook_failure(app_id, 0, type(e).__name__)
+        _handle_app_webhook_disable(app_id, action, type(e).__name__)
         return f"Error calling {app_tool.name}: {str(e)}"
 
 
