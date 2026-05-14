@@ -221,7 +221,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       onChargingStatusChange: (bool charging) {
         if (isCharging != charging) {
           isCharging = charging;
-          if (!charging) _hasFullyChargedAlerted = false;
+          if (!charging) {
+            _hasFullyChargedAlerted = false;
+          } else if (batteryLevel >= 100 && !_hasFullyChargedAlerted) {
+            _hasFullyChargedAlerted = true;
+            final ctx = globalNavigatorKey.currentContext;
+            NotificationService.instance.createNotification(
+              title: ctx?.l10n.batteryFullyChargedTitle ?? "Omi is fully charged",
+              body: ctx?.l10n.batteryFullyChargedBody ?? "Your Omi device is fully charged. Feel free to unplug!",
+            );
+          }
           notifyListeners();
         }
       },
