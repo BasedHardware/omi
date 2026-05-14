@@ -19,7 +19,7 @@ from utils.async_tasks import gather_safe
 import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
-from database.apps import record_app_usage
+from database.apps import get_app_by_id_db, record_app_usage
 from database.redis_db import delete_app_cache_by_id
 from database.webhook_health import (
     record_app_webhook_failure,
@@ -66,18 +66,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _notify_app_owner(app_id: str, title: str, body: str):
+    """Send a push notification to the app owner about webhook health."""
+    try:
+        app_data = get_app_by_id_db(app_id)
+        if app_data and app_data.get('uid'):
+            send_notification(app_data['uid'], title, body)
+    except Exception as e:
+        logger.warning(f'Failed to notify app owner for {app_id}: {e}')
+
+
 def _handle_webhook_health_action(app_id: str, action: int, error: str):
     """Handle graduated response from webhook health tracking.
     action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable
     """
     if action == 1:
         logger.warning(f'Webhook health: app {app_id} failing for 24h+ (day 1 warning). Last error: {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Failing',
+            f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
+            'Please check your endpoint. It will be auto-disabled in 48 hours if failures continue.',
+        )
     elif action == 2:
         logger.warning(f'Webhook health: app {app_id} failing for 48h+ (day 2 final warning). Last error: {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Final Warning',
+            f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 24 hours if failures continue.',
+        )
     elif action == 3:
         logger.error(f'Webhook health: auto-disabling app {app_id} after 72h+ of failures. Last error: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
+        _notify_app_owner(
+            app_id,
+            'Webhook Auto-Disabled',
+            f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
+            'Please fix your endpoint and re-enable the app from your developer dashboard.',
+        )
 
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
