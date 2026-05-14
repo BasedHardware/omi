@@ -297,7 +297,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        systemPromptSuffix: String? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
@@ -381,6 +382,7 @@ final class AgentPillsManager: ObservableObject {
             await provider.sendMessage(
                 pill.query,
                 model: pill.model,
+                systemPromptSuffix: systemPromptSuffix,
                 systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix,
                 sessionKey: "agent-\(pill.id.uuidString)"
             )
