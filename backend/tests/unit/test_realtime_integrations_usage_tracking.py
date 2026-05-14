@@ -60,6 +60,7 @@ vector_db_mod.query_vectors_by_metadata = MagicMock(return_value=[])
 
 apps_mod = sys.modules["database.apps"]
 apps_mod.record_app_usage = MagicMock()
+apps_mod.get_app_by_id_db = MagicMock(return_value=None)
 
 llm_usage_mod = sys.modules["database.llm_usage"]
 llm_usage_mod.record_llm_usage = MagicMock()
