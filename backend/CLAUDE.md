@@ -172,23 +172,43 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 
 WebSocket handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per connection. These rules prevent ghost connections, memory leaks, and gauge drift.
 
-### Task lifecycle: receive-then-drain
+### Task lifecycle: supervisor with `asyncio.wait(FIRST_COMPLETED)`
 
-Never `asyncio.gather()` the receive task with background tasks. If any bg task hangs, the gather blocks forever and the `finally` block (gauge dec, cleanup) never executes.
+Never `asyncio.gather()` the receive task with background tasks — a hung bg task blocks cleanup forever. Never bare `await receive_task` either — a crashed bg task goes unnoticed for hours.
+
+Use `asyncio.wait(FIRST_COMPLETED)` to detect **both** client disconnect **and** bg task failures immediately:
 
 ```python
 bg_main_tasks = []
 try:
     GAUGE.inc()
-    receive_task = asyncio.create_task(receive_loop())
-    bg_main_tasks = [asyncio.create_task(bg1()), asyncio.create_task(bg2())]
-    await receive_task                    # exits when client disconnects
-    try:
-        await asyncio.wait_for(asyncio.gather(*bg_main_tasks, return_exceptions=True), timeout=BG_DRAIN_TIMEOUT)
-    except asyncio.TimeoutError:
-        for t in bg_main_tasks:
-            if not t.done(): t.cancel()
-        await asyncio.gather(*bg_main_tasks, return_exceptions=True)
+    receive_task = asyncio.create_task(receive_loop(), name=f"ws:{uid}:receive")
+    bg_main_tasks = [
+        asyncio.create_task(bg1(), name=f"ws:{uid}:bg1"),
+        asyncio.create_task(bg2(), name=f"ws:{uid}:bg2"),
+    ]
+    # Supervisor: exits on disconnect OR bg crash
+    done, _ = await asyncio.wait({receive_task, *bg_main_tasks}, return_when=asyncio.FIRST_COMPLETED)
+    # Log bg failures, re-raise receive errors
+    for task in done:
+        if task is not receive_task and not task.cancelled():
+            exc = task.exception()
+            if exc: logger.error(f"BG task {task.get_name()} crashed: {exc}")
+    if receive_task in done and not receive_task.cancelled():
+        exc = receive_task.exception()
+        if exc: raise exc
+    # Cancel receive if bg crash triggered exit
+    if not receive_task.done():
+        receive_task.cancel()
+    # Drain remaining bg tasks with timeout
+    remaining = [t for t in bg_main_tasks if not t.done()]
+    if remaining:
+        try:
+            await asyncio.wait_for(asyncio.gather(*remaining, return_exceptions=True), timeout=BG_DRAIN_TIMEOUT)
+        except asyncio.TimeoutError:
+            for t in remaining:
+                if not t.done(): t.cancel()
+            await asyncio.gather(*remaining, return_exceptions=True)
 finally:
     all_to_cancel = [t for t in bg_main_tasks if not t.done()]
     for t in all_to_cancel: t.cancel()
@@ -204,9 +224,9 @@ Every `websocket.receive()` / `websocket.receive_bytes()` must be wrapped in `as
 
 `GAUGE.inc()` inside the `try` body, `GAUGE.dec()` in the `finally` — always paired, never separated by code that can raise. Initialize `bg_main_tasks = []` BEFORE the `try` so the `finally` can reference it.
 
-### Task tracking
+### Task tracking and naming
 
-Never bare `asyncio.create_task()` without tracking the task for cancellation. Use `spawn()` (which adds to `bg_tasks`) or add to `bg_main_tasks`. Untracked tasks leak on disconnect.
+Every `asyncio.create_task()` must: (1) include `name=f"ws:{uid}:{task_name}"` for production debugging, (2) be tracked for cancellation via `spawn()` (adds to `bg_tasks`) or `bg_main_tasks`. Untracked/unnamed tasks leak on disconnect and are invisible in logs.
 
 ### Executor bounds
 
