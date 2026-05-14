@@ -38,8 +38,26 @@ actor TaskAssistant: ProactiveAssistant {
     private var latestFrame: CapturedFrame?
     /// Fallback timer that fires after extractionInterval if no context switch occurs
     private var fallbackTimerTask: Task<Void, Never>?
-    /// Timestamp of last context switch yield, for throttling rapid switches
-    private var lastContextSwitchYieldTime: Date = .distantPast
+    // Per-(app, normalized-window) timestamp of the last yielded context switch.
+    // Replaces the old global throttle so 10 different chats in <60s all flow through,
+    // while bouncing back to the same chat re-uses the cached analysis.
+    private var lastAnalyzedByKey: [String: Date] = [:]
+
+    /// Apps where new content arrives while the user stays in-app, so a context-switch
+    /// trigger is too slow. Frames arriving for these apps fire analysis immediately
+    /// (subject to the per-window dedupe TTL below).
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram",
+        "Messages",
+        "iMessage",
+        "WhatsApp",
+        "Signal",
+        "Slack",
+        "Discord",
+        "Messenger",
+    ]
+
+    private static let messagingFastPathDelay: TimeInterval = 15.0
 
     // Cached goals (refreshed every 5 minutes)
     private var cachedGoals: [Goal] = []
@@ -256,7 +274,35 @@ actor TaskAssistant: ProactiveAssistant {
             startFallbackTimer()
         }
 
+        // Fast in-app trigger: for messaging apps, arm a ~15s timer keyed to the
+        // current (app, window). Lets a new chat message turn into a task without
+        // requiring the user to leave the app.
+        armFastFallbackIfNeeded(frame: frame)
+
         return nil
+    }
+
+    /// For messaging apps, fire analysis immediately when a frame for a fresh window
+    /// arrives (subject to the per-window dedupe TTL). Lets chat content turn into a task
+    /// without requiring the user to leave the app. Non-messaging apps continue to rely on
+    /// the regular context-switch + fallback-timer path.
+    private func armFastFallbackIfNeeded(frame: CapturedFrame) {
+        guard Self.messagingFastPathApps.contains(frame.appName) else { return }
+
+        let key = Self.analyzedKey(for: frame)
+
+        // Per-window dedupe — same chat within the TTL is suppressed; the next eligible
+        // frame fires immediately.
+        if let last = lastAnalyzedByKey[key] {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed < Self.messagingFastPathDelay {
+                return
+            }
+        }
+
+        log("Task: Fast in-app trigger firing immediately for messaging window '\(key)'")
+        lastAnalyzedByKey[key] = Date()
+        triggerContinuation.yield(.timerFallback(frame))
     }
 
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
@@ -474,6 +520,15 @@ actor TaskAssistant: ProactiveAssistant {
             )
 
             log("Task: Synced to staged_tasks backend (id: \(response.id))")
+
+            // Fast-path promotion: don't wait up to 5 min for the safety-net timer to
+            // promote this new task into action_items + fire a notification. Kicking off
+            // the promote loop immediately means the user sees the notification within
+            // seconds of the task being saved, not minutes later.
+            Task {
+                await TaskPromotionService.shared.promoteIfNeeded()
+            }
+
             return response.id
         } catch {
             logError("Task: Failed to sync to backend", error: error)
@@ -529,13 +584,23 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Context switch from \(frame.appName) (window: \(frame.windowTitle ?? "nil")) -> \(newApp)")
 
-        // Throttle context switch yields using the analysis delay setting
+        // Per-window dedupe instead of one global cooldown. A different chat / window /
+        // browser tab has a different key, so 10 chats with 10 people in <60s all flow
+        // through. Re-entering the same chat within the dedupe window is skipped (the
+        // semantic dedupe inside the Claude prompt already catches duplicate tasks if
+        // we ever do re-analyze the same window later).
+        // Messaging apps use a shorter dedupe so a new message in the same chat doesn't
+        // wait a full minute before getting re-analyzed.
         let analysisDelay = await MainActor.run { AssistantSettings.shared.analysisDelay }
-        if analysisDelay > 0 {
-            let elapsed = Date().timeIntervalSince(lastContextSwitchYieldTime)
-            if elapsed < TimeInterval(analysisDelay) {
-                log("Task: Context switch throttled (\(Int(elapsed))s < \(analysisDelay)s delay)")
-                // Still cancel fallback timer so it resets
+        let dedupeKey = Self.analyzedKey(for: frame)
+        let dedupeTTL: TimeInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? Self.messagingFastPathDelay
+            : TimeInterval(analysisDelay)
+        let now = Date()
+        if dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
+            let elapsed = now.timeIntervalSince(last)
+            if elapsed < dedupeTTL {
+                log("Task: Context switch dedupe — already analyzed '\(dedupeKey)' \(Int(elapsed))s ago (<\(Int(dedupeTTL))s), skipping")
                 fallbackTimerTask?.cancel()
                 fallbackTimerTask = nil
                 return
@@ -547,8 +612,34 @@ actor TaskAssistant: ProactiveAssistant {
         fallbackTimerTask = nil
 
         // Yield context switch trigger with the frame
-        lastContextSwitchYieldTime = Date()
+        lastAnalyzedByKey[dedupeKey] = now
+        pruneStaleDedupeEntries(now: now, ttl: TimeInterval(max(analysisDelay, 60) * 5))
         triggerContinuation.yield(.contextSwitch(frame))
+    }
+
+    /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing
+    /// counters and collapses whitespace so the same chat across reopens hashes the same.
+    static func analyzedKey(for frame: CapturedFrame) -> String {
+        let app = frame.appName.lowercased()
+        let title = normalizedWindowTitle(frame.windowTitle)
+        return "\(app)::\(title)"
+    }
+
+    private static func normalizedWindowTitle(_ title: String?) -> String {
+        guard let raw = title, !raw.isEmpty else { return "" }
+        var t = raw.lowercased()
+        // Strip Telegram-style trailing message counters: " (247887)" / "(247887)".
+        if let range = t.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression) {
+            t.removeSubrange(range)
+        }
+        // Collapse whitespace runs so " foo   bar " == "foo bar".
+        t = t.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        return t
+    }
+
+    private func pruneStaleDedupeEntries(now: Date, ttl: TimeInterval) {
+        let cutoff = now.addingTimeInterval(-ttl)
+        lastAnalyzedByKey = lastAnalyzedByKey.filter { $0.value >= cutoff }
     }
 
     func clearPendingWork() async {

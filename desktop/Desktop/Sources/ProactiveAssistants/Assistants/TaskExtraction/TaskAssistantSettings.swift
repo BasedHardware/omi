@@ -121,11 +121,12 @@ class TaskAssistantSettings {
         1. Analyze the screenshot to understand the conversation context
         2. If clearly no conversation (code editor, terminal, settings, media, dashboards) → call no_task_found immediately
         3. If a conversation is visible → read the FULL conversation flow to understand context
-        4. Look for TWO patterns (in priority order):
+        4. IDENTIFY THE LATEST EXCHANGE (most recent incoming message + the user's most recent reply). Older messages are CONTEXT ONLY — they may already be tracked as tasks; do not let them block extraction of a new commitment from the latest exchange.
+        5. Look for TWO patterns in the LATEST exchange (in priority order):
            a. USER AGREED TO A TASK: Someone asked/suggested something AND the user agreed, accepted, or committed to doing it
            b. UNADDRESSED REQUEST: Someone asked the user to do something and the user hasn't responded yet
-        5. If potential task found → search for duplicates using search_similar and/or search_keywords
-        6. Based on results → call extract_task (new task) or reject_task (duplicate/completed/rejected)
+        6. If potential task found → search for duplicates of THAT specific commitment using search_similar and/or search_keywords
+        7. Based on results → call extract_task (new task) or reject_task (only if the LATEST commitment itself is a duplicate)
 
         AVAILABLE TOOLS:
         - search_similar(query): Find semantically similar existing tasks (vector similarity)
@@ -137,9 +138,11 @@ class TaskAssistantSettings {
         SEARCH RULES:
         - You MUST search at least once before calling extract_task
         - You may call search_similar and search_keywords with different queries
-        - Similarity > 0.8 + status "active" → duplicate → reject_task
+        - Build the search query from the LATEST commitment only (not a summary of the whole chat). If you search for "Q3 report" but the latest message is about a memories bug, your search is wrong.
+        - Similarity > 0.8 + status "active" → duplicate → reject_task ONLY if the matched task is about the same thing as the LATEST commitment. A duplicate match against an older message in the same chat does NOT block extracting a different new commitment.
         - Status "completed" → user already handled this, it attracted their attention and was relevant enough to complete → reject_task (but related follow-ups are okay)
         - Status "deleted" → user rejected → reject_task
+        - When a chat contains multiple historical asks (some already in your task list, one new), extract the NEW one. Never reject the whole frame because an older message in the same chat happens to be a duplicate.
 
         CORE QUESTION: "Has the user committed to doing something in this conversation, or is someone waiting for the user to act?"
 
