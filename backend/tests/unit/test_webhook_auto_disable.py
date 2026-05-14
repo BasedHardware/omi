@@ -65,15 +65,30 @@ def _load_app_tools_module():
     """Load app_tools module directly, bypassing __init__.py which pulls in heavy deps."""
     _db_redis_mod = sys.modules.get("database.redis_db")
     if _db_redis_mod:
-        for attr in ['get_cached_user_geolocation', 'delete_app_cache_by_id']:
+        for attr in ['get_cached_user_geolocation', 'delete_app_cache_by_id', 'get_enabled_apps']:
             if not hasattr(_db_redis_mod, attr):
                 setattr(_db_redis_mod, attr, MagicMock())
-    for mod_name in ["utils.mcp_client", "utils.log_sanitizer", "utils.retrieval", "utils.retrieval.agentic"]:
+    for mod_name in [
+        "utils.mcp_client",
+        "utils.log_sanitizer",
+        "utils.retrieval",
+        "utils.retrieval.agentic",
+        "utils.notifications",
+    ]:
         sys.modules.setdefault(mod_name, MagicMock())
+    _notif_mod = sys.modules.get("utils.notifications")
+    if _notif_mod and not hasattr(_notif_mod, 'send_notification'):
+        _notif_mod.send_notification = MagicMock()
+    _apps_db_mod = sys.modules.get("database.apps")
+    if _apps_db_mod and not hasattr(_apps_db_mod, 'get_app_by_id_db'):
+        _apps_db_mod.get_app_by_id_db = MagicMock(return_value=None)
     if "utils.retrieval" in sys.modules:
         sys.modules["utils.retrieval"].__path__ = []
     if "utils.retrieval.tools.app_tools" in sys.modules:
-        return sys.modules["utils.retrieval.tools.app_tools"]
+        existing = sys.modules["utils.retrieval.tools.app_tools"]
+        if hasattr(existing, 'is_app_webhook_disabled'):
+            return existing
+        del sys.modules["utils.retrieval.tools.app_tools"]
     spec = importlib.util.spec_from_file_location(
         "utils.retrieval.tools.app_tools",
         os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'retrieval', 'tools', 'app_tools.py'),
