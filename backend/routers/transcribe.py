@@ -244,11 +244,6 @@ async def _stream_handler(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    # BYOKMiddleware doesn't fire for WebSocket upgrades (HTTP-only). Extract
-    # BYOK headers from the upgrade request and stash them in the contextvar
-    # BEFORE the paywall check, so a user sending all 4 keys gets the
-    # request-level BYOK escape hatch instead of being closed with trial_expired
-    # whenever their Firestore BYOK heartbeat is briefly stale.
     set_byok_keys(extract_byok_from_websocket(websocket))
 
     if is_trial_paywalled(uid, source):
@@ -2626,6 +2621,7 @@ async def _stream_handler(
     #
     bg_main_tasks = []
     try:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
         # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
         await _process_stt()
