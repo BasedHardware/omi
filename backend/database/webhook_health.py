@@ -204,7 +204,8 @@ def _get_dev_failure_script():
 def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: str) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
     try:
-        key = f'dev_webhook_health:{uid}:{wtype}'
+        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
         script = _get_dev_failure_script()
         result = int(
@@ -219,7 +220,8 @@ def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: st
 def record_dev_webhook_success(uid: str, wtype: str):
     """Record a successful developer webhook delivery. Resets failure state."""
     try:
-        key = f'dev_webhook_health:{uid}:{wtype}'
+        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
         r.hset(
             key,
