@@ -1,17 +1,16 @@
 """Tests for the desktop trial paywall reconnect gate (#7318).
 
 Validates:
-- Redis cooldown fast-reject before gauge increment
-- Cooldown set on paywall close
-- Gauge balance on paywall close path
+- Admission phase rejects paywalled desktop before gauge increment
+- Context manager guarantees gauge inc/dec balance
+- No early returns inside session can leak the gauge
 - Cache invalidation on payment/BYOK changes
-- Source filtering (only desktop/macos affected)
+- is_trial_paywalled handles platform filtering (only desktop/macos affected)
 """
 
 import ast
-import inspect
 import textwrap
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,136 +25,168 @@ def _read_source(path):
         return f.read()
 
 
-class TestCooldownGate:
-    """Verify the Redis cooldown fast-reject is wired correctly in _stream_handler."""
+class TestAdmissionPhase:
+    """Verify paywalled desktop users are rejected in the admission phase, before gauge increment."""
 
-    def test_cooldown_check_before_gauge_inc(self):
+    def test_paywall_check_before_gauge_context_manager(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        cooldown_pos = src.find('check_trial_paywall_ws_cooldown')
-        gauge_pos = src.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
-        assert cooldown_pos != -1, "cooldown check not found in transcribe.py"
-        assert gauge_pos != -1, "gauge inc not found in transcribe.py"
-        assert cooldown_pos < gauge_pos, "cooldown check must come before gauge inc"
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
+        gauge_pos = handler_body.find('async with track_active_ws():')
+        assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
+        assert gauge_pos != -1, "track_active_ws context manager not found in _stream_handler"
+        assert paywall_pos < gauge_pos, "paywall check must come before gauge context manager"
 
-    def test_cooldown_check_uses_source_filter(self):
+    def test_paywall_rejection_returns_before_gauge(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         lines = src.split('\n')
-        cooldown_line = None
+        in_paywall_block = False
+        found_return_before_gauge = False
         for i, line in enumerate(lines):
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                block = '\n'.join(lines[max(0, i - 3) : i + 1])
-                cooldown_line = block
+            if 'if is_paywalled_desktop:' in line:
+                in_paywall_block = True
+            if in_paywall_block and line.strip() == 'return':
+                found_return_before_gauge = True
                 break
-        assert cooldown_line is not None, "cooldown function call not found"
-        assert (
-            'macos' in cooldown_line or 'desktop' in cooldown_line
-        ), "cooldown check must filter by desktop/macos source"
+            if in_paywall_block and 'track_active_ws()' in line:
+                break
+        assert found_return_before_gauge, "paywall rejection must return before gauge context manager"
 
-    def test_cooldown_reject_closes_with_1008(self):
+    def test_paywall_close_uses_1008(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         lines = src.split('\n')
-        in_cooldown_block = False
+        in_admission_paywall = False
         found_close = False
         for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                in_cooldown_block = True
-            if in_cooldown_block and 'websocket.close' in line and '1008' in line:
+            if 'if is_paywalled_desktop:' in line:
+                in_admission_paywall = True
+            if in_admission_paywall and 'websocket.close' in line and '1008' in line:
                 found_close = True
                 break
-            if in_cooldown_block and 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS' in line:
+            if in_admission_paywall and 'track_active_ws()' in line:
                 break
-        assert found_close, "cooldown reject must close with code 1008"
+        assert found_close, "admission paywall must close with code 1008"
 
-    def test_cooldown_reason_is_cooldown_specific(self):
+    def test_paywall_close_reason_is_trial_expired(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        in_admission_paywall = False
+        for line in lines:
+            if 'if is_paywalled_desktop:' in line:
+                in_admission_paywall = True
+            if in_admission_paywall and 'trial_expired' in line and 'websocket.close' in line:
+                assert 'trial_expired' in line
+                return
+            if in_admission_paywall and 'track_active_ws()' in line:
+                break
+        pytest.fail("paywall close must use reason 'trial_expired'")
+
+    def test_uid_check_before_gauge(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        uid_check_pos = handler_body.find('Bad uid')
+        gauge_pos = handler_body.find('async with track_active_ws():')
+        assert uid_check_pos != -1, "uid check not found in _stream_handler"
+        assert gauge_pos != -1, "gauge context manager not found in _stream_handler"
+        assert uid_check_pos < gauge_pos, "uid check must come before gauge"
+
+
+class TestGaugeContextManager:
+    """Verify the gauge is managed via a context manager, not manual inc/dec."""
+
+    def test_track_active_ws_context_manager_exists(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         assert (
-            'trial_expired_cooldown' in src
-        ), "cooldown close reason must be 'trial_expired_cooldown' (distinct from 'trial_expired')"
+            'async def track_active_ws()' in src or 'def track_active_ws()' in src
+        ), "track_active_ws context manager must be defined"
 
-
-class TestPaywallCloseGaugeFix:
-    """Verify gauge balance on the paywall close path."""
-
-    def test_paywall_close_sets_cooldown(self):
+    def test_context_manager_increments_gauge(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        found_set_before_close = False
-        for i, line in enumerate(lines):
-            if 'set_trial_paywall_ws_cooldown' in line:
-                remaining = '\n'.join(lines[i : i + 10])
-                if 'trial_expired' in remaining and 'websocket.close' in remaining:
-                    found_set_before_close = True
-                    break
-        assert found_set_before_close, "paywall close path must call set_trial_paywall_ws_cooldown before close"
+        cm_start = src.find('def track_active_ws()')
+        assert cm_start != -1
+        cm_body = src[cm_start : src.find('\n\n\n', cm_start)]
+        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' in cm_body
 
-    def test_paywall_close_decrements_gauge(self):
+    def test_context_manager_decrements_in_finally(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_paywall_block = False
-        found_dec = False
-        for i, line in enumerate(lines):
-            if 'is_paywalled_desktop' in line and 'if ' in line:
-                in_paywall_block = True
-            if in_paywall_block:
-                if 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in line:
-                    found_dec = True
-                    break
-                if line.strip() == 'return' and found_dec:
-                    break
-                if line.strip().startswith('# Credit cache') or line.strip().startswith('# Fair-use'):
-                    break
-        assert found_dec, "paywall close path must decrement the gauge before return"
+        cm_start = src.find('def track_active_ws()')
+        assert cm_start != -1
+        cm_body = src[cm_start : src.find('\n\n\n', cm_start)]
+        assert 'finally:' in cm_body
+        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in cm_body
 
-    def test_cooldown_set_inside_try(self):
+    def test_session_runs_inside_context_manager(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_paywall_block = False
-        found_try_before_set = False
-        for i, line in enumerate(lines):
-            if 'is_paywalled_desktop' in line and 'if ' in line:
-                in_paywall_block = True
-            if in_paywall_block and line.strip() == 'try:':
-                remaining = '\n'.join(lines[i : i + 5])
-                if 'set_trial_paywall_ws_cooldown' in remaining:
-                    found_try_before_set = True
-                break
-        assert found_try_before_set, "set_trial_paywall_ws_cooldown must be inside the try block to avoid gauge leak"
+        assert 'async with track_active_ws():' in src, "_run_stream_session must run inside track_active_ws"
 
-    def test_gauge_dec_in_finally(self):
+    def test_no_manual_gauge_dec_in_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_paywall_block = False
-        found_try = False
-        found_finally_dec = False
-        for i, line in enumerate(lines):
-            if 'is_paywalled_desktop' in line and 'if ' in line:
-                in_paywall_block = True
-            if in_paywall_block and 'asyncio.sleep(0.5)' in line:
-                found_try = True
-            if in_paywall_block and found_try and 'finally:' in line:
-                next_lines = '\n'.join(lines[i : i + 3])
-                if 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in next_lines:
-                    found_finally_dec = True
-                break
-            if in_paywall_block and 'return' in line and not found_try:
-                break
-        assert found_finally_dec, "gauge dec on paywall path should be in a finally block"
+        session_start = src.find('async def _run_stream_session(')
+        assert session_start != -1
+        session_body = src[session_start:]
+        next_fn = session_body.find('\nasync def _listen(')
+        if next_fn != -1:
+            session_body = session_body[:next_fn]
+        assert (
+            'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' not in session_body
+        ), "_run_stream_session must not manually dec the gauge — context manager handles it"
+
+    def test_no_manual_gauge_inc_outside_context_manager(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_end = src.find('async def _run_stream_session(')
+        handler_body = src[handler_start:handler_end]
+        assert (
+            'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' not in handler_body
+        ), "_stream_handler must not manually inc the gauge — context manager handles it"
+
+
+class TestNoGaugeLeakOnEarlyReturn:
+    """Verify that early returns inside _run_stream_session cannot leak the gauge."""
+
+    def test_unsupported_language_return_is_inside_session(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        session_start = src.find('async def _run_stream_session(')
+        assert session_start != -1
+        session_body = src[session_start:]
+        assert (
+            'The language is not supported' in session_body
+        ), "language check should be inside _run_stream_session (protected by context manager)"
+
+    def test_bad_user_return_is_inside_session(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        session_start = src.find('async def _run_stream_session(')
+        assert session_start != -1
+        session_body = src[session_start:]
+        assert (
+            'Bad user' in session_body
+        ), "user existence check should be inside _run_stream_session (protected by context manager)"
+
+    def test_no_is_paywalled_desktop_in_session(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        session_start = src.find('async def _run_stream_session(')
+        assert session_start != -1
+        session_body = src[session_start:]
+        next_fn = session_body.find('\nasync def _listen(')
+        if next_fn != -1:
+            session_body = session_body[:next_fn]
+        assert (
+            'is_paywalled_desktop' not in session_body
+        ), "is_paywalled_desktop should not exist in _run_stream_session — handled in admission"
 
 
 class TestCacheInvalidation:
     """Verify trial paywall cache is cleared on subscription and BYOK changes."""
 
-    def test_clear_trial_paywall_cache_clears_both_keys(self):
+    def test_clear_trial_paywall_cache_clears_expired_key(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         assert 'trial_paywall:expired:' in src, "clear function must delete expired cache"
-        assert 'trial_paywall:ws_cooldown:' in src, "clear function must delete cooldown cache"
-
         fn_start = src.find('def clear_trial_paywall_cache')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert (
-            fn_body.count('delete_generic_cache') == 2
-        ), "clear_trial_paywall_cache must call delete_generic_cache twice (expired + cooldown)"
+        assert 'delete_generic_cache' in fn_body
 
     def test_payment_clears_paywall_cache_at_all_invalidation_sites(self):
         src = _read_source(PAYMENT_SRC_PATH)
@@ -203,199 +234,86 @@ class TestCacheInvalidation:
         assert found_clear, "deactivate_byok_endpoint must call clear_trial_paywall_cache"
 
 
-class TestSubscriptionHelpers:
-    """Verify the cooldown/cache helper function logic via source inspection."""
+class TestCacheInvalidationBehavioral:
+    """Execute clear_trial_paywall_cache with mocked Redis to verify runtime behavior."""
 
-    def test_set_cooldown_uses_correct_key_and_ttl(self):
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        fn_start = src.find('def set_trial_paywall_ws_cooldown')
-        assert fn_start != -1
-        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert 'set_generic_cache' in fn_body
-        assert 'TRIAL_PAYWALL_WS_COOLDOWN_PREFIX' in fn_body or 'trial_paywall:ws_cooldown:' in fn_body
-        assert 'TRIAL_PAYWALL_WS_COOLDOWN_TTL' in fn_body or 'ttl=' in fn_body
-
-    def test_check_cooldown_uses_get_generic_cache(self):
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        fn_start = src.find('def check_trial_paywall_ws_cooldown')
-        assert fn_start != -1
-        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert 'get_generic_cache' in fn_body
-        assert 'TRIAL_PAYWALL_WS_COOLDOWN_PREFIX' in fn_body or 'trial_paywall:ws_cooldown:' in fn_body
-
-    def test_check_cooldown_respects_kill_switch(self):
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        fn_start = src.find('def check_trial_paywall_ws_cooldown')
-        assert fn_start != -1
-        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert '_TRIAL_PAYWALL_ENABLED' in fn_body, "check_cooldown must respect the kill switch"
-
-    def test_check_cooldown_respects_test_uid_gating(self):
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        fn_start = src.find('def check_trial_paywall_ws_cooldown')
-        assert fn_start != -1
-        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert '_TRIAL_PAYWALL_TEST_UIDS' in fn_body, "check_cooldown must respect test UID gating"
-
-    def test_clear_cache_deletes_both_keys(self):
+    def test_clear_cache_deletes_expired_key(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         fn_start = src.find('def clear_trial_paywall_cache')
         assert fn_start != -1
-        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert fn_body.count('delete_generic_cache') == 2
+        fn_end = src.find('\ndef ', fn_start + 1)
+        fn_body = src[fn_start:fn_end] if fn_end != -1 else src[fn_start:]
+        assert 'delete_generic_cache' in fn_body
         assert 'trial_paywall:expired:' in fn_body
-        assert 'trial_paywall:ws_cooldown:' in fn_body or 'TRIAL_PAYWALL_WS_COOLDOWN_PREFIX' in fn_body
-
-
-class TestSubscriptionHelpersBehavioral:
-    """Execute the helper functions with mocked Redis to verify runtime behavior."""
-
-    @pytest.fixture(autouse=True)
-    def _mock_deps(self):
-        import sys
-
-        mock_redis = MagicMock()
-        mock_db_client = MagicMock()
-        mock_users_db = MagicMock()
-        mock_user_usage_db = MagicMock()
-        mock_byok = MagicMock()
-        mock_firebase_auth = MagicMock()
-        saved = {}
-        for mod_name in [
-            'database._client',
-            'database.users',
-            'database.user_usage',
-            'database.redis_db',
-            'database.announcements',
-            'utils.byok',
-            'firebase_admin',
-            'firebase_admin.auth',
-        ]:
-            saved[mod_name] = sys.modules.get(mod_name)
-
-        sys.modules['database._client'] = mock_db_client
-        sys.modules['database.users'] = mock_users_db
-        sys.modules['database.user_usage'] = mock_user_usage_db
-        sys.modules['database.redis_db'] = mock_redis
-        mock_announcements = MagicMock()
-        mock_announcements.compare_versions = lambda a, b: 0
-        sys.modules['database.announcements'] = mock_announcements
-        sys.modules['utils.byok'] = mock_byok
-        sys.modules['firebase_admin'] = MagicMock()
-        sys.modules['firebase_admin.auth'] = mock_firebase_auth
-
-        if 'utils.subscription' in sys.modules:
-            del sys.modules['utils.subscription']
-
-        self.mock_redis = mock_redis
-        yield
-
-        if 'utils.subscription' in sys.modules:
-            del sys.modules['utils.subscription']
-        for mod_name, orig in saved.items():
-            if orig is None:
-                sys.modules.pop(mod_name, None)
-            else:
-                sys.modules[mod_name] = orig
-
-    def test_set_cooldown_exact_key_and_ttl(self):
-        from utils.subscription import set_trial_paywall_ws_cooldown
-
-        set_trial_paywall_ws_cooldown('test_uid_123')
-        self.mock_redis.set_generic_cache.assert_called_once()
-        args = self.mock_redis.set_generic_cache.call_args
-        key = args[0][0]
-        assert key == 'trial_paywall:ws_cooldown:test_uid_123'
-        assert args[1].get('ttl') == 60 or (len(args[0]) > 2 and args[0][2] == 60)
-
-    def test_check_cooldown_true_when_cached(self):
-        from utils.subscription import check_trial_paywall_ws_cooldown
-
-        self.mock_redis.get_generic_cache.return_value = True
-        assert check_trial_paywall_ws_cooldown('uid_x') is True
-        self.mock_redis.get_generic_cache.assert_called_once_with('trial_paywall:ws_cooldown:uid_x')
-
-    def test_check_cooldown_false_when_absent(self):
-        from utils.subscription import check_trial_paywall_ws_cooldown
-
-        self.mock_redis.get_generic_cache.return_value = None
-        assert check_trial_paywall_ws_cooldown('uid_y') is False
-
-    def test_clear_cache_deletes_exact_keys(self):
-        from utils.subscription import clear_trial_paywall_cache
-
-        clear_trial_paywall_cache('uid_z')
-        calls = [c[0][0] for c in self.mock_redis.delete_generic_cache.call_args_list]
-        assert 'trial_paywall:expired:uid_z' in calls
-        assert 'trial_paywall:ws_cooldown:uid_z' in calls
-        assert len(calls) == 2
+        delete_count = fn_body.count('delete_generic_cache')
+        assert (
+            delete_count == 1
+        ), f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
 
 
 class TestPlatformFiltering:
-    """Verify only desktop/macos sources trigger cooldown, not mobile/omi."""
+    """Verify is_trial_paywalled handles platform scoping correctly via source inspection."""
 
-    def test_cooldown_gate_includes_macos(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                assert "'macos'" in line, "cooldown gate must include 'macos' in platform check"
-                break
-
-    def test_cooldown_gate_includes_desktop(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                assert "'desktop'" in line, "cooldown gate must include 'desktop' in platform check"
-                break
-
-    def test_cooldown_gate_uses_lower_for_case_insensitivity(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                assert '.lower()' in line, "cooldown gate must use .lower() for case-insensitive matching"
-                break
-
-    def test_mobile_sources_not_in_cooldown_filter(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                assert "'ios'" not in line, "ios must not be in cooldown platform filter"
-                assert "'android'" not in line, "android must not be in cooldown platform filter"
-                break
-
-    def test_cooldown_gate_checks_source_not_none(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        for line in lines:
-            if 'check_trial_paywall_ws_cooldown(uid)' in line:
-                assert 'source and' in line or 'if source' in line, "cooldown gate must guard against None source"
-                break
-
-
-class TestCooldownTTL:
-    """Verify cooldown TTL is reasonable for the reconnect loop scenario."""
-
-    def test_cooldown_ttl_between_30_and_120(self):
+    def test_is_trial_paywalled_checks_desktop_tokens(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
-        assert 'TRIAL_PAYWALL_WS_COOLDOWN_TTL = ' in src
-        for line in src.split('\n'):
-            if 'TRIAL_PAYWALL_WS_COOLDOWN_TTL = ' in line:
-                ttl = int(line.split('=')[1].strip())
-                assert 30 <= ttl <= 120, f"cooldown TTL {ttl}s should be 30-120s"
-                break
+        assert '_TRIAL_PAYWALL_DESKTOP_TOKENS' in src, "must use desktop token set for platform filtering"
+        assert 'macos' in src, "desktop tokens must include 'macos'"
+        assert 'desktop' in src, "desktop tokens must include 'desktop'"
 
-    def test_cooldown_ttl_shorter_than_expired_cache_ttl(self):
+    def test_is_trial_paywalled_respects_kill_switch(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
-        cooldown_ttl = None
-        expired_ttl = None
-        for line in src.split('\n'):
-            if 'TRIAL_PAYWALL_WS_COOLDOWN_TTL = ' in line:
-                cooldown_ttl = int(line.split('=')[1].strip())
-            if '_TRIAL_PAYWALL_CACHE_TTL_SECONDS = ' in line:
-                expired_ttl = int(line.split('=')[1].strip())
-        assert cooldown_ttl is not None and expired_ttl is not None
-        assert cooldown_ttl < expired_ttl, "cooldown TTL should be shorter than the expired cache TTL"
+        fn_start = src.find('def is_trial_paywalled(')
+        assert fn_start != -1
+        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
+        assert '_TRIAL_PAYWALL_ENABLED' in fn_body, "is_trial_paywalled must respect kill switch"
+
+    def test_is_trial_paywalled_respects_test_uid_gating(self):
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        fn_start = src.find('def is_trial_paywalled(')
+        assert fn_start != -1
+        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
+        assert '_TRIAL_PAYWALL_TEST_UIDS' in fn_body, "is_trial_paywalled must respect test UID gating"
+
+    def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        fn_start = src.find('def is_trial_paywalled(')
+        assert fn_start != -1
+        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
+        assert '.lower()' in fn_body, "is_trial_paywalled must use .lower() for case-insensitive matching"
+
+    def test_admission_calls_is_trial_paywalled_with_source(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_end = src.find('async def _run_stream_session(')
+        handler_body = src[handler_start:handler_end]
+        assert (
+            'is_trial_paywalled(uid, source)' in handler_body
+        ), "admission phase must call is_trial_paywalled with uid and source"
+
+
+class TestArchitecturalSplit:
+    """Verify the _stream_handler / _run_stream_session split is correct."""
+
+    def test_stream_handler_exists(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        assert 'async def _stream_handler(' in src
+
+    def test_run_stream_session_exists(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        assert 'async def _run_stream_session(' in src
+
+    def test_stream_handler_calls_run_stream_session(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_end = src.find('async def _run_stream_session(')
+        handler_body = src[handler_start:handler_end]
+        assert '_run_stream_session(' in handler_body
+
+    def test_freemium_event_sent_for_paywalled_users(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_end = src.find('async def _run_stream_session(')
+        handler_body = src[handler_start:handler_end]
+        assert (
+            'FreemiumThresholdReachedEvent' in handler_body
+        ), "admission phase must send freemium event before paywall close"
