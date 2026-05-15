@@ -611,6 +611,14 @@ def _save_action_items(uid: str, conversation: Conversation):
                     due_at=action_item.due_at.isoformat(),
                 )
 
+        # Auto-sync to task integration — submit before vector ops so it always runs
+        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+        def _run_auto_sync():
+            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+        submit_with_context(critical_executor, _run_auto_sync)
+
         upsert_action_item_vectors_batch(
             uid,
             [
@@ -618,14 +626,6 @@ def _save_action_items(uid: str, conversation: Conversation):
                 for aid, data in zip(action_item_ids, action_items_data)
             ],
         )
-
-        # Auto-sync to task integration
-        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
-
-        def _run_auto_sync():
-            asyncio.run(auto_sync_action_items_batch(uid, created_items))
-
-        submit_with_context(critical_executor, _run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
