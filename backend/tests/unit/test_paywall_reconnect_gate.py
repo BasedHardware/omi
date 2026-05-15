@@ -218,6 +218,135 @@ class TestSubscriptionHelpers:
         assert 'trial_paywall:ws_cooldown:' in fn_body or 'TRIAL_PAYWALL_WS_COOLDOWN_PREFIX' in fn_body
 
 
+class TestSubscriptionHelpersBehavioral:
+    """Execute the helper functions with mocked Redis to verify runtime behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_deps(self):
+        import sys
+
+        mock_redis = MagicMock()
+        mock_db_client = MagicMock()
+        mock_users_db = MagicMock()
+        mock_user_usage_db = MagicMock()
+        mock_byok = MagicMock()
+        mock_firebase_auth = MagicMock()
+        saved = {}
+        for mod_name in [
+            'database._client',
+            'database.users',
+            'database.user_usage',
+            'database.redis_db',
+            'database.announcements',
+            'utils.byok',
+            'firebase_admin',
+            'firebase_admin.auth',
+        ]:
+            saved[mod_name] = sys.modules.get(mod_name)
+
+        sys.modules['database._client'] = mock_db_client
+        sys.modules['database.users'] = mock_users_db
+        sys.modules['database.user_usage'] = mock_user_usage_db
+        sys.modules['database.redis_db'] = mock_redis
+        mock_announcements = MagicMock()
+        mock_announcements.compare_versions = lambda a, b: 0
+        sys.modules['database.announcements'] = mock_announcements
+        sys.modules['utils.byok'] = mock_byok
+        sys.modules['firebase_admin'] = MagicMock()
+        sys.modules['firebase_admin.auth'] = mock_firebase_auth
+
+        if 'utils.subscription' in sys.modules:
+            del sys.modules['utils.subscription']
+
+        self.mock_redis = mock_redis
+        yield
+
+        if 'utils.subscription' in sys.modules:
+            del sys.modules['utils.subscription']
+        for mod_name, orig in saved.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+    def test_set_cooldown_exact_key_and_ttl(self):
+        from utils.subscription import set_trial_paywall_ws_cooldown
+
+        set_trial_paywall_ws_cooldown('test_uid_123')
+        self.mock_redis.set_generic_cache.assert_called_once()
+        args = self.mock_redis.set_generic_cache.call_args
+        key = args[0][0]
+        assert key == 'trial_paywall:ws_cooldown:test_uid_123'
+        assert args[1].get('ttl') == 60 or (len(args[0]) > 2 and args[0][2] == 60)
+
+    def test_check_cooldown_true_when_cached(self):
+        from utils.subscription import check_trial_paywall_ws_cooldown
+
+        self.mock_redis.get_generic_cache.return_value = True
+        assert check_trial_paywall_ws_cooldown('uid_x') is True
+        self.mock_redis.get_generic_cache.assert_called_once_with('trial_paywall:ws_cooldown:uid_x')
+
+    def test_check_cooldown_false_when_absent(self):
+        from utils.subscription import check_trial_paywall_ws_cooldown
+
+        self.mock_redis.get_generic_cache.return_value = None
+        assert check_trial_paywall_ws_cooldown('uid_y') is False
+
+    def test_clear_cache_deletes_exact_keys(self):
+        from utils.subscription import clear_trial_paywall_cache
+
+        clear_trial_paywall_cache('uid_z')
+        calls = [c[0][0] for c in self.mock_redis.delete_generic_cache.call_args_list]
+        assert 'trial_paywall:expired:uid_z' in calls
+        assert 'trial_paywall:ws_cooldown:uid_z' in calls
+        assert len(calls) == 2
+
+
+class TestPlatformFiltering:
+    """Verify only desktop/macos sources trigger cooldown, not mobile/omi."""
+
+    def test_cooldown_gate_includes_macos(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        for line in lines:
+            if 'check_trial_paywall_ws_cooldown(uid)' in line:
+                assert "'macos'" in line, "cooldown gate must include 'macos' in platform check"
+                break
+
+    def test_cooldown_gate_includes_desktop(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        for line in lines:
+            if 'check_trial_paywall_ws_cooldown(uid)' in line:
+                assert "'desktop'" in line, "cooldown gate must include 'desktop' in platform check"
+                break
+
+    def test_cooldown_gate_uses_lower_for_case_insensitivity(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        for line in lines:
+            if 'check_trial_paywall_ws_cooldown(uid)' in line:
+                assert '.lower()' in line, "cooldown gate must use .lower() for case-insensitive matching"
+                break
+
+    def test_mobile_sources_not_in_cooldown_filter(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        for line in lines:
+            if 'check_trial_paywall_ws_cooldown(uid)' in line:
+                assert "'ios'" not in line, "ios must not be in cooldown platform filter"
+                assert "'android'" not in line, "android must not be in cooldown platform filter"
+                break
+
+    def test_cooldown_gate_checks_source_not_none(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        for line in lines:
+            if 'check_trial_paywall_ws_cooldown(uid)' in line:
+                assert 'source and' in line or 'if source' in line, "cooldown gate must guard against None source"
+                break
+
+
 class TestCooldownTTL:
     """Verify cooldown TTL is reasonable for the reconnect loop scenario."""
 
