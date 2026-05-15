@@ -5,7 +5,10 @@ Validates:
 - No paywall close block inside the session body (removed, handled in admission)
 - Cache invalidation on payment/BYOK changes
 - is_trial_paywalled handles platform filtering (only desktop/macos affected)
+- Behavioral tests for is_trial_paywalled and clear_trial_paywall_cache
 """
+
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -258,3 +261,125 @@ class TestPlatformFiltering:
         assert (
             'is_trial_paywalled(uid, source)' in admission_body
         ), "admission phase must call is_trial_paywalled with uid and source"
+
+
+class TestIsTrialPaywalledBehavioral:
+    """Behavioral tests for is_trial_paywalled() — mock internals, test logic directly.
+
+    Uses sys.modules stubs to avoid triggering Firestore/Firebase init on import.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_subscription(self):
+        import sys
+        import types
+
+        def _stub(name):
+            if name not in sys.modules:
+                sys.modules[name] = types.ModuleType(name)
+            return sys.modules[name]
+
+        saved = {}
+        stubs = [
+            'google.cloud',
+            'google.cloud.firestore',
+            'google.cloud.firestore_v1',
+            'firebase_admin',
+            'firebase_admin.auth',
+            'firebase_admin.firestore',
+            'database._client',
+            'database.redis_db',
+            'database.users',
+            'database.user_usage',
+            'database.announcements',
+        ]
+        for name in stubs:
+            saved[name] = sys.modules.get(name)
+            mod = _stub(name)
+            if name == 'database._client':
+                mod.db = MagicMock()
+            elif name == 'database.redis_db':
+                mod.get_generic_cache = MagicMock(return_value=None)
+                mod.set_generic_cache = MagicMock()
+                mod.delete_generic_cache = MagicMock()
+            elif name == 'database.users':
+                mod.get_user_valid_subscription = MagicMock(return_value=None)
+                mod.is_byok_active = MagicMock(return_value=False)
+            elif name == 'database.user_usage':
+                pass
+            elif name == 'database.announcements':
+                mod.compare_versions = MagicMock()
+            elif name == 'firebase_admin.auth':
+                mock_user = MagicMock()
+                mock_user.user_metadata.creation_timestamp = 0
+                mod.get_user = MagicMock(return_value=mock_user)
+
+        if 'utils.subscription' in sys.modules:
+            del sys.modules['utils.subscription']
+
+        import utils.subscription as sub
+
+        self._sub = sub
+        self._mock_expired = MagicMock(return_value=True)
+        self._orig_expired = sub._is_trial_expired_cached
+        sub._is_trial_expired_cached = self._mock_expired
+        sub._TRIAL_PAYWALL_ENABLED = True
+        sub._TRIAL_PAYWALL_TEST_UIDS = set()
+
+        yield
+
+        sub._is_trial_expired_cached = self._orig_expired
+        for name in stubs:
+            if saved[name] is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = saved[name]
+
+    def test_desktop_expired_returns_true(self):
+        assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
+
+    def test_macos_expired_returns_true(self):
+        assert self._sub.is_trial_paywalled('uid1', 'macos') is True
+
+    def test_ios_returns_false(self):
+        assert self._sub.is_trial_paywalled('uid1', 'ios') is False
+        self._mock_expired.assert_not_called()
+
+    def test_android_returns_false(self):
+        assert self._sub.is_trial_paywalled('uid1', 'android') is False
+        self._mock_expired.assert_not_called()
+
+    def test_none_platform_returns_false(self):
+        assert self._sub.is_trial_paywalled('uid1', None) is False
+        self._mock_expired.assert_not_called()
+
+    def test_unknown_platform_returns_false(self):
+        assert self._sub.is_trial_paywalled('uid1', 'phone_call') is False
+        self._mock_expired.assert_not_called()
+
+    def test_mixed_case_desktop(self):
+        assert self._sub.is_trial_paywalled('uid1', 'Desktop') is True
+        assert self._sub.is_trial_paywalled('uid1', 'MACOS') is True
+
+    def test_kill_switch_disabled(self):
+        self._sub._TRIAL_PAYWALL_ENABLED = False
+        assert self._sub.is_trial_paywalled('uid1', 'desktop') is False
+        self._sub._TRIAL_PAYWALL_ENABLED = True
+
+    def test_test_uid_gating_allows_listed(self):
+        self._sub._TRIAL_PAYWALL_TEST_UIDS = {'uid1', 'uid2'}
+        assert self._sub.is_trial_paywalled('uid1', 'desktop') is True
+        self._sub._TRIAL_PAYWALL_TEST_UIDS = set()
+
+    def test_test_uid_gating_blocks_unlisted(self):
+        self._sub._TRIAL_PAYWALL_TEST_UIDS = {'uid1', 'uid2'}
+        assert self._sub.is_trial_paywalled('uid99', 'desktop') is False
+        self._sub._TRIAL_PAYWALL_TEST_UIDS = set()
+
+    def test_not_expired_returns_false(self):
+        self._mock_expired.return_value = False
+        assert self._sub.is_trial_paywalled('uid1', 'desktop') is False
+
+    def test_clear_cache_calls_redis_delete(self):
+        self._sub.clear_trial_paywall_cache('test-uid-123')
+        self._sub.redis_db.delete_generic_cache.assert_called_with('trial_paywall:expired:test-uid-123')
