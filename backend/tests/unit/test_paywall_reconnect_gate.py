@@ -8,10 +8,6 @@ Validates:
 - is_trial_paywalled handles platform filtering (only desktop/macos affected)
 """
 
-import ast
-import textwrap
-from unittest.mock import MagicMock
-
 import pytest
 
 TRANSCRIBE_SRC_PATH = 'routers/transcribe.py'
@@ -44,7 +40,7 @@ class TestAdmissionPhase:
         in_paywall_block = False
         found_return_before_gauge = False
         for i, line in enumerate(lines):
-            if 'if is_paywalled_desktop:' in line:
+            if 'if is_trial_paywalled(' in line:
                 in_paywall_block = True
             if in_paywall_block and line.strip() == 'return':
                 found_return_before_gauge = True
@@ -59,7 +55,7 @@ class TestAdmissionPhase:
         in_admission_paywall = False
         found_close = False
         for line in lines:
-            if 'if is_paywalled_desktop:' in line:
+            if 'if is_trial_paywalled(' in line:
                 in_admission_paywall = True
             if in_admission_paywall and 'websocket.close' in line and '1008' in line:
                 found_close = True
@@ -73,7 +69,7 @@ class TestAdmissionPhase:
         lines = src.split('\n')
         in_admission_paywall = False
         for line in lines:
-            if 'if is_paywalled_desktop:' in line:
+            if 'if is_trial_paywalled(' in line:
                 in_admission_paywall = True
             if in_admission_paywall and 'trial_expired' in line and 'websocket.close' in line:
                 assert 'trial_expired' in line
@@ -164,7 +160,7 @@ class TestNoGaugeLeakOnEarlyReturn:
             'Bad user' in session_body
         ), "user existence check should be inside _run_stream_session (protected by context manager)"
 
-    def test_no_is_paywalled_desktop_in_session(self):
+    def test_no_paywall_check_in_session(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         session_start = src.find('async def _run_stream_session(')
         assert session_start != -1
@@ -173,8 +169,8 @@ class TestNoGaugeLeakOnEarlyReturn:
         if next_fn != -1:
             session_body = session_body[:next_fn]
         assert (
-            'is_paywalled_desktop' not in session_body
-        ), "is_paywalled_desktop should not exist in _run_stream_session — handled in admission"
+            'is_trial_paywalled' not in session_body
+        ), "is_trial_paywalled should not exist in _run_stream_session — handled in admission"
 
 
 class TestCacheInvalidation:
@@ -309,11 +305,11 @@ class TestArchitecturalSplit:
         handler_body = src[handler_start:handler_end]
         assert '_run_stream_session(' in handler_body
 
-    def test_freemium_event_sent_for_paywalled_users(self):
+    def test_no_freemium_event_in_admission(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_end = src.find('async def _run_stream_session(')
         handler_body = src[handler_start:handler_end]
         assert (
-            'FreemiumThresholdReachedEvent' in handler_body
-        ), "admission phase must send freemium event before paywall close"
+            'FreemiumThresholdReachedEvent' not in handler_body
+        ), "admission phase should not send freemium event — close reason 'trial_expired' is the signal"
