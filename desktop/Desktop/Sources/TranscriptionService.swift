@@ -513,6 +513,12 @@ class TranscriptionService {
 
             case .failure(let error):
                 guard self.isConnected else { return }
+                // 1008 policy violation = server-side hard reject (e.g. trial_expired).
+                // Don't reconnect — the server will keep closing immediately and we'd loop.
+                if self.webSocketTask?.closeCode == .policyViolation {
+                    log("TranscriptionService: Server closed with policy violation (1008) — disabling reconnect")
+                    self.shouldReconnect = false
+                }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }
