@@ -240,8 +240,9 @@ actor TaskAssistant: ProactiveAssistant {
 
     /// Run the extraction pipeline on arbitrary JPEG data without side effects (no saving, no events).
     /// Used by the test runner to replay past screenshots.
-    /// Returns (result, searchCount) where searchCount is the number of search tool calls made.
-    func testAnalyze(jpegData: Data, appName: String) async throws -> (TaskExtractionResult?, Int) {
+    /// Returns (results, searchCount) — results is one entry per extracted task plus one
+    /// terminator entry (no_task_found/reject_task) when no tasks were extracted.
+    func testAnalyze(jpegData: Data, appName: String) async throws -> ([TaskExtractionResult], Int) {
         return try await extractTaskSingleStage(from: jpegData, appName: appName)
     }
 
@@ -668,17 +669,20 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Analyzing frame from \(frame.appName)...")
         do {
-            let (result, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
-            guard let result = result else {
-                log("Task: Analysis returned no result")
+            let (results, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+            guard !results.isEmpty else {
+                log("Task: Analysis returned no results")
                 return
             }
 
-            log("Task: Analysis complete - hasNewTask: \(result.hasNewTask), context: \(result.contextSummary), searches: \(searchCount)")
+            let extractedCount = results.filter { $0.hasNewTask }.count
+            log("Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)")
 
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle) { type, data in
-                Task { @MainActor in
-                    AssistantCoordinator.shared.sendEvent(type: type, data: data)
+            for result in results {
+                await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle) { type, data in
+                    Task { @MainActor in
+                        AssistantCoordinator.shared.sendEvent(type: type, data: data)
+                    }
                 }
             }
         } catch {
@@ -686,9 +690,14 @@ actor TaskAssistant: ProactiveAssistant {
         }
     }
 
-    /// Loop-based extraction: image analysis + iterative tool calling for search + terminal tool for decision
-    /// Returns (result, searchCount) where searchCount is the number of search tool calls made.
-    private func extractTaskSingleStage(from jpegData: Data, appName: String) async throws -> (TaskExtractionResult?, Int) {
+    /// Loop-based extraction: image analysis + iterative tool calling. A single frame can
+    /// contain multiple distinct commitments (e.g. two unrelated asks in one chat) — the
+    /// loop accumulates every extract_task call instead of stopping after the first.
+    /// reject_task on one candidate no longer kills the whole frame; the loop keeps going
+    /// until no_task_found terminates it or the iteration budget is exhausted.
+    /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
+    /// terminator result when zero tasks were extracted.
+    private func extractTaskSingleStage(from jpegData: Data, appName: String) async throws -> ([TaskExtractionResult], Int) {
         // 1. Gather context
         let context = await refreshContext()
 
@@ -861,10 +870,14 @@ actor TaskAssistant: ProactiveAssistant {
             ]
         }
 
-        // 6. Tool-calling loop (max 5 iterations)
+        // 6. Tool-calling loop (max 8 iterations — enough headroom for 2-3 distinct
+        // commitments per frame each doing search + extract).
         var searchCount = 0
+        var extractedResults: [TaskExtractionResult] = []
+        var lastContextSummary = ""
+        var lastCurrentActivity = ""
 
-        for iteration in 0..<5 {
+        for iteration in 0..<8 {
             let result = try await geminiClient.sendImageToolLoop(
                 contents: contents,
                 systemPrompt: currentSystemPrompt,
@@ -883,12 +896,16 @@ actor TaskAssistant: ProactiveAssistant {
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No task on screen"
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
                 log("Task: no_task_found — \(contextSummary)")
-                return (TaskExtractionResult(
+                if !extractedResults.isEmpty {
+                    // Already extracted at least one task — terminator can be implicit, just return.
+                    return (extractedResults, searchCount)
+                }
+                return ([TaskExtractionResult(
                     hasNewTask: false,
                     task: nil,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
-                ), searchCount)
+                )], searchCount)
 
             case "extract_task":
                 let title = toolCall.arguments["title"] as? String ?? ""
@@ -968,24 +985,67 @@ actor TaskAssistant: ProactiveAssistant {
                 )
 
                 log("Task: extract_task — \"\(title)\" (confidence: \(confidence), priority: \(priorityStr), score: \(relevanceScore.map { String($0) } ?? "nil"))")
-                return (TaskExtractionResult(
+                extractedResults.append(TaskExtractionResult(
                     hasNewTask: true,
                     task: task,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
-                ), searchCount)
+                ))
+                lastContextSummary = contextSummary
+                lastCurrentActivity = currentActivity
+                // Feed an acknowledgement back so the model can decide whether to extract
+                // more commitments or stop with no_task_found.
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["title": title]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: """
+                            EXTRACTED: "\(title)". \
+                            Now look at the SAME screenshot again — is there ANOTHER distinct, unrelated commitment from a different request or different deliverable? \
+                            (Same person asking for two different things counts as two tasks.) \
+                            If yes, search_similar for the next one and extract it. \
+                            If no other commitment remains, call no_task_found.
+                            """)
+                    ))]
+                ))
+                continue
 
             case "reject_task":
                 let reason = toolCall.arguments["reason"] as? String ?? "Unknown reason"
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? ""
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? ""
                 log("Task: reject_task — \(reason)")
-                return (TaskExtractionResult(
-                    hasNewTask: false,
-                    task: nil,
-                    contextSummary: contextSummary,
-                    currentActivity: currentActivity
-                ), searchCount)
+                lastContextSummary = contextSummary
+                lastCurrentActivity = currentActivity
+                // reject_task no longer kills the frame — Claude may have only rejected one
+                // of several commitments. Feed the rejection back and let it look for others.
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["reason": reason]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: """
+                            REJECTED that candidate (duplicate / already tracked). \
+                            Look at the SAME screenshot again — is there ANOTHER distinct, unrelated commitment that is NOT a duplicate of any existing task? \
+                            If yes, search_similar for it and extract it. \
+                            If no other commitment remains, call no_task_found.
+                            """)
+                    ))]
+                ))
+                continue
 
             case "search_similar":
                 let query = toolCall.arguments["query"] as? String ?? ""
@@ -1057,8 +1117,18 @@ actor TaskAssistant: ProactiveAssistant {
             }
         }
 
-        log("Task: Completed in \(searchCount) searches (loop exhausted without terminal tool)")
-        return (nil, searchCount)
+        log("Task: Completed in \(searchCount) searches (loop exhausted without terminal tool), extracted: \(extractedResults.count)")
+        if !extractedResults.isEmpty {
+            return (extractedResults, searchCount)
+        }
+        // No extracts and no terminator — return a synthetic no-task result so the caller
+        // still saves an observation row for telemetry.
+        return ([TaskExtractionResult(
+            hasNewTask: false,
+            task: nil,
+            contextSummary: lastContextSummary.isEmpty ? "Analysis incomplete" : lastContextSummary,
+            currentActivity: lastCurrentActivity.isEmpty ? "Unknown" : lastCurrentActivity
+        )], searchCount)
     }
 
     // MARK: - Title Validation
