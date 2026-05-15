@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Rewind shows screenshots within ~5 seconds of launch instead of waiting up to a minute for the first video chunk to fill up"
+  ],
   "releases": [
     {
       "version": "0.11.404",
