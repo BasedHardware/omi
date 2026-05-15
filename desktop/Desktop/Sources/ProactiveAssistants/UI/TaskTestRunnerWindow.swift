@@ -529,8 +529,12 @@ struct TaskTestRunnerView: View {
 
                     // Run extraction pipeline
                     let analyzeStart = Date()
-                    let (result, searchCount) = try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
+                    let (allResults, searchCount) = try await taskAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
                     let duration = Date().timeIntervalSince(analyzeStart)
+
+                    // Pick the first task-bearing result for display; fall back to the first
+                    // result (e.g. no_task_found terminator) when nothing was extracted.
+                    let result: TaskExtractionResult? = allResults.first(where: { $0.hasNewTask }) ?? allResults.first
 
                     await MainActor.run {
                         results.append(TaskTestResult(
