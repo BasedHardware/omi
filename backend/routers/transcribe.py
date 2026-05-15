@@ -243,6 +243,12 @@ async def _stream_handler(
     if is_trial_paywalled(uid, source):
         logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
         try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
             await asyncio.sleep(0.5)
             await websocket.close(code=1008, reason="trial_expired")
         except Exception as e:
