@@ -88,7 +88,13 @@ from utils.fair_use import (
     is_dg_budget_exhausted,
     record_dg_usage_ms,
 )
-from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds, is_trial_paywalled
+from utils.subscription import (
+    has_transcription_credits,
+    get_remaining_transcription_seconds,
+    is_trial_paywalled,
+    check_trial_paywall_ws_cooldown,
+    set_trial_paywall_ws_cooldown,
+)
 from utils.translation import TranslationService
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
@@ -231,6 +237,15 @@ async def _stream_handler(
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
+
+    if source and source.lower() in ('macos', 'desktop') and check_trial_paywall_ws_cooldown(uid):
+        logger.info("trial paywall: cooldown reject uid=%s session=%s", uid, session_id)
+        try:
+            await websocket.close(code=1008, reason="trial_expired_cooldown")
+        except Exception:
+            pass
+        return
+
     BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
@@ -440,11 +455,14 @@ async def _stream_handler(
             uid,
             session_id,
         )
+        set_trial_paywall_ws_cooldown(uid)
         try:
             await asyncio.sleep(0.5)  # let the freemium event flush before close
             await websocket.close(code=1008, reason="trial_expired")
         except Exception as e:
             logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
+        finally:
+            BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         websocket_active = False
         return
 
