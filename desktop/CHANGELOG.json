@@ -1,9 +1,15 @@
 {
   "unreleased": [
-    "Task notifications fire within seconds instead of waiting up to 5 minutes \u2014 promote runs immediately on monitoring start and the safety-net cadence dropped from 5 min to 1 min",
     "Rewind shows screenshots within ~5 seconds of launch instead of waiting up to a minute for the first video chunk to fill up"
   ],
   "releases": [
+    {
+      "version": "0.11.404",
+      "date": "2026-05-15",
+      "changes": [
+        "Task notifications fire within seconds instead of waiting up to 5 minutes \u2014 promote runs immediately on monitoring start and the safety-net cadence dropped from 5 min to 1 min"
+      ]
+    },
     {
       "version": "0.11.403",
       "date": "2026-05-15",
