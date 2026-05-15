@@ -106,26 +106,8 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     return _is_trial_expired_cached(uid)
 
 
-TRIAL_PAYWALL_WS_COOLDOWN_TTL = 60
-
-TRIAL_PAYWALL_WS_COOLDOWN_PREFIX = "trial_paywall:ws_cooldown:"
-
-
-def set_trial_paywall_ws_cooldown(uid: str) -> None:
-    redis_db.set_generic_cache(f"{TRIAL_PAYWALL_WS_COOLDOWN_PREFIX}{uid}", True, ttl=TRIAL_PAYWALL_WS_COOLDOWN_TTL)
-
-
-def check_trial_paywall_ws_cooldown(uid: str) -> bool:
-    if not _TRIAL_PAYWALL_ENABLED:
-        return False
-    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
-        return False
-    return bool(redis_db.get_generic_cache(f"{TRIAL_PAYWALL_WS_COOLDOWN_PREFIX}{uid}"))
-
-
 def clear_trial_paywall_cache(uid: str) -> None:
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
-    redis_db.delete_generic_cache(f"{TRIAL_PAYWALL_WS_COOLDOWN_PREFIX}{uid}")
 
 
 def is_paid_plan(plan: PlanType) -> bool:
