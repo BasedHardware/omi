@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Task notifications fire within seconds instead of waiting up to 5 minutes \u2014 promote runs immediately on monitoring start and the safety-net cadence dropped from 5 min to 1 min"
+  ],
   "releases": [
     {
       "version": "0.11.403",
