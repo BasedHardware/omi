@@ -1,9 +1,15 @@
 {
   "unreleased": [
-    "Task analyzer now extracts every distinct commitment in a frame instead of stopping after the first \u2014 a chat asking for two unrelated deliverables in one message creates two tasks",
     "Fixed Tasks page \"+\" button doing nothing when the task list was empty"
   ],
   "releases": [
+    {
+      "version": "0.11.402",
+      "date": "2026-05-15",
+      "changes": [
+        "Task analyzer now extracts every distinct commitment in a frame instead of stopping after the first \u2014 a chat asking for two unrelated deliverables in one message creates two tasks"
+      ]
+    },
     {
       "version": "0.11.401",
       "date": "2026-05-14",
