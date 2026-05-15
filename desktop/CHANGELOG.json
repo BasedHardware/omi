@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Rewind shows screenshots within ~5 seconds of launch instead of waiting up to a minute for the first video chunk to fill up"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.405",
+      "date": "2026-05-15",
+      "changes": [
+        "Rewind shows screenshots within ~5 seconds of launch instead of waiting up to a minute for the first video chunk to fill up"
+      ]
+    },
     {
       "version": "0.11.404",
       "date": "2026-05-15",
