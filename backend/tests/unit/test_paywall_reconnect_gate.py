@@ -72,6 +72,19 @@ class TestAdmissionPhase:
         assert gauge_pos != -1, "gauge inc not found in _stream_handler"
         assert uid_check_pos < gauge_pos, "uid check must come before gauge inc"
 
+    def test_freemium_event_sent_before_close(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        paywall_block = handler_body[paywall_pos:gauge_pos]
+        event_pos = paywall_block.find('FreemiumThresholdReachedEvent')
+        close_pos = paywall_block.find('websocket.close')
+        assert event_pos != -1, "admission must send FreemiumThresholdReachedEvent for desktop client"
+        assert close_pos != -1
+        assert event_pos < close_pos, "freemium event must be sent before websocket close"
+
 
 class TestNoPaywallBlockInSession:
     """Verify the old paywall close block was removed from inside the session."""
