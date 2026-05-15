@@ -106,6 +106,21 @@ class TestPaywallCloseGaugeFix:
                     break
         assert found_dec, "paywall close path must decrement the gauge before return"
 
+    def test_cooldown_set_inside_try(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        lines = src.split('\n')
+        in_paywall_block = False
+        found_try_before_set = False
+        for i, line in enumerate(lines):
+            if 'is_paywalled_desktop' in line and 'if ' in line:
+                in_paywall_block = True
+            if in_paywall_block and line.strip() == 'try:':
+                remaining = '\n'.join(lines[i : i + 5])
+                if 'set_trial_paywall_ws_cooldown' in remaining:
+                    found_try_before_set = True
+                break
+        assert found_try_before_set, "set_trial_paywall_ws_cooldown must be inside the try block to avoid gauge leak"
+
     def test_gauge_dec_in_finally(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         lines = src.split('\n')
@@ -207,6 +222,20 @@ class TestSubscriptionHelpers:
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         assert 'get_generic_cache' in fn_body
         assert 'TRIAL_PAYWALL_WS_COOLDOWN_PREFIX' in fn_body or 'trial_paywall:ws_cooldown:' in fn_body
+
+    def test_check_cooldown_respects_kill_switch(self):
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        fn_start = src.find('def check_trial_paywall_ws_cooldown')
+        assert fn_start != -1
+        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
+        assert '_TRIAL_PAYWALL_ENABLED' in fn_body, "check_cooldown must respect the kill switch"
+
+    def test_check_cooldown_respects_test_uid_gating(self):
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        fn_start = src.find('def check_trial_paywall_ws_cooldown')
+        assert fn_start != -1
+        fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
+        assert '_TRIAL_PAYWALL_TEST_UIDS' in fn_body, "check_cooldown must respect test UID gating"
 
     def test_clear_cache_deletes_both_keys(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
