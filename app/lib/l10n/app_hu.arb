@@ -2184,6 +2184,8 @@
     "selectOption": "Kiválasztás",
     "lowBatteryAlertTitle": "Alacsony akkumulátor figyelmeztetés",
     "lowBatteryAlertBody": "Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋",
+    "batteryFullyChargedTitle": "Az Omi teljesen feltöltődött",
+    "batteryFullyChargedBody": "Az Omi eszköz teljesen feltöltődött. Leválaszthatod!",
     "deviceDisconnectedNotificationTitle": "Az Omi eszköz lecsatlakozott",
     "deviceDisconnectedNotificationBody": "Kérjük, csatlakozzon újra az Omi használatának folytatásához.",
     "firmwareUpdateAvailable": "Firmware frissítés elérhető",

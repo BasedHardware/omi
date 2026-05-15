@@ -6871,6 +6871,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lowBatteryAlertBody => 'Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Az Omi teljesen feltöltődött';
+
+  @override
+  String get batteryFullyChargedBody => 'Az Omi eszköz teljesen feltöltődött. Leválaszthatod!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Az Omi eszköz lecsatlakozott';
 
   @override

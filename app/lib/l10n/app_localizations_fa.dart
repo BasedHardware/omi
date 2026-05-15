@@ -6843,6 +6843,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lowBatteryAlertBody => 'باتری دستگاه شما تقریباً تمام است. وقت شارژ کردن است! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi کاملاً شارژ شد';
+
+  @override
+  String get batteryFullyChargedBody => 'دستگاه Omi شما کاملاً شارژ شده است. می‌توانید آن را جدا کنید!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'دستگاه Omi شما قطع شد';
 
   @override

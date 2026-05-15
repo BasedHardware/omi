@@ -6855,6 +6855,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get lowBatteryAlertBody => 'Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi sudah terisi penuh';
+
+  @override
+  String get batteryFullyChargedBody => 'Perangkat Omi Anda sudah terisi penuh. Silakan cabut kabelnya!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Perangkat Omi Anda Terputus';
 
   @override

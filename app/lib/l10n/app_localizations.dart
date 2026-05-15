@@ -12891,6 +12891,18 @@ abstract class AppLocalizations {
   /// **'Your device is running low on battery. Time for a recharge! 🔋'**
   String get lowBatteryAlertBody;
 
+  /// No description provided for @batteryFullyChargedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is fully charged'**
+  String get batteryFullyChargedTitle;
+
+  /// No description provided for @batteryFullyChargedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi device is fully charged. Feel free to unplug!'**
+  String get batteryFullyChargedBody;
+
   /// Title for device disconnected notification
   ///
   /// In en, this message translates to:

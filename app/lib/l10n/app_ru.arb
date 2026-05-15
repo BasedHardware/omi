@@ -2184,6 +2184,8 @@
     "selectOption": "Выбрать",
     "lowBatteryAlertTitle": "Предупреждение о низком заряде",
     "lowBatteryAlertBody": "Батарея вашего устройства разряжена. Пора зарядить! 🔋",
+    "batteryFullyChargedTitle": "Omi полностью заряжен",
+    "batteryFullyChargedBody": "Ваше устройство Omi полностью заряжено. Можно отключить от зарядки!",
     "deviceDisconnectedNotificationTitle": "Ваше устройство Omi отключено",
     "deviceDisconnectedNotificationBody": "Пожалуйста, подключитесь снова, чтобы продолжить использование Omi.",
     "firmwareUpdateAvailable": "Доступно обновление прошивки",

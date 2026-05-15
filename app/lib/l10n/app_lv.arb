@@ -2184,6 +2184,8 @@
     "selectOption": "Atlasīt",
     "lowBatteryAlertTitle": "Zema akumulatora brīdinājums",
     "lowBatteryAlertBody": "Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋",
+    "batteryFullyChargedTitle": "Omi ir pilnībā uzlādēts",
+    "batteryFullyChargedBody": "Jūsu Omi ierīce ir pilnībā uzlādēta. Varat to atvienot!",
     "deviceDisconnectedNotificationTitle": "Jūsu Omi ierīce ir atvienota",
     "deviceDisconnectedNotificationBody": "Lūdzu, pieslēdzieties atkārtoti, lai turpinātu lietot Omi.",
     "firmwareUpdateAvailable": "Pieejams programmaparatūras atjauninājums",

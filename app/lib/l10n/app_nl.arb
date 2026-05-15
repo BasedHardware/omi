@@ -2184,6 +2184,8 @@
     "selectOption": "Selecteren",
     "lowBatteryAlertTitle": "Waarschuwing lage batterij",
     "lowBatteryAlertBody": "De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋",
+    "batteryFullyChargedTitle": "Omi is volledig opgeladen",
+    "batteryFullyChargedBody": "Uw Omi-apparaat is volledig opgeladen. U kunt het loskoppelen!",
     "deviceDisconnectedNotificationTitle": "Uw Omi-apparaat is losgekoppeld",
     "deviceDisconnectedNotificationBody": "Verbind opnieuw om Omi te blijven gebruiken.",
     "firmwareUpdateAvailable": "Firmware-update beschikbaar",

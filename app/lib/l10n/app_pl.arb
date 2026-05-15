@@ -2184,6 +2184,8 @@
     "selectOption": "Wybierz",
     "lowBatteryAlertTitle": "Alert niskiego poziomu baterii",
     "lowBatteryAlertBody": "Bateria Twojego urządzenia jest na wyczerpaniu. Czas na ładowanie! 🔋",
+    "batteryFullyChargedTitle": "Omi jest w pełni naładowany",
+    "batteryFullyChargedBody": "Twoje urządzenie Omi jest w pełni naładowane. Możesz je odłączyć!",
     "deviceDisconnectedNotificationTitle": "Twoje urządzenie Omi zostało rozłączone",
     "deviceDisconnectedNotificationBody": "Połącz się ponownie, aby kontynuować korzystanie z Omi.",
     "firmwareUpdateAvailable": "Dostępna aktualizacja oprogramowania",

@@ -6789,6 +6789,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lowBatteryAlertBody => 'بطارية جهازك منخفضة. حان وقت إعادة الشحن! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'أومي مشحون بالكامل';
+
+  @override
+  String get batteryFullyChargedBody => 'جهاز Omi الخاص بك مشحون بالكامل. يمكنك فصله الآن!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'تم قطع اتصال جهاز Omi';
 
   @override

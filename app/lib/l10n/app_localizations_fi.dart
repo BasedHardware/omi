@@ -6841,6 +6841,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get lowBatteryAlertBody => 'Laitteesi akku on alhainen. Aika ladata! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi on ladattu täyteen';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi-laitteesi on ladattu täyteen. Voit irrottaa sen nyt!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi-laitteesi yhteys katkesi';
 
   @override
