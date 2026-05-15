@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed Tasks page \"+\" button doing nothing when the task list was empty"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.403",
+      "date": "2026-05-15",
+      "changes": [
+        "Fixed Tasks page \"+\" button doing nothing when the task list was empty"
+      ]
+    },
     {
       "version": "0.11.402",
       "date": "2026-05-15",
