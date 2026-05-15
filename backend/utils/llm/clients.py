@@ -39,14 +39,21 @@ class _AnthropicClientProxy:
 
     __slots__ = ('_default',)
 
-    def __init__(self, default: anthropic.AsyncAnthropic):
+    def __init__(self, default: Optional[anthropic.AsyncAnthropic] = None):
         object.__setattr__(self, '_default', default)
+
+    def _get_default(self) -> anthropic.AsyncAnthropic:
+        default = self._default
+        if default is None:
+            default = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
+            object.__setattr__(self, '_default', default)
+        return default
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
         if byok:
             return _cached_anthropic(byok)
-        return self._default
+        return self._get_default()
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
@@ -137,8 +144,7 @@ def _create_byok_client(
 
 
 # Anthropic client for chat agent (module-level, BYOK-aware)
-_default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
-anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
+anthropic_client = _AnthropicClientProxy()
 
 
 def get_anthropic_client() -> anthropic.AsyncAnthropic:
@@ -585,6 +591,11 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     if cache_key and model in _CACHE_KEY_MODELS:
         return result.bind(prompt_cache_key=cache_key)
     return result
+
+
+def get_openai_agent_llm(streaming: bool = False) -> BaseChatModel:
+    """OpenAI-compatible agent model used when CHAT_PROVIDER=openai."""
+    return get_llm('chat_graph', streaming=streaming)
 
 
 def get_qos_info() -> Dict[str, Dict[str, str]]:

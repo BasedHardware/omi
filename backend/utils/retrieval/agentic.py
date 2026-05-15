@@ -6,13 +6,20 @@ to use to gather context and answer user questions. Uses Anthropic's native
 tool use API with streaming for real-time responses.
 """
 
-import uuid
 import asyncio
 import contextvars
+import os
 import traceback
+import uuid
 from typing import List, Optional, AsyncGenerator, Any, Tuple
 
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
+
+try:
+    from langgraph.prebuilt import create_react_agent
+except ImportError:
+    create_react_agent = None
 
 # Context variable to store config for tools
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
@@ -47,10 +54,11 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_openai_agent_llm
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
-from utils.observability.langsmith import is_langsmith_enabled
+from utils.observability.langsmith import get_chat_tracer_callbacks, is_langsmith_enabled
+from utils.observability.langsmith_prompts import get_prompt_metadata
 import logging
 
 # Import langsmith traceable if available
@@ -66,6 +74,12 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+CHAT_PROVIDER = os.getenv('CHAT_PROVIDER', 'anthropic').strip().lower()
+if CHAT_PROVIDER not in {'anthropic', 'openai'}:
+    logger.warning("Unsupported CHAT_PROVIDER=%s; falling back to anthropic", CHAT_PROVIDER)
+    CHAT_PROVIDER = 'anthropic'
+logger.info("Chat provider: %s", CHAT_PROVIDER)
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -502,12 +516,242 @@ async def _run_anthropic_agent_stream(
     await callback.end()
 
 
+def _messages_to_langchain(messages: List[Message]) -> List:
+    """Convert chat messages to LangChain message objects."""
+    result = []
+    for msg in messages:
+        if msg.sender == "ai":
+            result.append(AIMessage(content=msg.text))
+        else:
+            result.append(HumanMessage(content=msg.text))
+    return result
+
+
+def _append_openai_app_tool_prompt(system_prompt: str, app_tools: list) -> str:
+    if not app_tools:
+        return system_prompt
+
+    app_tool_names = ", ".join(sorted(t.name for t in app_tools))
+    return f"""{system_prompt}
+
+<available_app_tools>
+You have access to additional tools from the user's connected apps. Use these tools when the user asks for actions or data from matching external services.
+
+Available app tool names: {app_tool_names}
+</available_app_tools>"""
+
+
+async def _run_openai_agent_stream(
+    agent,
+    messages: List,
+    config: dict,
+    callback: AsyncStreamingCallback,
+    full_response: List[str],
+):
+    """Run the LangGraph ReAct agent and feed events into the callback queue."""
+    safety_guard = config['configurable'].get('safety_guard')
+
+    try:
+        async for event in agent.astream_events({"messages": messages}, config=config, version="v2"):
+            kind = event.get("event")
+
+            if kind == "on_chat_model_stream":
+                chunk = event.get("data", {}).get("chunk")
+                token = getattr(chunk, "content", None)
+                if isinstance(token, str) and token:
+                    full_response.append(token)
+                    await callback.put_data(token)
+
+            elif kind == "on_tool_start":
+                tool_name = event.get("name", "unknown")
+                tool_input = event.get("data", {}).get("input", {})
+                if not isinstance(tool_input, dict):
+                    tool_input = {}
+
+                logger.info(f"Tool started: {tool_name}")
+
+                app_id = _extract_app_id(tool_name)
+                tools_list = config.get('configurable', {}).get('tools', [])
+                tool_obj = next((t for t in tools_list if getattr(t, 'name', None) == tool_name), None)
+                await callback.put_thought(get_tool_display_name(tool_name, tool_obj), app_id=app_id)
+
+                if safety_guard:
+                    try:
+                        safety_guard.validate_tool_call(tool_name, tool_input)
+                        warning = safety_guard.should_warn_user()
+                        if warning:
+                            await callback.put_thought(warning)
+                    except SafetyGuardError as e:
+                        await callback.put_data(f"\n\n{str(e)}")
+                        logger.error(f"Safety Guard blocked tool call: {e}")
+                        await callback.end()
+                        return
+
+            elif kind == "on_tool_end":
+                tool_name = event.get("name", "unknown")
+                output_raw = event.get("data", {}).get("output", "")
+                output = str(getattr(output_raw, 'content', output_raw))
+
+                logger.info(f"Tool ended: {tool_name}")
+                await _emit_calendar_status(callback, tool_name, output)
+
+                if safety_guard and output:
+                    try:
+                        safety_guard.check_context_size(output)
+                    except SafetyGuardError as e:
+                        await callback.put_data(f"\n\n{str(e)}")
+                        logger.error(f"Safety Guard blocked due to context size: {e}")
+                        await callback.end()
+                        return
+
+            elif kind == "on_tool_error":
+                logger.error(f"Tool error: {event.get('name', 'unknown')} - {event.get('data', {}).get('error', '')}")
+            elif kind == "on_chain_error":
+                logger.error(f"Chain error: {event.get('data', {}).get('error', '')}")
+
+        if safety_guard:
+            logger.info(f"Safety Guard final stats: {safety_guard.get_stats()}")
+
+        await callback.end()
+
+    except SafetyGuardError as e:
+        await callback.put_data(f"\n\n{str(e)}")
+        logger.error(f"Safety Guard stopped execution: {e}")
+        await callback.end()
+    except Exception as e:
+        logger.error(f"Error in OpenAI agent stream: {e}")
+        traceback.print_exc()
+        await callback.end()
+
+
+async def _execute_agentic_chat_stream_openai(
+    uid: str,
+    messages: List[Message],
+    app: Optional[App],
+    callback_data: dict,
+    chat_session: Optional[ChatSession],
+    context: Optional[PageContext],
+) -> AsyncGenerator[str, None]:
+    """Execute agentic chat through LangGraph/OpenAI for self-hosted fallback."""
+    if create_react_agent is None:
+        logger.error("CHAT_PROVIDER=openai but langgraph is not installed")
+        if callback_data is not None:
+            callback_data['error'] = 'langgraph is not installed'
+        yield "data: Sorry, I encountered an error. Please try again."
+        yield None
+        return
+
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
+
+    prompt_name, prompt_commit, prompt_source = None, None, None
+    try:
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+    except Exception as e:
+        logger.error(f"Could not get prompt metadata: {e}")
+
+    tools = list(CORE_TOOLS)
+    try:
+        app_tools = load_app_tools(uid)
+        if app_tools:
+            tools.extend(app_tools)
+            logger.info(f"Added {len(app_tools)} app tools to OpenAI chat")
+            system_prompt = _append_openai_app_tool_prompt(system_prompt, app_tools)
+    except Exception as e:
+        logger.error(f"Error loading app tools: {e}")
+
+    langchain_messages = [SystemMessage(content=system_prompt)]
+    langchain_messages.extend(_messages_to_langchain(messages))
+
+    conversations_collected = []
+    safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
+    langsmith_run_id = str(uuid.uuid4())
+    metadata = {
+        "uid": uid,
+        "app_id": app.id if app else None,
+        "app_name": app.name if app else None,
+        "chat_session_id": chat_session.id if chat_session else None,
+        "has_context": context is not None,
+        "context_type": context.type if context else None,
+        "num_tools": len(tools),
+        "prompt_name": prompt_name,
+        "prompt_commit": prompt_commit,
+        "provider": "openai",
+    }
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.agentic.stream",
+        tags=["chat", "agentic", "streaming", "openai"],
+        metadata=metadata,
+    )
+    config = {
+        "run_id": langsmith_run_id,
+        "callbacks": tracer_callbacks,
+        "run_name": "chat.agentic.stream",
+        "tags": ["chat", "agentic", "streaming", "openai"],
+        "metadata": metadata,
+        "configurable": {
+            "user_id": uid,
+            "thread_id": str(uuid.uuid4()),
+            "conversations_collected": conversations_collected,
+            "safety_guard": safety_guard,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "tools": tools,
+        },
+    }
+    agent_config_context.set(config)
+
+    if callback_data is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
+        callback_data['prompt_name'] = prompt_name
+        callback_data['prompt_commit'] = prompt_commit
+
+    callback = AsyncStreamingCallback()
+    full_response = []
+    tool_usage_count = 0
+    agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=tools)
+    task = asyncio.create_task(_run_openai_agent_stream(agent, langchain_messages, config, callback, full_response))
+
+    try:
+        while True:
+            chunk = await callback.queue.get()
+            if chunk is None:
+                break
+
+            if chunk.startswith("think: "):
+                tool_usage_count += 1
+
+            yield chunk
+
+        await task
+
+        if callback_data is not None:
+            callback_data['answer'] = ''.join(full_response)
+            callback_data['memories_found'] = conversations_collected if conversations_collected else []
+            callback_data['ask_for_nps'] = tool_usage_count > 0
+            chart_data_from_config = config['configurable'].get('chart_data')
+            if chart_data_from_config:
+                callback_data['chart_data'] = chart_data_from_config
+            logger.info(f"Collected {len(callback_data['memories_found'])} conversations for citation")
+
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    except Exception as e:
+        task.cancel()
+        logger.error(f"Error in execute_agentic_chat_stream openai: {e}")
+        traceback.print_exc()
+        if callback_data is not None:
+            callback_data['error'] = str(e)
+
+    yield None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
-@_traceable(name="chat.anthropic.stream", run_type="chain")
+@_traceable(name="chat.agentic.stream", run_type="chain")
 async def execute_agentic_chat_stream(
     uid: str,
     messages: List[Message],
@@ -520,14 +764,19 @@ async def execute_agentic_chat_stream(
 
     Yields formatted chunks with "data: " or "think: " prefixes.
     """
+    if CHAT_PROVIDER == 'openai':
+        async for chunk in _execute_agentic_chat_stream_openai(
+            uid, messages, app, callback_data=callback_data, chat_session=chat_session, context=context
+        ):
+            yield chunk
+        return
+
     # Build system prompt
     system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
 
     # Get prompt metadata for tracing/versioning
     prompt_name, prompt_commit, prompt_source = None, None, None
     try:
-        from utils.observability.langsmith_prompts import get_prompt_metadata
-
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         logger.error(f"Could not get prompt metadata: {e}")
