@@ -375,6 +375,11 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+rolloutRestart:
+  enabled: true
+  schedule: "0 */4 * * *"
+  image: "bitnami/kubectl:latest"
+
 nodeSelector: {}
 
 tolerations: []

@@ -1,0 +1,81 @@
+{{- if .Values.rolloutRestart.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "pusher.fullname" . }}-restarter
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "pusher.fullname" . }}-restarter
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ include "pusher.fullname" . | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "pusher.fullname" . }}-restarter
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "pusher.fullname" . }}-restarter
+roleRef:
+  kind: Role
+  name: {{ include "pusher.fullname" . }}-restarter
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "pusher.fullname" . }}-rollout-restart
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.rolloutRestart.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: {{ include "pusher.fullname" . }}-restarter
+          restartPolicy: OnFailure
+          containers:
+            - name: kubectl
+              image: {{ .Values.rolloutRestart.image | quote }}
+              imagePullPolicy: IfNotPresent
+              command:
+                - kubectl
+                - rollout
+                - restart
+                - deployment/{{ include "pusher.fullname" . }}
+                - -n
+                - {{ .Release.Namespace }}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
