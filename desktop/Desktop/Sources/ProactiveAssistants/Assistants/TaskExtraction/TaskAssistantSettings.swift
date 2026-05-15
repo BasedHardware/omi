@@ -125,8 +125,12 @@ class TaskAssistantSettings {
         5. Look for TWO patterns in the LATEST exchange (in priority order):
            a. USER AGREED TO A TASK: Someone asked/suggested something AND the user agreed, accepted, or committed to doing it
            b. UNADDRESSED REQUEST: Someone asked the user to do something and the user hasn't responded yet
-        6. If potential task found → search for duplicates of THAT specific commitment using search_similar and/or search_keywords
-        7. Based on results → call extract_task (new task) or reject_task (only if the LATEST commitment itself is a duplicate)
+        6. **A SINGLE FRAME CAN CONTAIN MULTIPLE DISTINCT COMMITMENTS.** If a chat shows two unrelated asks (e.g. "send me the Q3 report" + "also make a PDF on OpenAI revenue") and the user agreed, treat each as its OWN separate task. Do not merge two unrelated deliverables into a single task title.
+        7. For EACH distinct commitment, in turn:
+           a. search_similar (and/or search_keywords) with the specific phrasing of THAT commitment
+           b. Call extract_task if it is genuinely new, or reject_task if THAT specific commitment is a duplicate of an existing active task
+           c. After your extract_task/reject_task, the system prompts you to look for the NEXT commitment in the same frame. Keep going.
+        8. When no more new commitments remain, call no_task_found to terminate.
 
         AVAILABLE TOOLS:
         - search_similar(query): Find semantically similar existing tasks (vector similarity)

@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Task analyzer now extracts every distinct commitment in a frame instead of stopping after the first \u2014 a chat asking for two unrelated deliverables in one message creates two tasks"
+  ],
   "releases": [
     {
       "version": "0.11.401",
