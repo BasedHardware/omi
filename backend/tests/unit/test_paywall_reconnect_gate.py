@@ -86,6 +86,37 @@ class TestAdmissionPhase:
         assert event_pos < close_pos, "freemium event must be sent before websocket close"
 
 
+class TestGaugeIncTryFinally:
+    """Verify gauge inc is immediately before the try/finally that decrements it — no leakable returns."""
+
+    def test_inc_immediately_before_try(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        inc_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        try_pos = handler_body.find('try:', inc_pos)
+        between = handler_body[inc_pos + len('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()') : try_pos]
+        assert 'return' not in between, "no return statements allowed between gauge inc and try block"
+
+    def test_unsupported_language_return_before_gauge(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        lang_pos = handler_body.find('The language is not supported')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        assert lang_pos != -1, "unsupported language check not found"
+        assert lang_pos < gauge_pos, "unsupported language return must come before gauge inc"
+
+    def test_bad_user_return_before_gauge(self):
+        src = _read_source(TRANSCRIBE_SRC_PATH)
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        user_pos = handler_body.find('Bad user')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        assert user_pos != -1, "bad user check not found"
+        assert user_pos < gauge_pos, "bad user return must come before gauge inc"
+
+
 class TestNoPaywallBlockInSession:
     """Verify the old paywall close block was removed from inside the session."""
 
