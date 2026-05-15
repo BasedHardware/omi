@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Tasks page \"+\" button doing nothing when the task list was empty"
+  ],
   "releases": [
     {
       "version": "0.11.402",
