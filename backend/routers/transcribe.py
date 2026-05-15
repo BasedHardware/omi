@@ -253,28 +253,17 @@ async def _stream_handler(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    use_custom_stt = custom_stt_mode == CustomSttMode.enabled
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
-    is_paywalled_desktop = is_trial_paywalled(uid, source)
-
-    if is_paywalled_desktop:
+    if is_trial_paywalled(uid, source):
         logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
-        if not user_has_credits:
-            try:
-                await websocket.send_json(
-                    FreemiumThresholdReachedEvent(
-                        remaining_seconds=0,
-                        action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
-                    ).to_json()
-                )
-            except Exception as e:
-                logger.error(f"Error sending freemium threshold event on connect: {e} {uid} {session_id}")
         try:
             await asyncio.sleep(0.5)
             await websocket.close(code=1008, reason="trial_expired")
         except Exception as e:
             logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
         return
+
+    use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
 
     # --- Admitted: track as active session (gauge inc/dec guaranteed by context manager) ---
     async with track_active_ws():
