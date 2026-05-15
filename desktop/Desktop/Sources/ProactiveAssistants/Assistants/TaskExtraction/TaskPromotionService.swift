@@ -14,10 +14,18 @@ actor TaskPromotionService {
 
     // MARK: - Lifecycle
 
-    /// Start the 5-minute safety-net timer
+    /// Promote any pending staged tasks immediately on service start, then keep a
+    /// short safety-net ticking to catch anything that slips through event-driven paths.
     func start() {
         startSafetyTimer()
         log("TaskPromotion: Service started")
+        // Fire an immediate promote so a staged task that was inserted while the service
+        // was stopped (e.g. across an app restart, or via manual backend insert during a
+        // demo) gets a notification within seconds instead of waiting for the first
+        // safety-timer tick.
+        Task { [weak self] in
+            await self?.promoteIfNeeded()
+        }
     }
 
     func stop() {
@@ -30,7 +38,7 @@ actor TaskPromotionService {
         safetyTimer?.cancel()
         safetyTimer = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)  // 5 minutes
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)  // 60 seconds
                 guard !Task.isCancelled else { break }
                 guard let self = self else { break }
                 log("TaskPromotion: Safety-net timer fired")
