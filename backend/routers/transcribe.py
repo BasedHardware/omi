@@ -255,7 +255,6 @@ async def _stream_handler(
             logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
         return
 
-    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
@@ -2603,6 +2602,7 @@ async def _stream_handler(
 
     # Start
     #
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     try:
         # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
