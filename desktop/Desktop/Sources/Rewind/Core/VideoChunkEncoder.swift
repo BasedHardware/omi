@@ -15,6 +15,11 @@ actor VideoChunkEncoder {
     // MARK: - Configuration
 
     private let chunkDuration: TimeInterval = 60.0 // 60-second chunks
+    /// First chunk after launch finalizes faster so Rewind shows screenshots within
+    /// seconds of monitoring starting, instead of waiting up to 60s + 10s stale grace.
+    /// The Rewind UI filters out the active (unfinalized) chunk, so without this you'd
+    /// see nothing on the Rewind page for ~1-2 minutes after every launch.
+    private let firstChunkDuration: TimeInterval = 5.0
     private var frameRate: Double {
         let interval = UserDefaults.standard.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
         return 1.0 / interval // e.g. 0.5s interval = 2 FPS
@@ -66,6 +71,11 @@ actor VideoChunkEncoder {
 
     private var videosDirectory: URL?
     private var isInitialized = false
+
+    /// True after the first chunk finalizes. Until then we use `firstChunkDuration`
+    /// instead of `chunkDuration` so Rewind UI starts showing frames within seconds
+    /// of launch.
+    private var hasFinalizedAnyChunk = false
 
     // MARK: - Types
 
@@ -198,12 +208,16 @@ actor VideoChunkEncoder {
             throw error
         }
 
-        // Check if chunk duration exceeded
+        // Check if chunk duration exceeded.
+        // First chunk uses the shorter `firstChunkDuration` so Rewind starts showing
+        // frames within ~5s of launch instead of waiting out the full 60s window.
+        let effectiveDuration = hasFinalizedAnyChunk ? chunkDuration : firstChunkDuration
         if let startTime = currentChunkStartTime,
-           timestamp.timeIntervalSince(startTime) >= chunkDuration
+           timestamp.timeIntervalSince(startTime) >= effectiveDuration
         {
             // Finalize current chunk
             try await finalizeCurrentChunk()
+            hasFinalizedAnyChunk = true
             return frameInfo
         }
 
