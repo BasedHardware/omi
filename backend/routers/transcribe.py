@@ -455,8 +455,8 @@ async def _stream_handler(
             uid,
             session_id,
         )
-        set_trial_paywall_ws_cooldown(uid)
         try:
+            set_trial_paywall_ws_cooldown(uid)
             await asyncio.sleep(0.5)  # let the freemium event flush before close
             await websocket.close(code=1008, reason="trial_expired")
         except Exception as e:
