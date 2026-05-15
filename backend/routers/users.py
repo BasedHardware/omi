@@ -77,6 +77,7 @@ from utils.subscription import (
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     legacy_plan_features,
+    clear_trial_paywall_cache,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -797,6 +798,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             )
     users_db.set_byok_active(uid, data.fingerprints)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": True}
 
 
@@ -805,6 +807,7 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": False}
 
 

@@ -106,6 +106,10 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     return _is_trial_expired_cached(uid)
 
 
+def clear_trial_paywall_cache(uid: str) -> None:
+    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
+
+
 def is_paid_plan(plan: PlanType) -> bool:
     return plan in PAID_PLAN_TYPES
 
