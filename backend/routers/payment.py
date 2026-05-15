@@ -29,6 +29,7 @@ from utils.subscription import (
     filter_plans_for_user,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    clear_trial_paywall_cache,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -451,6 +452,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.dict())
                 set_credits_invalidation_signal(uid)
+                clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
@@ -666,6 +668,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             _update_subscription_from_session(uid, session)
             set_credits_invalidation_signal(uid)
+            clear_trial_paywall_cache(uid)
             subscription = users_db.get_user_subscription(uid)
             if subscription and is_paid_plan(subscription.plan):
                 conversations_db.unlock_all_conversations(uid)
@@ -731,6 +734,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         action_items_db.unlock_all_action_items(uid)
                     users_db.update_user_subscription(uid, new_subscription.dict())
                     set_credits_invalidation_signal(uid)
+                    clear_trial_paywall_cache(uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
                         clear_fair_use_on_upgrade(uid)
                     logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
@@ -773,6 +777,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         else:
                             users_db.update_user_subscription(uid, new_subscription.dict())
                             set_credits_invalidation_signal(uid)
+                            clear_trial_paywall_cache(uid)
                             if is_paid_plan(new_subscription.plan):
                                 clear_fair_use_on_upgrade(uid)
                             logger.info(
@@ -803,6 +808,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             new_subscription.cancel_at_period_end = True
                             users_db.update_user_subscription(uid, new_subscription.dict())
                             set_credits_invalidation_signal(uid)
+                            clear_trial_paywall_cache(uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )
