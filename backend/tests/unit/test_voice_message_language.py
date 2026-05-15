@@ -7,6 +7,8 @@ import types
 from unittest.mock import MagicMock
 
 sys.modules["database._client"] = MagicMock()
+sys.modules["firebase_admin"] = MagicMock()
+sys.modules["firebase_admin.auth"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
 sys.modules["database.chat"] = MagicMock()
 sys.modules["database.notifications"] = MagicMock()

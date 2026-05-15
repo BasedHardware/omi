@@ -26,6 +26,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 sys.modules.setdefault('database._client', MagicMock())
 sys.modules.setdefault('database.redis_db', MagicMock())
 sys.modules.setdefault('database.users', MagicMock())
+sys.modules.setdefault('database.notifications', MagicMock())
 sys.modules.setdefault('database.user_usage', MagicMock())
 sys.modules.setdefault('database.llm_usage', MagicMock())
 sys.modules.setdefault('database.announcements', MagicMock())

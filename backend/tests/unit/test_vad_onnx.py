@@ -151,7 +151,7 @@ class TestVadIsEmptyHostedSuccess:
     """vad_is_empty() when HOSTED_VAD_API_URL is set and succeeds."""
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
-    @patch('utils.stt.vad.requests.post')
+    @patch('utils.stt.vad.httpx.post')
     @patch.object(vad, 'redis_db')
     def test_hosted_returns_segments(self, mock_redis, mock_post, tmp_wav_dir):
         """Hosted VAD returns segments — vad_is_empty returns False (not empty)."""
@@ -169,7 +169,7 @@ class TestVadIsEmptyHostedSuccess:
         mock_post.assert_called_once()
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
-    @patch('utils.stt.vad.requests.post')
+    @patch('utils.stt.vad.httpx.post')
     @patch.object(vad, 'redis_db')
     def test_hosted_returns_empty(self, mock_redis, mock_post, tmp_wav_dir):
         """Hosted VAD returns empty list — vad_is_empty returns True."""
@@ -185,7 +185,7 @@ class TestVadIsEmptyHostedSuccess:
         assert result is True
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
-    @patch('utils.stt.vad.requests.post')
+    @patch('utils.stt.vad.httpx.post')
     @patch.object(vad, 'redis_db')
     def test_hosted_return_segments_mode(self, mock_redis, mock_post, tmp_wav_dir):
         """return_segments=True returns the hosted segment list directly."""
@@ -211,7 +211,7 @@ class TestVadIsEmptyFallback:
     """vad_is_empty() falls back to local ONNX when hosted VAD fails."""
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
-    @patch('utils.stt.vad.requests.post', side_effect=Exception('connection refused'))
+    @patch('utils.stt.vad.httpx.post', side_effect=Exception('connection refused'))
     @patch('utils.stt.vad._run_file_vad')
     @patch.object(vad, 'redis_db')
     def test_hosted_exception_falls_back(self, mock_redis, mock_local, mock_post, tmp_wav_dir):
@@ -226,7 +226,7 @@ class TestVadIsEmptyFallback:
         mock_local.assert_called_once_with(wav_path)
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
-    @patch('utils.stt.vad.requests.post')
+    @patch('utils.stt.vad.httpx.post')
     @patch('utils.stt.vad._run_file_vad')
     @patch.object(vad, 'redis_db')
     def test_hosted_http_error_falls_back(self, mock_redis, mock_local, mock_post, tmp_wav_dir):

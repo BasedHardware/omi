@@ -1,8 +1,12 @@
 import sys
 import types
 
+_announcements_mod = types.ModuleType("database.announcements")
+_announcements_mod.compare_versions = lambda a, b: 0
+
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
+sys.modules.setdefault("database.announcements", _announcements_mod)
 
 from models.users import PlanType
 from utils.subscription import get_plan_features, get_plan_limits, get_plan_type_from_price_id, is_paid_plan

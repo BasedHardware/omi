@@ -111,6 +111,8 @@ if not hasattr(utils_mod, '__path__'):
 llm_mod = _stub_module("utils.llm")
 if not hasattr(llm_mod, '__path__'):
     llm_mod.__path__ = [os.path.join(_backend_root, "utils", "llm")]
+subscription_mod = _stub_module("utils.subscription")
+subscription_mod.is_trial_paywalled = MagicMock(return_value=False)
 tracker_mod = _stub_module("utils.llm.usage_tracker")
 tracker_mod.get_usage_callback = MagicMock(return_value=[])
 tracker_mod.track_usage = MagicMock()

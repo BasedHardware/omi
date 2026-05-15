@@ -19,6 +19,7 @@ def _compare_versions(a, b):
 
 
 _announcements_mod._compare_versions = _compare_versions
+_announcements_mod.compare_versions = _compare_versions
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 sys.modules.setdefault("database.announcements", _announcements_mod)

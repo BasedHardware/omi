@@ -1,6 +1,5 @@
 import json
 import re
-import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
@@ -62,6 +61,7 @@ from models.users import (
     PricingOption,
     PhoneCallQuota,
 )
+from utils.executors import storage_executor, submit_with_context
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
@@ -165,7 +165,7 @@ def delete_account(
 
         # 3. Wipe Firestore subcollections in the background — can take minutes
         #    for heavy users and would otherwise time out at the load balancer.
-        threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
+        submit_with_context(storage_executor, _background_wipe_user_data, uid)
 
         return {'status': 'ok', 'message': 'Account deletion started'}
     except Exception as e:

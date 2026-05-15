@@ -7,8 +7,25 @@ Verifies that:
 """
 
 import asyncio
+import sys
+import types
 import unittest
 from unittest.mock import patch, MagicMock
+
+db_client_mod = types.ModuleType("database._client")
+db_client_mod.db = MagicMock()
+db_client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+sys.modules.setdefault("database._client", db_client_mod)
+
+redis_db_mod = types.ModuleType("database.redis_db")
+redis_db_mod.check_rate_limit = MagicMock(return_value=(True, 0, 0))
+redis_db_mod.try_acquire_listen_lock = MagicMock(return_value=True)
+sys.modules.setdefault("database.redis_db", redis_db_mod)
+
+users_db_mod = types.ModuleType("database.users")
+users_db_mod.record_user_platform = MagicMock()
+users_db_mod.get_byok_state = MagicMock(return_value={})
+sys.modules.setdefault("database.users", users_db_mod)
 
 from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient

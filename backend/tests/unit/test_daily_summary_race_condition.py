@@ -73,6 +73,7 @@ client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 for name in [
     "utils.llm.external_integrations",
     "utils.notifications",
+    "utils.subscription",
     "utils.webhooks",
     "utils.conversations",
     "utils.conversations.factory",
@@ -96,6 +97,9 @@ utils_llm_ext.generate_comprehensive_daily_summary = MagicMock()
 utils_notifications = sys.modules["utils.notifications"]
 utils_notifications.send_bulk_notification = MagicMock()
 utils_notifications.send_notification = MagicMock()
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 utils_webhooks = sys.modules["utils.webhooks"]
 utils_webhooks.day_summary_webhook = MagicMock()

@@ -49,7 +49,7 @@ from utils.other.storage import (
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
@@ -1359,6 +1359,7 @@ def _run_full_pipeline_background(
     Moved ALL heavy processing here so the v2 endpoint returns 202 immediately.
     """
     set_byok_keys(byok_keys or {})
+    set_byok_uid(uid if byok_keys else None)
     segmented_paths = set()
     wav_paths = []
     stage_timings = {}
@@ -1580,6 +1581,7 @@ def _run_full_pipeline_background(
             pass
     finally:
         set_byok_keys({})
+        set_byok_uid(None)
         _cleanup_files(list(segmented_paths))
         _cleanup_files(wav_paths)
         try:

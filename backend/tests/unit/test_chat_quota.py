@@ -23,9 +23,12 @@ def _compare_versions(a, b):
 
 
 _announcements_mod._compare_versions = _compare_versions
+_announcements_mod.compare_versions = _compare_versions
 
 # Create stubs for database modules used by get_chat_quota_snapshot
-_db_users_mod = types.SimpleNamespace(get_user_valid_subscription=MagicMock())
+_db_users_mod = types.SimpleNamespace(
+    get_user_valid_subscription=MagicMock(), is_byok_active=MagicMock(return_value=False)
+)
 _db_user_usage_mod = types.SimpleNamespace(get_monthly_chat_usage=MagicMock())
 
 sys.modules.setdefault("database._client", types.SimpleNamespace(db=MagicMock()))
@@ -319,8 +322,8 @@ class TestEnforceChatQuota:
         ):
             sub_mod.enforce_chat_quota("uid123")  # no exception
 
-    def test_enforcement_exceeded_raises_402(self, monkeypatch):
-        """When user exceeds quota, raises HTTPException 402."""
+    def test_enforcement_exceeded_basic_raises_402(self, monkeypatch):
+        """When a basic user exceeds quota, raises HTTPException 402."""
         from fastapi import HTTPException
 
         sub_mod = _reload_subscription_module()
@@ -330,10 +333,10 @@ class TestEnforceChatQuota:
             "get_chat_quota_snapshot",
             return_value={
                 'allowed': False,
-                'plan': PlanType.unlimited,
+                'plan': PlanType.basic,
                 'unit': 'questions',
-                'used': 2001,
-                'limit': 2000,
+                'used': 31,
+                'limit': 30,
                 'reset_at': _RESET_AT,
             },
         ):
@@ -342,17 +345,15 @@ class TestEnforceChatQuota:
 
             assert exc_info.value.status_code == 402
             assert exc_info.value.detail['error'] == 'quota_exceeded'
-            assert exc_info.value.detail['plan'] == 'Neo'
-            assert exc_info.value.detail['plan_type'] == 'unlimited'
+            assert exc_info.value.detail['plan'] == 'Free'
+            assert exc_info.value.detail['plan_type'] == 'basic'
             assert exc_info.value.detail['unit'] == 'questions'
-            assert exc_info.value.detail['used'] == 2001
-            assert exc_info.value.detail['limit'] == 2000
+            assert exc_info.value.detail['used'] == 31
+            assert exc_info.value.detail['limit'] == 30
             assert exc_info.value.detail['reset_at'] == _RESET_AT
 
-    def test_enforcement_402_operator_plan(self, monkeypatch):
-        """Operator plan shows correct display name in 402 detail."""
-        from fastapi import HTTPException
-
+    def test_enforcement_operator_overage_allowed(self, monkeypatch):
+        """Operator users over quota are allowed and handled as overage."""
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -367,16 +368,10 @@ class TestEnforceChatQuota:
                 'reset_at': _RESET_AT,
             },
         ):
-            with pytest.raises(HTTPException) as exc_info:
-                sub_mod.enforce_chat_quota("uid123")
+            sub_mod.enforce_chat_quota("uid123")
 
-            assert exc_info.value.status_code == 402
-            assert exc_info.value.detail['plan'] == 'Operator'
-
-    def test_enforcement_402_architect_cost_based(self, monkeypatch):
-        """Architect plan shows cost_usd unit in 402 detail."""
-        from fastapi import HTTPException
-
+    def test_enforcement_architect_cost_overage_allowed(self, monkeypatch):
+        """Architect users over cost cap are allowed and handled as overage."""
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -391,9 +386,4 @@ class TestEnforceChatQuota:
                 'reset_at': _RESET_AT,
             },
         ):
-            with pytest.raises(HTTPException) as exc_info:
-                sub_mod.enforce_chat_quota("uid123")
-
-            assert exc_info.value.status_code == 402
-            assert exc_info.value.detail['unit'] == 'cost_usd'
-            assert exc_info.value.detail['used'] == 400.5
+            sub_mod.enforce_chat_quota("uid123")

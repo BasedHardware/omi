@@ -41,10 +41,12 @@ for submodule in [
     "vector_db",
     "apps",
     "llm_usage",
+    "user_usage",
     "_client",
     "chat",
     "goals",
     "auth",
+    "announcements",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -75,6 +77,14 @@ redis_mod.set_proactive_noti_sent_at = MagicMock()
 redis_mod.incr_daily_notification_count = MagicMock()
 redis_mod.get_daily_notification_count = MagicMock(return_value=0)
 redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
+redis_mod.delete_generic_cache = MagicMock()
+
+user_usage_mod = sys.modules["database.user_usage"]
+user_usage_mod.get_monthly_chat_usage = MagicMock(return_value={})
+user_usage_mod.get_monthly_usage_stats_since = MagicMock(return_value={})
+
+announcements_mod = sys.modules["database.announcements"]
+announcements_mod.compare_versions = MagicMock(return_value=0)
 
 goals_mod = sys.modules["database.goals"]
 goals_mod.get_user_goals = MagicMock(return_value=[])

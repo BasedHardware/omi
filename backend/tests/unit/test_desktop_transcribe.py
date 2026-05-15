@@ -27,6 +27,7 @@ for _msub in [
     'transcript_segment',
     'chat',
     'conversation',
+    'conversation_enums',
     'notification_message',
     'app',
     'memory',
@@ -113,8 +114,6 @@ for _ufull in [
     'utils.llm.chat',
     'utils.llm.goals',
     'utils.llm.usage_tracker',
-    'utils.conversations',
-    'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.other.storage',
     'utils.other.chat_file',
@@ -130,6 +129,24 @@ for _ufull in [
     'models.goal',
 ]:
     sys.modules.setdefault(_ufull, MagicMock())
+
+_utils_pkg = sys.modules.get('utils')
+_conv_pkg = ModuleType('utils.conversations')
+_conv_pkg.__path__ = ['utils/conversations']
+_conv_pkg.__package__ = 'utils.conversations'
+sys.modules['utils.conversations'] = _conv_pkg
+if _utils_pkg is not None:
+    setattr(_utils_pkg, 'conversations', _conv_pkg)
+
+_conv_factory = ModuleType('utils.conversations.factory')
+_conv_factory.deserialize_conversation = MagicMock()
+sys.modules['utils.conversations.factory'] = _conv_factory
+setattr(_conv_pkg, 'factory', _conv_factory)
+
+_conv_process = ModuleType('utils.conversations.process_conversation')
+_conv_process.process_conversation = MagicMock()
+sys.modules['utils.conversations.process_conversation'] = _conv_process
+setattr(_conv_pkg, 'process_conversation', _conv_process)
 
 # Force-import real models.chat (has no project deps, needed for FastAPI response_model)
 import importlib.util as _ilu
@@ -430,14 +447,14 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
 
     @patch('utils.stt.pre_recorded._deepgram_client')
     def test_retry_raises_after_max_attempts(self, mock_client):
-        """After 3 failed attempts, should raise RuntimeError."""
+        """After the configured retry is exhausted, should raise RuntimeError."""
         mock_client.listen.rest.v.return_value.transcribe_file.side_effect = Exception('connection timeout')
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100, encoding='linear16')
 
-        # Should have been called 3 times (attempts 0, 1, 2)
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        # Should have been called twice (initial + one retry)
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
     @patch('utils.stt.pre_recorded._deepgram_client')
     def test_return_language_empty_words_returns_detected_lang(self, mock_client):
@@ -462,10 +479,10 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
         mock_response.to_dict.return_value = {'results': {'channels': []}}
         mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100)
 
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -509,6 +526,10 @@ def _stub_router_deps():
     rdb = sys.modules.get('database.redis_db')
     if rdb:
         rdb.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+    subscription = sys.modules.get('utils.subscription')
+    if subscription:
+        subscription.enforce_chat_quota = MagicMock()
+        subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 
 def _make_chat_client():

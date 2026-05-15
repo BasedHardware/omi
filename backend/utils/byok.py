@@ -73,6 +73,7 @@ BYOK_HEADERS = {
 # Keys for the current request, if the client supplied them.
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
+_byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -85,6 +86,16 @@ def get_byok_key(provider: str) -> Optional[str]:
     if keys is None:
         return None
     return keys.get(provider)
+
+
+def get_byok_uid() -> Optional[str]:
+    """Return the authenticated uid for the current request, when known."""
+    return _byok_uid_ctx.get()
+
+
+def set_byok_uid(uid: Optional[str]) -> None:
+    """Attach the authenticated uid to the current request context."""
+    _byok_uid_ctx.set(uid)
 
 
 def has_byok_keys() -> bool:
@@ -127,10 +138,12 @@ class BYOKMiddleware(BaseHTTPMiddleware):
             if value:
                 keys[provider] = value
         token = _byok_ctx.set(keys)
+        uid_token = _byok_uid_ctx.set(None)
         try:
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
+            _byok_uid_ctx.reset(uid_token)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +216,7 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
+    set_byok_uid(uid)
 
 
 def validate_byok_websocket(uid: str) -> Optional[str]:
@@ -215,4 +229,6 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
     error = _check_byok_validity(uid)
     if error:
         logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+    else:
+        set_byok_uid(uid)
     return error

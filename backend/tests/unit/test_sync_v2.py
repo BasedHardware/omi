@@ -1900,15 +1900,19 @@ class TestTimeoutConfiguration:
 
     def test_llm_mini_has_timeout(self):
         source = self._read_clients_source()
-        llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
-        assert 'request_timeout=120' in llm_mini_line
-        assert 'max_retries=1' in llm_mini_line
+        start = source.index('llm_mini = ChatOpenAI')
+        end = source.find('\n)\n', start) + 3
+        block = source[start:end]
+        assert "'request_timeout': 120" in block or 'request_timeout=120' in block
+        assert "'max_retries': 1" in block or 'max_retries=1' in block
 
     def test_anthropic_default_has_timeout(self):
         source = self._read_clients_source()
-        default_line = [l for l in source.split('\n') if '_default_anthropic_client' in l and 'AsyncAnthropic' in l][0]
-        assert 'timeout=120' in default_line
-        assert 'max_retries=1' in default_line
+        start = source.index('def _get_default(self) -> anthropic.AsyncAnthropic:')
+        end = source.find('\n    def ', start + 1)
+        func_body = source[start:end]
+        assert 'anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)' in func_body
+        assert '_default_anthropic_client = anthropic.AsyncAnthropic' not in source
 
     def test_anthropic_byok_has_timeout(self):
         source = self._read_clients_source()

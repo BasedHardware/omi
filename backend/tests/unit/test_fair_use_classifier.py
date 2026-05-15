@@ -1,12 +1,15 @@
 """Tests for the LLM fair-use classifier (utils/llm/fair_use_classifier.py)."""
 
 import json
+import os
 import sys
 import types
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
 
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before importing the module under test
@@ -33,6 +36,11 @@ _llm_clients.llm_mini = MagicMock()
 sys.modules.setdefault('utils.llm.clients', _llm_clients)
 
 import utils.llm.fair_use_classifier as classifier_mod
+
+
+def _mock_classifier_llm(**kwargs):
+    classifier_mod._classifier_llm = MagicMock()
+    classifier_mod._classifier_llm.ainvoke = AsyncMock(**kwargs)
 
 
 class TestSelectRecipes:
@@ -167,7 +175,7 @@ class TestClassifyUserPurpose:
                 'reasoning': 'Clear audiobook pattern',
             }
         )
-        _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
+        _mock_classifier_llm(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
 
@@ -192,7 +200,7 @@ class TestClassifyUserPurpose:
 
         llm_response = MagicMock()
         llm_response.content = '```json\n{"misuse_score": 0.1, "usage_type": "none", "confidence": 0.9, "evidence": [], "reasoning": "Normal"}\n```'
-        _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
+        _mock_classifier_llm(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == pytest.approx(0.1)
@@ -215,7 +223,7 @@ class TestClassifyUserPurpose:
         llm_response.content = json.dumps(
             {'misuse_score': 1.5, 'usage_type': 'none', 'confidence': -0.2, 'evidence': [], 'reasoning': ''}
         )
-        _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
+        _mock_classifier_llm(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 1.0
@@ -237,7 +245,7 @@ class TestClassifyUserPurpose:
 
         llm_response = MagicMock()
         llm_response.content = 'This is not JSON at all'
-        _llm_clients.llm_mini.ainvoke = AsyncMock(return_value=llm_response)
+        _mock_classifier_llm(return_value=llm_response)
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 0.0
@@ -256,7 +264,7 @@ class TestClassifyUserPurpose:
                 'created_at': now,
             }
         ]
-        _llm_clients.llm_mini.ainvoke = AsyncMock(side_effect=Exception('LLM timeout'))
+        _mock_classifier_llm(side_effect=Exception('LLM timeout'))
 
         result = await classifier_mod.classify_user_purpose('user1')
         assert result['misuse_score'] == 0.0

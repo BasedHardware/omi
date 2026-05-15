@@ -109,6 +109,8 @@ for attr in [
     "adapt_plans_for_legacy_client",
     "legacy_plan_features",
     "is_paid_plan",
+    "is_trial_paywalled",
+    "clear_trial_paywall_cache",
 ]:
     setattr(subscription_mod, attr, MagicMock())
 subscription_mod.get_paid_plan_definitions = MagicMock(return_value=[])

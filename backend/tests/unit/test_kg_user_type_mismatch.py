@@ -63,6 +63,9 @@ for attr in [
     "upsert_memory_vector",
     "delete_memory_vector",
     "upsert_vector2",
+    "find_similar_action_items",
+    "upsert_action_item_vectors_batch",
+    "delete_action_item_vectors_batch",
     "update_vector_metadata",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
@@ -98,6 +101,7 @@ memories_mod.delete_memory = MagicMock()
 for name in [
     "utils.apps",
     "utils.analytics",
+    "utils.subscription",
     "utils.llm.memories",
     "utils.llm.conversation_processing",
     "utils.llm.external_integrations",
@@ -117,11 +121,14 @@ for name in [
         sys.modules[name] = types.ModuleType(name)
 
 utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "sync_update_persona_prompt"]:
+for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt", "sync_update_persona_prompt"]:
     setattr(utils_apps, attr, MagicMock())
 
 utils_analytics = sys.modules["utils.analytics"]
 utils_analytics.record_usage = MagicMock()
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 llm_memories = sys.modules["utils.llm.memories"]
 for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:

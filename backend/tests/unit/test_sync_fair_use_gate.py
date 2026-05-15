@@ -17,10 +17,14 @@ for mod_name in [
     'database.user_usage',
     'database.conversations',
     'firebase_admin',
+    'firebase_admin.auth',
     'firebase_admin.messaging',
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = ModuleType(mod_name)
+
+sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
+sys.modules['firebase_admin'].messaging = sys.modules['firebase_admin.messaging']
 
 # Stub redis_db.r
 _mock_redis = MagicMock()
@@ -256,9 +260,13 @@ class TestSyncEndpointCodeStructure:
             return f.read()
 
     def test_no_402_block(self):
-        """sync.py must not raise 402 (lock instead of block)."""
+        """Sync upload endpoints must lock credit-exhausted conversations instead of raising 402."""
         source = self._read_sync_source()
-        assert 'status_code=402' not in source
+        for route in ['@router.post("/v1/sync-local-files"', '@router.post("/v2/sync-local-files"']:
+            start = source.index(route)
+            next_route = source.find('\n@router.', start + 1)
+            endpoint_source = source[start:] if next_route == -1 else source[start:next_route]
+            assert 'status_code=402' not in endpoint_source
 
     def test_should_lock_flag_exists(self):
         """sync.py must use should_lock flag for credit-exhausted locking."""

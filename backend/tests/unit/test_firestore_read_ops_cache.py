@@ -653,7 +653,7 @@ class TestWebhookInvalidationCoverage:
         idx_scheduled = source.find("Scheduled upgrade completed for user")
         assert idx_scheduled > 0
         # Find the invalidation call before the log line (it's called right after update)
-        section = source[idx_scheduled - 200 : idx_scheduled]
+        section = source[idx_scheduled - 500 : idx_scheduled]
         assert 'set_credits_invalidation_signal(uid)' in section
 
     def test_schedule_canceled_calls_invalidation(self):

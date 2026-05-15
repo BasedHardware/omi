@@ -37,8 +37,10 @@ for submod in [
     "vector_db",
     "apps",
     "llm_usage",
+    "user_usage",
     "chat",
     "goals",
+    "announcements",
 ]:
     mod = types.ModuleType(f"database.{submod}")
     sys.modules.setdefault(f"database.{submod}", mod)
@@ -53,6 +55,10 @@ sys.modules["database.redis_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
 sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
+sys.modules["database.redis_db"].delete_generic_cache = MagicMock()
+sys.modules["database.user_usage"].get_monthly_chat_usage = MagicMock(return_value={})
+sys.modules["database.user_usage"].get_monthly_usage_stats_since = MagicMock(return_value={})
+sys.modules["database.announcements"].compare_versions = MagicMock(return_value=0)
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()

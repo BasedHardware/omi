@@ -17,6 +17,7 @@ for mod_name in [
     'google.cloud.firestore',
     'database.redis_db',
     'database.auth',
+    'database.users',
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = types.ModuleType(mod_name)
@@ -43,6 +44,7 @@ firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {}
 redis_db_stub = sys.modules['database.redis_db']
 redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
 redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+sys.modules['database.users'].record_user_platform = MagicMock()
 
 
 def _check_rate_limit(key, policy, max_requests, window):
@@ -479,18 +481,23 @@ class TestRealCheckRateLimit(unittest.TestCase):
 
         cls.mock_lua = mock_lua_callable
 
+    def _rate_limit_lua_source(self):
+        for call in self.real_module.r.register_script.call_args_list:
+            lua_source = call.args[0]
+            if 'local key = KEYS[1]' in lua_source and 'INCR' in lua_source:
+                return lua_source
+        self.fail('Rate-limit Lua script was not registered')
+
     def test_lua_script_has_ttl_self_heal(self):
         """Verify the registered Lua script contains TTL self-heal logic."""
-        # register_script was called with the Lua source
-        call_args = self.real_module.r.register_script.call_args
-        lua_source = call_args[0][0]
+        lua_source = self._rate_limit_lua_source()
         self.assertIn('TTL', lua_source)
         self.assertIn('ttl < 0', lua_source)
         self.assertIn('EXPIRE', lua_source)
 
     def test_lua_script_uses_incr(self):
         """Verify Lua uses INCR for atomic counter."""
-        lua_source = self.real_module.r.register_script.call_args[0][0]
+        lua_source = self._rate_limit_lua_source()
         self.assertIn('INCR', lua_source)
 
     def test_real_check_rate_limit_key_format(self):

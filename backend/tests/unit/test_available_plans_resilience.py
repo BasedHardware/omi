@@ -73,6 +73,7 @@ def _compare_versions(a, b):
 
 
 _announcements_mod._compare_versions = _compare_versions
+_announcements_mod.compare_versions = _compare_versions
 
 # database.users needs the functions payment.py imports by name
 _users_mod = sys.modules["database.users"]
@@ -126,6 +127,7 @@ _stripe_utils.create_subscription_checkout_session = MagicMock()
 
 _endpoints_mod = sys.modules["utils.other.endpoints"]
 _endpoints_mod.get_current_user_uid = lambda: "test-user"
+_endpoints_mod.get_current_user_uid_no_byok_validation = lambda: "test-user"
 
 # Ensure utils.other has endpoints attr for `from utils.other import endpoints`
 sys.modules["utils.other"].endpoints = _endpoints_mod

@@ -13,6 +13,7 @@ Verifies:
 import os
 import struct
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,6 +22,9 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 # Mock heavy dependencies at sys.modules level before importing storage
 sys.modules.setdefault("database._client", MagicMock())
+subscription_mod = types.ModuleType("utils.subscription")
+subscription_mod.get_default_basic_subscription = MagicMock()
+sys.modules.setdefault("utils.subscription", subscription_mod)
 
 _mock_gcs_storage = MagicMock()
 _mock_gcs_client_instance = MagicMock()

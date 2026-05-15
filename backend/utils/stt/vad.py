@@ -4,7 +4,7 @@ import threading
 
 import numpy as np
 import onnxruntime as ort
-import requests
+import httpx
 from fastapi import HTTPException
 from pydub import AudioSegment
 
@@ -111,7 +111,7 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
         try:
             with open(file_path, 'rb') as file:
                 files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-                response = requests.post(hosted_vad_url, files=files, timeout=300)
+                response = httpx.post(hosted_vad_url, files=files, timeout=300.0)
                 response.raise_for_status()
                 segments = response.json()
         except Exception as e:

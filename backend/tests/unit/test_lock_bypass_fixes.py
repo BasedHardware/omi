@@ -740,7 +740,9 @@ class TestScheduledDailySummaryLockFilter:
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True), patch(
+            'utils.other.notifications.is_trial_paywalled', return_value=False
+        ):
             with patch(
                 'utils.other.notifications.generate_comprehensive_daily_summary',
                 return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
@@ -1259,9 +1261,11 @@ class TestSuggestGoalLockFilter:
         mock_track.__enter__ = MagicMock(return_value=None)
         mock_track.__exit__ = MagicMock(return_value=False)
 
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = mock_llm_response
+
         with patch('utils.llm.goals.track_usage', return_value=mock_track):
-            with patch('utils.llm.goals.llm_mini') as mock_llm:
-                mock_llm.invoke.return_value = mock_llm_response
+            with patch('utils.llm.goals.get_llm', return_value=mock_llm):
 
                 from utils.llm.goals import suggest_goal
 

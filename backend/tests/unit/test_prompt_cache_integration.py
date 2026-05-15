@@ -89,6 +89,7 @@ mock_llm.invoke = MagicMock(return_value=MagicMock(content="test"))
 clients_mod = _stub_module("utils.llm.clients")
 clients_mod.get_llm = MagicMock(return_value=mock_llm)
 clients_mod.get_model = MagicMock(return_value="gpt-4.1-mini")
+clients_mod.get_openai_agent_llm = MagicMock(return_value=mock_llm)
 clients_mod.llm_mini = mock_llm
 clients_mod.llm_mini_stream = mock_llm
 clients_mod.llm_medium = mock_llm
@@ -113,6 +114,8 @@ tracker_mod.set_usage_context = MagicMock()
 tracker_mod.reset_usage_context = MagicMock()
 tracker_mod.Features = MagicMock()
 tracker_mod.track_usage = MagicMock()
+byok_errors_mod = _stub_module("utils.llm.byok_errors")
+byok_errors_mod.handle_llm_error = MagicMock()
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -611,8 +614,13 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
     source = source.replace("import tiktoken", "")
     source = source.replace("import anthropic", "")
+    source = source.replace("from langchain_core.callbacks import BaseCallbackHandler", "")
+    source = source.replace("from langchain_core.language_models import BaseChatModel", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
-    source = source.replace("from models.conversation import Structured", "")
+    source = source.replace("from langchain_google_genai import ChatGoogleGenerativeAI", "")
+    source = source.replace("from models.structured import Structured", "")
+    source = source.replace("from utils.byok import get_byok_key", "")
+    source = source.replace("from utils.llm.byok_errors import handle_llm_error", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
     # Create a fake anthropic module with AsyncAnthropic
@@ -623,10 +631,15 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
         "os": os,
         "ChatOpenAI": FakeChatOpenAI,
         "OpenAIEmbeddings": FakeOpenAIEmbeddings,
+        "ChatGoogleGenerativeAI": FakeChatOpenAI,
+        "BaseCallbackHandler": object,
+        "BaseChatModel": object,
         "tiktoken": fake_tiktoken,
         "anthropic": fake_anthropic,
         "PydanticOutputParser": MagicMock(),
         "Structured": MagicMock(),
+        "get_byok_key": MagicMock(return_value=None),
+        "handle_llm_error": MagicMock(),
         "get_usage_callback": MagicMock(return_value=[]),
         "List": list,
     }

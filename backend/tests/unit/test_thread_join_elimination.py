@@ -236,8 +236,8 @@ class TestAsyncSTTBehavior:
             import importlib
 
             mod = importlib.import_module('utils.stt.vad')
-            # _local_vad should be called via run_in_executor(critical_executor, ...)
-            with patch.object(mod, '_local_vad', return_value=[]) as mock_local:
+            # _run_file_vad should be called via run_in_executor(critical_executor, ...)
+            with patch.object(mod, '_run_file_vad', return_value=[]) as mock_local:
                 result = await mod.async_vad_is_empty('/tmp/nonexistent.wav')
                 mock_local.assert_called_once_with('/tmp/nonexistent.wav')
                 assert result is True  # empty segments = True

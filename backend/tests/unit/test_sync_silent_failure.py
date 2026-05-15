@@ -242,7 +242,7 @@ class TestDeepgramRetryBehavior:
             return f.read()
 
     def test_deepgram_raises_runtime_error_on_final_retry(self):
-        """After 2 retries, deepgram_prerecorded must raise instead of returning []."""
+        """After the configured retry is exhausted, deepgram_prerecorded must raise instead of returning []."""
         source = self._read_deepgram_source()
         start = source.index('def deepgram_prerecorded(')
         next_func_markers = ['@timeit', '\ndef ']
@@ -260,7 +260,7 @@ class TestDeepgramRetryBehavior:
 
         assert 'raise RuntimeError' in except_body
         assert 'Deepgram transcription failed after' in except_body
-        assert 'attempts < 2' in func_body
+        assert 'attempts < 1' in func_body
 
     def test_deepgram_keeps_empty_words_as_success(self):
         """A valid Deepgram response with no words must still return []."""
@@ -346,11 +346,11 @@ class TestDeepgramRetryBehavioral:
         mock_client.listen.rest.v.return_value.transcribe_url.side_effect = ConnectionError('timeout')
 
         with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
-            with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+            with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
                 self._deepgram_prerecorded('https://fake-audio.wav', attempts=0, return_language=True)
 
-        # Should have been called 3 times (initial + 2 retries)
-        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 3
+        # Should have been called twice (initial + one retry)
+        assert mock_client.listen.rest.v.return_value.transcribe_url.call_count == 2
 
     def test_valid_empty_transcription_returns_empty_list(self):
         """deepgram_prerecorded must return ([], lang) when DG succeeds but finds no words."""
@@ -395,14 +395,14 @@ class TestAppSideSyncBehavior:
                 return f.read()
         return None
 
-    def test_app_accepts_200_and_207(self):
-        """App treats both HTTP 200 and 207 as parseable responses."""
+    def test_app_accepts_200_only(self):
+        """Current app-side sync path only treats HTTP 200 as parseable."""
         source = self._read_app_file('backend/http/api/conversations.dart')
         if source is None:
             pytest.skip("App source not available")
 
         assert 'response.statusCode == 200' in source
-        assert 'response.statusCode == 207' in source
+        assert 'response.statusCode == 207' not in source
 
     def test_app_keeps_wals_retryable_on_partial_failure(self):
         """App keeps WALs retryable when response has partial failure (207)."""
@@ -586,6 +586,7 @@ from unittest.mock import MagicMock, patch
 _STUB_MODULES = [
     'models',
     'models.conversation',
+    'models.conversation_enums',
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
@@ -593,19 +594,27 @@ _STUB_MODULES = [
     'database.users',
     'database.user_usage',
     'database.conversations',
+    'database.sync_jobs',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
     'pydub',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.executors',
     'utils.log_sanitizer',
+    'utils.analytics',
     'utils.encryption',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
     'utils.fair_use',
     'utils.subscription',
+    'utils.byok',
+    'utils.speaker_assignment',
+    'utils.speaker_identification',
+    'utils.stt.speaker_embedding',
     'utils.conversations.process_conversation',
+    'utils.conversations.factory',
 ]
 
 
@@ -637,18 +646,38 @@ class TestProcessSegmentReal:
         _mock_conv_db.update_conversation_segments = MagicMock()
         _mock_conv_db.update_conversation = MagicMock()
         _mock_conv_db.get_conversation = MagicMock()
+        for attr in [
+            'create_sync_job',
+            'get_sync_job',
+            'update_sync_job',
+            'mark_job_processing',
+            'mark_job_completed',
+            'mark_job_failed',
+        ]:
+            setattr(sys.modules['database.sync_jobs'], attr, MagicMock())
         sys.modules['opuslib'].Decoder = MagicMock()
         sys.modules['pydub'].AudioSegment = MagicMock()
+        executor_future = MagicMock()
+        executor_future.result.return_value = None
+        fake_executor = MagicMock()
+        fake_executor.submit.return_value = executor_future
+        sys.modules['utils.executors'].critical_executor = fake_executor
+        sys.modules['utils.executors'].storage_executor = fake_executor
+        sys.modules['utils.executors'].sync_executor = fake_executor
+        sys.modules['utils.executors'].submit_with_context = MagicMock(return_value=executor_future)
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock()
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.conversations.factory'].deserialize_conversation = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
+        sys.modules['utils.analytics'].record_usage = MagicMock()
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
@@ -661,6 +690,14 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
         sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
+        sys.modules['utils.byok'].set_byok_keys = MagicMock()
+        sys.modules['utils.byok'].set_byok_uid = MagicMock()
+        sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
+        sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
+        sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock(return_value=None)
+        sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=0)
+        sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.75
         sys.modules['utils.conversations.process_conversation'].process_conversation = MagicMock()
 
         class _ConversationSource:
@@ -684,6 +721,7 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].ConversationSource = _ConversationSource
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
+        sys.modules['models.conversation_enums'].ConversationSource = _ConversationSource
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
 
         # Import under stubs
@@ -824,7 +862,7 @@ class TestProcessSegmentReal:
         call_count = [0]
         call_lock = threading.Lock()
 
-        def mock_deepgram_mixed(url, speakers_count=3, attempts=0, return_language=True):
+        def mock_deepgram_mixed(url, speakers_count=3, attempts=0, return_language=True, **kwargs):
             with call_lock:
                 call_count[0] += 1
                 n = call_count[0]
@@ -1006,6 +1044,7 @@ _CHAT_STUB_MODULES = [
     'firebase_admin',
     'utils.other.endpoints',
     'utils.other.storage',
+    'utils.executors',
     'utils.notifications',
     'utils.retrieval.graph',
     'utils.stt.pre_recorded',
@@ -1033,6 +1072,11 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
         sys.modules['fal_client'].submit = MagicMock()
+        executor_future = MagicMock()
+        executor_future.result.return_value = None
+        fake_executor = MagicMock()
+        fake_executor.submit.return_value = executor_future
+        sys.modules['utils.executors'].storage_executor = fake_executor
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.other.storage'].get_syncing_file_temporal_signed_url = MagicMock(return_value='https://fake')
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
@@ -1062,6 +1106,7 @@ class TestVoiceMessageRuntimeErrorHandling:
 
         # STT stubs
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded_from_bytes = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
 

@@ -76,11 +76,14 @@ class TestDgUsageBatchingBehavior:
             'database.user_usage',
             'database.conversations',
             'firebase_admin',
+            'firebase_admin.auth',
             'firebase_admin.messaging',
         ]:
             if mod_name not in sys.modules:
                 sys.modules[mod_name] = ModuleType(mod_name)
 
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
+        sys.modules['firebase_admin'].messaging = sys.modules['firebase_admin.messaging']
         sys.modules['database._client'].db = MagicMock()
         sys.modules['database.redis_db'].r = MagicMock()
 
