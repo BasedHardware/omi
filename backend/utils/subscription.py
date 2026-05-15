@@ -116,6 +116,10 @@ def set_trial_paywall_ws_cooldown(uid: str) -> None:
 
 
 def check_trial_paywall_ws_cooldown(uid: str) -> bool:
+    if not _TRIAL_PAYWALL_ENABLED:
+        return False
+    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
+        return False
     return bool(redis_db.get_generic_cache(f"{TRIAL_PAYWALL_WS_COOLDOWN_PREFIX}{uid}"))
 
 
