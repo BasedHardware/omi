@@ -91,7 +91,8 @@ def test_classify_byok_llm_error_ignores_transient_rate_limit():
 
 @patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
 @patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
-def test_handle_llm_error_logs_byok_source(mock_get_key, mock_get_uid):
+@patch('utils.llm.byok_errors._send_byok_llm_error_notification')
+def test_handle_llm_error_logs_byok_source(mock_send_notification, mock_get_key, mock_get_uid):
     from utils.llm.byok_errors import handle_llm_error
 
     with patch('utils.llm.byok_errors.logger.error') as mock_log:
@@ -102,6 +103,7 @@ def test_handle_llm_error_logs_byok_source(mock_get_key, mock_get_uid):
     assert log_args[1] == 'byok'
     assert log_args[2] == 'openai'
     assert log_args[8] == 'quota'
+    mock_send_notification.assert_called_once_with('user-1', 'openai', 'quota')
 
 
 @patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')

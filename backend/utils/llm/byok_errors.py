@@ -2,12 +2,34 @@ import asyncio
 import logging
 from typing import Optional
 
+try:
+    from firebase_admin import messaging
+except ImportError:
+    messaging = None
+
+try:
+    import database.notifications as notification_db
+except ImportError:
+    notification_db = None
+
+try:
+    from database.redis_db import try_acquire_byok_llm_error_notification_lock
+except ImportError:
+
+    def try_acquire_byok_llm_error_notification_lock(
+        uid: str, provider: str, reason: str, ttl: int = 60 * 60 * 24
+    ) -> bool:
+        logger.error('BYOK LLM notification lock unavailable uid=%s provider=%s reason=%s', uid, provider, reason)
+        return False
+
+
 from utils.byok import get_byok_key, get_byok_uid
 from utils.executors import storage_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
+_PERMANENT_FAILURE_CODES = frozenset({'UNREGISTERED', 'INVALID_REGISTRATION_TOKEN', 'NOT_FOUND'})
 _QUOTA_ERROR_NAMES = frozenset({'RateLimitError'})
 
 
@@ -62,6 +84,9 @@ def handle_llm_error(
         sanitize(str(error)),
     )
 
+    if source == 'byok' and uid and provider and reason:
+        _send_byok_llm_error_notification(uid, provider, reason)
+
 
 async def handle_llm_error_async(
     error: Exception,
@@ -88,3 +113,78 @@ def _get_status_code(error: Exception) -> Optional[int]:
     if isinstance(response_status, int):
         return response_status
     return None
+
+
+def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> None:
+    if notification_db is None or messaging is None:
+        logger.error(
+            'BYOK LLM notification dependencies unavailable uid=%s provider=%s reason=%s', uid, provider, reason
+        )
+        return
+
+    provider_name = provider.capitalize()
+    if reason == 'quota':
+        body = f'Your {provider_name} BYOK key appears to be out of quota. Update it to restore AI features.'
+    elif reason == 'permission':
+        body = f'Your {provider_name} BYOK key was denied access. Check its project and permissions in Omi settings.'
+    else:
+        body = f'Your {provider_name} BYOK key was rejected. Update it in Omi settings to restore AI features.'
+
+    try:
+        tokens = notification_db.get_all_tokens(uid)
+    except Exception as e:
+        logger.error(
+            'BYOK LLM notification token lookup failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
+        )
+        return
+
+    if not tokens:
+        logger.info('No tokens found for BYOK LLM notification uid=%s provider=%s reason=%s', uid, provider, reason)
+        return
+
+    try:
+        acquired = try_acquire_byok_llm_error_notification_lock(uid, provider, reason)
+    except Exception as e:
+        logger.error('BYOK LLM notification lock failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
+        return
+
+    if not acquired:
+        logger.info('BYOK LLM notification already sent recently uid=%s provider=%s reason=%s', uid, provider, reason)
+        return
+
+    notification = messaging.Notification(title='omi', body=body)
+    data = {'type': 'byok_llm_error', 'provider': provider, 'reason': reason}
+    messages = [messaging.Message(token=token, notification=notification, data=data) for token in tokens]
+
+    try:
+        response = messaging.send_each(messages)
+    except Exception as e:
+        logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
+        return
+
+    invalid_tokens = []
+    success_count = 0
+    for idx, result in enumerate(response.responses):
+        if result.success:
+            success_count += 1
+        elif result.exception:
+            error_code = getattr(result.exception, 'code', None)
+            if error_code in _PERMANENT_FAILURE_CODES:
+                invalid_tokens.append(tokens[idx])
+            else:
+                logger.error('BYOK LLM notification FCM send failed uid=%s error=%s', uid, result.exception)
+
+    if invalid_tokens:
+        try:
+            notification_db.remove_bulk_tokens(invalid_tokens)
+        except Exception as e:
+            logger.error('BYOK LLM notification invalid token cleanup failed uid=%s: %s', uid, e)
+
+    logger.info(
+        'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s total=%s',
+        uid,
+        provider,
+        reason,
+        success_count,
+        len(tokens),
+    )

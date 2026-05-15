@@ -602,6 +602,11 @@ def has_silent_user_notification_been_sent(uid: str) -> bool:
     return r.exists(f'users:{uid}:silent_notification_sent')
 
 
+def try_acquire_byok_llm_error_notification_lock(uid: str, provider: str, reason: str, ttl: int = 60 * 60 * 24) -> bool:
+    """Return True once per BYOK provider/error reason per TTL window."""
+    return bool(r.set(f'users:{uid}:byok_llm_error:{provider}:{reason}', '1', ex=ttl, nx=True))
+
+
 # ******************************************************
 # ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
 # ******************************************************
