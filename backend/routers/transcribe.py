@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import hashlib
 import io
 import json
@@ -112,17 +111,6 @@ from utils.metrics import (
     PUSHER_CIRCUIT_BREAKER_STATE,
     PUSHER_SESSION_DEGRADED,
 )
-
-
-@contextlib.asynccontextmanager
-async def track_active_ws():
-    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
-    try:
-        yield
-    finally:
-        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
-
-
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -248,7 +236,6 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
 
-    # --- Admission phase: reject before allocating session resources or incrementing the gauge ---
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
@@ -262,60 +249,12 @@ async def _stream_handler(
             logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
         return
 
-    use_custom_stt = custom_stt_mode == CustomSttMode.enabled
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
-
-    # --- Admitted: track as active session (gauge inc/dec guaranteed by context manager) ---
-    async with track_active_ws():
-        await _run_stream_session(
-            websocket=websocket,
-            uid=uid,
-            language=language,
-            sample_rate=sample_rate,
-            codec=codec,
-            channels=channels,
-            include_speech_profile=include_speech_profile,
-            stt_service=stt_service,
-            conversation_timeout=conversation_timeout,
-            source=source,
-            custom_stt_mode=custom_stt_mode,
-            onboarding_mode=onboarding_mode,
-            speaker_auto_assign_enabled=speaker_auto_assign_enabled,
-            vad_gate_override=vad_gate_override,
-            call_id=call_id,
-            session_id=session_id,
-            use_custom_stt=use_custom_stt,
-            user_has_credits=user_has_credits,
-        )
-
-    logger.info(f"_stream_handler ended {uid} {session_id}")
-
-
-async def _run_stream_session(
-    websocket: WebSocket,
-    uid: str,
-    language: str,
-    sample_rate: int,
-    codec: str,
-    channels: int,
-    include_speech_profile: bool,
-    stt_service: Optional[str],
-    conversation_timeout: int,
-    source: Optional[str],
-    custom_stt_mode: CustomSttMode,
-    onboarding_mode: bool,
-    speaker_auto_assign_enabled: bool,
-    vad_gate_override: Optional[str],
-    call_id: Optional[str],
-    session_id: str,
-    use_custom_stt: bool,
-    user_has_credits: bool,
-):
-    """Run the active streaming session. Gauge is managed by the caller's context manager."""
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     logger.info(
-        f'_run_stream_session {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
+        f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
 
+    use_custom_stt = custom_stt_mode == CustomSttMode.enabled
     is_multi_channel = channels >= 2
 
     # Multi-channel state (only allocated when channels >= 2)
@@ -347,6 +286,8 @@ async def _run_stream_session(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
         include_speech_profile = False
+
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
     if not user_has_credits:
         try:
             await send_credit_limit_notification(uid)
@@ -481,8 +422,11 @@ async def _run_stream_session(
     last_transcript_time: Optional[float] = None
     current_conversation_id = None
 
-    freemium_threshold_sent = False
+    freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
 
+    # Push the freemium threshold event upfront for already-exhausted users so
+    # the desktop popup appears immediately on connect, instead of waiting for
+    # the periodic loop's first 60s tick (typical desktop session is shorter).
     if not user_has_credits:
         try:
             await websocket.send_json(
@@ -2731,6 +2675,7 @@ async def _run_stream_session(
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
     finally:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
@@ -2857,6 +2802,8 @@ async def _run_stream_session(
                 translation_service.translation_cache.clear()
         except NameError:
             pass
+
+    logger.info(f"_stream_handler ended {uid} {session_id}")
 
 
 async def _listen(
