@@ -2,8 +2,7 @@
 
 Validates:
 - Admission phase rejects paywalled desktop before gauge increment
-- Context manager guarantees gauge inc/dec balance
-- No early returns inside session can leak the gauge
+- No paywall close block inside the session body (removed, handled in admission)
 - Cache invalidation on payment/BYOK changes
 - is_trial_paywalled handles platform filtering (only desktop/macos affected)
 """
@@ -24,153 +23,82 @@ def _read_source(path):
 class TestAdmissionPhase:
     """Verify paywalled desktop users are rejected in the admission phase, before gauge increment."""
 
-    def test_paywall_check_before_gauge_context_manager(self):
+    def test_paywall_check_before_gauge_inc(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         paywall_pos = handler_body.find('is_trial_paywalled(uid, source)')
-        gauge_pos = handler_body.find('async with track_active_ws():')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
         assert paywall_pos != -1, "is_trial_paywalled call not found in _stream_handler"
-        assert gauge_pos != -1, "track_active_ws context manager not found in _stream_handler"
-        assert paywall_pos < gauge_pos, "paywall check must come before gauge context manager"
+        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
+        assert paywall_pos < gauge_pos, "paywall check must come before gauge inc"
 
     def test_paywall_rejection_returns_before_gauge(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_paywall_block = False
-        found_return_before_gauge = False
-        for i, line in enumerate(lines):
-            if 'if is_trial_paywalled(' in line:
-                in_paywall_block = True
-            if in_paywall_block and line.strip() == 'return':
-                found_return_before_gauge = True
-                break
-            if in_paywall_block and 'track_active_ws()' in line:
-                break
-        assert found_return_before_gauge, "paywall rejection must return before gauge context manager"
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        paywall_block = handler_body[paywall_pos:gauge_pos]
+        assert 'return' in paywall_block, "paywall rejection must return before gauge inc"
 
     def test_paywall_close_uses_1008(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_admission_paywall = False
-        found_close = False
-        for line in lines:
-            if 'if is_trial_paywalled(' in line:
-                in_admission_paywall = True
-            if in_admission_paywall and 'websocket.close' in line and '1008' in line:
-                found_close = True
-                break
-            if in_admission_paywall and 'track_active_ws()' in line:
-                break
-        assert found_close, "admission paywall must close with code 1008"
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        paywall_block = handler_body[paywall_pos:gauge_pos]
+        assert (
+            'websocket.close' in paywall_block and '1008' in paywall_block
+        ), "admission paywall must close with code 1008"
 
     def test_paywall_close_reason_is_trial_expired(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        lines = src.split('\n')
-        in_admission_paywall = False
-        for line in lines:
-            if 'if is_trial_paywalled(' in line:
-                in_admission_paywall = True
-            if in_admission_paywall and 'trial_expired' in line and 'websocket.close' in line:
-                assert 'trial_expired' in line
-                return
-            if in_admission_paywall and 'track_active_ws()' in line:
-                break
-        pytest.fail("paywall close must use reason 'trial_expired'")
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        paywall_pos = handler_body.find('if is_trial_paywalled(')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        paywall_block = handler_body[paywall_pos:gauge_pos]
+        assert 'trial_expired' in paywall_block, "paywall close must use reason 'trial_expired'"
 
     def test_uid_check_before_gauge(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
         handler_body = src[handler_start:]
         uid_check_pos = handler_body.find('Bad uid')
-        gauge_pos = handler_body.find('async with track_active_ws():')
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
         assert uid_check_pos != -1, "uid check not found in _stream_handler"
-        assert gauge_pos != -1, "gauge context manager not found in _stream_handler"
-        assert uid_check_pos < gauge_pos, "uid check must come before gauge"
+        assert gauge_pos != -1, "gauge inc not found in _stream_handler"
+        assert uid_check_pos < gauge_pos, "uid check must come before gauge inc"
 
 
-class TestGaugeContextManager:
-    """Verify the gauge is managed via a context manager, not manual inc/dec."""
+class TestNoPaywallBlockInSession:
+    """Verify the old paywall close block was removed from inside the session."""
 
-    def test_track_active_ws_context_manager_exists(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert (
-            'async def track_active_ws()' in src or 'def track_active_ws()' in src
-        ), "track_active_ws context manager must be defined"
-
-    def test_context_manager_increments_gauge(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        cm_start = src.find('def track_active_ws()')
-        assert cm_start != -1
-        cm_body = src[cm_start : src.find('\n\n\n', cm_start)]
-        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' in cm_body
-
-    def test_context_manager_decrements_in_finally(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        cm_start = src.find('def track_active_ws()')
-        assert cm_start != -1
-        cm_body = src[cm_start : src.find('\n\n\n', cm_start)]
-        assert 'finally:' in cm_body
-        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in cm_body
-
-    def test_session_runs_inside_context_manager(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert 'async with track_active_ws():' in src, "_run_stream_session must run inside track_active_ws"
-
-    def test_no_manual_gauge_dec_in_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        session_start = src.find('async def _run_stream_session(')
-        assert session_start != -1
-        session_body = src[session_start:]
-        next_fn = session_body.find('\nasync def _listen(')
-        if next_fn != -1:
-            session_body = session_body[:next_fn]
-        assert (
-            'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' not in session_body
-        ), "_run_stream_session must not manually dec the gauge — context manager handles it"
-
-    def test_no_manual_gauge_inc_outside_context_manager(self):
+    def test_no_paywalled_desktop_variable(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
-        handler_end = src.find('async def _run_stream_session(')
-        handler_body = src[handler_start:handler_end]
+        handler_body = src[handler_start:]
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        after_gauge = handler_body[gauge_pos:]
         assert (
-            'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()' not in handler_body
-        ), "_stream_handler must not manually inc the gauge — context manager handles it"
+            'is_paywalled_desktop' not in after_gauge
+        ), "is_paywalled_desktop variable should not exist after gauge inc — handled in admission"
 
-
-class TestNoGaugeLeakOnEarlyReturn:
-    """Verify that early returns inside _run_stream_session cannot leak the gauge."""
-
-    def test_unsupported_language_return_is_inside_session(self):
+    def test_no_cooldown_calls(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        session_start = src.find('async def _run_stream_session(')
-        assert session_start != -1
-        session_body = src[session_start:]
-        assert (
-            'The language is not supported' in session_body
-        ), "language check should be inside _run_stream_session (protected by context manager)"
+        assert 'check_trial_paywall_ws_cooldown' not in src, "cooldown check removed"
+        assert 'set_trial_paywall_ws_cooldown' not in src, "cooldown set removed"
 
-    def test_bad_user_return_is_inside_session(self):
+    def test_gauge_dec_in_finally(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
-        session_start = src.find('async def _run_stream_session(')
-        assert session_start != -1
-        session_body = src[session_start:]
-        assert (
-            'Bad user' in session_body
-        ), "user existence check should be inside _run_stream_session (protected by context manager)"
-
-    def test_no_paywall_check_in_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        session_start = src.find('async def _run_stream_session(')
-        assert session_start != -1
-        session_body = src[session_start:]
-        next_fn = session_body.find('\nasync def _listen(')
-        if next_fn != -1:
-            session_body = session_body[:next_fn]
-        assert (
-            'is_trial_paywalled' not in session_body
-        ), "is_trial_paywalled should not exist in _run_stream_session — handled in admission"
+        handler_start = src.find('async def _stream_handler(')
+        handler_body = src[handler_start:]
+        finally_pos = handler_body.rfind('finally:')
+        assert finally_pos != -1
+        finally_block = handler_body[finally_pos:]
+        assert 'BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()' in finally_block, "gauge dec must be in the finally block"
 
 
 class TestCacheInvalidation:
@@ -231,7 +159,7 @@ class TestCacheInvalidation:
 
 
 class TestCacheInvalidationBehavioral:
-    """Execute clear_trial_paywall_cache with mocked Redis to verify runtime behavior."""
+    """Verify clear_trial_paywall_cache implementation."""
 
     def test_clear_cache_deletes_expired_key(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
@@ -280,36 +208,9 @@ class TestPlatformFiltering:
     def test_admission_calls_is_trial_paywalled_with_source(self):
         src = _read_source(TRANSCRIBE_SRC_PATH)
         handler_start = src.find('async def _stream_handler(')
-        handler_end = src.find('async def _run_stream_session(')
-        handler_body = src[handler_start:handler_end]
+        handler_body = src[handler_start:]
+        gauge_pos = handler_body.find('BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()')
+        admission_body = handler_body[:gauge_pos]
         assert (
-            'is_trial_paywalled(uid, source)' in handler_body
+            'is_trial_paywalled(uid, source)' in admission_body
         ), "admission phase must call is_trial_paywalled with uid and source"
-
-
-class TestArchitecturalSplit:
-    """Verify the _stream_handler / _run_stream_session split is correct."""
-
-    def test_stream_handler_exists(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert 'async def _stream_handler(' in src
-
-    def test_run_stream_session_exists(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        assert 'async def _run_stream_session(' in src
-
-    def test_stream_handler_calls_run_stream_session(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_end = src.find('async def _run_stream_session(')
-        handler_body = src[handler_start:handler_end]
-        assert '_run_stream_session(' in handler_body
-
-    def test_no_freemium_event_in_admission(self):
-        src = _read_source(TRANSCRIBE_SRC_PATH)
-        handler_start = src.find('async def _stream_handler(')
-        handler_end = src.find('async def _run_stream_session(')
-        handler_body = src[handler_start:handler_end]
-        assert (
-            'FreemiumThresholdReachedEvent' not in handler_body
-        ), "admission phase should not send freemium event — close reason 'trial_expired' is the signal"
