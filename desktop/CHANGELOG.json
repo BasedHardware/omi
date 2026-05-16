@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed BYOK users hitting trial_expired / monthly-limit popup even with all 4 keys configured"
+  ],
   "releases": [
     {
       "version": "0.11.401",
