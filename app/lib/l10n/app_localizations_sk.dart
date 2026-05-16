@@ -6837,6 +6837,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get lowBatteryAlertBody => 'Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi je plne nabitý';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaše zariadenie Omi je plne nabité. Môžete ho odpojiť!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Vaše zariadenie Omi bolo odpojené';
 
   @override

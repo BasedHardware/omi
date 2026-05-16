@@ -14,7 +14,7 @@ use axum::{
     Router,
 };
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::AppState;
 
 use super::rate_limit::{self, RateDecision};
@@ -79,10 +79,11 @@ impl IntoResponse for ProxyError {
 /// Rate-limited per user: Tier 1 (allow), Tier 2 (degrade Pro→Flash), Tier 3 (reject 429).
 async fn gemini_proxy(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
     Path(path): Path<String>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
 
@@ -243,11 +244,12 @@ async fn gemini_proxy(
 /// Rate-limited per user with same tiers as gemini_proxy.
 async fn gemini_stream_proxy(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
     Path(path): Path<String>,
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
 

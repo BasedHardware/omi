@@ -2184,6 +2184,8 @@
     "selectOption": "เลือก",
     "lowBatteryAlertTitle": "การแจ้งเตือนแบตเตอรี่ต่ำ",
     "lowBatteryAlertBody": "แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋",
+    "batteryFullyChargedTitle": "Omi ชาร์จเต็มแล้ว",
+    "batteryFullyChargedBody": "อุปกรณ์ Omi ของคุณชาร์จเต็มแล้ว รู้สึกอิสระที่จะถอดปลั๊กได้!",
     "deviceDisconnectedNotificationTitle": "อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ",
     "deviceDisconnectedNotificationBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน Omi ต่อไป",
     "firmwareUpdateAvailable": "มีการอัปเดตเฟิร์มแวร์",

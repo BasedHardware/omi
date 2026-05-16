@@ -6860,6 +6860,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get lowBatteryAlertBody => 'De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi is volledig opgeladen';
+
+  @override
+  String get batteryFullyChargedBody => 'Uw Omi-apparaat is volledig opgeladen. U kunt het loskoppelen!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Uw Omi-apparaat is losgekoppeld';
 
   @override

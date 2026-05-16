@@ -102,6 +102,8 @@ pytest tests/unit/test_superwall_webhook.py -v
 pytest tests/unit/test_catalog_filter.py -v
 pytest tests/unit/test_superwall_e2e.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
+pytest tests/unit/test_stripe_webhook_none_guard.py -v
+pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
 pytest tests/unit/test_async_webhooks.py -v
 pytest tests/unit/test_async_app_integrations.py -v
@@ -115,6 +117,8 @@ pytest tests/unit/test_async_http_infrastructure.py -v
 pytest tests/unit/test_clean_sweep_migrations.py -v
 pytest tests/unit/test_omi_qos_tiers.py -v
 pytest tests/unit/test_byok_security.py -v
+pytest tests/unit/test_paywall_reconnect_gate.py -v
+pytest tests/unit/test_trial_metadata.py -v
 pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
 

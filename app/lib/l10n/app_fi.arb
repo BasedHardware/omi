@@ -2184,6 +2184,8 @@
     "selectOption": "Valitse",
     "lowBatteryAlertTitle": "Alhaisen akun varoitus",
     "lowBatteryAlertBody": "Laitteesi akku on alhainen. Aika ladata! 🔋",
+    "batteryFullyChargedTitle": "Omi on ladattu täyteen",
+    "batteryFullyChargedBody": "Omi-laitteesi on ladattu täyteen. Voit irrottaa sen nyt!",
     "deviceDisconnectedNotificationTitle": "Omi-laitteesi yhteys katkesi",
     "deviceDisconnectedNotificationBody": "Yhdistä uudelleen jatkaaksesi Omin käyttöä.",
     "firmwareUpdateAvailable": "Laiteohjelmistopäivitys saatavilla",

@@ -6821,6 +6821,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lowBatteryAlertBody => 'Din enheds batteri er lavt. Det er tid til at genoplade! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi er fuldt opladet';
+
+  @override
+  String get batteryFullyChargedBody => 'Din Omi-enhed er fuldt opladet. Du kan frakoble den nu!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Din Omi-enhed er afbrudt';
 
   @override

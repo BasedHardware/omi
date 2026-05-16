@@ -2167,6 +2167,8 @@
     "selectOption": "Seleccionar",
     "lowBatteryAlertTitle": "Alerta de bateria baixa",
     "lowBatteryAlertBody": "La bateria del teu dispositiu és baixa. És hora de carregar! 🔋",
+    "batteryFullyChargedTitle": "L'Omi està completament carregat",
+    "batteryFullyChargedBody": "El teu dispositiu Omi està completament carregat. Pots desconnectar-lo!",
     "deviceDisconnectedNotificationTitle": "El teu dispositiu Omi s'ha desconnectat",
     "deviceDisconnectedNotificationBody": "Si us plau, reconnecta per continuar utilitzant Omi.",
     "firmwareUpdateAvailable": "Actualització de firmware disponible",

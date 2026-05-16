@@ -2184,6 +2184,8 @@
     "selectOption": "Selectează",
     "lowBatteryAlertTitle": "Alertă baterie descărcată",
     "lowBatteryAlertBody": "Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋",
+    "batteryFullyChargedTitle": "Omi este complet încărcat",
+    "batteryFullyChargedBody": "Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!",
     "deviceDisconnectedNotificationTitle": "Dispozitivul Omi a fost deconectat",
     "deviceDisconnectedNotificationBody": "Vă rugăm să vă reconectați pentru a continua să utilizați Omi.",
     "firmwareUpdateAvailable": "Actualizare firmware disponibilă",

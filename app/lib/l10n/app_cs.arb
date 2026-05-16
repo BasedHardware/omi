@@ -2144,6 +2144,8 @@
     "selectOption": "Vybrat",
     "lowBatteryAlertTitle": "Upozornění na vybitou baterii",
     "lowBatteryAlertBody": "Baterie vašeho zařízení je vybitá. Je čas ji dobít! 🔋",
+    "batteryFullyChargedTitle": "Omi je plně nabitý",
+    "batteryFullyChargedBody": "Vaše zařízení Omi je plně nabité. Můžete jej odpojit!",
     "deviceDisconnectedNotificationTitle": "Vaše zařízení Omi bylo odpojeno",
     "deviceDisconnectedNotificationBody": "Prosím, znovu se připojte, abyste mohli pokračovat v používání Omi.",
     "firmwareUpdateAvailable": "K dispozici je aktualizace firmwaru",

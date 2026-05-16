@@ -154,23 +154,53 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
     }
 
-    func testDevelopmentBackendRoutingDisabled() {
-        // Beta-to-dev routing disabled — see DesktopBackendEnvironment for context.
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+    func testBetaProductionBundleRoutesToDevelopmentBackends() {
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "beta"
         ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        // "staging" is normalized to "beta" — same routing.
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "staging"
         ))
+    }
+
+    func testStableProductionBundleKeepsProductionBackends() {
         XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.computer-macos",
             updateChannel: "stable"
         ))
+    }
+
+    func testNonProductionBundleSkipsAutomaticBetaRouting() {
+        // Dev bundle and named test bundles never trigger beta-to-dev routing
+        // automatically. They must opt in via OMI_FORCE_DEV_BACKENDS or env URLs.
         XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.desktop-dev",
             updateChannel: "beta"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.omi-beta-dev-test",
+            updateChannel: "beta"
+        ))
+    }
+
+    func testForceOverrideEnablesDevelopmentBackendsForAnyBundle() {
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.desktop-dev",
+            updateChannel: "stable",
+            forceOverride: "1"
+        ))
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.omi-beta-dev-test",
+            updateChannel: "stable",
+            forceOverride: "true"
+        ))
+        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+            bundleIdentifier: "com.omi.computer-macos",
+            updateChannel: "stable",
+            forceOverride: "0"
         ))
     }
 
@@ -369,51 +399,25 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "fetchApiKeys")
     }
 
-    func testSynthesizeSpeechRoutesToRustWithExpectedPayload() async throws {
+    func testSynthesizeSpeechRoutesToRust() async {
         let client = await makeTestClient()
-        let request = APIClient.TtsSynthesizeRequest(
-            text: "hello from test",
-            voiceId: "BAMYoBHLZM7lJgJAmFz0",
-            modelId: "eleven_turbo_v2_5",
-            outputFormat: "mp3_44100_128",
-            voiceSettings: .init(
-                stability: 0.34,
-                similarityBoost: 0.88,
-                style: 0.12,
-                useSpeakerBoost: true
+        _ = try? await client.synthesizeSpeech(
+            request: APIClient.TtsSynthesizeRequest(
+                text: "Hello",
+                voiceId: "onyx",
+                instructions: "Speak naturally"
             )
         )
 
-        _ = try? await client.synthesizeSpeech(request: request)
-
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
+        let requests = URLCapture.capturedRequests
+        assertRoutes(requests, host: "rust-test", port: 9002,
                      pathContains: "v1/tts/synthesize", method: "POST",
                      label: "synthesizeSpeech")
 
-        let captured = try XCTUnwrap(URLCapture.capturedRequests.first)
-        XCTAssertEqual(captured.headers["Authorization"], "Bearer test-token")
-        XCTAssertEqual(captured.headers["Content-Type"], "application/json")
-
-        let body = try XCTUnwrap(captured.body)
-        let json = try XCTUnwrap(
-            try JSONSerialization.jsonObject(with: body) as? [String: Any]
-        )
-
-        XCTAssertEqual(json["text"] as? String, "hello from test")
-        XCTAssertEqual(json["voice_id"] as? String, "BAMYoBHLZM7lJgJAmFz0")
-        XCTAssertEqual(json["model_id"] as? String, "eleven_turbo_v2_5")
-        XCTAssertEqual(json["output_format"] as? String, "mp3_44100_128")
-        XCTAssertNil(json["voiceId"])
-        XCTAssertNil(json["modelId"])
-        XCTAssertNil(json["outputFormat"])
-
-        let voiceSettings = try XCTUnwrap(json["voice_settings"] as? [String: Any])
-        XCTAssertEqual(voiceSettings["stability"] as? Double, 0.34)
-        XCTAssertEqual(voiceSettings["similarity_boost"] as? Double, 0.88)
-        XCTAssertEqual(voiceSettings["style"] as? Double, 0.12)
-        XCTAssertEqual(voiceSettings["use_speaker_boost"] as? Bool, true)
-        XCTAssertNil(voiceSettings["similarityBoost"])
-        XCTAssertNil(voiceSettings["useSpeakerBoost"])
+        let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        XCTAssertEqual(body?["text"] as? String, "Hello")
+        XCTAssertEqual(body?["voice_id"] as? String, "onyx")
+        XCTAssertEqual(body?["instructions"] as? String, "Speak naturally")
     }
 
     // -- Assistant settings (GET → Python, migrated from Rust) --

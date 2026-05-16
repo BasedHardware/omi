@@ -279,6 +279,7 @@ class ShortcutSettings: ObservableObject {
         KeyboardShortcut(modifierOnly: .option),
         KeyboardShortcut(modifierOnly: .command, requiresRightCommand: true),
         KeyboardShortcut(modifierOnly: .function),
+        KeyboardShortcut(modifierOnly: .control),
     ]
 
     @Published var pttShortcut: KeyboardShortcut {
@@ -391,40 +392,101 @@ class ShortcutSettings: ObservableObject {
         return "Maximum"
     }
 
-    /// A selectable ElevenLabs voice for floating-bar replies.
-    struct VoiceOption: Identifiable, Equatable {
-        enum Gender: String {
+    /// A selectable voice for floating-bar replies.
+    struct VoiceOption: Identifiable, Equatable, Sendable {
+        enum Gender: String, Sendable {
             case female
             case male
+        }
+
+        enum Provider: String, Sendable {
+            case localSystem
+            case openAI
         }
 
         let id: String
         let name: String
         let gender: Gender
         let description: String
+        let provider: Provider
+        let openAIVoice: String?
+        let openAIInstructions: String?
+        let preferredSystemVoiceIdentifiers: [String]
+        let preferredSystemVoiceNames: [String]
+
+        var isLocalSystem: Bool {
+            provider == .localSystem
+        }
+
+        var isOpenAI: Bool {
+            provider == .openAI
+        }
     }
 
-    /// Curated ElevenLabs voices available from the voice picker.
+    static let openAIShimmerVoiceID = "openai:shimmer"
+    static let openAIOnyxVoiceID = "openai:onyx"
+
+    /// Curated OpenAI voices available from the voice picker.
     static let availableVoices: [VoiceOption] = [
-        VoiceOption(id: "BAMYoBHLZM7lJgJAmFz0", name: "Sloane", gender: .female, description: "Warm, confident"),
-        VoiceOption(id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", gender: .female, description: "Smooth, sultry"),
-        VoiceOption(id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", gender: .female, description: "Calm, breathy"),
-        VoiceOption(id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", gender: .female, description: "Soft, mature"),
-        VoiceOption(id: "piTKgcLEGmPE4e6mEKli", name: "Nicole", gender: .female, description: "Whispery, intimate"),
-        VoiceOption(id: "pNInz6obpgDQGcFmaJgB", name: "Adam", gender: .male, description: "Deep American"),
-        VoiceOption(id: "ErXwobaYiN019PkySvjV", name: "Antoni", gender: .male, description: "Warm, friendly"),
-        VoiceOption(id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", gender: .male, description: "Young, deep"),
-        VoiceOption(id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum", gender: .male, description: "Intense, gravelly"),
-        VoiceOption(id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", gender: .male, description: "Authoritative British"),
+        VoiceOption(
+            id: openAIOnyxVoiceID,
+            name: "Onyx",
+            gender: .male,
+            description: "OpenAI, deep, grounded",
+            provider: .openAI,
+            openAIVoice: "onyx",
+            openAIInstructions:
+                "Speak in a deep, natural, grounded voice with calm confidence and smooth pacing.",
+            preferredSystemVoiceIdentifiers: [],
+            preferredSystemVoiceNames: []
+        ),
+        VoiceOption(
+            id: openAIShimmerVoiceID,
+            name: "Shimmer",
+            gender: .female,
+            description: "OpenAI, warm human, cheap",
+            provider: .openAI,
+            openAIVoice: "shimmer",
+            openAIInstructions:
+                "Speak naturally in a warm, relaxed adult tone. Keep it conversational, calm, and human without sounding exaggerated.",
+            preferredSystemVoiceIdentifiers: [],
+            preferredSystemVoiceNames: []
+        ),
+        VoiceOption(
+            id: "openai:coral",
+            name: "Coral",
+            gender: .female,
+            description: "OpenAI, bright, expressive",
+            provider: .openAI,
+            openAIVoice: "coral",
+            openAIInstructions:
+                "Speak naturally in a warm, expressive human tone with smooth pacing and light emotional color.",
+            preferredSystemVoiceIdentifiers: [],
+            preferredSystemVoiceNames: []
+        ),
+        VoiceOption(
+            id: "openai:nova",
+            name: "Nova",
+            gender: .female,
+            description: "OpenAI, clear, friendly",
+            provider: .openAI,
+            openAIVoice: "nova",
+            openAIInstructions:
+                "Speak in a natural, friendly, confident tone with clear articulation and relaxed pacing.",
+            preferredSystemVoiceIdentifiers: [],
+            preferredSystemVoiceNames: []
+        ),
     ]
 
-    static let defaultVoiceID = "BAMYoBHLZM7lJgJAmFz0"
+    static let defaultVoiceID = openAIShimmerVoiceID
 
     static func voiceOption(for id: String) -> VoiceOption {
-        availableVoices.first(where: { $0.id == id }) ?? availableVoices[0]
+        availableVoices.first(where: { $0.id == id })
+            ?? availableVoices.first(where: { $0.id == defaultVoiceID })
+            ?? availableVoices[0]
     }
 
-    /// Selected ElevenLabs voice ID for floating-bar TTS replies.
+    /// Selected voice ID for floating-bar TTS replies.
     @Published var selectedVoiceID: String {
         didSet {
             guard selectedVoiceID != oldValue else { return }

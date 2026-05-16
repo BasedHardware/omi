@@ -1,0 +1,66 @@
+name: Notify Telegram
+description: Sends deployment status details to a Telegram.
+
+inputs:
+  telegram_bot_token:
+    description: Telegram bot token used to send the notification.
+    required: true
+  telegram_chat_id:
+    description: Telegram chat ID that receives the notification.
+    required: true
+  environment:
+    description: Deployment environment to show in the Telegram message.
+    required: true
+  release_version:
+    description: Optional release version to show in the Telegram message.
+    required: false
+    default: ''
+  status:
+    description: Deployment status to show in the Telegram message.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set deploy status
+      shell: bash
+      run: |
+        if [ "${{ inputs.status }}" == "success" ]; then
+          echo "ICON=✅" >> $GITHUB_ENV
+          echo "STATUS=Success" >> $GITHUB_ENV
+        else
+          echo "ICON=❌" >> $GITHUB_ENV
+          echo "STATUS=Failed" >> $GITHUB_ENV
+        fi
+
+    - name: Notify Telegram
+      shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_bot_token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
+      run: |
+        WORKFLOW_NAME="${{ github.workflow }}"
+        ENVIRONMENT="${{ inputs.environment }}"
+        DEPLOY_BRANCH="${{ github.ref_name }}"
+        DEPLOY_TAG="${GITHUB_SHA::7}"
+        [[ -n "${{ inputs.release_version }}" ]] && RELEASE_VERSION="${{ inputs.release_version }}" || RELEASE_VERSION="release-$(date +'%Y%m%d')-${{ github.run_number }}"
+        ACTOR="${{ github.actor }}"
+        FINISH_TIME="$(date -u '+%Y-%m-%d %H:%M UTC')"
+        GITHUB_URL="https://github.com/BasedHardware/omi"
+        DEPLOY_SUMMARY_URL="${GITHUB_URL}/actions/runs/${{ github.run_id }}"
+        MESSAGE="🚀 <b>$WORKFLOW_NAME</b>: $ICON $STATUS
+
+        ⚡️ <b>Environment:</b> $ENVIRONMENT
+        🌿 <b>Branch:</b> $DEPLOY_BRANCH
+        📦 <b>Release version:</b> $RELEASE_VERSION
+        🏷️ <b>Tag:</b> $DEPLOY_TAG
+        👤 <b>Triggered by:</b> $ACTOR
+        🕐 <b>Finished at:</b> $FINISH_TIME
+
+        📝 <a href=\"$DEPLOY_SUMMARY_URL\">Deployment Summary</a>"
+
+        curl -s --fail -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
+          -d parse_mode="HTML" \
+          -d disable_web_page_preview=true \
+          --data-urlencode text="$MESSAGE"

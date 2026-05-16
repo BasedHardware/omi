@@ -6860,6 +6860,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get lowBatteryAlertBody => 'Bateri peranti anda lemah. Masa untuk mengecas semula! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi telah dicas penuh';
+
+  @override
+  String get batteryFullyChargedBody => 'Peranti Omi anda telah dicas sepenuhnya. Anda boleh mencabutnya!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Peranti Omi Anda Terputus';
 
   @override

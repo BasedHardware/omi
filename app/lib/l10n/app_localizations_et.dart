@@ -6841,6 +6841,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get lowBatteryAlertBody => 'Teie seadme aku on tühi. Aeg laadida! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi on täielikult laetud';
+
+  @override
+  String get batteryFullyChargedBody => 'Teie Omi seade on täielikult laetud. Võite selle lahti ühendada!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Teie Omi seade on lahti ühendatud';
 
   @override

@@ -265,7 +265,15 @@ struct DashboardPage: View {
                 isStopping: chatProvider.isStopping,
                 placeholder: "Ask omi anything",
                 mode: $chatProvider.chatMode,
-                inputText: $chatProvider.draftText
+                inputText: $chatProvider.draftText,
+                attachments: $chatProvider.pendingAttachments,
+                onAttachmentsAdded: { urls in
+                    let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+                    chatProvider.addAttachments(toAdd)
+                },
+                onAttachmentRemoved: { id in
+                    chatProvider.removePendingAttachment(id: id)
+                }
             )
             .padding(.horizontal, 30)
             .padding(.top, 12)

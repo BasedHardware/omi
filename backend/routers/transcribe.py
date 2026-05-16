@@ -88,7 +88,11 @@ from utils.fair_use import (
     is_dg_budget_exhausted,
     record_dg_usage_ms,
 )
-from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
+from utils.subscription import (
+    has_transcription_credits,
+    get_remaining_transcription_seconds,
+    is_trial_paywalled,
+)
 from utils.translation import TranslationService
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
@@ -231,7 +235,26 @@ async def _stream_handler(
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
-    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
+
+    if not uid or len(uid) <= 0:
+        await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    if is_trial_paywalled(uid, source):
+        logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
+        try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
+            await asyncio.sleep(0.5)
+            await websocket.close(code=1008, reason="trial_expired")
+        except Exception as e:
+            logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
+        return
+
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
@@ -269,11 +292,7 @@ async def _stream_handler(
     if onboarding_mode:
         include_speech_profile = False
 
-    if not uid or len(uid) <= 0:
-        await websocket.close(code=1008, reason="Bad uid")
-        return
-
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid)
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
     if not user_has_credits:
         try:
             await send_credit_limit_notification(uid)
@@ -409,6 +428,21 @@ async def _stream_handler(
     current_conversation_id = None
 
     freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
+
+    # Push the freemium threshold event upfront for already-exhausted users so
+    # the desktop popup appears immediately on connect, instead of waiting for
+    # the periodic loop's first 60s tick (typical desktop session is shorter).
+    if not user_has_credits:
+        try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
+            freemium_threshold_sent = True
+        except Exception as e:
+            logger.error(f"Error sending freemium threshold event on connect: {e} {uid} {session_id}")
 
     # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
     CREDITS_REFRESH_SECONDS = 900  # 15 min
@@ -549,7 +583,7 @@ async def _stream_handler(
                 )
             )
             if needs_refresh:
-                remaining_seconds_cache = get_remaining_transcription_seconds(uid)
+                remaining_seconds_cache = get_remaining_transcription_seconds(uid, source=source)
                 remaining_seconds_cache_ts = now
                 remaining_seconds_cache_initialized = True
             elif remaining_seconds_cache is not None and transcription_seconds > 0:
@@ -2109,7 +2143,10 @@ async def _stream_handler(
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
-                            uid, [s.dict() for s in transcript_segments], current_conversation_id
+                            uid,
+                            [s.dict() for s in transcript_segments],
+                            current_conversation_id,
+                            source=source,
                         )
                     except Exception as e:
                         logger.error(f"Error triggering realtime integrations: {e} {uid} {session_id}")
@@ -2341,9 +2378,9 @@ async def _stream_handler(
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
-                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
+                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083).
                 if fair_use_dg_budget_exhausted:
-                    pass  # Audio not forwarded to DG — budget/credits exhausted
+                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
                 else:
                     dg_socket.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)
@@ -2565,6 +2602,7 @@ async def _stream_handler(
 
     # Start
     #
+    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
     try:
         # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))

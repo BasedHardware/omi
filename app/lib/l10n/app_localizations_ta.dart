@@ -6888,6 +6888,12 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi முழுமையாக சார்ஜ் ஆகியது';
+
+  @override
+  String get batteryFullyChargedBody => 'உங்கள் Omi சாதனம் முழுமையாக சார்ஜ் ஆகியது. அனப்ளக் செய்யலாம்!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'உங்கள் Omi சாதனம் துண்டிக்கப்பட்டது';
 
   @override

@@ -6879,6 +6879,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get lowBatteryAlertBody => 'మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi పూర్తిగా చార్జ్ అయింది';
+
+  @override
+  String get batteryFullyChargedBody => 'మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'మీ Omi పరికరం డిస్‌కనెక్ట్ చేయబడింది';
 
   @override

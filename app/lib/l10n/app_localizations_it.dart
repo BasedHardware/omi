@@ -6880,6 +6880,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get lowBatteryAlertBody => 'La batteria del dispositivo è scarica. È ora di ricaricare! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi è completamente carico';
+
+  @override
+  String get batteryFullyChargedBody => 'Il tuo dispositivo Omi è completamente carico. Puoi scollegarlo!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Il tuo dispositivo Omi si è disconnesso';
 
   @override

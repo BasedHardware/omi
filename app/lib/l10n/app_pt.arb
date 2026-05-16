@@ -2185,6 +2185,8 @@
     "selectOption": "Selecionar",
     "lowBatteryAlertTitle": "Alerta de bateria fraca",
     "lowBatteryAlertBody": "A bateria do seu dispositivo está fraca. Hora de recarregar! 🔋",
+    "batteryFullyChargedTitle": "Omi está totalmente carregado",
+    "batteryFullyChargedBody": "Seu dispositivo Omi está totalmente carregado. Você pode desligá-lo!",
     "deviceDisconnectedNotificationTitle": "Seu dispositivo Omi foi desconectado",
     "deviceDisconnectedNotificationBody": "Por favor, reconecte para continuar usando o Omi.",
     "firmwareUpdateAvailable": "Atualização de firmware disponível",

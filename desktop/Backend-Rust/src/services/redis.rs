@@ -274,21 +274,15 @@ return {daily, burst}
         Ok((daily_count, burst_count))
     }
 
-    // ============================================================================
-    // TTS (ElevenLabs) RATE LIMITING - issue #6622
-    // ============================================================================
-
-    /// Check and record a TTS request for rate limiting.
-    /// Tracks burst (requests/minute) and daily character usage in one Lua script.
-    /// Returns TtsRateResult indicating whether the request is allowed.
+    /// Check and record an OpenAI TTS request for rate limiting.
+    /// Uses a Lua script for atomic burst (sorted set) + daily character counter.
+    /// Returns (daily_chars, burst_count) so the caller can decide Allow/Reject.
     pub async fn check_tts_rate_limit(
         &self,
         uid: &str,
-        burst_limit: i64,
+        chars: usize,
         burst_window_secs: u64,
-        char_count: i64,
-        daily_char_limit: i64,
-    ) -> Result<crate::routes::tts::TtsRateResult, redis::RedisError> {
+    ) -> Result<(i64, i64), redis::RedisError> {
         let mut conn = self.get_connection().await?;
 
         let now_ms = chrono::Utc::now().timestamp_millis();
@@ -298,32 +292,21 @@ return {daily, burst}
         let burst_key = format!("tts_rl:{}:burst", uid);
         let daily_chars_key = format!("tts_rl:{}:chars:{}", uid, day_ordinal);
 
-        // Lua script: atomic burst + daily char check and record.
         // KEYS[1] = burst_key, KEYS[2] = daily_chars_key
-        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl
-        // ARGV[4] = daily_ttl, ARGV[5] = char_count, ARGV[6] = burst_limit, ARGV[7] = daily_char_limit
-        //
-        // Returns {burst_count, daily_chars, 0=allow/1=burst_exceeded/2=chars_exceeded}
+        // ARGV[1] = cutoff_ms, ARGV[2] = now_ms, ARGV[3] = burst_ttl,
+        // ARGV[4] = daily_ttl, ARGV[5] = character count
         let script = r#"
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
-local burst = redis.call('ZCARD', KEYS[1])
-if burst >= tonumber(ARGV[6]) then
-    return {burst, 0, 1}
-end
-local daily_chars = tonumber(redis.call('GET', KEYS[2]) or '0')
-if daily_chars + tonumber(ARGV[5]) > tonumber(ARGV[7]) then
-    return {burst, daily_chars, 2}
-end
-redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2] .. ':' .. tostring(burst))
-redis.call('EXPIRE', KEYS[1], ARGV[3])
-redis.call('INCRBY', KEYS[2], ARGV[5])
+local chars = redis.call('INCRBY', KEYS[2], ARGV[5])
 redis.call('EXPIRE', KEYS[2], ARGV[4])
-local new_chars = tonumber(redis.call('GET', KEYS[2]) or '0')
-return {burst + 1, new_chars, 0}
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+redis.call('ZADD', KEYS[1], ARGV[2], ARGV[2] .. ':' .. tostring(chars))
+local burst = redis.call('ZCARD', KEYS[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return {chars, burst}
 "#;
 
         let burst_ttl = (burst_window_secs * 2) as i64;
-        let daily_ttl: i64 = 172_800; // 48h
+        let daily_ttl: i64 = 172_800;
 
         let result: Vec<i64> = redis::cmd("EVAL")
             .arg(script)
@@ -334,18 +317,14 @@ return {burst + 1, new_chars, 0}
             .arg(now_ms)
             .arg(burst_ttl)
             .arg(daily_ttl)
-            .arg(char_count)
-            .arg(burst_limit)
-            .arg(daily_char_limit)
+            .arg(chars as i64)
             .query_async(&mut conn)
             .await?;
 
-        let decision = result.get(2).copied().unwrap_or(0);
-        match decision {
-            1 => Ok(crate::routes::tts::TtsRateResult::BurstExceeded),
-            2 => Ok(crate::routes::tts::TtsRateResult::DailyCharsExceeded),
-            _ => Ok(crate::routes::tts::TtsRateResult::Allow),
-        }
+        let daily_chars = result.first().copied().unwrap_or(0);
+        let burst_count = result.get(1).copied().unwrap_or(0);
+
+        Ok((daily_chars, burst_count))
     }
 
     // ============================================================================

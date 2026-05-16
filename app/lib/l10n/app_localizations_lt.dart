@@ -6842,6 +6842,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get lowBatteryAlertBody => 'Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi yra visiškai įkrautas';
+
+  @override
+  String get batteryFullyChargedBody => 'Jūsų Omi įrenginys yra visiškai įkrautas. Galite jį atjungti!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Jūsų Omi įrenginys atsijungė';
 
   @override

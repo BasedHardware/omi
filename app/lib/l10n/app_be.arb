@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "Ваша прыстасаванне буквальна вычарпвае батарэю. Час пазарадзіць! 🔋",
+    "batteryFullyChargedTitle": "Omi поўнасцю зараджаны",
+    "batteryFullyChargedBody": "Ваш прылада Omi поўнасцю зараджана. Можаце адключыць!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },

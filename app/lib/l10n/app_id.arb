@@ -2184,6 +2184,8 @@
     "selectOption": "Pilih",
     "lowBatteryAlertTitle": "Peringatan Baterai Lemah",
     "lowBatteryAlertBody": "Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋",
+    "batteryFullyChargedTitle": "Omi sudah terisi penuh",
+    "batteryFullyChargedBody": "Perangkat Omi Anda sudah terisi penuh. Silakan cabut kabelnya!",
     "deviceDisconnectedNotificationTitle": "Perangkat Omi Anda Terputus",
     "deviceDisconnectedNotificationBody": "Silakan sambungkan kembali untuk terus menggunakan Omi.",
     "firmwareUpdateAvailable": "Pembaruan Firmware Tersedia",

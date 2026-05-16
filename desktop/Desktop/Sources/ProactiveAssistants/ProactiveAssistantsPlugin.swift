@@ -76,6 +76,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var lastDistributionTime: Date = .distantPast
     /// Fallback interval: re-distribute even without context change to catch visual-only updates.
     private let distributionFallbackInterval: TimeInterval = 60
+    private let messagingDistributionFallbackInterval: TimeInterval = 15
+
+    /// Apps where new content can arrive while the user stays focused. Reusing the same
+    /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
+        "Slack", "Discord", "Messenger",
+    ]
 
     /// Apps whose primary purpose is video/audio calls.
     private static let videoCallApps: Set<String> = [
@@ -229,6 +237,21 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Guard against both active monitoring and pending startup (race condition fix)
         guard !isMonitoring && !isStartingMonitoring else {
             completion(isMonitoring, nil)
+            return
+        }
+
+        // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+        // when the user is past their trial. `AppState` writes
+        // `desktop_isPaywalled` to UserDefaults whenever it flips so other
+        // singletons can synchronously check. Toggle UI also gates on this.
+        if UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+            log("Paywall: refusing startMonitoring (trial expired)")
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "trial_expired"]
+            )
+            completion(false, "trial_expired")
             return
         }
 
@@ -921,7 +944,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         )
 
         let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
-        let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
+        // Messaging apps get a much shorter same-context fallback so a new chat message
+        // reaches the analyzer in ~15s, even when you stay in the app the whole time.
+        let activeFallbackInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? messagingDistributionFallbackInterval
+            : distributionFallbackInterval
+        let fallbackDue = timeSinceLastDistribution >= activeFallbackInterval
 
         if contextChanged {
             // Update tracking immediately so subsequent captures in the same new context
@@ -1274,7 +1302,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
                 message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
         }
     }
@@ -1582,7 +1611,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: NotificationService.screenCaptureResetTitle,
                 message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
             return
         }
@@ -1596,7 +1626,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         NotificationService.shared.sendNotification(
             title: NotificationService.screenCaptureResetTitle,
             message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-            deliverSystemBanner: true
+            deliverSystemBanner: true,
+            respectFrequency: false
         )
     }
 }

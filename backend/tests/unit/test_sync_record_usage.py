@@ -121,7 +121,7 @@ class TestV1RecordUsage:
 class TestV2RecordUsage:
     @staticmethod
     def _get_v2_body():
-        return _extract_function_body(_read_sync_source(), '_process_segments_background')
+        return _extract_function_body(_read_sync_source(), '_run_full_pipeline_background')
 
     def test_record_usage_called_in_v2(self):
         body = self._get_v2_body()
@@ -143,14 +143,14 @@ class TestV2RecordUsage:
         preceding = body[max(0, record_idx - 300) : record_idx]
         assert 'successful_segments > 0' in preceding, "record_usage must be guarded by successful_segments > 0"
 
-    def test_record_usage_before_mark_job_completed(self):
-        """record_usage must run before mark_job_completed."""
+    def test_record_usage_before_final_mark_job_completed(self):
+        """record_usage must run before the final mark_job_completed (after segment processing)."""
         body = self._get_v2_body()
         record_pos = body.find('record_usage(')
-        complete_pos = body.find('mark_job_completed(')
-        assert record_pos > 0
-        assert complete_pos > 0
-        assert record_pos < complete_pos, "record_usage must run before mark_job_completed"
+        assert record_pos > 0, "record_usage must exist"
+        complete_pos = body.rfind('mark_job_completed(')
+        assert complete_pos > 0, "mark_job_completed must exist"
+        assert record_pos < complete_pos, "record_usage must run before the final mark_job_completed"
 
     def test_record_usage_wrapped_in_try_except(self):
         body = self._get_v2_body()

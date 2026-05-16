@@ -2184,6 +2184,8 @@
     "selectOption": "Επιλογή",
     "lowBatteryAlertTitle": "Ειδοποίηση χαμηλής μπαταρίας",
     "lowBatteryAlertBody": "Η μπαταρία της συσκευής σας είναι χαμηλή. Ώρα για επαναφόρτιση! 🔋",
+    "batteryFullyChargedTitle": "Το Omi έχει φορτιστεί πλήρως",
+    "batteryFullyChargedBody": "Η συσκευή Omi σου είναι πλήρως φορτισμένη. Μπορείς να την αποσυνδέσεις!",
     "deviceDisconnectedNotificationTitle": "Η συσκευή Omi σας αποσυνδέθηκε",
     "deviceDisconnectedNotificationBody": "Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το Omi.",
     "firmwareUpdateAvailable": "Διαθέσιμη ενημέρωση υλικολογισμικού",
