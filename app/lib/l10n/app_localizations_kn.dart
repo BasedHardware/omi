@@ -511,6 +511,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTap => 'ಗುಣ ಟ್ಯಾಪ್';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED ಝಗಬೆಳಗುವುದು';
 
   @override

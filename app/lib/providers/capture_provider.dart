@@ -644,6 +644,15 @@ class CaptureProvider extends ChangeNotifier
     };
   }
 
+  String _buttonPressAnalyticsValue(String source) => source.replaceAll(' ', '_');
+
+  void _trackButtonAction(String source, String feature) {
+    PlatformManager.instance.analytics.omiButtonPress(
+      press: _buttonPressAnalyticsValue(source),
+      feature: feature,
+    );
+  }
+
   Future<void> _runButtonAction({
     required OmiButtonAction action,
     required String deviceId,
@@ -663,10 +672,10 @@ class CaptureProvider extends ChangeNotifier
         _isProcessingButtonEvent = true;
         try {
           if (_isPaused) {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+            _trackButtonAction(source, 'unmute');
             await resumeDeviceRecording();
           } else {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+            _trackButtonAction(source, 'mute');
             await pauseDeviceRecording();
           }
         } catch (e) {
@@ -679,11 +688,11 @@ class CaptureProvider extends ChangeNotifier
         Logger.debug("$source: toggling conversation star");
         if (!_starOngoingConversation) {
           markConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+          _trackButtonAction(source, 'star_conversation');
           HapticFeedback.mediumImpact();
         } else {
           unmarkConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+          _trackButtonAction(source, 'unstar_conversation');
           HapticFeedback.lightImpact();
         }
         return;
@@ -691,7 +700,7 @@ class CaptureProvider extends ChangeNotifier
         Logger.debug("$source: processing conversation");
         _isProcessingButtonEvent = true;
         try {
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+          _trackButtonAction(source, 'process_conversation');
           await forceProcessingCurrentConversation();
         } finally {
           _isProcessingButtonEvent = false;

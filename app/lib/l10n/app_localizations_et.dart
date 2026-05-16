@@ -511,6 +511,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get doubleTap => 'Topeltpuudutus';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED heledus';
 
   @override

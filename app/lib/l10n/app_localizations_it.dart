@@ -511,6 +511,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get doubleTap => 'Doppio Tocco';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Luminosità LED';
 
   @override

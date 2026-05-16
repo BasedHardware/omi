@@ -511,6 +511,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get doubleTap => 'Двойно докосване';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Яркост на LED';
 
   @override

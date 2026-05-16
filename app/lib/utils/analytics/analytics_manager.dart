@@ -1346,6 +1346,21 @@ class AnalyticsManager {
     );
   }
 
+  void omiButtonPress({
+    required String press,
+    required String feature,
+    Map<String, dynamic>? additionalProperties,
+  }) {
+    track(
+      'Omi Button Press',
+      properties: {
+        'press': press,
+        'feature': feature,
+        if (additionalProperties != null) ...additionalProperties,
+      },
+    );
+  }
+
   // ============================================================================
   // WRAPPED 2025 TRACKING
   // ============================================================================

@@ -511,6 +511,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTap => 'Çift Dokunma';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED Parlaklığı';
 
   @override

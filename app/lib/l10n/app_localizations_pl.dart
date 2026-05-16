@@ -509,6 +509,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get doubleTap => 'Podwójne dotknięcie';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Jasność LED';
 
   @override

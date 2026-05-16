@@ -507,6 +507,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTap => 'แตะสองครั้ง';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'ความสว่าง LED';
 
   @override

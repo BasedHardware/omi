@@ -500,6 +500,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTap => '双击';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED 亮度';
 
   @override

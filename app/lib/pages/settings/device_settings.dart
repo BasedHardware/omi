@@ -341,11 +341,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   String _buttonPressTitle(OmiButtonPress press) {
     switch (press) {
       case OmiButtonPress.singleTap:
-        return '1x';
+        return context.l10n.singleTap;
       case OmiButtonPress.doubleTap:
         return context.l10n.doubleTap;
       case OmiButtonPress.tripleTap:
-        return '3x';
+        return context.l10n.tripleTap;
     }
   }
 

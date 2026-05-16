@@ -509,6 +509,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTap => 'دوگنا تھپتھپائیں';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED روشنی';
 
   @override

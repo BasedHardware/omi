@@ -511,6 +511,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get doubleTap => 'Nhấn đúp';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Độ sáng đèn LED';
 
   @override

@@ -513,6 +513,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get doubleTap => 'Διπλό Πάτημα';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Φωτεινότητα LED';
 
   @override

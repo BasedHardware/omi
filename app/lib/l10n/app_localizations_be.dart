@@ -509,6 +509,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTap => 'Двайны дотык';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Яркасць LED';
 
   @override

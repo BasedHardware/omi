@@ -511,6 +511,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get doubleTap => 'Двойное нажатие';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Яркость LED';
 
   @override

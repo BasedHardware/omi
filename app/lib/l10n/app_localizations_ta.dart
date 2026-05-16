@@ -512,6 +512,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get doubleTap => 'இரட்டை தட்டு';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED பிரகாசம்';
 
   @override

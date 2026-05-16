@@ -510,6 +510,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get doubleTap => 'Dvostruki dodir';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Svjetlina LED-a';
 
   @override
