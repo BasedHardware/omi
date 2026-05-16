@@ -50,6 +50,20 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isFetchingConversations = false;
 
+  // True when the last full conversations fetch failed (no response /
+  // non-200) rather than legitimately returning zero results. The UI uses
+  // this to keep showing a loading state and auto-retry instead of latching
+  // "No conversations yet" — e.g. on a cold start where the Firebase auth
+  // token wasn't ready yet for the very first request.
+  bool conversationsLoadFailed = false;
+  Timer? _initialFetchRetryTimer;
+  int _initialFetchRetryCount = 0;
+  static const int _maxInitialFetchRetries = 4;
+
+  // The empty-state widget should defer to a pending auto-retry so the user
+  // doesn't see "No conversations yet" in the gap between backoff attempts.
+  bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
+
   ConversationProvider() {
     _setupMergeListener();
     _loadSettings();
@@ -89,6 +103,10 @@ class ConversationProvider extends ChangeNotifier {
     currentSearchPage = 1;
     isLoadingConversations = false;
     isFetchingConversations = false;
+    conversationsLoadFailed = false;
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryTimer = null;
+    _initialFetchRetryCount = 0;
     memoriesToDelete = {};
     deleteTimestamps = {};
     _processingConversationWatchTimer?.cancel();
@@ -323,7 +341,7 @@ class ConversationProvider extends ChangeNotifier {
 
   Future _fetchNewConversations() async {
     setLoadingConversations(true);
-    List<ServerConversation> newConversations = await _getConversationsFromServer();
+    List<ServerConversation> newConversations = (await _getConversationsFromServer()).items;
     setLoadingConversations(false);
 
     List<ServerConversation> upsertConvos = [];
@@ -367,8 +385,32 @@ class ConversationProvider extends ChangeNotifier {
     searchedConversations = [];
 
     setLoadingConversations(true);
-    conversations = await _getConversationsFromServer();
+    final result = await _getConversationsFromServer();
     setLoadingConversations(false);
+
+    if (!result.ok) {
+      // The request failed (no response / non-200) — most commonly the auth
+      // token not being ready for the very first request after a cold start.
+      // Do NOT overwrite what we have with an empty list or latch the
+      // "No conversations yet" state: keep the cache (if any) and auto-retry
+      // so the list self-heals without the user having to pull-to-refresh.
+      conversationsLoadFailed = true;
+      if (conversations.isEmpty && selectedFolderId == null) {
+        conversations = SharedPreferencesUtil().cachedConversations;
+      }
+      if (searchedConversations.isEmpty) {
+        searchedConversations = conversations;
+      }
+      _groupConversationsByDateWithoutNotify();
+      notifyListeners();
+      _scheduleInitialFetchRetry();
+      return;
+    }
+
+    conversationsLoadFailed = false;
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryCount = 0;
+    conversations = result.items;
 
     // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -391,7 +433,21 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _scheduleInitialFetchRetry() {
+    if (_initialFetchRetryCount >= _maxInitialFetchRetries) return;
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryCount++;
+    // Linear backoff: 2s, 4s, 6s, 8s.
+    _initialFetchRetryTimer = Timer(Duration(seconds: 2 * _initialFetchRetryCount), () {
+      if (conversationsLoadFailed) fetchConversations();
+    });
+  }
+
   Future getInitialConversations() async {
+    // A manual/initial entry gets a fresh retry budget so pull-to-refresh
+    // can recover even after the auto-retries were exhausted.
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryCount = 0;
     await fetchConversations();
     await checkHasDailySummaries();
   }
@@ -527,10 +583,10 @@ class ConversationProvider extends ChangeNotifier {
     return (DateTime(date.year, date.month, date.day, 0, 0, 0), DateTime(date.year, date.month, date.day, 23, 59, 59));
   }
 
-  Future _getConversationsFromServer() async {
+  Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
     final (startDate, endDate) = _getDateFilterRange();
 
-    return await getConversations(
+    return await getConversationsResult(
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
@@ -741,6 +797,7 @@ class ConversationProvider extends ChangeNotifier {
   void dispose() {
     _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
+    _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
     super.dispose();
   }
