@@ -5288,6 +5288,10 @@ struct SettingsContentView: View {
           try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
+            // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
+            // event — once all 4 BYOK keys validate, the user is on the free BYOK
+            // plan and shouldn't be locked out of capture/transcription anymore.
+            AppState.current?.isPaywalled = false
             byokKeyStatuses = results
             byokActivationError = nil
           }
@@ -6853,6 +6857,17 @@ struct SettingsContentView: View {
             subscription.subscription.plan.rawValue == selectedPlanIdForCheckout
           {
             self.selectedPlanIdForCheckout = nil
+          }
+          // Clear the sticky paywall flag whenever the subscription endpoint
+          // reports a non-basic active plan. Catches the case where a paid user
+          // hit the paywall once (e.g. WS connected before payment cleared
+          // the trial cache) — without this they'd stay paywalled until the
+          // next app restart even after their Operator/Architect plan is active.
+          if subscription.subscription.plan != .basic,
+             subscription.subscription.status == .active,
+             AppState.current?.isPaywalled == true {
+            AppState.current?.isPaywalled = false
+            log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
           isLoadingSubscription = false
         }

@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed BYOK users hitting \"trial_expired\" / monthly-limit popup even with all 4 keys configured \u2014 request-level BYOK headers now bypass the trial paywall regardless of Firestore heartbeat state, and the listen WebSocket extracts BYOK headers before the paywall check"
+  ],
   "releases": [
     {
       "version": "0.11.406",
