@@ -263,6 +263,20 @@ class TestGetTrialMetadataBehavior:
         assert result.trial_remaining_seconds == 0
         assert result.trial_remaining_seconds >= 0
 
+    def test_exact_boundary_just_before_expiry(self):
+        """User at 259199 seconds (1 second before expiry): still active."""
+        self._mock_user_in_trial(age_seconds=259199)
+        result = self.fn('uid_test')
+        assert result.trial_expired is False
+        assert result.trial_remaining_seconds >= 1
+
+    def test_exact_boundary_just_after_expiry(self):
+        """User at 259201 seconds (1 second after expiry): expired."""
+        self._mock_user_expired(age_seconds=259201)
+        result = self.fn('uid_test')
+        assert result.trial_expired is True
+        assert result.trial_remaining_seconds == 0
+
 
 class TestTrialMetadataModel:
     """Verify TrialMetadata model has correct fields and defaults."""
