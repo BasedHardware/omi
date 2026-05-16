@@ -1770,13 +1770,14 @@ struct SettingsContentView: View {
 
           Divider().overlay(OmiColors.backgroundQuaternary)
 
-          HStack(spacing: 8) {
-            Image(systemName: "sparkles")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.purplePrimary)
-            Text("Unlimited listening, transcription, memories & insights")
-              .scaledFont(size: 12)
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Included in your trial")
+              .scaledFont(size: 12, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
+
+            trialFeatureRow(icon: "waveform", text: "Unlimited listening & transcription")
+            trialFeatureRow(icon: "brain.head.profile", text: "Unlimited memories & insights")
+            trialFeatureRow(icon: "bubble.left.and.bubble.right.fill", text: "Chat questions")
           }
         }
       }
@@ -1816,6 +1817,36 @@ struct SettingsContentView: View {
         }
       }
     }
+  }
+
+  private func trialFeatureRow(icon: String, text: String) -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: icon)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.purplePrimary)
+        .frame(width: 16)
+      Text(text)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textSecondary)
+      Spacer()
+      premiumBadge
+    }
+  }
+
+  private var premiumBadge: some View {
+    Text("PREMIUM")
+      .scaledFont(size: 9, weight: .bold)
+      .foregroundColor(.white)
+      .padding(.horizontal, 6)
+      .padding(.vertical, 2)
+      .background(
+        Capsule()
+          .fill(LinearGradient(
+            colors: [OmiColors.purplePrimary, OmiColors.purplePrimary.opacity(0.7)],
+            startPoint: .leading,
+            endPoint: .trailing
+          ))
+      )
   }
 
   private func trialCountdownText(remaining: Int) -> String {
