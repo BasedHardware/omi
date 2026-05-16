@@ -74,8 +74,7 @@ class RingStatus {
   bool get isRtcValid => rtcValid != 0;
 
   @override
-  String toString() =>
-      'RingStatus(used=$usedBytes, unread=$unreadPackets, free=$freeBytes, rtcValid=$rtcValid)';
+  String toString() => 'RingStatus(used=$usedBytes, unread=$unreadPackets, free=$freeBytes, rtcValid=$rtcValid)';
 }
 
 /// Ring-buffer info returned via NOTIFY_INFO (0x02) on the control characteristic.
