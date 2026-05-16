@@ -89,6 +89,18 @@ class SubscriptionPlan(BaseModel):
     legacy: bool = False
 
 
+class TrialMetadata(BaseModel):
+    """Structured trial state for desktop clients to render countdown UI."""
+
+    trial_started_at: Optional[int] = None  # unix seconds
+    trial_ends_at: Optional[int] = None  # unix seconds
+    trial_remaining_seconds: int = 0
+    trial_expired: bool = False
+    trial_duration_seconds: int = 0  # configured trial length
+    trial_features: List[str] = []
+    plan_after_trial: str = 'Free'  # display name of fallback plan
+
+
 class PhoneCallQuota(BaseModel):
     """Phone call feature access + remaining-quota snapshot for the client."""
 
