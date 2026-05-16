@@ -138,6 +138,14 @@ class AppState: ObservableObject {
     didSet { UserDefaults.standard.set(isPaywalled, forKey: "desktop_isPaywalled") }
   }
 
+  /// Trial metadata fetched from Rust backend (`/v1/trial`). Updated every 60s
+  /// while the app is running. Used by SettingsPage to render the trial countdown
+  /// card and by FloatingControlBar for pre-expiry nudge banners.
+  @Published var trialMetadata: TrialMetadataResponse?
+
+  /// Timer that refreshes trial metadata every 60 seconds.
+  private var trialRefreshTimer: Timer?
+
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
   func triggerUsageLimitPopup(reason: String) {
@@ -160,6 +168,41 @@ class AppState: ObservableObject {
       userInfo: ["reason": reason]
     )
     return true
+  }
+
+  /// Fetch trial metadata from the Rust backend and update local state.
+  /// Called on app launch and every 60s thereafter while running.
+  func fetchTrialMetadata() {
+    Task {
+      do {
+        let metadata = try await APIClient.shared.getTrialMetadata()
+        self.trialMetadata = metadata
+        // Sync paywall flag from trial state
+        if metadata.trialExpired && !self.isPaywalled {
+          self.isPaywalled = true
+        }
+      } catch {
+        log("AppState: failed to fetch trial metadata: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  /// Start periodic trial metadata refresh (60s interval).
+  func startTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    fetchTrialMetadata()
+    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.fetchTrialMetadata()
+      }
+    }
+  }
+
+  /// Stop trial refresh (e.g. on sign-out).
+  func stopTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    trialRefreshTimer = nil
+    trialMetadata = nil
   }
 
   /// True if notifications are enabled but won't show visual banners
