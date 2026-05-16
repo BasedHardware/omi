@@ -17,8 +17,10 @@ import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -172,6 +174,29 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
+  // The capturing page only renders transcript/photos that are already
+  // streaming in — it does not start the mic itself. So opening it without
+  // first kicking off phone-mic recording leaves the user stuck on the
+  // "waiting for transcript or photos" placeholder forever. Mirror the
+  // proven start path (battery_info_widget._startRecording).
+  Future<void> _startPhoneRecording(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final captureProvider = context.read<CaptureProvider>();
+    if (captureProvider.recordingState == RecordingState.initialising) return;
+    if (captureProvider.recordingState != RecordingState.record) {
+      await captureProvider.streamRecording();
+      PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    }
+    if (!context.mounted) return;
+    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+        ? captureProvider.conversationProvider!.conversations.first.id
+        : null;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+    );
+  }
+
   Widget _buildGetStartedOptions(BuildContext context) {
     Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
       return GestureDetector(
@@ -221,9 +246,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final phoneOption = option(
       icon: Icons.mic_rounded,
       label: 'Record with Phone',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
-      },
+      onTap: () => _startPhoneRecording(context),
     );
     final callOption = option(
       icon: Icons.phone_in_talk_rounded,
