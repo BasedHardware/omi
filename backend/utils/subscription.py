@@ -11,7 +11,7 @@ import database.users as users_db
 import database.user_usage as user_usage_db
 from database import redis_db
 from database.announcements import compare_versions
-from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize
 import logging
@@ -33,7 +33,7 @@ PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 #                                   (everyone else exempt). Defaults to empty
 #                                   (unrestricted) so a real prod deploy
 #                                   covers all qualifying desktop users.
-TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60
+TRIAL_LENGTH_SECONDS = int(os.getenv('TRIAL_LENGTH_SECONDS', str(3 * 24 * 60 * 60)))
 
 _TRIAL_PAYWALL_ENABLED = os.getenv("TRIAL_PAYWALL_ENABLED", "true").lower() != "false"
 
@@ -108,6 +108,66 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
 
 def clear_trial_paywall_cache(uid: str) -> None:
     redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
+
+
+def get_trial_metadata(uid: str) -> TrialMetadata:
+    """Compute structured trial metadata for the given user.
+
+    Returns trial timing info regardless of platform — the client decides
+    whether to render the countdown UI. Paid-plan and BYOK users get
+    `trial_expired=False` with zeroed timing (trial is irrelevant to them).
+
+    This reuses the same Firebase Auth lookup path as `_is_trial_expired_uncached`
+    and benefits from the same Redis cache for the expensive bits.
+    """
+    try:
+        subscription = users_db.get_user_valid_subscription(uid)
+        plan = subscription.plan if subscription else PlanType.basic
+
+        # Paid-plan or BYOK users: trial is moot — they have full access.
+        if plan != PlanType.basic or users_db.is_byok_active(uid):
+            return TrialMetadata(
+                trial_expired=False,
+                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+                trial_features=TRIAL_FEATURES,
+                plan_after_trial=get_plan_display_name(PlanType.basic),
+            )
+
+        user_record = firebase_auth.get_user(uid)
+        creation_ms = user_record.user_metadata.creation_timestamp
+        if not creation_ms:
+            # No creation timestamp — treat as active trial (fail-open).
+            return TrialMetadata(
+                trial_expired=False,
+                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+                trial_features=TRIAL_FEATURES,
+                plan_after_trial=get_plan_display_name(PlanType.basic),
+            )
+
+        creation_seconds = int(creation_ms / 1000)
+        trial_ends_at = creation_seconds + TRIAL_LENGTH_SECONDS
+        now = int(time.time())
+        remaining = max(0, trial_ends_at - now)
+        expired = remaining == 0
+
+        return TrialMetadata(
+            trial_started_at=creation_seconds,
+            trial_ends_at=trial_ends_at,
+            trial_remaining_seconds=remaining,
+            trial_expired=expired,
+            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+            trial_features=TRIAL_FEATURES,
+            plan_after_trial=get_plan_display_name(PlanType.basic),
+        )
+    except Exception as e:
+        logger.warning("get_trial_metadata failed for uid=%s: %s", uid, e)
+        # Fail-open: report as active trial so UI doesn't flash paywall.
+        return TrialMetadata(
+            trial_expired=False,
+            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+            trial_features=TRIAL_FEATURES,
+            plan_after_trial=get_plan_display_name(PlanType.basic),
+        )
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -334,6 +394,15 @@ FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '
 NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '200'))
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
+
+# Features available during the 3-day desktop trial (matches paid-plan behavior).
+TRIAL_FEATURES = [
+    'unlimited_listening',
+    'unlimited_transcription',
+    'unlimited_memories',
+    'unlimited_insights',
+    f'{FREE_CHAT_QUESTIONS_PER_MONTH}_chat_questions_per_month',
+]
 
 # Display names shown to users. Internal PlanType stays the same for Stripe compat.
 PLAN_DISPLAY_NAMES = {
