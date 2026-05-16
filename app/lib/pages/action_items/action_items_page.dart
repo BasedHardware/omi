@@ -55,6 +55,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // important thing to surface, hiding them behind a tap caused regret.
   bool _overdueExpanded = true;
 
+  bool _noDeadlineExpanded = true;
+
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -907,43 +909,79 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
                   child: Row(
                     children: [
-                      Text(
-                        title.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (provider.showCompletedView && orderedItems.isNotEmpty)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () => _confirmClearCompleted(provider, orderedItems),
-                              child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
-                            ),
-                          ],
+                      if (category == TaskCategory.noDeadline)
+                        GestureDetector(
+                          onTap: () => setState(() => _noDeadlineExpanded = !_noDeadlineExpanded),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _noDeadlineExpanded ? Icons.expand_less : Icons.expand_more,
+                                color: Colors.grey[500],
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                title.toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              if (orderedItems.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                              ],
+                            ],
+                          ),
                         )
-                      else if (orderedItems.isNotEmpty)
-                        Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      else
+                        Text(
+                          title.toUpperCase(),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      const Spacer(),
+                      if (category != TaskCategory.noDeadline) ...[
+                        if (provider.showCompletedView && orderedItems.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _confirmClearCompleted(provider, orderedItems),
+                                child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
+                              ),
+                            ],
+                          )
+                        else if (orderedItems.isNotEmpty)
+                          Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
+                        GestureDetector(
+                          onTap: () => _confirmClearCompleted(provider, orderedItems),
+                          child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
+                        ),
                     ],
                   ),
                 ),
 
                 // Drop zone for first position
-                if (orderedItems.isNotEmpty)
+                if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
                 // Task items. Row padding alone carries the rhythm — no
                 // dividers between rows; matches Things 3 / Apple Reminders.
-                ...orderedItems.map(
-                  (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
-                ),
+                if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
+                  ...orderedItems.map(
+                    (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                  ),
 
                 // Spacing after section
                 const SizedBox(height: 12),
