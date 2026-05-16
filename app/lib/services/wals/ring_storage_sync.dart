@@ -590,8 +590,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     final advancedOk = reachedDone && doneOk && !flushError && !_isCancelled && doneNextSeq != null;
     if (advancedOk) {
       final ok = await connection.advanceRing(doneNextSeq!);
-      Logger.debug(
-          'RingStorageSync: advance(seq=$doneNextSeq) -> $ok (records=$recordsConsumed)');
+      Logger.debug('RingStorageSync: advance(seq=$doneNextSeq) -> $ok (records=$recordsConsumed)');
       DebugLogManager.logEvent('ring_sync_advanced', {
         'records': recordsConsumed,
         'next_seq': doneNextSeq,
