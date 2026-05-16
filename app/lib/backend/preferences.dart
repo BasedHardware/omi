@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/logger.dart';
@@ -45,8 +46,10 @@ class SharedPreferencesUtil {
   }
 
   BtDevice get btDevice {
-    final String device = getString('btDevice') ?? '';
-    if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
+    final String device = getString('btDevice');
+    if (device.isEmpty) {
+      return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
+    }
     return BtDevice.fromJson(jsonDecode(device));
   }
 
@@ -58,15 +61,25 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // Button behavior uses OmiButtonAction.value.
+  // Defaults: single = ask question, double = pause/mute, triple = end conversation.
+  int get singleTapAction => getInt('singleTapAction', defaultValue: OmiButtonAction.askQuestion.value);
+
+  set singleTapAction(int value) => saveInt('singleTapAction', value);
+
+  int get doubleTapAction => getInt('doubleTapAction', defaultValue: OmiButtonAction.pauseResume.value);
 
   set doubleTapAction(int value) => saveInt('doubleTapAction', value);
 
-  // Keep backward compatibility
-  bool get doubleTapPausesMuting => doubleTapAction == 1;
+  int get tripleTapAction => getInt('tripleTapAction', defaultValue: OmiButtonAction.endConversation.value);
 
-  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
+
+  // Keep backward compatibility
+  bool get doubleTapPausesMuting => doubleTapAction == OmiButtonAction.pauseResume.value;
+
+  set doubleTapPausesMuting(bool value) =>
+      doubleTapAction = value ? OmiButtonAction.pauseResume.value : OmiButtonAction.endConversation.value;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {

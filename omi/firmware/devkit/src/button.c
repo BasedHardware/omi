@@ -89,6 +89,7 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 #define LONG_TAP 3
 #define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
+#define TRIPLE_TAP 6
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
@@ -103,54 +104,45 @@ static void reset_count()
     inc_count_0 = 0;
     inc_count_1 = 0;
 }
-static inline void notify_press()
+
+static inline void notify_button_state(int state, const char *label)
 {
-    final_button_state[0] = BUTTON_PRESS;
-    LOG_INF("Button pressed");
+    final_button_state[0] = state;
+    LOG_INF("Button %s", label);
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
     }
+}
+
+static inline void notify_press()
+{
+    notify_button_state(BUTTON_PRESS, "pressed");
 }
 
 static inline void notify_unpress()
 {
-    final_button_state[0] = BUTTON_RELEASE;
-    LOG_INF("Button released");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
+    notify_button_state(BUTTON_RELEASE, "released");
 }
 
 static inline void notify_tap()
 {
-    final_button_state[0] = SINGLE_TAP;
-    LOG_INF("Button single tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
+    notify_button_state(SINGLE_TAP, "single tap");
 }
 
 static inline void notify_double_tap()
 {
-    final_button_state[0] = DOUBLE_TAP; // button press
-    LOG_INF("Button double tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
+    notify_button_state(DOUBLE_TAP, "double tap");
+}
+
+static inline void notify_triple_tap()
+{
+    notify_button_state(TRIPLE_TAP, "triple tap");
 }
 
 static inline void notify_long_tap()
 {
-    final_button_state[0] = LONG_TAP; // button press
-    LOG_INF("Button long tap");
-    struct bt_conn *conn = get_current_connection();
-    if (conn != NULL) {
-        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
-    }
+    notify_button_state(LONG_TAP, "long tap");
 }
 
 #define BUTTON_PRESSED 1
@@ -164,6 +156,7 @@ typedef enum {
     BUTTON_EVENT_NONE,
     BUTTON_EVENT_SINGLE_TAP,
     BUTTON_EVENT_DOUBLE_TAP,
+    BUTTON_EVENT_TRIPLE_TAP,
     BUTTON_EVENT_LONG_PRESS,
     BUTTON_EVENT_RELEASE
 } ButtonEvent;
@@ -173,8 +166,17 @@ static uint32_t btn_press_start_time;
 static uint32_t btn_release_time;
 static uint32_t btn_last_tap_time;
 static bool btn_is_pressed;
+static uint8_t btn_tap_count;
 
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
+
+static void reset_tap_tracking()
+{
+    btn_tap_count = 0;
+    btn_press_start_time = 0;
+    btn_release_time = 0;
+    btn_last_tap_time = 0;
+}
 
 void check_button_level(struct k_work *work_item)
 {
@@ -192,28 +194,26 @@ void check_button_level(struct k_work *work_item)
         btn_is_pressed = false;
         btn_release_time = current_time;
 
-        // Check for double tap
         uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
         if (press_duration < TAP_THRESHOLD) {
-            if (btn_last_tap_time > 0 &&
-                (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
-                event = BUTTON_EVENT_DOUBLE_TAP;
-                btn_last_tap_time = 0; // Reset double-tap / single-tap detection
-            } else {
-                btn_last_tap_time = current_time;
+            if (btn_tap_count < 3) {
+                btn_tap_count++;
             }
+            btn_last_tap_time = current_time;
+        } else {
+            event = BUTTON_EVENT_RELEASE;
         }
     }
 
-    // Check for single tap
-    if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
-        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
-        if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 &&
-            (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
+    // Resolve tap sequences only after the multi-tap window passes.
+    if (event == BUTTON_EVENT_NONE && btn_state == BUTTON_RELEASED && !btn_is_pressed && btn_tap_count > 0 &&
+        (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL > DOUBLE_TAP_WINDOW) {
+        if (btn_tap_count == 1) {
             event = BUTTON_EVENT_SINGLE_TAP;
-            btn_last_tap_time = 0;
-        } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
-            event = BUTTON_EVENT_RELEASE;
+        } else if (btn_tap_count == 2) {
+            event = BUTTON_EVENT_DOUBLE_TAP;
+        } else {
+            event = BUTTON_EVENT_TRIPLE_TAP;
         }
     }
 
@@ -227,6 +227,7 @@ void check_button_level(struct k_work *work_item)
         LOG_PRINTK("single tap detected\n");
         btn_last_event = event;
         notify_tap();
+        reset_tap_tracking();
     }
 
     // Double tap
@@ -234,12 +235,22 @@ void check_button_level(struct k_work *work_item)
         LOG_PRINTK("double tap detected\n");
         btn_last_event = event;
         notify_double_tap();
+        reset_tap_tracking();
+    }
+
+    // Triple tap
+    if (event == BUTTON_EVENT_TRIPLE_TAP) {
+        LOG_PRINTK("triple tap detected\n");
+        btn_last_event = event;
+        notify_triple_tap();
+        reset_tap_tracking();
     }
 
     // Long press, one time event
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_PRINTK("long press detected\n");
         btn_last_event = event;
+        reset_tap_tracking();
 
         // Enter the low power mode
         is_off = true;
@@ -255,9 +266,7 @@ void check_button_level(struct k_work *work_item)
 
         // Reset
         current_time = 0;
-        btn_press_start_time = 0;
-        btn_release_time = 0;
-        btn_last_tap_time = 0;
+        reset_tap_tracking();
     }
     if (event == BUTTON_EVENT_RELEASE) {
         current_button_state = GRACE;

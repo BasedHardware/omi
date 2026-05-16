@@ -6,11 +6,11 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
@@ -18,11 +18,8 @@ import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -46,15 +43,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Timer? _debounce;
   Timer? _micGainDebounce;
-
-  // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BtDevice btDevice) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return await connection.disconnect();
-  }
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -350,21 +338,69 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _getDoubleTapActionLabel(int action) {
-    switch (action) {
-      case 0:
-        return context.l10n.endConversation;
-      case 1:
-        return context.l10n.pauseResume;
-      case 2:
-        return context.l10n.starConversation;
-      default:
-        return context.l10n.endConversation;
+  String _buttonPressTitle(OmiButtonPress press) {
+    switch (press) {
+      case OmiButtonPress.singleTap:
+        return '1x';
+      case OmiButtonPress.doubleTap:
+        return context.l10n.doubleTap;
+      case OmiButtonPress.tripleTap:
+        return '3x';
     }
   }
 
-  void _showDoubleTapActionSheet() {
-    int currentAction = SharedPreferencesUtil().doubleTapAction;
+  int _configuredActionValue(OmiButtonPress press) {
+    final preferences = SharedPreferencesUtil();
+    return switch (press) {
+      OmiButtonPress.singleTap => preferences.singleTapAction,
+      OmiButtonPress.doubleTap => preferences.doubleTapAction,
+      OmiButtonPress.tripleTap => preferences.tripleTapAction,
+    };
+  }
+
+  void _setConfiguredActionValue(OmiButtonPress press, int value) {
+    final preferences = SharedPreferencesUtil();
+    switch (press) {
+      case OmiButtonPress.singleTap:
+        preferences.singleTapAction = value;
+        break;
+      case OmiButtonPress.doubleTap:
+        preferences.doubleTapAction = value;
+        break;
+      case OmiButtonPress.tripleTap:
+        preferences.tripleTapAction = value;
+        break;
+    }
+  }
+
+  String _getButtonActionLabel(OmiButtonAction action) {
+    switch (action) {
+      case OmiButtonAction.endConversation:
+        return context.l10n.endConversation;
+      case OmiButtonAction.pauseResume:
+        return context.l10n.pauseResume;
+      case OmiButtonAction.starConversation:
+        return context.l10n.starConversation;
+      case OmiButtonAction.askQuestion:
+        return context.l10n.askOmi;
+      case OmiButtonAction.noAction:
+        return context.l10n.off;
+    }
+  }
+
+  String _getConfiguredActionLabel(OmiButtonPress press) {
+    final fallback = switch (press) {
+      OmiButtonPress.singleTap => OmiButtonAction.askQuestion,
+      OmiButtonPress.doubleTap => OmiButtonAction.pauseResume,
+      OmiButtonPress.tripleTap => OmiButtonAction.endConversation,
+    };
+    return _getButtonActionLabel(
+      OmiButtonAction.fromValue(_configuredActionValue(press), fallback: fallback),
+    );
+  }
+
+  void _showButtonActionSheet(OmiButtonPress press) {
+    int currentAction = _configuredActionValue(press);
 
     showModalBottomSheet(
       context: context,
@@ -384,18 +420,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                   ),
                   Text(
-                    context.l10n.doubleTapAction,
+                    _buttonPressTitle(press),
                     style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: Text(
+                      context.l10n.askOmi,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    ),
+                    trailing: currentAction == OmiButtonAction.askQuestion.value
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
+                    onTap: () {
+                      setState(() => _setConfiguredActionValue(press, OmiButtonAction.askQuestion.value));
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  ListTile(
+                    title: Text(
                       context.l10n.endAndProcess,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
-                    trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    trailing: currentAction == OmiButtonAction.endConversation.value
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
                     onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 0);
+                      setState(() => _setConfiguredActionValue(press, OmiButtonAction.endConversation.value));
                       Navigator.pop(sheetContext);
                     },
                   ),
@@ -404,9 +455,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       context.l10n.pauseResumeRecording,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
-                    trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    trailing: currentAction == OmiButtonAction.pauseResume.value
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
                     onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 1);
+                      setState(() => _setConfiguredActionValue(press, OmiButtonAction.pauseResume.value));
                       Navigator.pop(sheetContext);
                     },
                   ),
@@ -415,9 +468,24 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       context.l10n.starOngoing,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
-                    trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    trailing: currentAction == OmiButtonAction.starConversation.value
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
                     onTap: () {
-                      setState(() => SharedPreferencesUtil().doubleTapAction = 2);
+                      setState(() => _setConfiguredActionValue(press, OmiButtonAction.starConversation.value));
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  ListTile(
+                    title: Text(
+                      context.l10n.off,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
+                    ),
+                    trailing: currentAction == OmiButtonAction.noAction.value
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
+                    onTap: () {
+                      setState(() => _setConfiguredActionValue(press, OmiButtonAction.noAction.value));
                       Navigator.pop(sheetContext);
                     },
                   ),
@@ -470,7 +538,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         activeTrackColor: Colors.white,
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
-                        overlayColor: Colors.white.withOpacity(0.1),
+                        overlayColor: Colors.white.withValues(alpha: 0.1),
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
@@ -579,7 +647,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         activeTrackColor: Colors.white,
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
-                        overlayColor: Colors.white.withOpacity(0.1),
+                        overlayColor: Colors.white.withValues(alpha: 0.1),
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
@@ -660,9 +728,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.1) : const Color(0xFF2A2A2E),
+          color: isSelected ? Colors.white.withValues(alpha: 0.1) : const Color(0xFF2A2A2E),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? Colors.white.withOpacity(0.5) : Colors.transparent, width: 1),
+          border: Border.all(color: isSelected ? Colors.white.withValues(alpha: 0.5) : Colors.transparent, width: 1),
         ),
         child: Center(
           child: Text(
@@ -684,18 +752,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildCustomizationSection() {
-    final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,
-            title: context.l10n.doubleTap,
-            chipValue: _getDoubleTapActionLabel(doubleTapAction),
-            onTap: _showDoubleTapActionSheet,
+            title: _buttonPressTitle(OmiButtonPress.singleTap),
+            chipValue: _getConfiguredActionLabel(OmiButtonPress.singleTap),
+            onTap: () => _showButtonActionSheet(OmiButtonPress.singleTap),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.handPointer,
+            title: _buttonPressTitle(OmiButtonPress.doubleTap),
+            chipValue: _getConfiguredActionLabel(OmiButtonPress.doubleTap),
+            onTap: () => _showButtonActionSheet(OmiButtonPress.doubleTap),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.handPointer,
+            title: _buttonPressTitle(OmiButtonPress.tripleTap),
+            chipValue: _getConfiguredActionLabel(OmiButtonPress.tripleTap),
+            onTap: () => _showButtonActionSheet(OmiButtonPress.tripleTap),
           ),
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
@@ -731,6 +810,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             // Disconnect
             GestureDetector(
               onTap: () async {
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final disconnectedMessage = context.l10n.deviceDisconnectedMessage;
                 final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
 
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
@@ -747,11 +829,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
                 PlatformManager.instance.analytics.disconnectFriendClicked();
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(context.l10n.deviceDisconnectedMessage)));
+                if (mounted) {
+                  navigator.pop();
+                  messenger.showSnackBar(SnackBar(content: Text(disconnectedMessage)));
                 }
               },
               child: Padding(
@@ -785,6 +865,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
+                      final navigator = Navigator.of(context);
+                      final messenger = ScaffoldMessenger.of(context);
+                      final unpairedMessage = context.l10n.deviceUnpairedMessage;
                       await SharedPreferencesUtil().btDeviceSet(
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
@@ -795,11 +878,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       provider.setIsConnected(false);
                       provider.setConnectedDevice(null);
                       provider.updateConnectingStatus(false);
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
+                      if (mounted) {
+                        navigator.pop();
+                        messenger.showSnackBar(
                           SnackBar(
-                            content: Text(context.l10n.deviceUnpairedMessage),
+                            content: Text(unpairedMessage),
                             duration: const Duration(seconds: 5),
                           ),
                         );
