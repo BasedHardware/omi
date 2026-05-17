@@ -559,13 +559,13 @@ async def create_persona(
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '').lower()
-        data['username'] = increment_username(data['username'])
+        data['username'] = await run_blocking(critical_executor, increment_username, data['username'])
     await run_blocking(critical_executor, save_username, data['username'], uid)
 
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
-    data['description'] = generate_persona_desc(uid, data['name'])
+    data['description'] = await run_blocking(critical_executor, generate_persona_desc, uid, data['name'])
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     contents = await file.read()
@@ -592,7 +592,7 @@ async def update_persona(
     uid=Depends(auth.get_current_user_uid),
 ):
     data = json.loads(persona_data)
-    persona = get_available_app_by_id(persona_id, uid)
+    persona = await run_blocking(critical_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
@@ -614,7 +614,7 @@ async def update_persona(
         data['image'] = img_url
 
     await run_blocking(critical_executor, save_username, data['username'], uid)
-    data['description'] = generate_persona_desc(uid, data['name'])
+    data['description'] = await run_blocking(critical_executor, generate_persona_desc, uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
@@ -629,7 +629,7 @@ async def update_persona(
     await run_blocking(critical_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
-        invalidate_approved_apps_cache()
+        await run_blocking(critical_executor, invalidate_approved_apps_cache)
     await run_blocking(critical_executor, delete_app_cache_by_id, persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
