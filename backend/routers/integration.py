@@ -152,7 +152,7 @@ async def create_conversation_via_integration(
     response_model=integration_models.EmptyResponse,
     tags=['integration', 'memories'],
 )
-async def create_memories_via_integration(
+def create_memories_via_integration(
     request: Request,
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
@@ -205,7 +205,7 @@ async def create_memories_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'memories'],
 )
-async def get_memories_via_integration(
+def get_memories_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -255,7 +255,7 @@ async def get_memories_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'conversations'],
 )
-async def get_conversations_via_integration(
+def get_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -376,7 +376,7 @@ async def get_conversations_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'conversations'],
 )
-async def search_conversations_via_integration(
+def search_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -504,7 +504,7 @@ async def search_conversations_via_integration(
     response_model=integration_models.EmptyResponse,
     tags=['integration', 'notifications'],
 )
-async def send_notification_via_integration(
+def send_notification_via_integration(
     request: Request, app_id: str, message: str, uid: str, authorization: Optional[str] = Header(None)
 ):
     # Verify API key from Authorization header
@@ -555,7 +555,7 @@ async def send_notification_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'tasks'],
 )
-async def get_tasks_via_integration(
+def get_tasks_via_integration(
     request: Request,
     app_id: str,
     uid: str,

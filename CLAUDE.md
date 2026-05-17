@@ -33,7 +33,9 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - **No in-function imports** — all imports at module top level.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/lint_async_blockers.py` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` before committing.
+- **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O). FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep). Never call sync DB/storage/file functions directly inside `async def` — wrap with `await asyncio.to_thread(func, args)` or `await loop.run_in_executor(executor, func, args)`.
+- **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `asyncio.to_thread()` or `run_in_executor(storage_executor, ...)`.
 
 ### Logging Security
 Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.

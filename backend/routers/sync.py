@@ -1673,7 +1673,7 @@ async def sync_local_files_v2(
 
 
 @router.get("/v2/sync-local-files/{job_id}")
-async def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
     if not job:

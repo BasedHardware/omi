@@ -1778,8 +1778,12 @@ async def _stream_handler(
                     logger.info(f"Speaker ID: no stored embedding, extracting from speech profile {uid} {session_id}")
                     file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
                     if file_path:
-                        with open(file_path, 'rb') as f:
-                            profile_bytes = f.read()
+
+                        def _read_file(p):
+                            with open(p, 'rb') as f:
+                                return f.read()
+
+                        profile_bytes = await asyncio.to_thread(_read_file, file_path)
                         user_embedding = await asyncio.to_thread(
                             extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
                         )

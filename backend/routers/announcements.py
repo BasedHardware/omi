@@ -27,7 +27,7 @@ router = APIRouter()
 
 
 @router.get("/v1/announcements/changelogs", response_model=List[Announcement])
-async def get_changelogs(
+def get_changelogs(
     from_version: Optional[str] = Query(None, description="Previous app version (before upgrade)"),
     to_version: Optional[str] = Query(None, description="Current app version (after upgrade)"),
     max_version: Optional[str] = Query(None, description="Maximum version to include (filters out future versions)"),
@@ -56,7 +56,7 @@ async def get_changelogs(
 
 
 @router.get("/v1/announcements/features", response_model=List[Announcement])
-async def get_features(
+def get_features(
     version: str = Query(..., description="Version user upgraded to"),
     version_type: str = Query(..., description="Type: 'app' or 'firmware'"),
     device_model: Optional[str] = Query(None, description="Device model (for firmware features)"),
@@ -76,7 +76,7 @@ async def get_features(
 
 
 @router.get("/v1/announcements/general", response_model=List[Announcement])
-async def get_announcements(
+def get_announcements(
     last_checked_at: Optional[str] = Query(
         None, description="ISO timestamp of last check (only returns newer announcements)"
     ),
@@ -104,7 +104,7 @@ async def get_announcements(
 
 
 @router.get("/v1/announcements/pending", response_model=List[Announcement], tags=["announcements"])
-async def get_pending_announcements_endpoint(
+def get_pending_announcements_endpoint(
     app_version: str = Query(..., description="Current app version (e.g., '1.0.522+240')"),
     platform: str = Query(..., description="Platform: 'ios' or 'android'"),
     trigger: str = Query(..., description="Trigger: 'app_launch', 'version_upgrade', or 'firmware_upgrade'"),
@@ -157,7 +157,7 @@ class DismissAnnouncementRequest(BaseModel):
 
 
 @router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
-async def dismiss_announcement_endpoint(
+def dismiss_announcement_endpoint(
     announcement_id: str,
     data: DismissAnnouncementRequest,
     uid: str = Depends(auth_endpoints.get_current_user_uid),
@@ -222,7 +222,7 @@ class UpdateAnnouncementRequest(BaseModel):
 
 
 @router.get("/v1/announcements/all", response_model=List[Announcement], tags=["admin"])
-async def list_all_announcements(
+def list_all_announcements(
     secret_key: str = Header(..., description="Admin secret key"),
     announcement_type: Optional[AnnouncementType] = Query(None, description="Filter by type"),
     active_only: bool = Query(False, description="Only return active announcements"),
@@ -243,7 +243,7 @@ async def list_all_announcements(
 
 
 @router.get("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
-async def get_announcement(
+def get_announcement(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),
 ):
@@ -261,7 +261,7 @@ async def get_announcement(
 
 
 @router.post("/v1/announcements", response_model=Announcement, tags=["admin"])
-async def create_announcement_endpoint(
+def create_announcement_endpoint(
     data: CreateAnnouncementRequest,
     secret_key: str = Header(..., description="Admin secret key"),
 ):
@@ -300,7 +300,7 @@ async def create_announcement_endpoint(
 
 
 @router.put("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
-async def update_announcement_endpoint(
+def update_announcement_endpoint(
     announcement_id: str,
     data: UpdateAnnouncementRequest,
     secret_key: str = Header(..., description="Admin secret key"),
@@ -343,7 +343,7 @@ async def update_announcement_endpoint(
 
 
 @router.delete("/v1/announcements/{announcement_id}", tags=["admin"])
-async def delete_announcement_endpoint(
+def delete_announcement_endpoint(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),
     soft_delete: bool = Query(True, description="If true, deactivates instead of permanently deleting"),

@@ -86,7 +86,7 @@ class AdviceResponse(BaseModel):
 
 
 @router.get('/v1/goals', tags=['goals'])
-async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
+def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
     if goal:
@@ -99,7 +99,7 @@ async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Opt
 
 
 @router.get('/v1/goals/all', tags=['goals'])
-async def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get all active goals for the user (up to 4)."""
     goals = goals_db.get_user_goals(uid, limit=4)
 
@@ -114,7 +114,7 @@ async def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[d
 
 
 @router.post('/v1/goals', tags=['goals'])
-async def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a new goal. This will deactivate any existing active goal."""
     goal_data = {
         'id': f"goal_{uuid.uuid4().hex[:12]}",
@@ -139,7 +139,7 @@ async def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user
 
 
 @router.patch('/v1/goals/{goal_id}', tags=['goals'])
-async def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
 
@@ -161,7 +161,7 @@ async def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth
 
 
 @router.patch('/v1/goals/{goal_id}/progress', tags=['goals'])
-async def update_goal_progress(
+def update_goal_progress(
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
     uid: str = Depends(auth.get_current_user_uid),
@@ -182,7 +182,7 @@ async def update_goal_progress(
 
 
 @router.get('/v1/goals/{goal_id}/history', tags=['goals'])
-async def get_goal_history(
+def get_goal_history(
     goal_id: str, days: int = Query(default=30, le=365), uid: str = Depends(auth.get_current_user_uid)
 ) -> List[dict]:
     """Get progress history for a goal."""
@@ -197,7 +197,7 @@ async def get_goal_history(
 
 
 @router.delete('/v1/goals/{goal_id}', tags=['goals'])
-async def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Delete a goal."""
     success = goals_db.delete_goal(uid, goal_id)
 
@@ -208,13 +208,13 @@ async def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid
 
 
 @router.get('/v1/goals/suggest', tags=['goals'])
-async def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
+def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     return suggest_goal_llm(uid)
 
 
 @router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
-async def get_goal_advice(
+def get_goal_advice(
     goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
     """Get AI-generated actionable advice for achieving a goal."""
@@ -226,7 +226,7 @@ async def get_goal_advice(
 
 
 @router.get('/v1/goals/advice', tags=['goals'])
-async def get_current_goal_advice(
+def get_current_goal_advice(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
     """Get AI-generated advice for the current active goal."""
@@ -234,7 +234,7 @@ async def get_current_goal_advice(
     if not goal:
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return await get_goal_advice(goal['id'], uid)
+    return get_goal_advice(goal['id'], uid)
 
 
 class ProgressExtractRequest(BaseModel):
@@ -244,7 +244,7 @@ class ProgressExtractRequest(BaseModel):
 
 
 @router.post('/v1/goals/extract-progress', tags=['goals'])
-async def extract_and_update_progress(
+def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
 ) -> dict:

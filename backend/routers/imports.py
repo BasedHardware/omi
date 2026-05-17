@@ -58,10 +58,10 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        f = open(zip_path, 'wb')
+        loop = asyncio.get_running_loop()
+        f = await loop.run_in_executor(None, open, zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(storage_executor, f.write, contents)
         finally:
             f.close()
@@ -86,7 +86,7 @@ async def import_limitless_data(
     response_model=List[ImportJobResponse],
     tags=['import'],
 )
-async def get_import_jobs(
+def get_import_jobs(
     uid: str = Depends(auth.get_current_user_uid),
     limit: int = 50,
 ):
@@ -117,7 +117,7 @@ async def get_import_jobs(
     response_model=ImportJobResponse,
     tags=['import'],
 )
-async def get_import_job_status(
+def get_import_job_status(
     job_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -154,7 +154,7 @@ async def get_import_job_status(
     '/v1/import/limitless/conversations',
     tags=['import'],
 )
-async def delete_limitless_conversations(
+def delete_limitless_conversations(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
