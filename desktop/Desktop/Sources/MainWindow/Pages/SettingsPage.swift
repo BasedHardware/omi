@@ -1739,18 +1739,18 @@ struct SettingsContentView: View {
     if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
       settingsCard(settingId: "planusage.trial") {
         VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 12) {
+          HStack(spacing: 16) {
             Image(systemName: "clock.fill")
-              .scaledFont(size: 24)
+              .scaledFont(size: 28)
               .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
 
             VStack(alignment: .leading, spacing: 4) {
               Text("Premium Trial Active")
-                .scaledFont(size: 15, weight: .semibold)
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(trialCountdownText(remaining: trial.trialRemainingSeconds))
-                .scaledFont(size: 13, weight: .medium)
+                .scaledFont(size: 13)
                 .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
             }
 
@@ -1772,26 +1772,26 @@ struct SettingsContentView: View {
 
           VStack(alignment: .leading, spacing: 8) {
             Text("Included in your trial")
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textTertiary)
 
-            trialFeatureRow(icon: "waveform", text: "Unlimited listening & transcription")
-            trialFeatureRow(icon: "brain.head.profile", text: "Unlimited memories & insights")
-            trialFeatureRow(icon: "bubble.left.and.bubble.right.fill", text: "Chat questions")
+            trialFeatureRow(text: "Unlimited listening & transcription")
+            trialFeatureRow(text: "Unlimited memories & insights")
+            trialFeatureRow(text: "Chat questions")
           }
         }
       }
     } else if let trial = appState.trialMetadata, trial.trialExpired {
       settingsCard(settingId: "planusage.trial-expired") {
         VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 12) {
+          HStack(spacing: 16) {
             Image(systemName: "exclamationmark.circle.fill")
-              .scaledFont(size: 24)
+              .scaledFont(size: 28)
               .foregroundColor(OmiColors.warning)
 
             VStack(alignment: .leading, spacing: 4) {
               Text("Trial Ended")
-                .scaledFont(size: 15, weight: .semibold)
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Upgrade to keep unlimited access")
@@ -1819,34 +1819,20 @@ struct SettingsContentView: View {
     }
   }
 
-  private func trialFeatureRow(icon: String, text: String) -> some View {
+  private func trialFeatureRow(text: String) -> some View {
     HStack(spacing: 8) {
-      Image(systemName: icon)
-        .scaledFont(size: 11)
-        .foregroundColor(OmiColors.purplePrimary)
-        .frame(width: 16)
+      ZStack {
+        Circle()
+          .fill(OmiColors.purplePrimary.opacity(0.16))
+          .frame(width: 18, height: 18)
+        Image(systemName: "checkmark")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+      }
       Text(text)
-        .scaledFont(size: 12)
+        .scaledFont(size: 13, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
-      Spacer()
-      premiumBadge
     }
-  }
-
-  private var premiumBadge: some View {
-    Text("PREMIUM")
-      .scaledFont(size: 9, weight: .bold)
-      .foregroundColor(.white)
-      .padding(.horizontal, 6)
-      .padding(.vertical, 2)
-      .background(
-        Capsule()
-          .fill(LinearGradient(
-            colors: [OmiColors.purplePrimary, OmiColors.purplePrimary.opacity(0.7)],
-            startPoint: .leading,
-            endPoint: .trailing
-          ))
-      )
   }
 
   private func trialCountdownText(remaining: Int) -> String {
