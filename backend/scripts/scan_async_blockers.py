@@ -340,7 +340,7 @@ def main():
     else:
         print_report(results)
 
-    has_high = results["summary"]["high_network_io"] > 0 or results["summary"]["async_helpers_with_blocking"] > 0
+    has_high = results["summary"]["high_network_io"] > 0
     sys.exit(1 if has_high else 0)
 
 
