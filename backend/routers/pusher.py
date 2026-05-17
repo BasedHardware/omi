@@ -28,6 +28,7 @@ from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -616,42 +617,26 @@ async def _websocket_util_trigger(
     bg_main_tasks = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = asyncio.create_task(receive_tasks(), name=f"ws:{uid}:receive")
+        receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
         bg_main_tasks = [
-            asyncio.create_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
-            asyncio.create_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
-            asyncio.create_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
-            asyncio.create_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
+            create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+            create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+            create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+            create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
         ]
 
-        # Supervisor loop: wait for client disconnect OR any bg task crash.
-        # Finite bg tasks that complete normally are removed from the monitored
-        # set — only disconnect or crash exits the loop.
-        monitored = {receive_task, *bg_main_tasks}
-        supervisor_exit = None
-        while monitored:
-            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
-
-            for task in done:
-                if task is receive_task:
-                    supervisor_exit = "disconnect"
-                    break
-                if not task.cancelled():
-                    exc = task.exception()
-                    if exc is not None:
-                        logger.error(f"BG task {task.get_name()} crashed: {exc} {uid}")
-                        supervisor_exit = "crash"
-                        break
-
-            if supervisor_exit:
-                break
+        exit_result = await supervise_tasks(
+            receive_task=receive_task,
+            bg_tasks=bg_main_tasks,
+            finite_tasks=None,
+            label=f"pusher:{uid}",
+        )
 
         if receive_task.done() and not receive_task.cancelled():
             exc = receive_task.exception()
             if exc is not None:
                 raise exc
 
-        # If receive_task is still running (bg task crashed first), cancel it
         if not receive_task.done():
             websocket_active = False
             receive_task.cancel()
@@ -660,40 +645,15 @@ async def _websocket_util_trigger(
             except asyncio.CancelledError:
                 pass
 
-        # Drain remaining bg tasks with timeout
-        remaining = [t for t in bg_main_tasks if not t.done()]
-        if remaining:
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*remaining, return_exceptions=True),
-                    timeout=BG_DRAIN_TIMEOUT,
-                )
-            except asyncio.TimeoutError:
-                dropped_speaker = len(speaker_sample_queue)
-                dropped_transcript = len(transcript_queue)
-                dropped_audio = len(audio_bytes_queue)
-                dropped_cloud = len(private_cloud_queue)
-                logger.warning(
-                    f"Background tasks didn't drain within {BG_DRAIN_TIMEOUT}s, force-cancelling {uid} "
-                    f"(dropped: speaker={dropped_speaker} transcript={dropped_transcript} "
-                    f"audio={dropped_audio} cloud={dropped_cloud})"
-                )
-                for task in remaining:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*remaining, return_exceptions=True)
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label=f"pusher:{uid}:bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
     finally:
         websocket_active = False
 
-        # Cancel background tasks from both spawn() and main task lists
         all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
-        for task in all_to_cancel:
-            task.cancel()
-        if all_to_cancel:
-            await asyncio.gather(*all_to_cancel, return_exceptions=True)
+        await drain_tasks(all_to_cancel, timeout=5.0, label=f"pusher:{uid}:cleanup", cancel=True)
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
