@@ -77,20 +77,20 @@ class UsageProvider with ChangeNotifier {
     PlanType.unlimitedV2,
   };
 
-  bool get _isPaidPlan {
+  bool get isPaidPlan {
     final plan = _subscription?.subscription.plan;
     return plan != null && _paidPlans.contains(plan);
   }
 
   bool get canAccessPhoneCalls {
-    if (_isPaidPlan) return true;
+    if (isPaidPlan) return true;
     final quota = phoneCallQuota;
     if (quota == null) return false;
     return quota.hasAccess;
   }
 
   bool get shouldShowPhoneCallsEntry {
-    if (_isPaidPlan) return true;
+    if (isPaidPlan) return true;
     final quota = phoneCallQuota;
     final freeTierEnabled = quota != null && (quota.monthlyLimit ?? 0) > 0;
     if (freeTierEnabled) return true;
