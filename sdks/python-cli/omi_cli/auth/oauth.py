@@ -23,6 +23,7 @@ from __future__ import annotations
 import html
 import http.server
 import secrets
+import socket
 import socketserver
 import threading
 import time
@@ -33,7 +34,7 @@ from typing import Any, Optional
 import httpx
 
 from omi_cli import config as cfg
-from omi_cli.auth.store import store_oauth_tokens, update_oauth_id_token
+from omi_cli.auth.store import store_api_key, store_oauth_tokens, update_oauth_id_token
 from omi_cli.config import Profile
 from omi_cli.errors import AuthError, UsageError
 
@@ -61,6 +62,23 @@ _HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 # Refresh slightly before the server-quoted expiry to absorb clock skew + the
 # round-trip time of the upcoming API call.
 _REFRESH_MARGIN_SECONDS = 60
+
+# Dev-key management endpoint. POST mints a key, GET lists, DELETE revokes —
+# all authenticated by the Firebase ID token (backend get_current_user_id),
+# unlike the /v1/dev/* data endpoints which require the minted key itself.
+_DEV_KEYS_PATH = "/v1/dev/keys"
+# Full read+write so every CLI subcommand works. The backend defaults to
+# read-only when scopes are omitted, so the CLI must request them explicitly.
+_CLI_KEY_SCOPES = [
+    "conversations:read",
+    "conversations:write",
+    "memories:read",
+    "memories:write",
+    "action_items:read",
+    "action_items:write",
+    "goals:read",
+    "goals:write",
+]
 
 
 # --- Browser flow ----------------------------------------------------------
@@ -151,15 +169,16 @@ def login_with_browser(
         )
 
     custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri)
-    id_token, refresh_token, expires_in = _firebase_signin_with_custom_token(custom_token)
+    id_token, _refresh_token, _expires_in = _firebase_signin_with_custom_token(custom_token)
 
-    return store_oauth_tokens(
-        profile_name,
-        id_token=id_token,
-        refresh_token=refresh_token,
-        expires_at=time.time() + expires_in - _REFRESH_MARGIN_SECONDS,
-        api_base=api_base,
-    )
+    # Every /v1/dev/* endpoint the CLI actually uses authenticates with a
+    # *developer API key*, not a Firebase ID token — so storing the Firebase
+    # token directly would 401 ("Invalid API Key") on the very first call.
+    # The Firebase session DOES authenticate POST /v1/dev/keys, so use it once
+    # to mint a long-lived dev key and store that. Browser OAuth is, in effect,
+    # just a friendlier way to obtain a key without visiting the dashboard.
+    raw_key = _exchange_firebase_token_for_dev_key(api_base, id_token)
+    return store_api_key(profile_name, raw_key, api_base=api_base)
 
 
 # --- Refresh ---------------------------------------------------------------
@@ -238,6 +257,66 @@ def needs_refresh(profile: Profile, now: Optional[float] = None) -> bool:
 
 
 # --- Internals -------------------------------------------------------------
+
+
+def _cli_key_name() -> str:
+    """Stable, recognizable name for the CLI's own dev key.
+
+    Per-host so the user can tell which machine a key belongs to in the
+    dashboard, and stable so re-login replaces it instead of piling up.
+    """
+    host = socket.gethostname() or "unknown-host"
+    return f"omi-cli ({host})"
+
+
+def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
+    """Mint a developer API key using the Firebase ID token.
+
+    The Firebase session authenticates ``/v1/dev/keys`` (backend
+    ``get_current_user_id``); the returned dev key is what every other
+    ``/v1/dev/*`` endpoint requires. Re-login first deletes the CLI's own
+    prior keys — matched by our exact :func:`_cli_key_name` only, so a user's
+    other keys are never touched — then mints a fresh one.
+    """
+    base = api_base.rstrip("/")
+    headers = {"Authorization": f"Bearer {id_token}"}
+    key_name = _cli_key_name()
+
+    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        # Best-effort cleanup of our own stale keys. Non-critical: if listing
+        # or deleting fails, still try to create — a duplicate is recoverable,
+        # a failed login is not.
+        try:
+            listing = client.get(f"{base}{_DEV_KEYS_PATH}", headers=headers)
+            if listing.status_code == 200:
+                for key in listing.json():
+                    if isinstance(key, dict) and key.get("name") == key_name and key.get("id"):
+                        client.delete(f"{base}{_DEV_KEYS_PATH}/{key['id']}", headers=headers)
+        except httpx.HTTPError:
+            pass
+
+        resp = client.post(
+            f"{base}{_DEV_KEYS_PATH}",
+            headers=headers,
+            json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
+        )
+
+    if resp.status_code not in (200, 201):
+        raise AuthError(
+            message=f"Could not create an API key for the CLI ({resp.status_code})",
+            detail=(
+                "OAuth sign-in succeeded, but minting a developer API key failed. "
+                "Try again, or use `omi auth login --api-key`."
+            ),
+        )
+
+    raw_key = resp.json().get("key")
+    if not raw_key:
+        raise AuthError(
+            message="Key-mint response was missing the API key",
+            detail="The /v1/dev/keys response did not include a `key` field.",
+        )
+    return str(raw_key)
 
 
 def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str) -> str:
