@@ -1392,10 +1392,12 @@ async def update_omi_persona_connected_accounts(uid: str):
                 update_data['connected_accounts'] = connected_accounts
                 update_data['updated_at'] = datetime.now(timezone.utc)
                 update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
-                update_data['description'] = generate_persona_desc(uid, update_data['name'])
+                update_data['description'] = await run_blocking(
+                    critical_executor, generate_persona_desc, uid, update_data['name']
+                )
 
                 await run_blocking(critical_executor, update_app_in_db, update_data)
-                delete_app_cache_by_id(persona['id'])
+                await run_blocking(critical_executor, delete_app_cache_by_id, persona['id'])
     except Exception as e:
         logger.error(f"Error updating persona connected accounts: {e}")
 
