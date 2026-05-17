@@ -36,8 +36,7 @@
     "lucide-react": "^0.438.0",
     "markdown-to-jsx": "^7.5.0",
     "moment": "^2.30.1",
-    "next": "^14.2.18",
-    "nuqs": "^1.19.0",
+    "next": "^16.2.6",
     "react": "^18",
     "react-dom": "^18",
     "react-instantsearch": "^7.13.0",
@@ -74,6 +73,7 @@
   },
   "overrides": {
     "postcss": "$postcss",
-    "qs": "^6.15.1"
+    "qs": "^6.15.1",
+    "glob": "^10.5.0"
   }
 }
