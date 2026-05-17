@@ -146,9 +146,31 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
     whether to render the countdown UI. Paid-plan and BYOK users get
     `trial_expired=False` with zeroed timing (trial is irrelevant to them).
 
+    Respects the same rollout controls as `is_trial_paywalled`:
+    - Kill switch (`TRIAL_PAYWALL_ENABLED=false`) → always returns trial_expired=False
+    - Test UID gating (`TRIAL_PAYWALL_TEST_UIDS`) → non-listed UIDs get trial_expired=False
+
     This reuses the same Firebase Auth lookup path as `_is_trial_expired_uncached`
     and benefits from the same Redis cache for the expensive bits.
     """
+    # Respect kill switch — if paywall disabled, trial never expires.
+    if not _TRIAL_PAYWALL_ENABLED:
+        return TrialMetadata(
+            trial_expired=False,
+            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+            trial_features=TRIAL_FEATURES,
+            plan_after_trial=get_plan_display_name(PlanType.basic),
+        )
+
+    # Respect test UID gating — if test UIDs set, non-listed users are exempt.
+    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
+        return TrialMetadata(
+            trial_expired=False,
+            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+            trial_features=TRIAL_FEATURES,
+            plan_after_trial=get_plan_display_name(PlanType.basic),
+        )
+
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
