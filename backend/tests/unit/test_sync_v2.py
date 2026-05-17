@@ -43,7 +43,7 @@ class TestSyncV2Structure:
         """GET /v2/sync-local-files/{job_id} must exist."""
         source = self._read_sync_source()
         assert '"/v2/sync-local-files/{job_id}"' in source
-        assert 'async def get_sync_job_status' in source
+        assert 'def get_sync_job_status' in source
 
     def test_v1_endpoint_unchanged(self):
         """v1 endpoint must still exist with original path and function name."""
@@ -174,7 +174,7 @@ class TestSyncV2Structure:
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
         source = self._read_sync_source()
-        start = source.index('async def get_sync_job_status')
+        start = source.index('def get_sync_job_status')
         func_body = source[start:]
 
         assert "job['uid'] != uid" in func_body, "GET must check job ownership"
@@ -183,7 +183,7 @@ class TestSyncV2Structure:
     def test_v2_get_returns_404_for_missing(self):
         """GET must return 404 for expired/missing jobs."""
         source = self._read_sync_source()
-        start = source.index('async def get_sync_job_status')
+        start = source.index('def get_sync_job_status')
         func_body = source[start:]
 
         assert '404' in func_body, "GET must return 404 for missing job"
