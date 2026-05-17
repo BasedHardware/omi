@@ -6,10 +6,9 @@ Validates:
 - Paid-plan users get trial_expired=False (trial is moot)
 - BYOK users get trial_expired=False (trial is moot)
 - Firebase lookup failure fails open (trial_expired=False)
-- TRIAL_LENGTH_SECONDS is env-configurable
+- TRIAL_LENGTH_SECONDS is correctly configured
 - TrialMetadata model fields are correct
 - Endpoint returns correct response shape
-- Env var parsing for kill switch and test UIDs
 - FastAPI route integration (auth, serialization)
 - Boundary conditions derived from configured duration
 """
@@ -55,14 +54,10 @@ class TestTrialEndpointExists:
         assert "TrialMetadata" in src
 
 
-class TestTrialLengthConfigurable:
-    """Verify TRIAL_LENGTH_SECONDS is env-configurable."""
+class TestTrialLengthConfigured:
+    """Verify TRIAL_LENGTH_SECONDS is defined as 3 days."""
 
-    def test_trial_length_uses_env_var(self):
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        assert "os.getenv('TRIAL_LENGTH_SECONDS'" in src
-
-    def test_trial_length_default_is_3_days(self):
+    def test_trial_length_is_3_days(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         assert "3 * 24 * 60 * 60" in src
 
@@ -134,8 +129,7 @@ def _get_trial_metadata_fn():
         'logger': MagicMock(),
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
-        '_TRIAL_PAYWALL_ENABLED': True,
-        '_TRIAL_PAYWALL_TEST_UIDS': set(),
+        '_request_has_all_byok_keys': lambda: False,
     }
     # Execute TRIAL_LENGTH_SECONDS
     exec(compile(tls_line, '<subscription.py>', 'exec'), namespace)
@@ -283,89 +277,6 @@ class TestGetTrialMetadataBehavior:
         assert result.trial_remaining_seconds == 0
 
 
-class TestGetTrialMetadataRolloutGates:
-    """Behavioral tests for kill switch and test UID gating in get_trial_metadata."""
-
-    def setup_method(self):
-        self.fn, self.ns = _get_trial_metadata_fn()
-
-    def _mock_expired_user(self):
-        """Mock a user whose trial has expired (4 days old)."""
-        sub = MagicMock()
-        sub.plan = PlanType.basic
-        self.ns['users_db'].get_user_valid_subscription.return_value = sub
-        self.ns['users_db'].is_byok_active.return_value = False
-        creation_ms = (time.time() - 4 * 24 * 3600) * 1000
-        user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
-        self.ns['firebase_auth'].get_user.return_value = user_record
-
-    def test_kill_switch_disabled_returns_not_expired(self):
-        """When _TRIAL_PAYWALL_ENABLED=False, get_trial_metadata returns trial_expired=False."""
-        self._mock_expired_user()
-        self.ns['_TRIAL_PAYWALL_ENABLED'] = False
-        result = self.fn('uid_test')
-        assert result.trial_expired is False
-        # Should not call Firebase or DB
-        self.ns['users_db'].get_user_valid_subscription.assert_not_called()
-        self.ns['firebase_auth'].get_user.assert_not_called()
-
-    def test_kill_switch_enabled_returns_expired(self):
-        """When _TRIAL_PAYWALL_ENABLED=True, expired user gets trial_expired=True."""
-        self._mock_expired_user()
-        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
-        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = set()
-        result = self.fn('uid_test')
-        assert result.trial_expired is True
-
-    def test_test_uids_listed_user_gets_real_result(self):
-        """When test UIDs set and user is listed, return real trial state."""
-        self._mock_expired_user()
-        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
-        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = {'uid_test'}
-        result = self.fn('uid_test')
-        assert result.trial_expired is True
-
-    def test_test_uids_unlisted_user_exempt(self):
-        """When test UIDs set and user is NOT listed, return trial_expired=False."""
-        self._mock_expired_user()
-        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
-        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = {'other_uid'}
-        result = self.fn('uid_test')
-        assert result.trial_expired is False
-        # Should not call Firebase or DB
-        self.ns['users_db'].get_user_valid_subscription.assert_not_called()
-        self.ns['firebase_auth'].get_user.assert_not_called()
-
-    def test_empty_test_uids_means_all_users(self):
-        """When _TRIAL_PAYWALL_TEST_UIDS is empty set, all users are subject to trial."""
-        self._mock_expired_user()
-        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
-        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = set()
-        result = self.fn('uid_test')
-        assert result.trial_expired is True
-
-
-class TestGetTrialMetadataRolloutGatesSourceLevel:
-    """Source-level tests verifying rollout gate code in get_trial_metadata."""
-
-    def test_kill_switch_checked_before_try_block(self):
-        """get_trial_metadata must check _TRIAL_PAYWALL_ENABLED before try block."""
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        func_start = src.index('def get_trial_metadata(')
-        next_func = src.index('\ndef ', func_start + 1)
-        func_body = src[func_start:next_func]
-        assert '_TRIAL_PAYWALL_ENABLED' in func_body
-
-    def test_test_uids_checked_before_try_block(self):
-        """get_trial_metadata must check _TRIAL_PAYWALL_TEST_UIDS before try block."""
-        src = _read_source(SUBSCRIPTION_SRC_PATH)
-        func_start = src.index('def get_trial_metadata(')
-        next_func = src.index('\ndef ', func_start + 1)
-        func_body = src[func_start:next_func]
-        assert '_TRIAL_PAYWALL_TEST_UIDS' in func_body
-
-
 class TestTrialMetadataModel:
     """Verify TrialMetadata model has correct fields and defaults."""
 
@@ -443,84 +354,6 @@ class TestTrialEndpointAuth:
             body_end = src.find('\n\n# ', endpoint_start + 1)
         body = src[endpoint_start:body_end]
         assert "return get_trial_metadata(uid)" in body
-
-
-# ── Env-var parsing tests: verify module-level config parsing ────────────────
-
-
-def _eval_env_parsing(env_overrides):
-    """Execute the env-var parsing lines from subscription.py in isolation.
-
-    Returns (_TRIAL_PAYWALL_ENABLED, _TRIAL_PAYWALL_TEST_UIDS) as parsed.
-    """
-    source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text()
-    # Extract the three config lines
-    lines = source.split('\n')
-    enabled_line = [l for l in lines if l.startswith('_TRIAL_PAYWALL_ENABLED')][0]
-    uids_lines = []
-    in_uids = False
-    for l in lines:
-        if l.startswith('_TRIAL_PAYWALL_TEST_UIDS'):
-            in_uids = True
-        if in_uids:
-            uids_lines.append(l)
-            if '}' in l:
-                break
-    uids_block = '\n'.join(uids_lines)
-
-    ns = {'os': os}
-    with patch.dict(os.environ, env_overrides, clear=False):
-        exec(compile(enabled_line, '<test>', 'exec'), ns)
-        exec(compile(uids_block, '<test>', 'exec'), ns)
-    return ns['_TRIAL_PAYWALL_ENABLED'], ns['_TRIAL_PAYWALL_TEST_UIDS']
-
-
-class TestEnvVarParsing:
-    """Verify _TRIAL_PAYWALL_ENABLED and _TRIAL_PAYWALL_TEST_UIDS parse env vars correctly."""
-
-    def test_kill_switch_env_false_disables(self):
-        """TRIAL_PAYWALL_ENABLED=false at module level sets _TRIAL_PAYWALL_ENABLED=False."""
-        enabled, _ = _eval_env_parsing({'TRIAL_PAYWALL_ENABLED': 'false'})
-        assert enabled is False
-
-    def test_kill_switch_env_true_enables(self):
-        """TRIAL_PAYWALL_ENABLED=true at module level sets _TRIAL_PAYWALL_ENABLED=True."""
-        enabled, _ = _eval_env_parsing({'TRIAL_PAYWALL_ENABLED': 'true'})
-        assert enabled is True
-
-    def test_kill_switch_env_FALSE_case_insensitive(self):
-        """TRIAL_PAYWALL_ENABLED=FALSE (uppercase) also disables."""
-        enabled, _ = _eval_env_parsing({'TRIAL_PAYWALL_ENABLED': 'FALSE'})
-        assert enabled is False
-
-    def test_kill_switch_env_missing_defaults_true(self):
-        """No TRIAL_PAYWALL_ENABLED env var defaults to True."""
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('TRIAL_PAYWALL_ENABLED', None)
-            enabled, _ = _eval_env_parsing({})
-        assert enabled is True
-
-    def test_test_uids_csv_parsing(self):
-        """TRIAL_PAYWALL_TEST_UIDS=uid1,uid2 parses to {'uid1', 'uid2'}."""
-        _, uids = _eval_env_parsing({'TRIAL_PAYWALL_TEST_UIDS': 'uid1,uid2'})
-        assert uids == {'uid1', 'uid2'}
-
-    def test_test_uids_csv_with_whitespace_trimmed(self):
-        """TRIAL_PAYWALL_TEST_UIDS=' uid1 , uid2 ' trims whitespace."""
-        _, uids = _eval_env_parsing({'TRIAL_PAYWALL_TEST_UIDS': ' uid1 , uid2 '})
-        assert uids == {'uid1', 'uid2'}
-
-    def test_test_uids_empty_string_gives_empty_set(self):
-        """TRIAL_PAYWALL_TEST_UIDS='' parses to empty set (all users subject)."""
-        _, uids = _eval_env_parsing({'TRIAL_PAYWALL_TEST_UIDS': ''})
-        assert uids == set()
-
-    def test_test_uids_missing_env_gives_empty_set(self):
-        """No TRIAL_PAYWALL_TEST_UIDS env var defaults to empty set."""
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('TRIAL_PAYWALL_TEST_UIDS', None)
-            _, uids = _eval_env_parsing({})
-        assert uids == set()
 
 
 # ── FastAPI route integration test ───────────────────────────────────────────
