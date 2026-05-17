@@ -11,7 +11,7 @@ Endpoints:
 
 import logging
 
-from utils.executors import critical_executor, run_blocking
+from utils.executors import db_executor, run_blocking
 from datetime import datetime, timezone
 
 import google.auth
@@ -45,7 +45,7 @@ def _get_gce_access_token() -> str:
 
 async def _check_gce_status(vm_name: str, zone: str) -> str:
     """Check the actual GCE instance status (RUNNING, TERMINATED, STOPPED, etc.)."""
-    token = await run_blocking(critical_executor, _get_gce_access_token)
+    token = await run_blocking(db_executor, _get_gce_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
@@ -60,7 +60,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     import time
 
     t0 = time.monotonic()
-    token = await run_blocking(critical_executor, _get_gce_access_token)
+    token = await run_blocking(db_executor, _get_gce_access_token)
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
     )
@@ -79,7 +79,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
         for i in range(24):
             await asyncio.sleep(5)
-            token = await run_blocking(critical_executor, _get_gce_access_token)
+            token = await run_blocking(db_executor, _get_gce_access_token)
             status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
             status = status_resp.json()
             if status.get("status") == "DONE":
@@ -95,7 +95,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         )
         ip = None
         for attempt in range(6):
-            token = await run_blocking(critical_executor, _get_gce_access_token)
+            token = await run_blocking(db_executor, _get_gce_access_token)
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
             instance = inst_resp.json()
             try:
@@ -159,7 +159,7 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
 @router.post("/v1/agent/vm-ensure")
 async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
     """Check VM status; if stopped/terminated, restart it in the background."""
-    vm = await run_blocking(critical_executor, get_agent_vm, uid)
+    vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm:
         return {"has_vm": False}
 
@@ -195,7 +195,7 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
 @router.post("/v1/agent/keepalive")
 async def keepalive(uid: str = Depends(get_current_user_uid)):
     """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
-    vm = await run_blocking(critical_executor, get_agent_vm, uid)
+    vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm or vm.get("status") != "ready":
         return {"ok": False, "reason": "no_vm"}
 

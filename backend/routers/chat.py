@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor, storage_executor, run_blocking
+from utils.executors import critical_executor, db_executor, storage_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -253,7 +253,7 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        critical_executor.submit(extract_and_update_goal_progress, uid, data.text)
+        db_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None

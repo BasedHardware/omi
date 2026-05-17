@@ -117,7 +117,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.executors import critical_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
@@ -1767,7 +1767,7 @@ async def _stream_handler(
         # extract from the WAV file and store it in Firestore for future sessions.
         if has_speech_profile:
             try:
-                embedding_list = await run_blocking(critical_executor, user_db.get_user_speaker_embedding, uid)
+                embedding_list = await run_blocking(db_executor, user_db.get_user_speaker_embedding, uid)
                 if embedding_list:
                     user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
                     person_embeddings_cache[USER_SELF_PERSON_ID] = {
@@ -1795,7 +1795,7 @@ async def _stream_handler(
                         }
                         # Store in Firestore so future sessions load directly
                         await run_blocking(
-                            critical_executor,
+                            db_executor,
                             user_db.set_user_speaker_embedding,
                             uid,
                             user_embedding.flatten().tolist(),

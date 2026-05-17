@@ -53,7 +53,7 @@ from utils.overage import (
     get_user_overage,
     is_overage_plan,
 )
-from utils.executors import critical_executor, run_blocking
+from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 import os
 import logging
@@ -640,14 +640,14 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             # Verify user exists before processing — the subscription getter has
             # create-on-miss behavior that would resurrect a deleted user's doc
-            if not await run_blocking(critical_executor, users_db.get_user_profile, uid):
+            if not await run_blocking(db_executor, users_db.get_user_profile, uid):
                 logger.warning(
                     f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session processing"
                 )
                 return {"status": "success"}
 
             # Check if user already has an active subscription to prevent duplicates
-            existing_subscription = await run_blocking(critical_executor, users_db.get_user_valid_subscription, uid)
+            existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
             if existing_subscription and existing_subscription.stripe_subscription_id:
                 # If user already has a Stripe subscription, verify it's not the same one
                 if existing_subscription.stripe_subscription_id == session.get('subscription'):
@@ -667,14 +667,14 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
                         )
 
-            await run_blocking(critical_executor, _update_subscription_from_session, uid, session)
-            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
+            await run_blocking(db_executor, _update_subscription_from_session, uid, session)
+            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             clear_trial_paywall_cache(uid)
-            subscription = await run_blocking(critical_executor, users_db.get_user_subscription, uid)
+            subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
             if subscription and is_paid_plan(subscription.plan):
-                await run_blocking(critical_executor, conversations_db.unlock_all_conversations, uid)
-                await run_blocking(critical_executor, memories_db.unlock_all_memories, uid)
-                await run_blocking(critical_executor, action_items_db.unlock_all_action_items, uid)
+                await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+                await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+                await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 clear_fair_use_on_upgrade(uid)
             subscription_id = session.get('subscription')
             if subscription_id:
@@ -721,7 +721,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if not customer_id:
                 return {"status": "success", "message": "No customer ID or UID in subscription event."}
 
-            user = await run_blocking(critical_executor, users_db.get_user_by_stripe_customer_id, customer_id)
+            user = await run_blocking(db_executor, users_db.get_user_by_stripe_customer_id, customer_id)
             if user and user.get('uid'):
                 uid = user['uid']
 
@@ -730,13 +730,11 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if new_subscription:
                 try:
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                        await run_blocking(critical_executor, conversations_db.unlock_all_conversations, uid)
-                        await run_blocking(critical_executor, memories_db.unlock_all_memories, uid)
-                        await run_blocking(critical_executor, action_items_db.unlock_all_action_items, uid)
-                    await run_blocking(
-                        critical_executor, users_db.update_user_subscription, uid, new_subscription.dict()
-                    )
-                    await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
+                        await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
+                        await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
+                        await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
+                    await run_blocking(db_executor, users_db.update_user_subscription, uid, new_subscription.dict())
+                    await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     clear_trial_paywall_cache(uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
                         clear_fair_use_on_upgrade(uid)
@@ -779,9 +777,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                         else:
                             await run_blocking(
-                                critical_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
                             )
-                            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
+                            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             clear_trial_paywall_cache(uid)
                             if is_paid_plan(new_subscription.plan):
                                 clear_fair_use_on_upgrade(uid)
@@ -810,9 +808,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         else:
                             new_subscription.cancel_at_period_end = True
                             await run_blocking(
-                                critical_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
                             )
-                            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
+                            await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             clear_trial_paywall_cache(uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
@@ -844,8 +842,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if account['charges_enabled'] and account['details_submitted']:
             # account is fully onboarded
             uid = (account.get('metadata') or {}).get('uid')
-            if uid and await run_blocking(critical_executor, get_default_payment_method, uid) is None:
-                await run_blocking(critical_executor, set_default_payment_method, uid, 'stripe')
+            if uid and await run_blocking(db_executor, get_default_payment_method, uid) is None:
+                await run_blocking(db_executor, set_default_payment_method, uid, 'stripe')
 
     # TODO: handle this event to link transfers?
     # if event['type'] == 'transfer.created':

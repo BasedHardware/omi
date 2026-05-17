@@ -17,6 +17,7 @@ import httpx
 
 from utils.executors import (
     critical_executor,
+    db_executor,
     postprocess_executor,
     storage_executor,
     sync_executor,
@@ -212,7 +213,7 @@ def precache_conversation_audio_endpoint(
                 logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    submit_with_context(critical_executor, _precache_all_parallel)
+    submit_with_context(db_executor, _precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -311,7 +312,7 @@ def get_audio_signed_urls_endpoint(
                 except Exception as e:
                     logger.error(f"Error in parallel cache: {e}")
 
-        submit_with_context(critical_executor, _cache_uncached_parallel)
+        submit_with_context(db_executor, _cache_uncached_parallel)
 
     return {"audio_files": result}
 
@@ -1632,9 +1633,7 @@ async def sync_local_files_v2(
         paths = await run_blocking(storage_executor, _retrieve_file_paths_v2, files, uid, job_id)
 
         # Create Redis job — total_segments=0 until VAD completes in background
-        await run_blocking(
-            critical_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id
-        )
+        await run_blocking(db_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id)
 
         # Capture event loop for async calls from background thread
         loop_v2 = asyncio.get_running_loop()

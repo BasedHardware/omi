@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from utils.executors import critical_executor, storage_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -67,7 +67,7 @@ async def import_limitless_data(
     except Exception as e:
         # Clean up on error
         await run_blocking(
-            critical_executor,
+            db_executor,
             import_jobs_db.update_import_job,
             job.id,
             {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
