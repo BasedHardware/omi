@@ -59,6 +59,11 @@ class ConversationProvider extends ChangeNotifier {
   Timer? _initialFetchRetryTimer;
   int _initialFetchRetryCount = 0;
   static const int _maxInitialFetchRetries = 4;
+  // After the fast backoff budget is spent we keep retrying on a slow fixed
+  // interval rather than giving up — otherwise a prolonged outage latches the
+  // misleading get-started/"No conversations yet" hero for a user who really
+  // does have conversations (just an empty local cache + a slow auth/network).
+  static const int _slowFetchRetryIntervalSeconds = 15;
 
   // The empty-state widget should defer to a pending auto-retry so the user
   // doesn't see "No conversations yet" in the gap between backoff attempts.
@@ -341,8 +346,15 @@ class ConversationProvider extends ChangeNotifier {
 
   Future _fetchNewConversations() async {
     setLoadingConversations(true);
-    List<ServerConversation> newConversations = (await _getConversationsFromServer()).items;
+    final result = await _getConversationsFromServer();
     setLoadingConversations(false);
+
+    // A background/debounced refresh failed (transient network error, token
+    // expiry, etc.). Don't treat the empty result as "no new conversations" —
+    // keep the existing list untouched; the next refresh trigger will retry.
+    if (!result.ok) return;
+
+    List<ServerConversation> newConversations = result.items;
 
     List<ServerConversation> upsertConvos = [];
 
@@ -434,11 +446,19 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _scheduleInitialFetchRetry() {
-    if (_initialFetchRetryCount >= _maxInitialFetchRetries) return;
     _initialFetchRetryTimer?.cancel();
-    _initialFetchRetryCount++;
-    // Linear backoff: 2s, 4s, 6s, 8s.
-    _initialFetchRetryTimer = Timer(Duration(seconds: 2 * _initialFetchRetryCount), () {
+    final int delaySeconds;
+    if (_initialFetchRetryCount < _maxInitialFetchRetries) {
+      _initialFetchRetryCount++;
+      // Fast linear backoff for the first few attempts: 2s, 4s, 6s, 8s.
+      delaySeconds = 2 * _initialFetchRetryCount;
+    } else {
+      // Budget spent — keep self-healing on a slow interval so the UI stays
+      // on the shimmer (isAwaitingInitialFetchRetry stays true) instead of
+      // falling through to the misleading get-started/empty state.
+      delaySeconds = _slowFetchRetryIntervalSeconds;
+    }
+    _initialFetchRetryTimer = Timer(Duration(seconds: delaySeconds), () {
       if (conversationsLoadFailed) fetchConversations();
     });
   }
