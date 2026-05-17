@@ -119,6 +119,7 @@ from utils.stt.speaker_embedding import (
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task
 
 logger = logging.getLogger(__name__)
 
@@ -1739,11 +1740,9 @@ async def _stream_handler(
                 )
                 # Drain any in-flight embedding match tasks before flushing
                 if speaker_match_tasks:
-                    pending = list(speaker_match_tasks)
-                    try:
-                        await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Timeout draining speaker match tasks before rollover {uid} {session_id}")
+                    await drain_tasks(
+                        list(speaker_match_tasks), timeout=5.0, label=f"listen:{uid}:speaker_rollover", cancel=False
+                    )
                 _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
@@ -2262,11 +2261,9 @@ async def _stream_handler(
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for speaker ID task to finish {uid} {session_id}")
         if speaker_match_tasks:
-            pending = list(speaker_match_tasks)
-            try:
-                await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=10.0)
-            except asyncio.TimeoutError:
-                logger.warning(f"Timeout waiting for embedding tasks before final pass {uid} {session_id}")
+            await drain_tasks(
+                list(speaker_match_tasks), timeout=10.0, label=f"listen:{uid}:speaker_final", cancel=False
+            )
 
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
@@ -2699,40 +2696,22 @@ async def _stream_handler(
         # finishes after ~7s, speaker_id returns immediately when disabled). Their normal
         # completion should NOT tear down the session. All other bg tasks are lifetime tasks —
         # if they complete, it means the session is ending (e.g. heartbeat inactivity timeout).
-        finite_tasks = set()
+        finite_task_set = set()
         if not is_multi_channel:
-            finite_tasks = {pending_conversations_task, speaker_id_task}
+            finite_task_set = {pending_conversations_task, speaker_id_task}
 
-        # Supervisor loop: wait for client disconnect, bg crash, or lifetime task completion.
-        monitored = {data_process_task, *bg_main_tasks}
-        supervisor_exit = None
-        while monitored:
-            done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
-
-            for task in done:
-                if task is data_process_task:
-                    supervisor_exit = "disconnect"
-                    break
-                if not task.cancelled():
-                    exc = task.exception()
-                    if exc is not None:
-                        logger.error(f"BG task {task.get_name()} crashed: {exc} {uid} {session_id}")
-                        supervisor_exit = "crash"
-                        break
-                    if task not in finite_tasks:
-                        logger.info(f"Lifetime task {task.get_name()} completed, tearing down {uid} {session_id}")
-                        supervisor_exit = "lifetime_done"
-                        break
-
-            if supervisor_exit:
-                break
+        exit_result = await supervise_tasks(
+            receive_task=data_process_task,
+            bg_tasks=bg_main_tasks,
+            finite_tasks=finite_task_set,
+            label=f"listen:{uid}:{session_id}",
+        )
 
         if data_process_task.done() and not data_process_task.cancelled():
             exc = data_process_task.exception()
             if exc is not None:
                 raise exc
 
-        # If receive is still running (bg task crashed first), cancel it
         if not data_process_task.done():
             websocket_active = False
             data_process_task.cancel()
@@ -2741,23 +2720,7 @@ async def _stream_handler(
             except asyncio.CancelledError:
                 pass
 
-        # Drain remaining bg tasks with timeout
-        remaining = [t for t in bg_main_tasks if not t.done()]
-        if remaining:
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*remaining, return_exceptions=True),
-                    timeout=BG_DRAIN_TIMEOUT,
-                )
-            except asyncio.TimeoutError:
-                hung_count = sum(1 for t in remaining if not t.done())
-                logger.warning(
-                    f"BG drain timeout ({BG_DRAIN_TIMEOUT}s), force-cancelling {hung_count} tasks {uid} {session_id}"
-                )
-                for task in remaining:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*remaining, return_exceptions=True)
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label=f"listen:{uid}:bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
@@ -2842,12 +2805,8 @@ async def _stream_handler(
         if onboarding_handler:
             onboarding_handler.cleanup()
 
-        # Cancel all tracked background tasks to prevent memory leaks
         all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
-        for task in all_to_cancel:
-            task.cancel()
-        if all_to_cancel:
-            await asyncio.gather(*all_to_cancel, return_exceptions=True)
+        await drain_tasks(all_to_cancel, timeout=5.0, label=f"listen:{uid}:cleanup", cancel=True)
         bg_tasks.clear()
 
         # Flush any remaining mixed audio to pusher
