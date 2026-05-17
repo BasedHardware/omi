@@ -571,17 +571,15 @@ class TestTranscribeSupervisor:
         assert 'speaker_id_task' in src, "speaker_id_task must be referenced"
 
     def test_transcribe_lifetime_task_triggers_teardown(self):
-        """Lifetime task normal completion must trigger supervisor exit, not re-wait."""
+        """Lifetime task handling via supervise_tasks utility with finite_tasks set."""
         src = TRANSCRIBE_SRC.read_text()
-        assert 'task not in finite_tasks' in src, (
-            "Supervisor must check 'task not in finite_tasks' to distinguish " "lifetime tasks from finite tasks"
-        )
-        assert 'lifetime_done' in src or 'lifetime' in src, "Supervisor must log/exit when a lifetime task completes"
+        assert 'finite_task' in src, "Transcribe must define finite tasks for supervisor"
+        assert 'supervise_tasks' in src, "Transcribe must use supervise_tasks utility"
 
-    def test_transcribe_uses_supervisor_wait(self):
+    def test_transcribe_uses_supervisor_utility(self):
         src = TRANSCRIBE_SRC.read_text()
-        assert 'asyncio.FIRST_COMPLETED' in src
-        assert 'asyncio.wait(' in src
+        assert 'supervise_tasks' in src, "Transcribe must use supervise_tasks from async_tasks"
+        assert 'drain_tasks' in src, "Transcribe must use drain_tasks from async_tasks"
 
     def test_transcribe_has_receive_timeout(self):
         src = TRANSCRIBE_SRC.read_text()
@@ -620,13 +618,13 @@ class TestTranscribeSupervisor:
         assert found_dec_in_finally, "BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
 
     def test_transcribe_supervisor_before_drain(self):
-        """asyncio.wait(FIRST_COMPLETED) must appear before BG_DRAIN_TIMEOUT in transcribe.py."""
+        """supervise_tasks() must appear before the main bg drain_tasks(bg_main_tasks) in transcribe.py."""
         src = TRANSCRIBE_SRC.read_text()
-        wait_pos = src.find('asyncio.FIRST_COMPLETED')
-        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
-        assert wait_pos != -1, "'asyncio.FIRST_COMPLETED' not found in transcribe.py"
-        assert drain_pos != -1, "'timeout=BG_DRAIN_TIMEOUT' not found in transcribe.py"
-        assert wait_pos < drain_pos, "Supervisor must appear before drain timeout in transcribe.py"
+        supervise_pos = src.find('exit_result = await supervise_tasks(')
+        drain_pos = src.find('await drain_tasks(bg_main_tasks')
+        assert supervise_pos != -1, "'supervise_tasks(' call not found in transcribe.py"
+        assert drain_pos != -1, "'drain_tasks(bg_main_tasks' not found in transcribe.py"
+        assert supervise_pos < drain_pos, "supervise_tasks must appear before bg drain in transcribe.py"
 
     def test_transcribe_no_gauge_before_try(self):
         """Gauge inc must NOT appear before the main try block to prevent leak on early return."""
@@ -692,11 +690,11 @@ class TestStructuralIntegrity:
         src = PUSHER_SRC.read_text()
         assert 'BG_DRAIN_TIMEOUT' in src
 
-    def test_source_uses_supervisor_wait(self):
-        """The supervisor uses asyncio.wait(FIRST_COMPLETED) to detect bg crashes."""
+    def test_source_uses_supervisor_utility(self):
+        """The supervisor uses supervise_tasks() from async_tasks to detect bg crashes."""
         src = PUSHER_SRC.read_text()
-        assert 'asyncio.FIRST_COMPLETED' in src
-        assert 'asyncio.wait(' in src
+        assert 'supervise_tasks(' in src
+        assert 'drain_tasks(' in src
 
     def test_source_does_not_gather_all_five_tasks(self):
         """The old pattern gathered all 5 tasks — verify it's gone."""
@@ -743,17 +741,16 @@ class TestProductionFlowStructure:
         assert found_dec_in_finally, "PUSHER_ACTIVE_WS_CONNECTIONS.dec() must be in finally block"
 
     def test_supervisor_before_bg_drain(self):
-        """asyncio.wait(FIRST_COMPLETED) supervisor must appear before BG_DRAIN_TIMEOUT —
-        proving we detect disconnect/crash first, then drain."""
+        """supervise_tasks() must appear before drain_tasks() — supervisor-then-drain ordering."""
         src = PUSHER_SRC.read_text()
-        wait_pos = src.find('asyncio.FIRST_COMPLETED')
-        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
+        supervise_pos = src.find('supervise_tasks(')
+        drain_pos = src.find('drain_tasks(')
 
-        assert wait_pos != -1, "'asyncio.FIRST_COMPLETED' not found in source"
-        assert drain_pos != -1, "'timeout=BG_DRAIN_TIMEOUT' not found in source"
-        assert wait_pos < drain_pos, (
-            f"'asyncio.FIRST_COMPLETED' (pos {wait_pos}) must appear before "
-            f"'timeout=BG_DRAIN_TIMEOUT' (pos {drain_pos}) — supervisor-then-drain ordering"
+        assert supervise_pos != -1, "'supervise_tasks(' not found in source"
+        assert drain_pos != -1, "'drain_tasks(' not found in source"
+        assert supervise_pos < drain_pos, (
+            f"'supervise_tasks(' (pos {supervise_pos}) must appear before "
+            f"'drain_tasks(' (pos {drain_pos}) — supervisor-then-drain ordering"
         )
 
     def test_receive_task_not_in_gather_with_bg_tasks(self):
@@ -769,45 +766,25 @@ class TestProductionFlowStructure:
                     'receive_task' in gather_block and 'bg_main_tasks' in gather_block
                 ), f"receive_task must not be gathered with bg_main_tasks (line {i + 1})"
 
-    def test_force_cancel_in_timeout_except(self):
-        """After BG_DRAIN_TIMEOUT fires, tasks must be cancelled — verify
-        cancel() appears in the TimeoutError handler that follows BG_DRAIN_TIMEOUT."""
+    def test_drain_tasks_used_for_bg_cleanup(self):
+        """drain_tasks() must be used with BG_DRAIN_TIMEOUT for bg task cleanup."""
         src = PUSHER_SRC.read_text()
+        assert 'drain_tasks(' in src, "drain_tasks must be used for bg task cleanup"
+        assert 'BG_DRAIN_TIMEOUT' in src, "BG_DRAIN_TIMEOUT must be passed to drain_tasks"
 
-        drain_pos = src.find('timeout=BG_DRAIN_TIMEOUT')
-        assert drain_pos != -1, "timeout=BG_DRAIN_TIMEOUT not found"
-
-        after_drain = src[drain_pos:]
-        timeout_pos = after_drain.find('except asyncio.TimeoutError:')
-        assert timeout_pos != -1, "except asyncio.TimeoutError not found after BG_DRAIN_TIMEOUT"
-
-        after_timeout = after_drain[timeout_pos:]
-        lines = after_timeout.split('\n')[1:]
-
-        found_cancel = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('except ') or stripped.startswith('finally:') or stripped.startswith('else:'):
-                break
-            if '.cancel()' in stripped:
-                found_cancel = True
-                break
-
-        assert found_cancel, "task.cancel() must follow asyncio.TimeoutError in drain path"
-
-    def test_finally_cancels_remaining_tasks(self):
-        """The finally block must cancel any remaining un-done tasks (bg_tasks + bg_main_tasks)."""
+    def test_finally_drains_remaining_tasks(self):
+        """The finally block must drain any remaining un-done tasks via drain_tasks()."""
         handler = _parse_handler_ast()
         try_blocks = _find_try_blocks(handler)
 
-        found_cancel_in_finally = False
+        found_drain_in_finally = False
         for tb in try_blocks:
             if tb.finalbody:
                 finally_calls = _find_calls_in_body(tb.finalbody)
-                if 'cancel' in finally_calls:
-                    found_cancel_in_finally = True
+                if 'drain_tasks' in finally_calls:
+                    found_drain_in_finally = True
 
-        assert found_cancel_in_finally, "finally block must cancel remaining tasks"
+        assert found_drain_in_finally, "finally block must use drain_tasks for cleanup"
 
     def test_bg_main_tasks_has_four_tasks(self):
         """bg_main_tasks list literal should have exactly 4 tasks (not 5 — receive is separate)."""
@@ -822,7 +799,7 @@ class TestProductionFlowStructure:
                 in_bg_list = True
                 continue
             if in_bg_list:
-                if 'create_task(' in stripped:
+                if 'create_named_task(' in stripped or 'create_task(' in stripped:
                     task_count += 1
                 if ']' in stripped:
                     break
@@ -840,10 +817,7 @@ class TestProductionFlowStructure:
                 return
         pytest.fail("is_shutdown must guard the SPEAKER_SAMPLE_MIN_AGE check in process_speaker_sample_queue")
 
-    def test_dropped_counts_logged_on_drain_timeout(self):
-        """When drain timeout fires, per-queue drop counts must be logged."""
+    def test_drain_tasks_handles_timeout_logging(self):
+        """drain_tasks utility handles timeout logging — verify it's used in pusher."""
         src = PUSHER_SRC.read_text()
-        assert 'dropped_speaker' in src, "Must log dropped speaker sample count"
-        assert 'dropped_transcript' in src, "Must log dropped transcript count"
-        assert 'dropped_audio' in src, "Must log dropped audio count"
-        assert 'dropped_cloud' in src, "Must log dropped cloud count"
+        assert 'drain_tasks(' in src, "drain_tasks must be used in pusher for orderly cleanup"
