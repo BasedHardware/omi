@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omi-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "Command-line interface for Omi — talk to memories, conversations, action items, and goals from your terminal."
 readme = "README.md"
 license = { text = "MIT" }
