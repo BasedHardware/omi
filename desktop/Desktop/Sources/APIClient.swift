@@ -3843,6 +3843,27 @@ struct CustomerPortalResponse: Codable {
   let url: String
 }
 
+/// Trial metadata from `/v1/users/me/trial` (Python backend) — timing info for countdown UI
+struct TrialMetadataResponse: Codable {
+  let trialStartedAt: Int?
+  let trialEndsAt: Int?
+  let trialRemainingSeconds: Int
+  let trialExpired: Bool
+  let trialDurationSeconds: Int
+  let trialFeatures: [String]
+  let planAfterTrial: String
+
+  enum CodingKeys: String, CodingKey {
+    case trialStartedAt = "trial_started_at"
+    case trialEndsAt = "trial_ends_at"
+    case trialRemainingSeconds = "trial_remaining_seconds"
+    case trialExpired = "trial_expired"
+    case trialDurationSeconds = "trial_duration_seconds"
+    case trialFeatures = "trial_features"
+    case planAfterTrial = "plan_after_trial"
+  }
+}
+
 /// User profile response
 struct UserProfileResponse: Codable {
   let uid: String
@@ -4465,6 +4486,10 @@ extension APIClient {
 
   func getUserSubscription() async throws -> UserSubscriptionResponse {
     return try await get("v1/users/me/subscription")
+  }
+
+  func getTrialMetadata() async throws -> TrialMetadataResponse {
+    return try await get("v1/users/me/trial")
   }
 
   func getAvailablePlans() async throws -> AvailablePlansResponse {

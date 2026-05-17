@@ -1732,10 +1732,141 @@ struct SettingsContentView: View {
     }
   }
 
+  // MARK: - Trial Countdown Card
+
+  @ViewBuilder
+  private var trialCountdownCard: some View {
+    if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
+      settingsCard(settingId: "planusage.trial") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "clock.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Premium Trial Active")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(trialCountdownText(remaining: trial.trialRemainingSeconds))
+                .scaledFont(size: 13)
+                .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+            }
+
+            Spacer()
+
+            // Progress ring
+            ZStack {
+              Circle()
+                .stroke(OmiColors.backgroundQuaternary, lineWidth: 3)
+              Circle()
+                .trim(from: 0, to: trialProgress(trial))
+                .stroke(trialTimeColor(remaining: trial.trialRemainingSeconds), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 32, height: 32)
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Included in your trial")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textTertiary)
+
+            trialFeatureRow(text: "Unlimited listening & transcription")
+            trialFeatureRow(text: "Unlimited memories & insights")
+            trialFeatureRow(text: "Chat questions")
+          }
+        }
+      }
+    } else if let trial = appState.trialMetadata, trial.trialExpired {
+      settingsCard(settingId: "planusage.trial-expired") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "exclamationmark.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Trial Ended")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text("Upgrade to keep unlimited access")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  private func trialFeatureRow(text: String) -> some View {
+    HStack(spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(OmiColors.purplePrimary.opacity(0.16))
+          .frame(width: 18, height: 18)
+        Image(systemName: "checkmark")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+      }
+      Text(text)
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+  }
+
+  private func trialCountdownText(remaining: Int) -> String {
+    if remaining <= 0 { return "Expired" }
+    let hours = remaining / 3600
+    let minutes = (remaining % 3600) / 60
+    if hours >= 24 {
+      let days = hours / 24
+      let leftoverHours = hours % 24
+      return "\(days)d \(leftoverHours)h remaining"
+    }
+    if hours > 0 {
+      return "\(hours)h \(minutes)m remaining"
+    }
+    return "\(minutes)m remaining"
+  }
+
+  private func trialTimeColor(remaining: Int) -> Color {
+    if remaining <= 3600 { return OmiColors.warning }      // < 1 hour: warning orange
+    if remaining <= 24 * 3600 { return .yellow }           // < 24 hours: yellow
+    return OmiColors.success                                // plenty of time: green
+  }
+
+  private func trialProgress(_ trial: TrialMetadataResponse) -> CGFloat {
+    guard trial.trialDurationSeconds > 0 else { return 0 }
+    return CGFloat(trial.trialRemainingSeconds) / CGFloat(trial.trialDurationSeconds)
+  }
+
   // MARK: - Plan and Usage Section
 
   private var planUsageSection: some View {
     VStack(spacing: 20) {
+      trialCountdownCard
+
       settingsCard(settingId: "planusage.current") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {

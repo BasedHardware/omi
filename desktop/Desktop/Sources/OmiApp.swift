@@ -406,6 +406,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // Fetch subscription plan for floating bar usage limits
       Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
+      // Start trial metadata polling (countdown UI + pre-expiry nudges)
+      if let state = AppState.current {
+        state.startTrialMetadataRefresh()
+        TrialBannerService.shared.start(appState: state)
+      }
+
       // Check tier eligibility (at most once per day)
       Task {
         await TierManager.shared.checkTierIfNeeded()
