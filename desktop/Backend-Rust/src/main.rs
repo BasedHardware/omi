@@ -38,12 +38,11 @@ use config::Config;
 use routes::{
     // Active (real traffic from current app)
     agent_routes, auth_routes, chat_completions_routes, config_routes, crisp_routes,
-    health_routes, proxy_routes, screen_activity_routes, trial_routes, tts_routes, updates_routes,
+    health_routes, proxy_routes, screen_activity_routes, tts_routes, updates_routes,
     webhook_routes,
     // Deprecated stubs (return 410 Gone — current app uses Python for all data CRUD)
     deprecated_routes,
 };
-use routes::trial::TrialMetadataCache;
 use services::{FirestoreService, IntegrationService, RedisService};
 
 /// Application state shared across handlers
@@ -57,8 +56,6 @@ pub struct AppState {
     pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
     /// Vertex AI auth provider (present when USE_VERTEX_AI=true)
     pub vertex_auth: Option<vertex::VertexAuth>,
-    /// Trial metadata cache — calls Python `/v1/users/me/trial`, caches 60s.
-    pub trial_cache: Arc<TrialMetadataCache>,
 }
 
 #[tokio::main]
@@ -238,9 +235,6 @@ async fn main() {
     // Paywall checker — calls Python `/v1/users/me/paywall`, caches 5min.
     let paywall_checker = Arc::new(PaywallChecker::new(config.python_api_base.clone()));
 
-    // Trial metadata cache — calls Python `/v1/users/me/trial`, caches 60s.
-    let trial_cache = Arc::new(TrialMetadataCache::new(config.python_api_base.clone()));
-
     let state = AppState {
         firestore,
         integrations,
@@ -249,7 +243,6 @@ async fn main() {
         crisp_session_cache: routes::crisp::new_session_cache(),
         gemini_rate_limiter,
         vertex_auth,
-        trial_cache,
     };
 
     // Build CORS layer
@@ -274,7 +267,6 @@ async fn main() {
         .merge(chat_completions_routes())
         .merge(updates_routes())
         .merge(webhook_routes())
-        .merge(trial_routes())
         // ── Deprecated stubs (return 410 Gone) ───────────────────────────
         // Current app uses Python (api.omi.me) for all data CRUD.
         .merge(deprecated_routes())
