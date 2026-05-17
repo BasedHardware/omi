@@ -213,7 +213,7 @@ def precache_conversation_audio_endpoint(
                 logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    submit_with_context(db_executor, _precache_all_parallel)
+    submit_with_context(postprocess_executor, _precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -312,7 +312,7 @@ def get_audio_signed_urls_endpoint(
                 except Exception as e:
                     logger.error(f"Error in parallel cache: {e}")
 
-        submit_with_context(db_executor, _cache_uncached_parallel)
+        submit_with_context(postprocess_executor, _cache_uncached_parallel)
 
     return {"audio_files": result}
 
