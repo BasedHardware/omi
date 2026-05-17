@@ -22,7 +22,6 @@ class _DailySummariesListState extends State<DailySummariesList> {
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
-  int _offset = 0;
   static const int _limit = 20;
   bool _hasMore = true;
 
@@ -39,7 +38,6 @@ class _DailySummariesListState extends State<DailySummariesList> {
       setState(() {
         _summaries = summaries;
         _isLoading = false;
-        _offset = summaries.length;
         _hasMore = summaries.length >= _limit;
       });
     }
@@ -48,11 +46,12 @@ class _DailySummariesListState extends State<DailySummariesList> {
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
     setState(() => _isLoadingMore = true);
-    final moreSummaries = await getDailySummaries(limit: _limit, offset: _offset);
+    // Derive the offset from the current list length so swipe-deletions don't
+    // cause the next page to skip rows (a standalone counter would drift).
+    final moreSummaries = await getDailySummaries(limit: _limit, offset: _summaries.length);
     if (mounted) {
       setState(() {
         _summaries.addAll(moreSummaries);
-        _offset += moreSummaries.length;
         _hasMore = moreSummaries.length >= _limit;
         _isLoadingMore = false;
       });
@@ -91,7 +90,12 @@ class _DailySummariesListState extends State<DailySummariesList> {
     final confirmed = await showDeleteRecapConfirmDialog(context);
     if (confirmed != true) return false;
 
+    // The await above can suspend long enough for the widget to be disposed,
+    // and a concurrent list refresh can drop ``summary`` from ``_summaries``
+    // (indexOf -> -1, which would make removeAt throw).
+    if (!mounted) return false;
     final removedIndex = _summaries.indexOf(summary);
+    if (removedIndex == -1) return false;
     setState(() => _summaries.removeAt(removedIndex));
 
     final ok = await deleteDailySummary(summary.id);
@@ -252,7 +256,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFF6B6B).withOpacity(0.85),
+            color: const Color(0xFFFF6B6B).withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(24.0),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24),
