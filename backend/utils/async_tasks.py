@@ -188,8 +188,16 @@ async def drain_tasks(
         logger.warning("Drain timeout (%.1fs), force-cancelling %d tasks [%s]", timeout, len(still_pending), label)
         for task in still_pending:
             task.cancel()
-        await asyncio.gather(*still_pending, return_exceptions=True)
+        # Bounded wait for cancel acknowledgement — never block indefinitely
+        _, truly_stuck = await asyncio.wait(still_pending, timeout=5.0)
         force_cancelled = len(still_pending)
+        if truly_stuck:
+            logger.error(
+                "drain_tasks: %d tasks ignored cancellation after 5s [%s]: %s",
+                len(truly_stuck),
+                label,
+                [t.get_name() for t in truly_stuck],
+            )
 
     return force_cancelled
 
