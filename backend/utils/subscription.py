@@ -23,23 +23,10 @@ PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 # Desktop-only 3-day trial paywall.
 #
 # Applies to ALL desktop users on the basic plan once their Firebase Auth
-# account is older than `TRIAL_LENGTH_SECONDS` and they don't have BYOK
+# account is older than TRIAL_LENGTH_SECONDS and they don't have BYOK
 # active. Mobile (ios / android), Omi devices, paid plans, BYOK users,
 # and accounts inside the trial window are exempt.
-#
-# Env-var overrides:
-#   TRIAL_PAYWALL_ENABLED=false   → kill switch, disables paywall entirely
-#   TRIAL_PAYWALL_TEST_UIDS=u1,u2 → if set, restrict paywall to listed UIDs
-#                                   (everyone else exempt). Defaults to empty
-#                                   (unrestricted) so a real prod deploy
-#                                   covers all qualifying desktop users.
-TRIAL_LENGTH_SECONDS = int(os.getenv('TRIAL_LENGTH_SECONDS', str(3 * 24 * 60 * 60)))
-
-_TRIAL_PAYWALL_ENABLED = os.getenv("TRIAL_PAYWALL_ENABLED", "true").lower() != "false"
-
-_TRIAL_PAYWALL_TEST_UIDS: set[str] = {
-    u.strip() for u in os.getenv("TRIAL_PAYWALL_TEST_UIDS", "").split(",") if u.strip()
-}
+TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 
 # Platform identifiers that count as desktop for paywall purposes. The Swift
 # client sends X-App-Platform: macos and the listen WS uses source=desktop.
@@ -126,11 +113,7 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
     """
-    if not _TRIAL_PAYWALL_ENABLED:
-        return False
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
-        return False
-    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
         return False
     return _is_trial_expired_cached(uid)
 
@@ -146,31 +129,9 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
     whether to render the countdown UI. Paid-plan and BYOK users get
     `trial_expired=False` with zeroed timing (trial is irrelevant to them).
 
-    Respects the same rollout controls as `is_trial_paywalled`:
-    - Kill switch (`TRIAL_PAYWALL_ENABLED=false`) → always returns trial_expired=False
-    - Test UID gating (`TRIAL_PAYWALL_TEST_UIDS`) → non-listed UIDs get trial_expired=False
-
     This reuses the same Firebase Auth lookup path as `_is_trial_expired_uncached`
     and benefits from the same Redis cache for the expensive bits.
     """
-    # Respect kill switch — if paywall disabled, trial never expires.
-    if not _TRIAL_PAYWALL_ENABLED:
-        return TrialMetadata(
-            trial_expired=False,
-            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-            trial_features=TRIAL_FEATURES,
-            plan_after_trial=get_plan_display_name(PlanType.basic),
-        )
-
-    # Respect test UID gating — if test UIDs set, non-listed users are exempt.
-    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
-        return TrialMetadata(
-            trial_expired=False,
-            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-            trial_features=TRIAL_FEATURES,
-            plan_after_trial=get_plan_display_name(PlanType.basic),
-        )
-
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
@@ -833,7 +794,7 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     etc). The paywall test override only fires for desktop sources so that
     phone-call / Omi-device traffic for cohort UIDs is unaffected.
     """
-    # Single-user paywall test override (see _TRIAL_PAYWALL_TEST_UIDS).
+    # Desktop trial paywall: paywalled users have zero transcription credits.
     if is_trial_paywalled(uid, source):
         return False
 
