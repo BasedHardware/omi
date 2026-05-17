@@ -1,4 +1,3 @@
-import asyncio
 import io
 import re
 import wave
@@ -9,6 +8,7 @@ import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
+from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -386,7 +386,8 @@ async def extract_speaker_samples(
                 continue
 
             # Download, merge, and extract
-            merged = await asyncio.to_thread(
+            merged = await run_blocking(
+                storage_executor,
                 download_audio_chunks_and_merge,
                 uid,
                 conversation_id,
@@ -424,8 +425,8 @@ async def extract_speaker_samples(
                 continue  # Try next segment
 
             # Upload and store
-            path = await asyncio.to_thread(
-                upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+            path = await run_blocking(
+                storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
             success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
@@ -438,7 +439,7 @@ async def extract_speaker_samples(
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
                 try:
-                    embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "sample.wav")
+                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
                     users_db.set_person_speaker_embedding(uid, person_id, embedding_list)

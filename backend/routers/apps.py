@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import storage_executor
+from utils.executors import critical_executor, storage_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -553,14 +553,14 @@ async def create_persona(
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
-    user = await asyncio.to_thread(get_user_from_uid, uid)
+    user = await run_blocking(critical_executor, get_user_from_uid, uid)
     data['author'] = user.get('display_name', '')
     data['email'] = user['email']
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '').lower()
         data['username'] = increment_username(data['username'])
-    await asyncio.to_thread(save_username, data['username'], uid)
+    await run_blocking(critical_executor, save_username, data['username'], uid)
 
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
@@ -569,9 +569,8 @@ async def create_persona(
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
     contents = await file.read()
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
-    img_url = await loop.run_in_executor(storage_executor, upload_app_logo, file_path, data['id'])
+    await run_blocking(storage_executor, _write_file, file_path, contents)
+    img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
@@ -580,7 +579,7 @@ async def create_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    await asyncio.to_thread(lambda: add_app_to_db(app_create.model_dump(exclude_unset=True)))
+    await run_blocking(critical_executor, add_app_to_db, app_create.model_dump(exclude_unset=True))
 
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
@@ -606,17 +605,15 @@ async def update_persona(
             and len(persona['image']) > 0
             and persona['image'].startswith('https://storage.googleapis.com/')
         ):
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(storage_executor, delete_app_logo, persona['image'])
+            await run_blocking(storage_executor, delete_app_logo, persona['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
         contents = await file.read()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(storage_executor, _write_file, file_path, contents)
-        img_url = await loop.run_in_executor(storage_executor, upload_app_logo, file_path, persona_id)
+        await run_blocking(storage_executor, _write_file, file_path, contents)
+        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
-    await asyncio.to_thread(save_username, data['username'], uid)
+    await run_blocking(critical_executor, save_username, data['username'], uid)
     data['description'] = generate_persona_desc(uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
 
@@ -629,11 +626,11 @@ async def update_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    await asyncio.to_thread(lambda: update_app_in_db(update_app.model_dump(exclude_unset=True)))
+    await run_blocking(critical_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         invalidate_approved_apps_cache()
-    await asyncio.to_thread(delete_app_cache_by_id, persona_id)
+    await run_blocking(critical_executor, delete_app_cache_by_id, persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
@@ -661,13 +658,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     If not, create a new one with default values.
     """
     # Check if user already has a persona
-    persona = await asyncio.to_thread(get_user_persona_by_uid, uid)
+    persona = await run_blocking(critical_executor, get_user_persona_by_uid, uid)
     if persona:
         # Return existing persona
         return persona
 
     # Create a new persona for the user
-    user = await asyncio.to_thread(get_user_from_uid, uid)
+    user = await run_blocking(critical_executor, get_user_from_uid, uid)
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
@@ -700,10 +697,10 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=422, detail=str(e))
 
     # Save username
-    await asyncio.to_thread(save_username, persona_data['username'], uid)
+    await run_blocking(critical_executor, save_username, persona_data['username'], uid)
 
     # Add persona to database
-    await asyncio.to_thread(lambda: add_app_to_db(persona_create.model_dump(exclude_unset=True)))
+    await run_blocking(critical_executor, add_app_to_db, persona_create.model_dump(exclude_unset=True))
 
     return persona_data
 
@@ -1315,11 +1312,11 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     }
 
     # By user persona first
-    persona = await asyncio.to_thread(get_user_persona_by_uid, uid)
+    persona = await run_blocking(critical_executor, get_user_persona_by_uid, uid)
 
     # Get matching persona if exists
     if not persona:
-        persona = await asyncio.to_thread(get_persona_by_twitter_handle_db, handle)
+        persona = await run_blocking(critical_executor, get_persona_by_twitter_handle_db, handle)
 
     if persona:
         res['persona_id'] = persona['id']
@@ -1333,7 +1330,7 @@ async def verify_twitter_ownership_tweet(
     username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
 ):
     # Get user info to check auth provider
-    user = await asyncio.to_thread(get_user_from_uid, uid)
+    user = await run_blocking(critical_executor, get_user_from_uid, uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1457,7 +1454,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     logo_url = await fetch_brandfetch_logo(domain) or ''
 
     app_id = str(ULID())
-    user = await asyncio.to_thread(get_user_from_uid, uid)
+    user = await run_blocking(critical_executor, get_user_from_uid, uid)
 
     # Check for OAuth metadata
     oauth_meta = await discover_oauth_metadata(server_url)
@@ -1527,7 +1524,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             },
             'chat_tools': [],
         }
-        await asyncio.to_thread(add_app_to_db, app_dict)
+        await run_blocking(critical_executor, add_app_to_db, app_dict)
 
         return {
             'app_id': app_id,
@@ -1567,7 +1564,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             },
             'chat_tools': _serialize_chat_tools_for_firestore(tools),
         }
-        await asyncio.to_thread(add_app_to_db, app_dict)
+        await run_blocking(critical_executor, add_app_to_db, app_dict)
 
         return {
             'app_id': app_id,
@@ -1589,7 +1586,7 @@ async def mcp_oauth_callback(code: str, state: str):
     except ValueError:
         return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
 
-    app_data = await asyncio.to_thread(get_app_by_id_db, app_id)
+    app_data = await run_blocking(critical_executor, get_app_by_id_db, app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
 
@@ -1638,11 +1635,11 @@ async def mcp_oauth_callback(code: str, state: str):
         },
         'chat_tools': _serialize_chat_tools_for_firestore(tools),
     }
-    await asyncio.to_thread(update_app_in_db, update_dict)
-    await asyncio.to_thread(delete_app_cache_by_id, app_id)
+    await run_blocking(critical_executor, update_app_in_db, update_dict)
+    await run_blocking(critical_executor, delete_app_cache_by_id, app_id)
 
     # Auto-enable the app for the user
-    await asyncio.to_thread(enable_app, uid, app_id)
+    await run_blocking(critical_executor, enable_app, uid, app_id)
 
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
@@ -1670,7 +1667,7 @@ async def mcp_oauth_callback(code: str, state: str):
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
 async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Re-discover tools from an MCP server and update the app."""
-    app_data = await asyncio.to_thread(get_app_by_id_db, app_id)
+    app_data = await run_blocking(critical_executor, get_app_by_id_db, app_id)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
     if app_data.get('uid') != uid:
@@ -1709,8 +1706,8 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
                 },
                 'chat_tools': _serialize_chat_tools_for_firestore(tools),
             }
-            await asyncio.to_thread(update_app_in_db, update_dict)
-            await asyncio.to_thread(delete_app_cache_by_id, app_id)
+            await run_blocking(critical_executor, update_app_in_db, update_dict)
+            await run_blocking(critical_executor, delete_app_cache_by_id, app_id)
 
             return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
         raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
@@ -1721,8 +1718,8 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
         'id': app_id,
         'chat_tools': _serialize_chat_tools_for_firestore(tools),
     }
-    await asyncio.to_thread(update_app_in_db, update_dict)
-    await asyncio.to_thread(delete_app_cache_by_id, app_id)
+    await run_blocking(critical_executor, update_app_in_db, update_dict)
+    await run_blocking(critical_executor, delete_app_cache_by_id, app_id)
 
     return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
 
@@ -1752,9 +1749,9 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
-    await asyncio.to_thread(enable_app, uid, app_id)
+    await run_blocking(critical_executor, enable_app, uid, app_id)
     if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
-        await asyncio.to_thread(increase_app_installs_count, app_id)
+        await run_blocking(critical_executor, increase_app_installs_count, app_id)
     return {'status': 'ok'}
 
 
@@ -1894,11 +1891,10 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
 
     try:
         contents = await file.read()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(storage_executor, _write_file, temp_path, contents)
+        await run_blocking(storage_executor, _write_file, temp_path, contents)
 
         # Upload to cloud storage
-        url = await loop.run_in_executor(storage_executor, upload_app_thumbnail, temp_path, thumbnail_id)
+        url = await run_blocking(storage_executor, upload_app_thumbnail, temp_path, thumbnail_id)
 
         return {'thumbnail_url': url, 'thumbnail_id': thumbnail_id}
 

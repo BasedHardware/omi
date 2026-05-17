@@ -27,7 +27,7 @@ from utils.app_integrations import (
 from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import storage_executor
+from utils.executors import storage_executor, run_blocking
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -232,17 +232,16 @@ async def _websocket_util_trigger(
             retries = batch.get('retries', 0)
             try:
                 chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
+                await run_blocking(
                     storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
                 del chunks_to_upload
                 try:
-                    audio_files = await loop.run_in_executor(
+                    audio_files = await run_blocking(
                         storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                     )
                     if audio_files:
-                        await loop.run_in_executor(
+                        await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,

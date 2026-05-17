@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from utils.executors import storage_executor
+from utils.executors import critical_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -58,19 +58,19 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        loop = asyncio.get_running_loop()
-        f = await loop.run_in_executor(None, open, zip_path, 'wb')
+        f = await run_blocking(storage_executor, open, zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                await loop.run_in_executor(storage_executor, f.write, contents)
+                await run_blocking(storage_executor, f.write, contents)
         finally:
             f.close()
     except Exception as e:
         # Clean up on error
-        await asyncio.to_thread(
-            lambda: import_jobs_db.update_import_job(
-                job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
-            )
+        await run_blocking(
+            critical_executor,
+            import_jobs_db.update_import_job,
+            job.id,
+            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
         )
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 

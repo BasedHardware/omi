@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import httpx
 
-from utils.executors import critical_executor, storage_executor, sync_executor, submit_with_context
+from utils.executors import critical_executor, storage_executor, sync_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -1144,8 +1144,7 @@ async def sync_local_files(
         def _run_vad(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        loop = asyncio.get_running_loop()
-        await asyncio.gather(*[loop.run_in_executor(sync_executor, _run_vad, path) for path in wav_paths])
+        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1223,7 +1222,7 @@ async def sync_local_files(
 
         await asyncio.gather(
             *[
-                loop.run_in_executor(
+                run_blocking(
                     sync_executor,
                     process_segment,
                     path,
@@ -1638,9 +1637,9 @@ async def sync_local_files_v2(
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg thread
 
-        # Run in default executor (not critical_executor) to avoid deadlock
-        loop_v2.run_in_executor(
-            None,
+        # Run in storage_executor (fire-and-forget, avoids deadlock with critical_executor)
+        submit_with_context(
+            storage_executor,
             _run_full_pipeline_background,
             job_id,
             uid,

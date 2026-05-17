@@ -1,4 +1,3 @@
-import asyncio
 import os
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Form
@@ -8,6 +7,7 @@ import firebase_admin.auth
 import httpx
 
 from database.apps import get_app_by_id_db
+from utils.executors import critical_executor, run_blocking
 from utils.http_client import get_auth_client
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
@@ -121,7 +121,7 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
 
-    app_data = await asyncio.to_thread(get_app_by_id_db, app_id)
+    app_data = await run_blocking(critical_executor, get_app_by_id_db, app_id)
     if not app_data:
         raise HTTPException(status_code=404, detail="App not found")
 
@@ -167,9 +167,9 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
             )
 
         try:
-            await asyncio.to_thread(enable_app, uid, app_id)
+            await run_blocking(critical_executor, enable_app, uid, app_id)
             if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
-                await asyncio.to_thread(increase_app_installs_count, app_id)
+                await run_blocking(critical_executor, increase_app_installs_count, app_id)
         except Exception as e:
             raise HTTPException(
                 status_code=500,

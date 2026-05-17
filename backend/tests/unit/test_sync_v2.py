@@ -65,8 +65,8 @@ class TestSyncV2Structure:
         assert "'job_id'" in func_body, "v2 response must include job_id"
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
-    def test_v2_submits_to_default_executor(self):
-        """v2 must submit background work via run_in_executor(None, ...) to avoid deadlock."""
+    def test_v2_submits_to_non_critical_executor(self):
+        """v2 must submit background work via submit_with_context(storage_executor) to avoid deadlock."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -74,11 +74,10 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
+        assert 'submit_with_context' in func_body, "v2 must use submit_with_context for background worker"
         assert '_run_full_pipeline_background' in func_body, "v2 must submit the full pipeline background worker"
-        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
-        assert none_executor_pattern.search(func_body), (
-            "v2 coordinator dispatch must use run_in_executor(None, ...) — "
+        assert 'storage_executor' in func_body, (
+            "v2 coordinator dispatch must use storage_executor (not critical_executor) — "
             "passing critical_executor would nest executors and cause deadlock"
         )
 
@@ -483,7 +482,7 @@ class TestV1Unchanged:
         """v1 must process segments synchronously with asyncio.gather (no background)."""
         body = self._get_v1_body()
         assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
-        assert 'run_in_executor' in body, "v1 must use run_in_executor for blocking segment work"
+        assert 'run_blocking' in body, "v1 must use run_blocking for blocking segment work"
         assert 'sync_executor' in body, "v1 must use sync_executor for segment work"
 
     def test_v1_cleanup_in_finally(self):
@@ -1808,8 +1807,8 @@ class TestBYOKContextPropagation:
         func_body = source[start:next_section]
 
         assert 'captured_byok' in func_body
-        dispatch_section = func_body[func_body.index('run_in_executor') :]
-        assert 'captured_byok' in dispatch_section, "captured BYOK must be passed to run_in_executor call"
+        dispatch_section = func_body[func_body.index('submit_with_context') :]
+        assert 'captured_byok' in dispatch_section, "captured BYOK must be passed to submit_with_context call"
 
     def test_background_worker_accepts_byok_parameter(self):
         """_run_full_pipeline_background must accept a byok_keys parameter."""

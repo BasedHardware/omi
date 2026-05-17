@@ -14,8 +14,10 @@ These replace ad-hoc ThreadPoolExecutor creation throughout the codebase,
 preventing thread proliferation and providing bounded concurrency.
 """
 
+import asyncio
 import atexit
 import contextvars
+import functools
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 
@@ -25,6 +27,14 @@ critical_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="critic
 sync_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="sync")
 postprocess_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="postproc")
 storage_executor = ThreadPoolExecutor(max_workers=16, thread_name_prefix="storage")
+
+
+async def run_blocking(executor: ThreadPoolExecutor, fn, *args, **kwargs):
+    """Offload *fn* to *executor*, propagating ContextVars."""
+    loop = asyncio.get_running_loop()
+    ctx = contextvars.copy_context()
+    call = functools.partial(ctx.run, functools.partial(fn, *args, **kwargs))
+    return await loop.run_in_executor(executor, call)
 
 
 def submit_with_context(executor: ThreadPoolExecutor, fn, *args, **kwargs) -> Future:

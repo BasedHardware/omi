@@ -9,6 +9,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from utils.byok import get_byok_key
+from utils.executors import sync_executor, run_blocking
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
@@ -301,8 +302,16 @@ async def connect_to_deepgram_with_backoff(
             logger.warning("Session ended, aborting Deepgram retry")
             return None
         try:
-            result = await asyncio.to_thread(
-                connect_to_deepgram, on_message, on_error, language, sample_rate, channels, model, keywords
+            result = await run_blocking(
+                sync_executor,
+                connect_to_deepgram,
+                on_message,
+                on_error,
+                language,
+                sample_rate,
+                channels,
+                model,
+                keywords,
             )
             if result is not None:
                 return result

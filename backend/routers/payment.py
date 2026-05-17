@@ -1,4 +1,3 @@
-import asyncio
 import os
 from datetime import datetime
 
@@ -54,6 +53,7 @@ from utils.overage import (
     get_user_overage,
     is_overage_plan,
 )
+from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize
 import os
 import logging
@@ -668,7 +668,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         )
 
             _update_subscription_from_session(uid, session)
-            await asyncio.to_thread(set_credits_invalidation_signal, uid)
+            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
             clear_trial_paywall_cache(uid)
             subscription = users_db.get_user_subscription(uid)
             if subscription and is_paid_plan(subscription.plan):
@@ -734,7 +734,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         memories_db.unlock_all_memories(uid)
                         action_items_db.unlock_all_action_items(uid)
                     users_db.update_user_subscription(uid, new_subscription.dict())
-                    await asyncio.to_thread(set_credits_invalidation_signal, uid)
+                    await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
                     clear_trial_paywall_cache(uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
                         clear_fair_use_on_upgrade(uid)
@@ -777,7 +777,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                         else:
                             users_db.update_user_subscription(uid, new_subscription.dict())
-                            await asyncio.to_thread(set_credits_invalidation_signal, uid)
+                            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
                             clear_trial_paywall_cache(uid)
                             if is_paid_plan(new_subscription.plan):
                                 clear_fair_use_on_upgrade(uid)
@@ -808,7 +808,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         else:
                             new_subscription.cancel_at_period_end = True
                             users_db.update_user_subscription(uid, new_subscription.dict())
-                            await asyncio.to_thread(set_credits_invalidation_signal, uid)
+                            await run_blocking(critical_executor, set_credits_invalidation_signal, uid)
                             clear_trial_paywall_cache(uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
@@ -840,8 +840,8 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if account['charges_enabled'] and account['details_submitted']:
             # account is fully onboarded
             uid = (account.get('metadata') or {}).get('uid')
-            if uid and await asyncio.to_thread(get_default_payment_method, uid) is None:
-                await asyncio.to_thread(set_default_payment_method, uid, 'stripe')
+            if uid and await run_blocking(critical_executor, get_default_payment_method, uid) is None:
+                await run_blocking(critical_executor, set_default_payment_method, uid, 'stripe')
 
     # TODO: handle this event to link transfers?
     # if event['type'] == 'transfer.created':

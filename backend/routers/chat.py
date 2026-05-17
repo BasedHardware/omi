@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor
+from utils.executors import critical_executor, storage_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -603,7 +603,7 @@ async def transcribe_voice_message(
         if file.filename.lower().endswith('.wav'):
             # For WAV files, save directly to a temporary path
             temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            await asyncio.to_thread(_save_wav, temp_path, file.file)
+            await run_blocking(storage_executor, _save_wav, temp_path, file.file)
             wav_paths.append(temp_path)
         else:
             # For other files, collect paths for later conversion
@@ -751,8 +751,8 @@ async def transcribe_voice_message_stream(
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')
-        allowed, remaining, retry_after = await asyncio.to_thread(
-            lambda: check_rate_limit(uid, 'voice:transcribe_stream', max_requests, window)
+        allowed, remaining, retry_after = await run_blocking(
+            critical_executor, check_rate_limit, uid, 'voice:transcribe_stream', max_requests, window
         )
         if not allowed:
             if not RATE_LIMIT_SHADOW:
