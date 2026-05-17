@@ -412,6 +412,124 @@ class TestGatherChunked:
 
         asyncio.run(_run())
 
+    def test_chunked_with_failures(self):
+        async def _run():
+            async def maybe_fail(i):
+                if i == 3:
+                    raise ValueError("fail at 3")
+                return i
+
+            results = await gather_chunked(
+                [maybe_fail(i) for i in range(6)],
+                chunk_size=3,
+                label="test",
+            )
+            assert len(results) == 6
+            assert results[3].ok is False
+            assert isinstance(results[3].exception, ValueError)
+            assert results[0].ok and results[4].ok
+
+        asyncio.run(_run())
+
+    def test_chunked_global_index(self):
+        async def _run():
+            async def val(x):
+                return x
+
+            results = await gather_chunked(
+                [val(i) for i in range(5)],
+                chunk_size=2,
+                label="test",
+            )
+            # Indices should be sequential across chunks
+            indices = [r.index for r in results]
+            assert indices == [0, 1, 0, 1, 0]  # reset per chunk
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Tests for drain_tasks edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestDrainTasksEdgeCases:
+    def test_drain_force_cancel_reports_count(self):
+        """After timeout, force-cancelled tasks are counted correctly."""
+
+        async def _run():
+            async def slow():
+                await asyncio.sleep(999)
+
+            tasks = [asyncio.create_task(slow()) for _ in range(3)]
+            await asyncio.sleep(0)
+            # cancel=False: we just wait, tasks won't finish, so all 3 get force-cancelled
+            result = await drain_tasks(tasks, timeout=0.1, label="count", cancel=False)
+            assert result == 3
+            assert all(t.done() for t in tasks)
+
+        asyncio.run(_run())
+
+    def test_drain_mixed_done_and_running(self):
+        async def _run():
+            async def quick():
+                return "done"
+
+            async def slow():
+                await asyncio.sleep(999)
+
+            t1 = asyncio.create_task(quick())
+            await t1
+            t2 = asyncio.create_task(slow())
+
+            result = await drain_tasks([t1, t2], timeout=1.0, label="mixed", cancel=True)
+            assert t1.done()
+            assert t2.done()
+            assert result == 0
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Tests for gather_with_logging edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestGatherWithLoggingEdgeCases:
+    def test_all_fail(self):
+        async def _run():
+            async def fail(msg):
+                raise RuntimeError(msg)
+
+            results = await gather_with_logging(
+                fail("a"),
+                fail("b"),
+                fail("c"),
+                label="all_fail",
+                max_concurrency=10,
+            )
+            assert all(not r.ok for r in results)
+            assert all(isinstance(r.exception, RuntimeError) for r in results)
+
+        asyncio.run(_run())
+
+    def test_none_return_value_preserved(self):
+        """None is a valid return value and must not be confused with failure."""
+
+        async def _run():
+            async def return_none():
+                return None
+
+            results = await gather_with_logging(
+                return_none(),
+                label="none_val",
+                max_concurrency=10,
+            )
+            assert results[0].ok is True
+            assert results[0].value is None
+
+        asyncio.run(_run())
+
 
 # ---------------------------------------------------------------------------
 # Structural tests — verify WS handlers use async_tasks utilities
@@ -453,24 +571,27 @@ class TestStructuralUsage:
 
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
-        import ast
+        for filename in ['routers/pusher.py', 'routers/transcribe.py']:
+            with open(filename) as f:
+                source = f.read()
+            assert (
+                'asyncio.gather(*tasks)' not in source
+            ), f"{filename} still has raw asyncio.gather(*tasks) — use supervise_tasks/drain_tasks"
+            assert (
+                'asyncio.gather(*bg_main_tasks)' not in source
+            ), f"{filename} still has raw asyncio.gather(*bg_main_tasks) — use drain_tasks"
+
+    def test_no_dynamic_uid_in_metric_labels(self):
+        """Metric labels must be static — no uid/session_id to prevent cardinality explosion."""
+        import re
 
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
             with open(filename) as f:
                 source = f.read()
-
-            # Should not have the old pattern: await asyncio.gather(*tasks)
-            # (the final cleanup one is replaced by drain_tasks)
-            # Allow asyncio.gather only in non-supervisor contexts
-            tree = ast.parse(source)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Attribute):
-                        if (
-                            isinstance(node.func.value, ast.Attribute)
-                            and getattr(node.func.value, 'attr', '') == 'gather'
-                        ):
-                            continue
+            for match in re.finditer(r'label=f"[^"]*\{uid\}', source):
+                pytest.fail(f"{filename}: dynamic uid in metric label: {match.group()}")
+            for match in re.finditer(r'label=f"[^"]*\{session_id\}', source):
+                pytest.fail(f"{filename}: dynamic session_id in metric label: {match.group()}")
 
     def test_app_integrations_uses_gather_with_logging(self):
         import ast
