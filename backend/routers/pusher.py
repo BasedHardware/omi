@@ -105,11 +105,11 @@ async def _process_conversation_task(
                     geolocation.latitude, geolocation.longitude
                 )
 
-            # Run in default executor (not critical_executor) because process_conversation
-            # is a coordinator that submits child tasks to critical_executor — nesting both
-            # in the same pool causes deadlock under concurrent load.
-            # Copy the current context (which holds BYOK keys) into the worker thread so
-            # LLM client proxies see the right key when resolving per-request.
+            # Default executor (None) is intentional: process_conversation is a coordinator
+            # that fans out to llm_executor/db_executor and calls .result(). Using a named
+            # pool would risk deadlock if that pool fills with coordinators. The default
+            # executor is unbounded so coordinators can't starve children.
+            # contextvars.copy_context() carries BYOK keys into the worker thread.
             loop = asyncio.get_running_loop()
             ctx = contextvars.copy_context()
             conversation = await loop.run_in_executor(

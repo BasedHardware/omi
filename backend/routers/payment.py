@@ -53,7 +53,7 @@ from utils.overage import (
     get_user_overage,
     is_overage_plan,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
 import os
 import logging
@@ -660,14 +660,14 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         f"User {uid} upgrading: canceling old subscription {old_sub_id}, activating new {session.get('subscription')}"
                     )
                     try:
-                        stripe.Subscription.cancel(old_sub_id)
+                        await run_blocking(stripe_executor, lambda: stripe.Subscription.cancel(old_sub_id))
                         logger.info(f"Old subscription {old_sub_id} canceled for user {uid}")
                     except Exception as e:
                         logger.error(
                             f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
                         )
 
-            await run_blocking(db_executor, _update_subscription_from_session, uid, session)
+            await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             clear_trial_paywall_cache(uid)
             subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
@@ -680,19 +680,28 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if subscription_id:
                 try:
                     price_id = None
-                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                    stripe_sub = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
                     if stripe_sub:
                         subscription_obj = stripe_sub.to_dict()
                         if subscription_obj and subscription_obj['items']['data']:
                             price_id = subscription_obj['items']['data'][0]['price']['id']
                     sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
-                    stripe.Subscription.modify(subscription_id, metadata={"uid": uid, "sub_type": sub_type})
+                    await run_blocking(
+                        stripe_executor,
+                        lambda: stripe.Subscription.modify(
+                            subscription_id, metadata={"uid": uid, "sub_type": sub_type}
+                        ),
+                    )
                 except Exception as e:
                     logger.error(f"Error updating subscription metadata: {e}")
 
                 # Send paid notification if applicable
                 try:
-                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                    stripe_sub = await run_blocking(
+                        stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                    )
                     if stripe_sub:
                         subscription_obj = stripe_sub.to_dict()
                         if subscription_obj and subscription_obj['items']['data']:
@@ -768,7 +777,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 try:
                     if schedule_obj.get('subscription'):
                         new_subscription_id = schedule_obj['subscription']
-                        new_stripe_sub = stripe.Subscription.retrieve(new_subscription_id)
+                        new_stripe_sub = await run_blocking(
+                            stripe_executor, lambda: stripe.Subscription.retrieve(new_subscription_id)
+                        )
                         new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
                         if not new_subscription:
                             logger.warning(
@@ -796,7 +807,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 try:
                     if schedule_obj.get('subscription'):
                         subscription_id = schedule_obj['subscription']
-                        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                        stripe_sub = await run_blocking(
+                            stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
+                        )
                         subscription_obj = stripe_sub.to_dict()
 
                         new_subscription = _build_subscription_from_stripe_object(subscription_obj)

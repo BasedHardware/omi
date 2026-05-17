@@ -1217,11 +1217,11 @@ async def sync_local_files(
             )
 
         # Fetch user transcription preferences once before spawning threads
-        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+        transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
-            person_embeddings_cache = build_person_embeddings_cache(uid)
+            person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
             if person_embeddings_cache:
                 logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
         except Exception as e:

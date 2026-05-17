@@ -26,6 +26,7 @@ from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
 from utils.other.endpoints import check_rate_limit_inline
+from utils.executors import run_blocking, db_executor, postprocess_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -93,12 +94,12 @@ async def create_conversation_via_integration(
     check_rate_limit_inline(f"{app_id}:{uid}", "integration:conversations")
 
     # Verify if the app exists
-    app = apps_db.get_app_by_id_db(app_id)
+    app = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_apps(uid)
+    enabled_plugins = await run_blocking(db_executor, redis_db.get_enabled_apps, uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -121,7 +122,9 @@ async def create_conversation_via_integration(
     # Geo
     geolocation = create_conversation.geolocation
     if geolocation and not geolocation.google_place_id:
-        create_conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+        create_conversation.geolocation = await run_blocking(
+            db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
+        )
     create_conversation.geolocation = geolocation
 
     # Language
@@ -137,7 +140,9 @@ async def create_conversation_via_integration(
     create_conversation.app_id = app_id
 
     # Process
-    conversation = process_conversation(uid, language_code, create_conversation)
+    conversation = await run_blocking(
+        postprocess_executor, process_conversation, uid, language_code, create_conversation
+    )
 
     # Always trigger integration
     await trigger_external_integrations(uid, conversation)
