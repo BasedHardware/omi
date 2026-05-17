@@ -1,0 +1,114 @@
+name: Publish omi-cli to PyPI
+
+# Releases the `omi-cli` package (sdks/python-cli) to PyPI via PyPI Trusted
+# Publishing (OIDC) — no long-lived API token is stored anywhere.
+#
+# Release flow:
+#   1. Bump `version` in sdks/python-cli/pyproject.toml, merge to main.
+#   2. git tag omi-cli-vX.Y.Z   (scheme is distinct from the omi-sdk's
+#      bare vX.Y.Z tags so the two never collide)
+#   3. git push origin omi-cli-vX.Y.Z
+#   -> this workflow tests, builds, and publishes X.Y.Z.
+#
+# `workflow_dispatch` runs build + twine check only (a dry run); it never
+# publishes because there is no tag to verify the version against.
+#
+# One-time setup (cannot be scripted — done in PyPI/GitHub web UIs):
+#   * PyPI -> project omi-cli -> Settings -> Publishing -> add a Trusted
+#     Publisher: owner BasedHardware, repo omi, workflow
+#     publish_omi_cli.yml, environment pypi.
+#   * GitHub -> repo Settings -> Environments -> create `pypi`
+#     (optionally require reviewers for a manual approve-before-publish gate).
+
+on:
+  push:
+    tags:
+      - 'omi-cli-v*'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Note for this dry-run build (no publish happens).'
+        required: false
+        default: 'manual dry-run'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize per ref; never cancel an in-flight publish.
+  group: publish-omi-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: sdks/python-cli
+
+jobs:
+  build:
+    name: Build & verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+          python -m pip install -e ".[dev]"
+
+      - name: Verify tag matches pyproject version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PYPROJECT_VERSION="$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")"
+          TAG_VERSION="${GITHUB_REF_NAME#omi-cli-v}"
+          echo "tag=$GITHUB_REF_NAME -> $TAG_VERSION ; pyproject=$PYPROJECT_VERSION"
+          if [ "$PYPROJECT_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (-> $TAG_VERSION) does not match pyproject version $PYPROJECT_VERSION. Bump pyproject.toml or fix the tag."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build sdist + wheel
+        run: |
+          rm -rf dist
+          python -m build
+
+      - name: Check distribution metadata
+        run: python -m twine check dist/*
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omi-cli-dist
+          path: sdks/python-cli/dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (Trusted Publishing)
+    needs: build
+    # Tag pushes only — workflow_dispatch stays a dry run (no tag to verify).
+    if: startsWith(github.ref, 'refs/tags/omi-cli-v')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/omi-cli/
+    permissions:
+      id-token: write  # the ONLY elevated permission, scoped to this job
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: omi-cli-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
