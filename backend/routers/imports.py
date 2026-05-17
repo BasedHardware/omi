@@ -67,8 +67,10 @@ async def import_limitless_data(
             f.close()
     except Exception as e:
         # Clean up on error
-        import_jobs_db.update_import_job(
-            job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
+        await asyncio.to_thread(
+            lambda: import_jobs_db.update_import_job(
+                job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
+            )
         )
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 

@@ -26,12 +26,17 @@ import ast, os, sys, json, argparse
 
 def get_db_imports(source):
     db_names = set()
+    db_module_aliases = set()
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and 'database' in node.module:
             for alias in node.names:
                 db_names.add(alias.asname or alias.name)
-    return db_names
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if 'database' in alias.name:
+                    db_module_aliases.add(alias.asname or alias.name.split('.')[-1])
+    return db_names, db_module_aliases
 
 
 def get_storage_imports(source):
@@ -85,12 +90,15 @@ def _get_offloaded_lines(node):
 
 
 def _collect_nested_func_lines(node):
-    """Collect line ranges of nested def/lambda inside an async function.
+    """Collect line numbers inside nested def/lambda within an async function.
 
-    Calls inside nested sync functions are not directly on the event loop.
+    Calls inside nested sync functions are not directly on the event loop,
+    even if those functions are defined inside if/for/try blocks.
     """
     nested = set()
-    for child in ast.iter_child_nodes(node):
+    for child in ast.walk(node):
+        if child is node:
+            continue
         if isinstance(child, (ast.FunctionDef, ast.Lambda)):
             for n in ast.walk(child):
                 if hasattr(n, 'lineno'):
@@ -98,7 +106,7 @@ def _collect_nested_func_lines(node):
     return nested
 
 
-def scan_async_function(node, db_names, storage_names):
+def scan_async_function(node, db_names, db_module_aliases, storage_names):
     """Scan an async function body for blocking calls on the event loop."""
     db_calls = []
     file_io = []
@@ -125,6 +133,8 @@ def scan_async_function(node, db_names, storage_names):
                 file_io.append({"line": line, "call": "open()"})
         if isinstance(child.func, ast.Attribute):
             if isinstance(child.func.value, ast.Name):
+                if child.func.value.id in db_module_aliases:
+                    db_calls.append({"line": line, "call": f"{child.func.value.id}.{child.func.attr}"})
                 if child.func.value.id == 'time' and child.func.attr == 'sleep':
                     sleeps.append({"line": line, "call": "time.sleep()"})
                 if child.func.value.id == 'requests':
@@ -173,7 +183,7 @@ def scan_dirs(dirs):
             continue
         files_scanned += 1
 
-        db_names = get_db_imports(source)
+        db_names, db_module_aliases = get_db_imports(source)
         storage_names = get_storage_imports(source)
 
         for node in ast.walk(tree):
@@ -189,7 +199,9 @@ def scan_dirs(dirs):
                 continue
 
             is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list)
-            db_calls, file_io, network_io, sleeps = scan_async_function(node, db_names, storage_names)
+            db_calls, file_io, network_io, sleeps = scan_async_function(
+                node, db_names, db_module_aliases, storage_names
+            )
             endpoint_has_await = has_await(node)
 
             if is_endpoint:
