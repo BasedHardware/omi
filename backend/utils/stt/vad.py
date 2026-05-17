@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
-from utils.executors import storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
 import logging
 
@@ -187,7 +187,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     """Async version of vad_is_empty using httpx.AsyncClient for hosted VAD."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
-        if exists := redis_db.get_generic_cache(caching_key):
+        if exists := await run_blocking(db_executor, redis_db.get_generic_cache, caching_key):
             if return_segments:
                 return exists
             return len(exists) == 0
@@ -209,7 +209,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
         segments = await run_blocking(sync_executor, _run_file_vad, file_path)
 
     if cache:
-        redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
+        await run_blocking(db_executor, redis_db.set_generic_cache, caching_key, segments, ttl=60 * 60 * 24)
     if return_segments:
         return segments
     logger.info(f'async_vad_is_empty {len(segments) == 0}')

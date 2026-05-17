@@ -255,18 +255,18 @@ async def extract_speaker_samples(
     try:
         # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
-        person = users_db.get_person(uid, person_id)
+        person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
         if person:
             person = await maybe_migrate_person_samples(uid, person)
 
         # Check sample count after migration
-        sample_count = users_db.get_person_speech_samples_count(uid, person_id)
+        sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
         if sample_count >= 1:
             logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
             return
 
         # Fetch conversation to get started_at and segment details
-        conversation = conversations_db.get_conversation(uid, conversation_id)
+        conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
