@@ -1741,7 +1741,7 @@ async def _stream_handler(
                 # Drain any in-flight embedding match tasks before flushing
                 if speaker_match_tasks:
                     await drain_tasks(
-                        list(speaker_match_tasks), timeout=5.0, label=f"listen:{uid}:speaker_rollover", cancel=False
+                        list(speaker_match_tasks), timeout=5.0, label="listen_speaker_rollover", cancel=False
                     )
                 _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
@@ -2261,9 +2261,7 @@ async def _stream_handler(
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for speaker ID task to finish {uid} {session_id}")
         if speaker_match_tasks:
-            await drain_tasks(
-                list(speaker_match_tasks), timeout=10.0, label=f"listen:{uid}:speaker_final", cancel=False
-            )
+            await drain_tasks(list(speaker_match_tasks), timeout=10.0, label="listen_speaker_final", cancel=False)
 
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
@@ -2704,8 +2702,9 @@ async def _stream_handler(
             receive_task=data_process_task,
             bg_tasks=bg_main_tasks,
             finite_tasks=finite_task_set,
-            label=f"listen:{uid}:{session_id}",
+            label="listen",
         )
+        logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid} {session_id}")
 
         if data_process_task.done() and not data_process_task.cancelled():
             exc = data_process_task.exception()
@@ -2720,7 +2719,7 @@ async def _stream_handler(
             except asyncio.CancelledError:
                 pass
 
-        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label=f"listen:{uid}:bg", cancel=False)
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="listen_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
@@ -2806,7 +2805,7 @@ async def _stream_handler(
             onboarding_handler.cleanup()
 
         all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
-        await drain_tasks(all_to_cancel, timeout=5.0, label=f"listen:{uid}:cleanup", cancel=True)
+        await drain_tasks(all_to_cancel, timeout=5.0, label="listen_cleanup", cancel=True)
         bg_tasks.clear()
 
         # Flush any remaining mixed audio to pusher
