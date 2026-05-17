@@ -413,7 +413,23 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final plan = provider.subscription!.subscription.plan;
-    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    final isPaid = provider.isPaidPlan;
+    // Top tier = no further upgrade target. Lite/Plus still have caps and can
+    // upgrade to Unlimited, so they should keep the upgrade CTA visible.
+    final isTopTier = plan == PlanType.unlimited ||
+        plan == PlanType.unlimitedV2 ||
+        plan == PlanType.operator ||
+        plan == PlanType.architect;
+    final planLabel = switch (plan) {
+      PlanType.lite => context.l10n.litePlan,
+      PlanType.plus => context.l10n.plusPlan,
+      PlanType.unlimited ||
+      PlanType.unlimitedV2 ||
+      PlanType.operator ||
+      PlanType.architect =>
+        context.l10n.unlimitedPlan,
+      _ => context.l10n.basicPlan,
+    };
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -430,10 +446,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
+                planLabel,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              if (isUnlimited)
+              if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
@@ -446,9 +462,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          if (!isUnlimited) ...[
-            const SizedBox(height: 4),
-            Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+          if (!isTopTier) ...[
+            if (!isPaid) ...[
+              const SizedBox(height: 4),
+              Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -471,7 +489,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            context.l10n.upgradeToUnlimited,
+                            isPaid ? context.l10n.upgradeYourPlan : context.l10n.upgradeToUnlimited,
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(width: 8),
