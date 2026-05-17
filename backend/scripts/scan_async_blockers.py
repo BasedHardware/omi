@@ -30,8 +30,12 @@ def get_db_imports(source):
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and 'database' in node.module:
-            for alias in node.names:
-                db_names.add(alias.asname or alias.name)
+            if node.module == 'database':
+                for alias in node.names:
+                    db_module_aliases.add(alias.asname or alias.name)
+            else:
+                for alias in node.names:
+                    db_names.add(alias.asname or alias.name)
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if 'database' in alias.name:
