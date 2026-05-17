@@ -173,6 +173,63 @@ class AppState: ObservableObject {
   /// Fetch trial metadata from the Rust backend and update local state.
   /// Called on app launch and every 60s thereafter while running.
   func fetchTrialMetadata() {
+    // Debug: inject fake trial data for UI testing via UserDefaults
+    // Set `debug_trial_mode` to "active" or "expired" to override
+    #if DEBUG
+    if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
+      let now = Int(Date().timeIntervalSince1970)
+      switch debugMode {
+      case "active":
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: now - 3600,
+          trialEndsAt: now + (2 * 24 * 3600) + 3600,
+          trialRemainingSeconds: (2 * 24 * 3600) + 3600,
+          trialExpired: false,
+          trialDurationSeconds: 3 * 24 * 3600,
+          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
+          planAfterTrial: "Free"
+        )
+        return
+      case "warning":
+        // 12h remaining — yellow state (1h < remaining <= 24h)
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: now - (2 * 24 * 3600) - (12 * 3600),
+          trialEndsAt: now + (12 * 3600),
+          trialRemainingSeconds: 12 * 3600,
+          trialExpired: false,
+          trialDurationSeconds: 3 * 24 * 3600,
+          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
+          planAfterTrial: "Free"
+        )
+        return
+      case "expiring":
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: now - (3 * 24 * 3600) + 1800,
+          trialEndsAt: now + 1800,
+          trialRemainingSeconds: 1800,
+          trialExpired: false,
+          trialDurationSeconds: 3 * 24 * 3600,
+          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
+          planAfterTrial: "Free"
+        )
+        return
+      case "expired":
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: now - (4 * 24 * 3600),
+          trialEndsAt: now - (1 * 24 * 3600),
+          trialRemainingSeconds: 0,
+          trialExpired: true,
+          trialDurationSeconds: 3 * 24 * 3600,
+          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
+          planAfterTrial: "Free"
+        )
+        return
+      default:
+        break
+      }
+    }
+    #endif
+
     Task {
       do {
         let metadata = try await APIClient.shared.getTrialMetadata()
