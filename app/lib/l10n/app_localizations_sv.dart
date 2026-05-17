@@ -9272,4 +9272,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Öppna betalningsportalen';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

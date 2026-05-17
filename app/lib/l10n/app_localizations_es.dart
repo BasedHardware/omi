@@ -9289,4 +9289,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Abrir portal de facturación';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

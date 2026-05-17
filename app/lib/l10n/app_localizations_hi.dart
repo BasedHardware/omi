@@ -9248,4 +9248,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'बिलिंग पोर्टल खोलें';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

@@ -9256,4 +9256,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Otvoriť platobný portál';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

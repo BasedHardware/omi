@@ -9267,4 +9267,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Avaa laskutusportaali';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

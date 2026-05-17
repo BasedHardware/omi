@@ -9277,4 +9277,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'বিলিং পোর্টাল খুলুন';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

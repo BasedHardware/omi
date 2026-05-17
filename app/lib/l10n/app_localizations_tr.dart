@@ -9281,4 +9281,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Faturalandırma portalını aç';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

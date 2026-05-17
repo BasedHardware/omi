@@ -9300,4 +9300,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'ಬಿಲ್ಲಿಂಗ್ ಪೋರ್ಟಲ್ ತೆರೆಯಿರಿ';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

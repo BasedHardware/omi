@@ -9318,4 +9318,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'బిల్లింగ్ పోర్టల్ తెరవండి';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

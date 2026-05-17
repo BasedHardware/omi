@@ -9264,4 +9264,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Otevřít fakturační portál';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

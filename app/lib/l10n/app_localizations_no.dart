@@ -9264,4 +9264,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Åpne betalingsportalen';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

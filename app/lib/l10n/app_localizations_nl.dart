@@ -9296,4 +9296,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Betalingsportaal openen';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

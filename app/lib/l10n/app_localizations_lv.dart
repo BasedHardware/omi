@@ -9286,4 +9286,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Atvērt rēķinu portālu';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

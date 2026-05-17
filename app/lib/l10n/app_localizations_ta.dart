@@ -9337,4 +9337,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'பில்லிங் போர்டலைத் திற';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

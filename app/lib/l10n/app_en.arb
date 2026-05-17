@@ -11050,5 +11050,13 @@
     "dualSubscriptionDetectedManage": "Open billing portal",
     "@dualSubscriptionDetectedManage": {
         "description": "Action button that opens the Stripe customer portal."
+    },
+    "litePlan": "Lite Plan",
+    "@litePlan": {
+        "description": "Lite plan name"
+    },
+    "plusPlan": "Plus Plan",
+    "@plusPlan": {
+        "description": "Plus plan name"
     }
 }

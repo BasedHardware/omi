@@ -9288,4 +9288,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Otwórz portal płatności';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

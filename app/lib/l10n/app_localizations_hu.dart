@@ -9307,4 +9307,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Számlázási portál megnyitása';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

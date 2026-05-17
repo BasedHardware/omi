@@ -9292,4 +9292,10 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Otvori portal za naplatu';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

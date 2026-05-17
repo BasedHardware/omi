@@ -9222,4 +9222,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'เปิดพอร์ทัลการเรียกเก็บเงิน';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

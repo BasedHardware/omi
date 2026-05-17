@@ -9294,4 +9294,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Адкрыць партал аплаты';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

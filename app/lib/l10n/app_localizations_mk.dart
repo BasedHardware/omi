@@ -9317,4 +9317,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Отвори портал за плаќање';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

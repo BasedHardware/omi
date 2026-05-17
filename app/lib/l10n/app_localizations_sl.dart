@@ -9292,4 +9292,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Odpri plačilni portal';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

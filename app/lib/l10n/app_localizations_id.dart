@@ -9278,4 +9278,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Buka portal penagihan';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

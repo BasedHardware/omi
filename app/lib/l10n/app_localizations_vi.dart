@@ -9268,4 +9268,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Mở cổng thanh toán';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

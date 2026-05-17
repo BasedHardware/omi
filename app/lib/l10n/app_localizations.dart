@@ -17300,6 +17300,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open billing portal'**
   String get dualSubscriptionDetectedManage;
+
+  /// Lite plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Lite Plan'**
+  String get litePlan;
+
+  /// Plus plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Plus Plan'**
+  String get plusPlan;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9353,4 +9353,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Buksan ang billing portal';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

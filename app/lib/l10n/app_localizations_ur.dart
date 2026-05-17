@@ -9285,4 +9285,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'بلنگ پورٹل کھولیں';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

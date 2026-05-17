@@ -9279,4 +9279,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'बिलिंग पोर्टल उघडा';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

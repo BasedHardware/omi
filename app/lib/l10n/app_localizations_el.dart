@@ -9333,4 +9333,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Άνοιγμα πύλης χρέωσης';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

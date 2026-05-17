@@ -9351,4 +9351,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Ouvrir le portail de facturation';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

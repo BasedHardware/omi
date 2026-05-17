@@ -9119,4 +9119,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => '결제 포털 열기';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

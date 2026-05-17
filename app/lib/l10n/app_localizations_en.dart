@@ -9265,4 +9265,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Open billing portal';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

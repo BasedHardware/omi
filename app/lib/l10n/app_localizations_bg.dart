@@ -9303,4 +9303,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Отвори портала';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

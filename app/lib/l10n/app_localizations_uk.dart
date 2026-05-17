@@ -9282,4 +9282,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Відкрити портал оплати';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

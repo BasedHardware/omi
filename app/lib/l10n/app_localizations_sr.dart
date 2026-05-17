@@ -9281,4 +9281,10 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Отвори портал за наплату';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

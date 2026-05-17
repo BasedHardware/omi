@@ -9345,4 +9345,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Zahlungsportal öffnen';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

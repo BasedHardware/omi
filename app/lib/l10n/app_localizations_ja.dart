@@ -9118,4 +9118,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => '請求ポータルを開く';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

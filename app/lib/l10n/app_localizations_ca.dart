@@ -9322,4 +9322,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Obre el portal de facturació';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

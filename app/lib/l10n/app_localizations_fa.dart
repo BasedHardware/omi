@@ -9271,4 +9271,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'باز کردن پورتال صورت‌حساب';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

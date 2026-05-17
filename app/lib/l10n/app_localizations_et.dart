@@ -9265,4 +9265,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Ava makseportaal';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

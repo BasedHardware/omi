@@ -9104,4 +9104,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => '打开计费门户';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }

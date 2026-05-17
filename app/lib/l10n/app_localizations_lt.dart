@@ -9277,4 +9277,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dualSubscriptionDetectedManage => 'Atidaryti sąskaitų portalą';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 }
