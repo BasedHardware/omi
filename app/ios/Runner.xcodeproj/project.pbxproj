@@ -31,6 +31,7 @@
 		42BABFC92F2A81B100E78A3C /* OmiProximitySensor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */; };
 		42BABFCB2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
 		42BABFCD2F2A81B100E78A3C /* OmiRegionCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */; };
+		42D42B2E2FAFABF600F86324 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42D42B2D2FAFABF600F86324 /* StoreKit.framework */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
@@ -137,6 +138,7 @@
 		42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiProximitySensor.swift; sourceTree = "<group>"; };
 		42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiDirectCallCoordinator.swift; sourceTree = "<group>"; };
 		42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRegionCheck.swift; sourceTree = "<group>"; };
+		42D42B2D2FAFABF600F86324 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
 		585D7D8307721A4D6595AA27 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -212,6 +214,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				42D42B2E2FAFABF600F86324 /* StoreKit.framework in Frameworks */,
 				42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */,
 				9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */,
 			);
@@ -235,6 +238,7 @@
 		20C35A59F6DEFF5646F302D3 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				42D42B2D2FAFABF600F86324 /* StoreKit.framework */,
 				42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */,
 				42476A832C5E369200426330 /* libsqlite3.tbd */,
 				42127DA02C283C4E0005AB40 /* OneSignalOutcomes.xcframework */,
@@ -245,6 +249,22 @@
 				866A58B811C972ED7D93998A /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
+			isa = PBXGroup;
+			children = (
+				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
+				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
+				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
+				42BABFC42F2A81B100E78A3C /* OmiCallError.swift */,
+				42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */,
+				42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */,
+				42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */,
+				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
+				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
+			);
+			path = PhoneCalls;
 			sourceTree = "<group>";
 		};
 		68E21E60C4FBF7F520F1D656 /* Pods */ = {
@@ -315,22 +335,6 @@
 				90E45FFB3093C995950509B7 /* BatteryWidget.appex */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		42BABFC02F2A81B100E78A3C /* PhoneCalls */ = {
-			isa = PBXGroup;
-			children = (
-				42BABFC22F2A81B100E78A3C /* OmiAudioLock.swift */,
-				42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */,
-				42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */,
-				42BABFC42F2A81B100E78A3C /* OmiCallError.swift */,
-				42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */,
-				42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */,
-				42BABFCA2F2A81B100E78A3C /* OmiProximitySensor.swift */,
-				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
-				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
-			);
-			path = PhoneCalls;
 			sourceTree = "<group>";
 		};
 		97C146F01CF9000F007C117D /* Runner */ = {
@@ -671,7 +675,6 @@
 /* Begin PBXTargetDependency section */
 		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = iphoneos;
 			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
 			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
 		};
