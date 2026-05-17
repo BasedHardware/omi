@@ -131,6 +131,8 @@ def _get_trial_metadata_fn():
         'logger': MagicMock(),
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
+        '_TRIAL_PAYWALL_ENABLED': True,
+        '_TRIAL_PAYWALL_TEST_UIDS': set(),
     }
     # Execute TRIAL_LENGTH_SECONDS
     exec(compile(tls_line, '<subscription.py>', 'exec'), namespace)
@@ -276,6 +278,89 @@ class TestGetTrialMetadataBehavior:
         result = self.fn('uid_test')
         assert result.trial_expired is True
         assert result.trial_remaining_seconds == 0
+
+
+class TestGetTrialMetadataRolloutGates:
+    """Behavioral tests for kill switch and test UID gating in get_trial_metadata."""
+
+    def setup_method(self):
+        self.fn, self.ns = _get_trial_metadata_fn()
+
+    def _mock_expired_user(self):
+        """Mock a user whose trial has expired (4 days old)."""
+        sub = MagicMock()
+        sub.plan = PlanType.basic
+        self.ns['users_db'].get_user_valid_subscription.return_value = sub
+        self.ns['users_db'].is_byok_active.return_value = False
+        creation_ms = (time.time() - 4 * 24 * 3600) * 1000
+        user_record = MagicMock()
+        user_record.user_metadata.creation_timestamp = creation_ms
+        self.ns['firebase_auth'].get_user.return_value = user_record
+
+    def test_kill_switch_disabled_returns_not_expired(self):
+        """When _TRIAL_PAYWALL_ENABLED=False, get_trial_metadata returns trial_expired=False."""
+        self._mock_expired_user()
+        self.ns['_TRIAL_PAYWALL_ENABLED'] = False
+        result = self.fn('uid_test')
+        assert result.trial_expired is False
+        # Should not call Firebase or DB
+        self.ns['users_db'].get_user_valid_subscription.assert_not_called()
+        self.ns['firebase_auth'].get_user.assert_not_called()
+
+    def test_kill_switch_enabled_returns_expired(self):
+        """When _TRIAL_PAYWALL_ENABLED=True, expired user gets trial_expired=True."""
+        self._mock_expired_user()
+        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
+        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = set()
+        result = self.fn('uid_test')
+        assert result.trial_expired is True
+
+    def test_test_uids_listed_user_gets_real_result(self):
+        """When test UIDs set and user is listed, return real trial state."""
+        self._mock_expired_user()
+        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
+        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = {'uid_test'}
+        result = self.fn('uid_test')
+        assert result.trial_expired is True
+
+    def test_test_uids_unlisted_user_exempt(self):
+        """When test UIDs set and user is NOT listed, return trial_expired=False."""
+        self._mock_expired_user()
+        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
+        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = {'other_uid'}
+        result = self.fn('uid_test')
+        assert result.trial_expired is False
+        # Should not call Firebase or DB
+        self.ns['users_db'].get_user_valid_subscription.assert_not_called()
+        self.ns['firebase_auth'].get_user.assert_not_called()
+
+    def test_empty_test_uids_means_all_users(self):
+        """When _TRIAL_PAYWALL_TEST_UIDS is empty set, all users are subject to trial."""
+        self._mock_expired_user()
+        self.ns['_TRIAL_PAYWALL_ENABLED'] = True
+        self.ns['_TRIAL_PAYWALL_TEST_UIDS'] = set()
+        result = self.fn('uid_test')
+        assert result.trial_expired is True
+
+
+class TestGetTrialMetadataRolloutGatesSourceLevel:
+    """Source-level tests verifying rollout gate code in get_trial_metadata."""
+
+    def test_kill_switch_checked_before_try_block(self):
+        """get_trial_metadata must check _TRIAL_PAYWALL_ENABLED before try block."""
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        func_start = src.index('def get_trial_metadata(')
+        next_func = src.index('\ndef ', func_start + 1)
+        func_body = src[func_start:next_func]
+        assert '_TRIAL_PAYWALL_ENABLED' in func_body
+
+    def test_test_uids_checked_before_try_block(self):
+        """get_trial_metadata must check _TRIAL_PAYWALL_TEST_UIDS before try block."""
+        src = _read_source(SUBSCRIPTION_SRC_PATH)
+        func_start = src.index('def get_trial_metadata(')
+        next_func = src.index('\ndef ', func_start + 1)
+        func_body = src[func_start:next_func]
+        assert '_TRIAL_PAYWALL_TEST_UIDS' in func_body
 
 
 class TestTrialMetadataModel:
