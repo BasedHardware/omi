@@ -10727,5 +10727,11 @@
     "startCallRecording": "کال ریکارڈنگ شروع کریں",
     "startVoiceRecording": "وائس ریکارڈنگ شروع کریں",
     "bulkExportAlreadyExported": "منتخب کردہ تمام کام پہلے ہی برآمد کیے جا چکے ہیں",
-    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔"
+    "bulkDeleteFailed": "کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔",
+    "deleteRecap": "خلاصہ حذف کریں",
+    "deleteRecapConfirmTitle": "یہ خلاصہ حذف کریں؟",
+    "deleteRecapConfirmBody": "یہ خلاصہ مستقل طور پر حذف کر دیا جائے گا۔ اس دن کی اصل گفتگوئیں متاثر نہیں ہوں گی۔",
+    "deleteRecapAction": "حذف",
+    "recapDeletedSnackbar": "خلاصہ حذف ہو گیا",
+    "recapDeleteFailed": "خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔"
 }

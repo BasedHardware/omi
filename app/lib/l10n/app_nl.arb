@@ -3019,5 +3019,11 @@
     "startCallRecording": "Gespreksopname starten",
     "startVoiceRecording": "Spraakopname starten",
     "bulkExportAlreadyExported": "Alle geselecteerde taken zijn al geëxporteerd",
-    "bulkDeleteFailed": "Taken konden niet worden verwijderd. Probeer het opnieuw."
+    "bulkDeleteFailed": "Taken konden niet worden verwijderd. Probeer het opnieuw.",
+    "deleteRecap": "Samenvatting verwijderen",
+    "deleteRecapConfirmTitle": "Deze samenvatting verwijderen?",
+    "deleteRecapConfirmBody": "Deze samenvatting wordt permanent verwijderd. De oorspronkelijke gesprekken van die dag blijven behouden.",
+    "deleteRecapAction": "Verwijderen",
+    "recapDeletedSnackbar": "Samenvatting verwijderd",
+    "recapDeleteFailed": "Kan de samenvatting niet verwijderen. Probeer het later opnieuw."
 }

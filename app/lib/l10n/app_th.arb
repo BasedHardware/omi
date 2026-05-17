@@ -3019,5 +3019,11 @@
     "startCallRecording": "เริ่มบันทึกการโทร",
     "startVoiceRecording": "เริ่มบันทึกเสียง",
     "bulkExportAlreadyExported": "งานที่เลือกทั้งหมดถูกส่งออกแล้ว",
-    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง"
+    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง",
+    "deleteRecap": "ลบสรุป",
+    "deleteRecapConfirmTitle": "ลบสรุปนี้หรือไม่?",
+    "deleteRecapConfirmBody": "สรุปนี้จะถูกลบอย่างถาวร บทสนทนาต้นฉบับของวันนั้นจะไม่ได้รับผลกระทบ",
+    "deleteRecapAction": "ลบ",
+    "recapDeletedSnackbar": "ลบสรุปแล้ว",
+    "recapDeleteFailed": "ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง"
 }

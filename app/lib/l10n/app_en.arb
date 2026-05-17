@@ -11022,5 +11022,29 @@
     "bulkDeleteFailed": "Could not delete tasks. Please try again.",
     "@bulkDeleteFailed": {
         "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
+    },
+    "deleteRecap": "Delete recap",
+    "@deleteRecap": {
+        "description": "Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background."
+    },
+    "deleteRecapConfirmTitle": "Delete this recap?",
+    "@deleteRecapConfirmTitle": {
+        "description": "Title of the confirm dialog when deleting a daily recap."
+    },
+    "deleteRecapConfirmBody": "This recap will be permanently removed. The original conversations from that day are not affected.",
+    "@deleteRecapConfirmBody": {
+        "description": "Body of the confirm dialog clarifying that conversations are not deleted with the recap."
+    },
+    "deleteRecapAction": "Delete",
+    "@deleteRecapAction": {
+        "description": "Confirm action button on the delete-recap dialog."
+    },
+    "recapDeletedSnackbar": "Recap deleted",
+    "@recapDeletedSnackbar": {
+        "description": "Snackbar shown after a recap was successfully deleted."
+    },
+    "recapDeleteFailed": "Couldn't delete the recap. Try again later.",
+    "@recapDeleteFailed": {
+        "description": "Snackbar shown when the recap delete API fails."
     }
 }

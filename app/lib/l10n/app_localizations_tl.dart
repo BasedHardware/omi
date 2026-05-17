@@ -9331,4 +9331,23 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
+
+  @override
+  String get deleteRecap => 'Burahin ang recap';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Burahin ang recap na ito?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.';
+
+  @override
+  String get deleteRecapAction => 'Burahin';
+
+  @override
+  String get recapDeletedSnackbar => 'Burado na ang recap';
+
+  @override
+  String get recapDeleteFailed => 'Hindi maburahin ang recap. Subukan ulit mamaya.';
 }

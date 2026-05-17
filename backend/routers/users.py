@@ -61,6 +61,7 @@ from models.users import (
     PlanType,
     PricingOption,
     PhoneCallQuota,
+    TrialMetadata,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -78,6 +79,7 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
+    get_trial_metadata,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -1106,6 +1108,21 @@ def get_user_paywall_status(
     """
     resolved_platform = x_app_platform or platform
     return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
+
+
+@router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
+def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Structured trial metadata for the calling user.
+
+    Returns trial timing info (start, end, remaining seconds, expired flag)
+    plus the list of features available during trial and the plan the user
+    falls to after trial expiry. Used by desktop clients to render countdown
+    banners and pre-expiry upgrade nudges.
+
+    Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
+    (trial is irrelevant to them — they have full access).
+    """
+    return get_trial_metadata(uid)
 
 
 # **************************************

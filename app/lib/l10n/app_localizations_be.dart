@@ -9272,4 +9272,23 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.';
+
+  @override
+  String get deleteRecap => 'Выдаліць агляд';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Выдаліць гэты агляд?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Гэты агляд будзе выдалены назаўсёды. Зыходныя размовы за той дзень не будуць закрануты.';
+
+  @override
+  String get deleteRecapAction => 'Выдаліць';
+
+  @override
+  String get recapDeletedSnackbar => 'Агляд выдалены';
+
+  @override
+  String get recapDeleteFailed => 'Не атрымалася выдаліць агляд. Паспрабуйце пазней.';
 }

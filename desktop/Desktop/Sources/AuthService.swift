@@ -333,6 +333,12 @@ class AuthService {
         AnalyticsManager.shared.signInCompleted(provider: "apple")
         APIKeyService.shared.startFetchingKeys()
 
+        // Start trial polling for the newly signed-in user
+        if let state = AppState.current {
+            state.startTrialMetadataRefresh()
+            TrialBannerService.shared.start(appState: state)
+        }
+
         if !AnalyticsManager.isDevBuild {
             let sentryUser = User(userId: userId)
             sentryUser.email = AuthState.shared.userEmail
@@ -448,6 +454,12 @@ class AuthService {
             AnalyticsManager.shared.identify()
             AnalyticsManager.shared.signInCompleted(provider: provider)
             APIKeyService.shared.startFetchingKeys()
+
+            // Start trial polling for the newly signed-in user
+            if let state = AppState.current {
+                state.startTrialMetadataRefresh()
+                TrialBannerService.shared.start(appState: state)
+            }
 
             // Set Sentry user context for error tracking (skip in dev builds)
             if !AnalyticsManager.isDevBuild {
@@ -1063,6 +1075,14 @@ class AuthService {
             await AgentSyncService.shared.stop()
             await FloatingBarUsageLimiter.shared.reset()
         }
+
+        // Stop trial polling and reset banner state for this user session
+        if let state = AppState.current {
+            state.stopTrialMetadataRefresh()
+            state.trialMetadata = nil
+            state.isPaywalled = false
+        }
+        TrialBannerService.shared.stop()
 
         // Close database and invalidate all storage caches so the next sign-in
         // opens a fresh per-user database.

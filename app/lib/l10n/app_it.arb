@@ -3019,5 +3019,11 @@
     "startCallRecording": "Avvia registrazione chiamata",
     "startVoiceRecording": "Avvia registrazione vocale",
     "bulkExportAlreadyExported": "Tutte le attività selezionate sono già state esportate",
-    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova."
+    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova.",
+    "deleteRecap": "Elimina riepilogo",
+    "deleteRecapConfirmTitle": "Eliminare questo riepilogo?",
+    "deleteRecapConfirmBody": "Questo riepilogo verrà rimosso in modo permanente. Le conversazioni originali di quel giorno non verranno modificate.",
+    "deleteRecapAction": "Elimina",
+    "recapDeletedSnackbar": "Riepilogo eliminato",
+    "recapDeleteFailed": "Impossibile eliminare il riepilogo. Riprova più tardi."
 }

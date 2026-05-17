@@ -9256,4 +9256,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tidak dapat menghapus tugas. Silakan coba lagi.';
+
+  @override
+  String get deleteRecap => 'Hapus ringkasan';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Hapus ringkasan ini?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ringkasan ini akan dihapus permanen. Percakapan asli dari hari itu tidak terpengaruh.';
+
+  @override
+  String get deleteRecapAction => 'Hapus';
+
+  @override
+  String get recapDeletedSnackbar => 'Ringkasan dihapus';
+
+  @override
+  String get recapDeleteFailed => 'Tidak dapat menghapus ringkasan. Coba lagi nanti.';
 }

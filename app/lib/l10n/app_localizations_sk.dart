@@ -9234,4 +9234,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Úlohy sa nepodarilo odstrániť. Skúste to znova.';
+
+  @override
+  String get deleteRecap => 'Odstrániť zhrnutie';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Odstrániť toto zhrnutie?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Zhrnutie bude trvalo odstránené. Pôvodné konverzácie z toho dňa zostávajú nedotknuté.';
+
+  @override
+  String get deleteRecapAction => 'Odstrániť';
+
+  @override
+  String get recapDeletedSnackbar => 'Zhrnutie odstránené';
+
+  @override
+  String get recapDeleteFailed => 'Zhrnutie sa nepodarilo odstrániť. Skúste neskôr.';
 }

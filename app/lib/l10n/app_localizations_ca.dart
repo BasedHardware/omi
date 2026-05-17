@@ -9300,4 +9300,23 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'No s\'han pogut eliminar les tasques. Torna-ho a provar.';
+
+  @override
+  String get deleteRecap => 'Esborra el resum';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Esborrar aquest resum?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Aquest resum s\'eliminarà permanentment. Les converses originals d\'aquell dia no es veuran afectades.';
+
+  @override
+  String get deleteRecapAction => 'Esborra';
+
+  @override
+  String get recapDeletedSnackbar => 'Resum esborrat';
+
+  @override
+  String get recapDeleteFailed => 'No s\'ha pogut esborrar el resum. Torna-ho a provar més tard.';
 }

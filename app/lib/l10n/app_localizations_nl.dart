@@ -9274,4 +9274,23 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Taken konden niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get deleteRecap => 'Samenvatting verwijderen';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Deze samenvatting verwijderen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Deze samenvatting wordt permanent verwijderd. De oorspronkelijke gesprekken van die dag blijven behouden.';
+
+  @override
+  String get deleteRecapAction => 'Verwijderen';
+
+  @override
+  String get recapDeletedSnackbar => 'Samenvatting verwijderd';
+
+  @override
+  String get recapDeleteFailed => 'Kan de samenvatting niet verwijderen. Probeer het later opnieuw.';
 }

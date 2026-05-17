@@ -9315,4 +9315,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get deleteRecap => 'சுருக்கத்தை நீக்கு';
+
+  @override
+  String get deleteRecapConfirmTitle => 'இந்தச் சுருக்கத்தை நீக்கவா?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'இந்தச் சுருக்கம் நிரந்தரமாக அகற்றப்படும். அந்த நாளின் அசல் உரையாடல்கள் பாதிக்கப்படவில்லை.';
+
+  @override
+  String get deleteRecapAction => 'நீக்கு';
+
+  @override
+  String get recapDeletedSnackbar => 'சுருக்கம் நீக்கப்பட்டது';
+
+  @override
+  String get recapDeleteFailed => 'சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
 }

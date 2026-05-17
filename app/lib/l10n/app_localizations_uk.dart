@@ -9260,4 +9260,23 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не вдалося видалити завдання. Спробуйте ще раз.';
+
+  @override
+  String get deleteRecap => 'Видалити підсумок';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Видалити цей підсумок?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Цей підсумок буде видалено назавжди. Оригінальні розмови того дня не зазнають змін.';
+
+  @override
+  String get deleteRecapAction => 'Видалити';
+
+  @override
+  String get recapDeletedSnackbar => 'Підсумок видалено';
+
+  @override
+  String get recapDeleteFailed => 'Не вдалося видалити підсумок. Спробуйте пізніше.';
 }

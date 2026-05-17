@@ -3041,5 +3041,11 @@
     "startCallRecording": "开始通话录音",
     "startVoiceRecording": "开始语音录音",
     "bulkExportAlreadyExported": "所选任务已全部导出",
-    "bulkDeleteFailed": "无法删除任务，请重试。"
+    "bulkDeleteFailed": "无法删除任务，请重试。",
+    "deleteRecap": "删除回顾",
+    "deleteRecapConfirmTitle": "删除该回顾?",
+    "deleteRecapConfirmBody": "此回顾将被永久删除。当天的原始对话不会受到影响。",
+    "deleteRecapAction": "删除",
+    "recapDeletedSnackbar": "回顾已删除",
+    "recapDeleteFailed": "无法删除回顾。请稍后重试。"
 }

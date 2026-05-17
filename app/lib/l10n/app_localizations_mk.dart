@@ -9295,4 +9295,23 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Задачите не можеа да се избришат. Обидете се повторно.';
+
+  @override
+  String get deleteRecap => 'Избриши преглед';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Да се избрише овој преглед?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Овој преглед ќе биде трајно отстранет. Оригиналните разговори од тој ден остануваат недопрени.';
+
+  @override
+  String get deleteRecapAction => 'Избриши';
+
+  @override
+  String get recapDeletedSnackbar => 'Прегледот е избришан';
+
+  @override
+  String get recapDeleteFailed => 'Прегледот не може да се избрише. Обидете се повторно подоцна.';
 }

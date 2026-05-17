@@ -9301,4 +9301,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Impossibile eliminare le attività. Riprova.';
+
+  @override
+  String get deleteRecap => 'Elimina riepilogo';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Eliminare questo riepilogo?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Questo riepilogo verrà rimosso in modo permanente. Le conversazioni originali di quel giorno non verranno modificate.';
+
+  @override
+  String get deleteRecapAction => 'Elimina';
+
+  @override
+  String get recapDeletedSnackbar => 'Riepilogo eliminato';
+
+  @override
+  String get recapDeleteFailed => 'Impossibile eliminare il riepilogo. Riprova più tardi.';
 }

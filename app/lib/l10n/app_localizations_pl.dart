@@ -9266,4 +9266,23 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nie udało się usunąć zadań. Spróbuj ponownie.';
+
+  @override
+  String get deleteRecap => 'Usuń podsumowanie';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Usunąć to podsumowanie?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'To podsumowanie zostanie trwale usunięte. Oryginalne rozmowy z tego dnia pozostaną nienaruszone.';
+
+  @override
+  String get deleteRecapAction => 'Usuń';
+
+  @override
+  String get recapDeletedSnackbar => 'Podsumowanie usunięte';
+
+  @override
+  String get recapDeleteFailed => 'Nie udało się usunąć podsumowania. Spróbuj ponownie później.';
 }

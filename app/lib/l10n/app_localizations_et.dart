@@ -9243,4 +9243,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get deleteRecap => 'Kustuta kokkuvõte';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Kustutada see kokkuvõte?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Kokkuvõte eemaldatakse jäädavalt. Selle päeva algsed vestlused jäävad puutumata.';
+
+  @override
+  String get deleteRecapAction => 'Kustuta';
+
+  @override
+  String get recapDeletedSnackbar => 'Kokkuvõte kustutatud';
+
+  @override
+  String get recapDeleteFailed => 'Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.';
 }

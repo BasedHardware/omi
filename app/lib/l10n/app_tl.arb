@@ -10727,5 +10727,11 @@
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",
     "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
-    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli.",
+    "deleteRecap": "Burahin ang recap",
+    "deleteRecapConfirmTitle": "Burahin ang recap na ito?",
+    "deleteRecapConfirmBody": "Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.",
+    "deleteRecapAction": "Burahin",
+    "recapDeletedSnackbar": "Burado na ang recap",
+    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya."
 }

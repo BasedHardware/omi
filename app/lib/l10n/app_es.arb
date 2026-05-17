@@ -3020,5 +3020,11 @@
     "startCallRecording": "Iniciar grabación de llamada",
     "startVoiceRecording": "Iniciar grabación de voz",
     "bulkExportAlreadyExported": "Todas las tareas seleccionadas ya están exportadas",
-    "bulkDeleteFailed": "No se pudieron eliminar las tareas. Inténtalo de nuevo."
+    "bulkDeleteFailed": "No se pudieron eliminar las tareas. Inténtalo de nuevo.",
+    "deleteRecap": "Eliminar resumen",
+    "deleteRecapConfirmTitle": "¿Eliminar este resumen?",
+    "deleteRecapConfirmBody": "Este resumen se eliminará de forma permanente. Las conversaciones originales de ese día no se ven afectadas.",
+    "deleteRecapAction": "Eliminar",
+    "recapDeletedSnackbar": "Resumen eliminado",
+    "recapDeleteFailed": "No se pudo eliminar el resumen. Inténtalo de nuevo más tarde."
 }

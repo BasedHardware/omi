@@ -10727,5 +10727,11 @@
     "startCallRecording": "Pokreni snimanje poziva",
     "startVoiceRecording": "Pokreni glasovno snimanje",
     "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
-    "bulkDeleteFailed": "Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo."
+    "bulkDeleteFailed": "Zadaci nisu mogli biti obrisani. Molimo pokušajte ponovo.",
+    "deleteRecap": "Obriši pregled",
+    "deleteRecapConfirmTitle": "Obrisati ovaj pregled?",
+    "deleteRecapConfirmBody": "Ovaj pregled bit će trajno uklonjen. Originalni razgovori s tog dana ostaju netaknuti.",
+    "deleteRecapAction": "Obriši",
+    "recapDeletedSnackbar": "Pregled obrisan",
+    "recapDeleteFailed": "Pregled nije moguće obrisati. Pokušajte ponovo kasnije."
 }

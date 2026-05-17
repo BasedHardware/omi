@@ -9250,4 +9250,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Não foi possível excluir as tarefas. Tente novamente.';
+
+  @override
+  String get deleteRecap => 'Excluir resumo';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Excluir este resumo?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Este resumo será removido permanentemente. As conversas originais daquele dia não são afetadas.';
+
+  @override
+  String get deleteRecapAction => 'Excluir';
+
+  @override
+  String get recapDeletedSnackbar => 'Resumo excluído';
+
+  @override
+  String get recapDeleteFailed => 'Não foi possível excluir o resumo. Tente novamente mais tarde.';
 }

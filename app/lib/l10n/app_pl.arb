@@ -3054,5 +3054,11 @@
     "startCallRecording": "Rozpocznij nagrywanie rozmowy",
     "startVoiceRecording": "Rozpocznij nagrywanie głosu",
     "bulkExportAlreadyExported": "Wszystkie wybrane zadania zostały już wyeksportowane",
-    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie."
+    "bulkDeleteFailed": "Nie udało się usunąć zadań. Spróbuj ponownie.",
+    "deleteRecap": "Usuń podsumowanie",
+    "deleteRecapConfirmTitle": "Usunąć to podsumowanie?",
+    "deleteRecapConfirmBody": "To podsumowanie zostanie trwale usunięte. Oryginalne rozmowy z tego dnia pozostaną nienaruszone.",
+    "deleteRecapAction": "Usuń",
+    "recapDeletedSnackbar": "Podsumowanie usunięte",
+    "recapDeleteFailed": "Nie udało się usunąć podsumowania. Spróbuj ponownie później."
 }

@@ -36,7 +36,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
-from utils.byok import get_byok_keys
+from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
@@ -239,6 +239,13 @@ async def _stream_handler(
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
         return
+
+    # BYOKMiddleware doesn't fire for WebSocket upgrades (HTTP-only). Extract
+    # BYOK headers from the upgrade request and stash them in the contextvar
+    # BEFORE the paywall check, so a user sending all 4 keys gets the
+    # request-level BYOK escape hatch instead of being closed with trial_expired
+    # whenever their Firestore BYOK heartbeat is briefly stale.
+    set_byok_keys(extract_byok_from_websocket(websocket))
 
     if is_trial_paywalled(uid, source):
         logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)

@@ -9263,4 +9263,23 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get deleteRecap => 'خلاصہ حذف کریں';
+
+  @override
+  String get deleteRecapConfirmTitle => 'یہ خلاصہ حذف کریں؟';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'یہ خلاصہ مستقل طور پر حذف کر دیا جائے گا۔ اس دن کی اصل گفتگوئیں متاثر نہیں ہوں گی۔';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'خلاصہ حذف ہو گیا';
+
+  @override
+  String get recapDeleteFailed => 'خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔';
 }

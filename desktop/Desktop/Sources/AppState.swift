@@ -138,6 +138,11 @@ class AppState: ObservableObject {
     didSet { UserDefaults.standard.set(isPaywalled, forKey: "desktop_isPaywalled") }
   }
 
+  /// Trial metadata from `/v1/users/me/trial`. Updated every 60s.
+  @Published var trialMetadata: TrialMetadataResponse?
+
+  private var trialRefreshTimer: Timer?
+
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
   func triggerUsageLimitPopup(reason: String) {
@@ -160,6 +165,94 @@ class AppState: ObservableObject {
       userInfo: ["reason": reason]
     )
     return true
+  }
+
+  func fetchTrialMetadata() {
+    #if DEBUG
+    if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
+      applyDebugTrialMode(debugMode)
+      return
+    }
+    #endif
+
+    Task { @MainActor in
+      do {
+        let metadata = try await APIClient.shared.getTrialMetadata()
+        self.trialMetadata = metadata
+        if metadata.trialExpired && !self.isPaywalled {
+          self.isPaywalled = true
+        } else if !metadata.trialExpired && self.isPaywalled {
+          self.isPaywalled = false
+        }
+      } catch {
+        log("AppState: failed to fetch trial metadata: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  #if DEBUG
+  private func applyDebugTrialMode(_ mode: String) {
+    let now = Int(Date().timeIntervalSince1970)
+    let features = ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"]
+    let dur = 3 * 24 * 3600
+
+    func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
+      TrialMetadataResponse(
+        trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
+        trialRemainingSeconds: remaining, trialExpired: expired,
+        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+      )
+    }
+
+    switch mode {
+    case "active":
+      self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
+    case "warning":
+      self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
+    case "expiring":
+      self.trialMetadata = mock(remaining: 1800, expired: false)
+    case "expired":
+      self.trialMetadata = mock(remaining: 0, expired: true)
+    case "realtime":
+      let endKey = "debug_trial_end_time"
+      let rtDur = 120
+      var endTime = UserDefaults.standard.integer(forKey: endKey)
+      if endTime == 0 {
+        endTime = now + rtDur
+        UserDefaults.standard.set(endTime, forKey: endKey)
+      }
+      let remaining = max(0, endTime - now)
+      self.trialMetadata = TrialMetadataResponse(
+        trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
+        trialRemainingSeconds: remaining, trialExpired: remaining == 0,
+        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+      )
+      if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
+    default:
+      break
+    }
+  }
+  #endif
+
+  func startTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    fetchTrialMetadata()
+    #if DEBUG
+    let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
+    #else
+    let interval: TimeInterval = 60
+    #endif
+    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.fetchTrialMetadata()
+      }
+    }
+  }
+
+  func stopTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    trialRefreshTimer = nil
+    trialMetadata = nil
   }
 
   /// True if notifications are enabled but won't show visual banners

@@ -9174,4 +9174,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'לא ניתן למחוק את המשימות. אנא נסה שוב.';
+
+  @override
+  String get deleteRecap => 'מחק סיכום';
+
+  @override
+  String get deleteRecapConfirmTitle => 'למחוק את הסיכום הזה?';
+
+  @override
+  String get deleteRecapConfirmBody => 'הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.';
+
+  @override
+  String get deleteRecapAction => 'מחק';
+
+  @override
+  String get recapDeletedSnackbar => 'הסיכום נמחק';
+
+  @override
+  String get recapDeleteFailed => 'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
 }

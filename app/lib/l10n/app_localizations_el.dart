@@ -9311,4 +9311,23 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.';
+
+  @override
+  String get deleteRecap => 'Διαγραφή σύνοψης';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Διαγραφή αυτής της σύνοψης;';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Αυτή η σύνοψη θα διαγραφεί οριστικά. Οι αρχικές συνομιλίες της ημέρας δεν επηρεάζονται.';
+
+  @override
+  String get deleteRecapAction => 'Διαγραφή';
+
+  @override
+  String get recapDeletedSnackbar => 'Η σύνοψη διαγράφηκε';
+
+  @override
+  String get recapDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.';
 }

@@ -10727,5 +10727,11 @@
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
     "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
-    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।",
+    "deleteRecap": "রিক্যাপ মুছুন",
+    "deleteRecapConfirmTitle": "এই রিক্যাপ মুছবেন?",
+    "deleteRecapConfirmBody": "এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।",
+    "deleteRecapAction": "মুছুন",
+    "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
+    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।"
 }

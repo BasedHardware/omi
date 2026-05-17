@@ -360,14 +360,24 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final hasMap = summary.locations.isNotEmpty;
 
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
-        Navigator.push(
+        // Detail page pops with ``{deleted: true, summaryId}`` when the user
+        // deletes from there — drop the card so the home recap row doesn't
+        // linger until the next pull-to-refresh.
+        final result = await Navigator.push<dynamic>(
           context,
           MaterialPageRoute(
             builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
           ),
         );
+        if (!mounted) return;
+        if (result is Map && result['deleted'] == true) {
+          final deletedId = result['summaryId'] as String?;
+          if (deletedId != null) {
+            setState(() => _recentSummaries.removeWhere((s) => s.id == deletedId));
+          }
+        }
       },
       child: Container(
         width: _cardWidth,

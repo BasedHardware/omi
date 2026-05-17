@@ -9278,4 +9278,23 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get deleteRecap => 'ಸಾರಾಂಶ ಅಳಿಸಿ';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ಈ ಸಾರಾಂಶವನ್ನು ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'ಈ ಸಾರಾಂಶವನ್ನು ಶಾಶ್ವತವಾಗಿ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಆ ದಿನದ ಮೂಲ ಸಂಭಾಷಣೆಗಳಿಗೆ ಪರಿಣಾಮ ಉಂಟಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get deleteRecapAction => 'ಅಳಿಸಿ';
+
+  @override
+  String get recapDeletedSnackbar => 'ಸಾರಾಂಶ ಅಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get recapDeleteFailed => 'ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.';
 }

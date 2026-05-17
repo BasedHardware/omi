@@ -518,6 +518,20 @@ Future<DailySummary?> getDailySummary(String summaryId) async {
   }
 }
 
+/// Delete a daily summary by id. Returns true on success.
+/// Backend route: DELETE /v1/users/daily-summaries/{summary_id}.
+Future<bool> deleteDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  // 200 = deleted, 404 = already gone (treat as success — user expectation matches).
+  return response.statusCode == 200 || response.statusCode == 404;
+}
+
 /// Generate a daily summary for a specific date (or today if not specified)
 /// Returns the summary_id on success, null on failure
 Future<String?> generateDailySummary({String? date}) async {

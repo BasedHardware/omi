@@ -9243,4 +9243,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get deleteRecap => 'Delete recap';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Delete this recap?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'This recap will be permanently removed. The original conversations from that day are not affected.';
+
+  @override
+  String get deleteRecapAction => 'Delete';
+
+  @override
+  String get recapDeletedSnackbar => 'Recap deleted';
+
+  @override
+  String get recapDeleteFailed => 'Couldn\'t delete the recap. Try again later.';
 }

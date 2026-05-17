@@ -9257,4 +9257,23 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get deleteRecap => 'रीकॅप हटवा';
+
+  @override
+  String get deleteRecapConfirmTitle => 'हे रीकॅप हटवायचे आहे का?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'हे रीकॅप कायमचे काढून टाकले जाईल. त्या दिवसाच्या मूळ संभाषणांवर परिणाम होणार नाही.';
+
+  @override
+  String get deleteRecapAction => 'हटवा';
+
+  @override
+  String get recapDeletedSnackbar => 'रीकॅप हटवले';
+
+  @override
+  String get recapDeleteFailed => 'रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.';
 }

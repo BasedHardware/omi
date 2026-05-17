@@ -10727,5 +10727,11 @@
     "startCallRecording": "شروع ضبط تماس",
     "startVoiceRecording": "شروع ضبط صدا",
     "bulkExportAlreadyExported": "همهٔ کارهای انتخاب‌شده قبلاً صادر شده‌اند",
-    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید."
+    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید.",
+    "deleteRecap": "حذف خلاصه",
+    "deleteRecapConfirmTitle": "این خلاصه حذف شود؟",
+    "deleteRecapConfirmBody": "این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.",
+    "deleteRecapAction": "حذف",
+    "recapDeletedSnackbar": "خلاصه حذف شد",
+    "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید."
 }
