@@ -293,7 +293,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           tooltip: context.l10n.deleteRecap,
           icon: Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
             child: _isDeleting
                 ? const SizedBox(
                     width: 16,
