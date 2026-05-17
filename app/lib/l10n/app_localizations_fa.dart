@@ -9249,4 +9249,23 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get deleteRecap => 'حذف خلاصه';
+
+  @override
+  String get deleteRecapConfirmTitle => 'این خلاصه حذف شود؟';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'خلاصه حذف شد';
+
+  @override
+  String get recapDeleteFailed => 'حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
 }

@@ -9264,4 +9264,23 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get deleteRecap => 'Dzēst kopsavilkumu';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Dzēst šo kopsavilkumu?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Šis kopsavilkums tiks neatgriezeniski noņemts. Tās dienas oriģinālās sarunas netiks ietekmētas.';
+
+  @override
+  String get deleteRecapAction => 'Dzēst';
+
+  @override
+  String get recapDeletedSnackbar => 'Kopsavilkums dzēsts';
+
+  @override
+  String get recapDeleteFailed => 'Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.';
 }

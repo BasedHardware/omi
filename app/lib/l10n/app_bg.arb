@@ -2988,5 +2988,11 @@
     "startCallRecording": "Стартиране на запис на разговор",
     "startVoiceRecording": "Стартиране на гласов запис",
     "bulkExportAlreadyExported": "Всички избрани задачи вече са експортирани",
-    "bulkDeleteFailed": "Задачите не можаха да бъдат изтрити. Моля, опитайте отново."
+    "bulkDeleteFailed": "Задачите не можаха да бъдат изтрити. Моля, опитайте отново.",
+    "deleteRecap": "Изтрий резюмето",
+    "deleteRecapConfirmTitle": "Да се изтрие това резюме?",
+    "deleteRecapConfirmBody": "Резюмето ще бъде премахнато завинаги. Оригиналните разговори от този ден не се засягат.",
+    "deleteRecapAction": "Изтрий",
+    "recapDeletedSnackbar": "Резюмето е изтрито",
+    "recapDeleteFailed": "Резюмето не може да бъде изтрито. Опитайте по-късно."
 }

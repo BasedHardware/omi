@@ -3028,5 +3028,11 @@
     "startCallRecording": "Start opkaldsoptagelse",
     "startVoiceRecording": "Start stemmeoptagelse",
     "bulkExportAlreadyExported": "Alle valgte opgaver er allerede eksporteret",
-    "bulkDeleteFailed": "Opgaverne kunne ikke slettes. Prøv igen."
+    "bulkDeleteFailed": "Opgaverne kunne ikke slettes. Prøv igen.",
+    "deleteRecap": "Slet opsummering",
+    "deleteRecapConfirmTitle": "Slet denne opsummering?",
+    "deleteRecapConfirmBody": "Opsummeringen fjernes permanent. De oprindelige samtaler fra den dag påvirkes ikke.",
+    "deleteRecapAction": "Slet",
+    "recapDeletedSnackbar": "Opsummering slettet",
+    "recapDeleteFailed": "Kunne ikke slette opsummeringen. Prøv igen senere."
 }

@@ -2988,5 +2988,11 @@
     "startCallRecording": "Zahájit nahrávání hovoru",
     "startVoiceRecording": "Zahájit hlasový záznam",
     "bulkExportAlreadyExported": "Všechny vybrané úkoly už byly exportovány",
-    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu."
+    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu.",
+    "deleteRecap": "Smazat shrnutí",
+    "deleteRecapConfirmTitle": "Smazat toto shrnutí?",
+    "deleteRecapConfirmBody": "Shrnutí bude trvale odstraněno. Původní konverzace z toho dne nebudou ovlivněny.",
+    "deleteRecapAction": "Smazat",
+    "recapDeletedSnackbar": "Shrnutí smazáno",
+    "recapDeleteFailed": "Shrnutí se nepodařilo smazat. Zkuste to znovu později."
 }

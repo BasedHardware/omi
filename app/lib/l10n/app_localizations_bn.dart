@@ -9255,4 +9255,22 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।';
+
+  @override
+  String get deleteRecap => 'রিক্যাপ মুছুন';
+
+  @override
+  String get deleteRecapConfirmTitle => 'এই রিক্যাপ মুছবেন?';
+
+  @override
+  String get deleteRecapConfirmBody => 'এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।';
+
+  @override
+  String get deleteRecapAction => 'মুছুন';
+
+  @override
+  String get recapDeletedSnackbar => 'রিক্যাপ মুছে ফেলা হয়েছে';
+
+  @override
+  String get recapDeleteFailed => 'রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।';
 }

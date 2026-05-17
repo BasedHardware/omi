@@ -9250,4 +9250,23 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Det gick inte att ta bort uppgifterna. Försök igen.';
+
+  @override
+  String get deleteRecap => 'Radera sammanfattning';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Radera den här sammanfattningen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Sammanfattningen tas bort permanent. De ursprungliga samtalen från den dagen påverkas inte.';
+
+  @override
+  String get deleteRecapAction => 'Radera';
+
+  @override
+  String get recapDeletedSnackbar => 'Sammanfattning raderad';
+
+  @override
+  String get recapDeleteFailed => 'Det gick inte att radera sammanfattningen. Försök igen senare.';
 }

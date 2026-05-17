@@ -3019,5 +3019,11 @@
     "startCallRecording": "Sākt zvana ierakstīšanu",
     "startVoiceRecording": "Sākt balss ierakstīšanu",
     "bulkExportAlreadyExported": "Visi atlasītie uzdevumi jau ir eksportēti",
-    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz."
+    "bulkDeleteFailed": "Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.",
+    "deleteRecap": "Dzēst kopsavilkumu",
+    "deleteRecapConfirmTitle": "Dzēst šo kopsavilkumu?",
+    "deleteRecapConfirmBody": "Šis kopsavilkums tiks neatgriezeniski noņemts. Tās dienas oriģinālās sarunas netiks ietekmētas.",
+    "deleteRecapAction": "Dzēst",
+    "recapDeletedSnackbar": "Kopsavilkums dzēsts",
+    "recapDeleteFailed": "Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk."
 }

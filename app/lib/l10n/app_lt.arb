@@ -3019,5 +3019,11 @@
     "startCallRecording": "Pradėti skambučio įrašymą",
     "startVoiceRecording": "Pradėti balso įrašymą",
     "bulkExportAlreadyExported": "Visos pasirinktos užduotys jau eksportuotos",
-    "bulkDeleteFailed": "Nepavyko ištrinti užduočių. Bandykite dar kartą."
+    "bulkDeleteFailed": "Nepavyko ištrinti užduočių. Bandykite dar kartą.",
+    "deleteRecap": "Ištrinti suvestinę",
+    "deleteRecapConfirmTitle": "Ištrinti šią suvestinę?",
+    "deleteRecapConfirmBody": "Ši suvestinė bus visam laikui pašalinta. Tos dienos pradinės pokalbiai nebus paveikti.",
+    "deleteRecapAction": "Ištrinti",
+    "recapDeletedSnackbar": "Suvestinė ištrinta",
+    "recapDeleteFailed": "Nepavyko ištrinti suvestinės. Bandykite vėliau."
 }

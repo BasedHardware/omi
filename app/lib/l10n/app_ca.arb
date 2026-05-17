@@ -2988,5 +2988,11 @@
     "startCallRecording": "Inicia l'enregistrament de trucada",
     "startVoiceRecording": "Inicia l'enregistrament de veu",
     "bulkExportAlreadyExported": "Totes les tasques seleccionades ja s'han exportat",
-    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar."
+    "bulkDeleteFailed": "No s'han pogut eliminar les tasques. Torna-ho a provar.",
+    "deleteRecap": "Esborra el resum",
+    "deleteRecapConfirmTitle": "Esborrar aquest resum?",
+    "deleteRecapConfirmBody": "Aquest resum s'eliminarà permanentment. Les converses originals d'aquell dia no es veuran afectades.",
+    "deleteRecapAction": "Esborra",
+    "recapDeletedSnackbar": "Resum esborrat",
+    "recapDeleteFailed": "No s'ha pogut esborrar el resum. Torna-ho a provar més tard."
 }

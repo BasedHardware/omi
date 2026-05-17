@@ -10727,5 +10727,11 @@
     "startCallRecording": "התחל הקלטת שיחה",
     "startVoiceRecording": "התחל הקלטה קולית",
     "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
-    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב.",
+    "deleteRecap": "מחק סיכום",
+    "deleteRecapConfirmTitle": "למחוק את הסיכום הזה?",
+    "deleteRecapConfirmBody": "הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.",
+    "deleteRecapAction": "מחק",
+    "recapDeletedSnackbar": "הסיכום נמחק",
+    "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר."
 }

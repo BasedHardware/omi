@@ -9083,4 +9083,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '无法删除任务，请重试。';
+
+  @override
+  String get deleteRecap => '删除回顾';
+
+  @override
+  String get deleteRecapConfirmTitle => '删除该回顾?';
+
+  @override
+  String get deleteRecapConfirmBody => '此回顾将被永久删除。当天的原始对话不会受到影响。';
+
+  @override
+  String get deleteRecapAction => '删除';
+
+  @override
+  String get recapDeletedSnackbar => '回顾已删除';
+
+  @override
+  String get recapDeleteFailed => '无法删除回顾。请稍后重试。';
 }

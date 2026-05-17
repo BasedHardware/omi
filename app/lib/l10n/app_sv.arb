@@ -3019,5 +3019,11 @@
     "startCallRecording": "Starta samtalsinspelning",
     "startVoiceRecording": "Starta röstinspelning",
     "bulkExportAlreadyExported": "Alla valda uppgifter är redan exporterade",
-    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen."
+    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen.",
+    "deleteRecap": "Radera sammanfattning",
+    "deleteRecapConfirmTitle": "Radera den här sammanfattningen?",
+    "deleteRecapConfirmBody": "Sammanfattningen tas bort permanent. De ursprungliga samtalen från den dagen påverkas inte.",
+    "deleteRecapAction": "Radera",
+    "recapDeletedSnackbar": "Sammanfattning raderad",
+    "recapDeleteFailed": "Det gick inte att radera sammanfattningen. Försök igen senare."
 }

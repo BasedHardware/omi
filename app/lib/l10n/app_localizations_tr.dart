@@ -9259,4 +9259,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get deleteRecap => 'Özeti sil';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Bu özet silinsin mi?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.';
+
+  @override
+  String get deleteRecapAction => 'Sil';
+
+  @override
+  String get recapDeletedSnackbar => 'Özet silindi';
+
+  @override
+  String get recapDeleteFailed => 'Özet silinemedi. Daha sonra tekrar deneyin.';
 }

@@ -3024,5 +3024,11 @@
     "startCallRecording": "Spustiť nahrávanie hovoru",
     "startVoiceRecording": "Spustiť hlasový záznam",
     "bulkExportAlreadyExported": "Všetky vybrané úlohy už boli exportované",
-    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova."
+    "bulkDeleteFailed": "Úlohy sa nepodarilo odstrániť. Skúste to znova.",
+    "deleteRecap": "Odstrániť zhrnutie",
+    "deleteRecapConfirmTitle": "Odstrániť toto zhrnutie?",
+    "deleteRecapConfirmBody": "Zhrnutie bude trvalo odstránené. Pôvodné konverzácie z toho dňa zostávajú nedotknuté.",
+    "deleteRecapAction": "Odstrániť",
+    "recapDeletedSnackbar": "Zhrnutie odstránené",
+    "recapDeleteFailed": "Zhrnutie sa nepodarilo odstrániť. Skúste neskôr."
 }

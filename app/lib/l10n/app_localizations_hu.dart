@@ -9285,4 +9285,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
+
+  @override
+  String get deleteRecap => 'Összefoglaló törlése';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Törlöd ezt az összefoglalót?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Az összefoglaló véglegesen eltávolításra kerül. Az adott nap eredeti beszélgetései érintetlenek maradnak.';
+
+  @override
+  String get deleteRecapAction => 'Törlés';
+
+  @override
+  String get recapDeletedSnackbar => 'Összefoglaló törölve';
+
+  @override
+  String get recapDeleteFailed => 'Nem sikerült törölni az összefoglalót. Próbáld újra később.';
 }

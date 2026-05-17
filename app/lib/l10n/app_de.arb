@@ -2987,5 +2987,11 @@
     "startCallRecording": "Anrufaufnahme starten",
     "startVoiceRecording": "Sprachaufnahme starten",
     "bulkExportAlreadyExported": "Alle ausgewählten Aufgaben wurden bereits exportiert",
-    "bulkDeleteFailed": "Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen."
+    "bulkDeleteFailed": "Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen.",
+    "deleteRecap": "Zusammenfassung löschen",
+    "deleteRecapConfirmTitle": "Diese Zusammenfassung löschen?",
+    "deleteRecapConfirmBody": "Diese Zusammenfassung wird dauerhaft entfernt. Die ursprünglichen Gespräche dieses Tages bleiben erhalten.",
+    "deleteRecapAction": "Löschen",
+    "recapDeletedSnackbar": "Zusammenfassung gelöscht",
+    "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut."
 }

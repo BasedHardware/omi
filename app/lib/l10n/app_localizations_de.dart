@@ -9323,4 +9323,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen.';
+
+  @override
+  String get deleteRecap => 'Zusammenfassung löschen';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Diese Zusammenfassung löschen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Diese Zusammenfassung wird dauerhaft entfernt. Die ursprünglichen Gespräche dieses Tages bleiben erhalten.';
+
+  @override
+  String get deleteRecapAction => 'Löschen';
+
+  @override
+  String get recapDeletedSnackbar => 'Zusammenfassung gelöscht';
+
+  @override
+  String get recapDeleteFailed => 'Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut.';
 }

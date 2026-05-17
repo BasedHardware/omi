@@ -3019,5 +3019,11 @@
     "startCallRecording": "Έναρξη εγγραφής κλήσης",
     "startVoiceRecording": "Έναρξη ηχογράφησης",
     "bulkExportAlreadyExported": "Όλες οι επιλεγμένες εργασίες έχουν ήδη εξαχθεί",
-    "bulkDeleteFailed": "Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά."
+    "bulkDeleteFailed": "Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.",
+    "deleteRecap": "Διαγραφή σύνοψης",
+    "deleteRecapConfirmTitle": "Διαγραφή αυτής της σύνοψης;",
+    "deleteRecapConfirmBody": "Αυτή η σύνοψη θα διαγραφεί οριστικά. Οι αρχικές συνομιλίες της ημέρας δεν επηρεάζονται.",
+    "deleteRecapAction": "Διαγραφή",
+    "recapDeletedSnackbar": "Η σύνοψη διαγράφηκε",
+    "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα."
 }

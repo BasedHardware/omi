@@ -9200,4 +9200,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'ลบงานไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String get deleteRecap => 'ลบสรุป';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ลบสรุปนี้หรือไม่?';
+
+  @override
+  String get deleteRecapConfirmBody => 'สรุปนี้จะถูกลบอย่างถาวร บทสนทนาต้นฉบับของวันนั้นจะไม่ได้รับผลกระทบ';
+
+  @override
+  String get deleteRecapAction => 'ลบ';
+
+  @override
+  String get recapDeletedSnackbar => 'ลบสรุปแล้ว';
+
+  @override
+  String get recapDeleteFailed => 'ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง';
 }

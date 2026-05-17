@@ -10727,5 +10727,11 @@
     "startCallRecording": "Пачаць запіс званка",
     "startVoiceRecording": "Пачаць галасавы запіс",
     "bulkExportAlreadyExported": "Усе выбраныя задачы ўжо экспартаваны",
-    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз."
+    "bulkDeleteFailed": "Не ўдалося выдаліць задачы. Калі ласка, паспрабуйце яшчэ раз.",
+    "deleteRecap": "Выдаліць агляд",
+    "deleteRecapConfirmTitle": "Выдаліць гэты агляд?",
+    "deleteRecapConfirmBody": "Гэты агляд будзе выдалены назаўсёды. Зыходныя размовы за той дзень не будуць закрануты.",
+    "deleteRecapAction": "Выдаліць",
+    "recapDeletedSnackbar": "Агляд выдалены",
+    "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней."
 }

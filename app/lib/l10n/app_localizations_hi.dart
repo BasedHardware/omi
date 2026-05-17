@@ -9226,4 +9226,23 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get deleteRecap => 'रीकैप हटाएँ';
+
+  @override
+  String get deleteRecapConfirmTitle => 'क्या यह रीकैप हटाना है?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'यह रीकैप स्थायी रूप से हटा दी जाएगी। उस दिन की मूल बातचीतें प्रभावित नहीं होंगी।';
+
+  @override
+  String get deleteRecapAction => 'हटाएँ';
+
+  @override
+  String get recapDeletedSnackbar => 'रीकैप हटा दी गई';
+
+  @override
+  String get recapDeleteFailed => 'रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।';
 }

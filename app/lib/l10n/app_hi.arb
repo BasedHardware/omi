@@ -3020,5 +3020,11 @@
     "startCallRecording": "कॉल रिकॉर्डिंग शुरू करें",
     "startVoiceRecording": "वॉइस रिकॉर्डिंग शुरू करें",
     "bulkExportAlreadyExported": "सभी चयनित कार्य पहले ही निर्यात किए जा चुके हैं",
-    "bulkDeleteFailed": "कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।"
+    "bulkDeleteFailed": "कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।",
+    "deleteRecap": "रीकैप हटाएँ",
+    "deleteRecapConfirmTitle": "क्या यह रीकैप हटाना है?",
+    "deleteRecapConfirmBody": "यह रीकैप स्थायी रूप से हटा दी जाएगी। उस दिन की मूल बातचीतें प्रभावित नहीं होंगी।",
+    "deleteRecapAction": "हटाएँ",
+    "recapDeletedSnackbar": "रीकैप हटा दी गई",
+    "recapDeleteFailed": "रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।"
 }

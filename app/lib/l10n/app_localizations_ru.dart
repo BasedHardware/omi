@@ -9275,4 +9275,23 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз.';
+
+  @override
+  String get deleteRecap => 'Удалить сводку';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Удалить эту сводку?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Эта сводка будет удалена навсегда. Исходные разговоры за этот день не затронуты.';
+
+  @override
+  String get deleteRecapAction => 'Удалить';
+
+  @override
+  String get recapDeletedSnackbar => 'Сводка удалена';
+
+  @override
+  String get recapDeleteFailed => 'Не удалось удалить сводку. Повторите попытку позже.';
 }

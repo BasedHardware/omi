@@ -10727,5 +10727,11 @@
     "startCallRecording": "Začni snemanje klica",
     "startVoiceRecording": "Začni glasovno snemanje",
     "bulkExportAlreadyExported": "Vse izbrane naloge so že izvožene",
-    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova."
+    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova.",
+    "deleteRecap": "Izbriši povzetek",
+    "deleteRecapConfirmTitle": "Izbrišem ta povzetek?",
+    "deleteRecapConfirmBody": "Ta povzetek bo trajno odstranjen. Izvirni pogovori tega dne ostanejo nespremenjeni.",
+    "deleteRecapAction": "Izbriši",
+    "recapDeletedSnackbar": "Povzetek izbrisan",
+    "recapDeleteFailed": "Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje."
 }

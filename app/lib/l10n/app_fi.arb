@@ -3019,5 +3019,11 @@
     "startCallRecording": "Aloita puhelun nauhoitus",
     "startVoiceRecording": "Aloita ääninauhoitus",
     "bulkExportAlreadyExported": "Kaikki valitut tehtävät on jo viety",
-    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen."
+    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen.",
+    "deleteRecap": "Poista yhteenveto",
+    "deleteRecapConfirmTitle": "Poistetaanko tämä yhteenveto?",
+    "deleteRecapConfirmBody": "Yhteenveto poistetaan pysyvästi. Tuon päivän alkuperäiset keskustelut säilyvät.",
+    "deleteRecapAction": "Poista",
+    "recapDeletedSnackbar": "Yhteenveto poistettu",
+    "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen."
 }

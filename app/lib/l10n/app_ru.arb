@@ -3054,5 +3054,11 @@
     "startCallRecording": "Начать запись звонка",
     "startVoiceRecording": "Начать голосовую запись",
     "bulkExportAlreadyExported": "Все выбранные задачи уже экспортированы",
-    "bulkDeleteFailed": "Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз."
+    "bulkDeleteFailed": "Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз.",
+    "deleteRecap": "Удалить сводку",
+    "deleteRecapConfirmTitle": "Удалить эту сводку?",
+    "deleteRecapConfirmBody": "Эта сводка будет удалена навсегда. Исходные разговоры за этот день не затронуты.",
+    "deleteRecapAction": "Удалить",
+    "recapDeletedSnackbar": "Сводка удалена",
+    "recapDeleteFailed": "Не удалось удалить сводку. Повторите попытку позже."
 }

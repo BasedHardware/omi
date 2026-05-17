@@ -3024,5 +3024,11 @@
     "startCallRecording": "Bắt đầu ghi âm cuộc gọi",
     "startVoiceRecording": "Bắt đầu ghi âm giọng nói",
     "bulkExportAlreadyExported": "Tất cả các tác vụ đã chọn đều đã được xuất",
-    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại."
+    "bulkDeleteFailed": "Không thể xóa các tác vụ. Vui lòng thử lại.",
+    "deleteRecap": "Xóa tóm tắt",
+    "deleteRecapConfirmTitle": "Xóa tóm tắt này?",
+    "deleteRecapConfirmBody": "Tóm tắt này sẽ bị xóa vĩnh viễn. Các cuộc trò chuyện gốc của ngày đó không bị ảnh hưởng.",
+    "deleteRecapAction": "Xóa",
+    "recapDeletedSnackbar": "Đã xóa tóm tắt",
+    "recapDeleteFailed": "Không thể xóa tóm tắt. Vui lòng thử lại sau."
 }

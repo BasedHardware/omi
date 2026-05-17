@@ -9185,4 +9185,22 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get deleteRecap => 'حذف الملخص';
+
+  @override
+  String get deleteRecapConfirmTitle => 'حذف هذا الملخص؟';
+
+  @override
+  String get deleteRecapConfirmBody => 'سيتم حذف هذا الملخص نهائيًا. لن تتأثر المحادثات الأصلية لذلك اليوم.';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'تم حذف الملخص';
+
+  @override
+  String get recapDeleteFailed => 'تعذر حذف الملخص. حاول مرة أخرى لاحقًا.';
 }
