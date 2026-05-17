@@ -138,12 +138,9 @@ class AppState: ObservableObject {
     didSet { UserDefaults.standard.set(isPaywalled, forKey: "desktop_isPaywalled") }
   }
 
-  /// Trial metadata fetched from Rust backend (`/v1/trial`). Updated every 60s
-  /// while the app is running. Used by SettingsPage to render the trial countdown
-  /// card and by FloatingControlBar for pre-expiry nudge banners.
+  /// Trial metadata from `/v1/users/me/trial`. Updated every 60s.
   @Published var trialMetadata: TrialMetadataResponse?
 
-  /// Timer that refreshes trial metadata every 60 seconds.
   private var trialRefreshTimer: Timer?
 
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
@@ -170,102 +167,21 @@ class AppState: ObservableObject {
     return true
   }
 
-  /// Fetch trial metadata from the Rust backend and update local state.
-  /// Called on app launch and every 60s thereafter while running.
   func fetchTrialMetadata() {
-    // Debug: inject fake trial data for UI testing via UserDefaults
-    // Set `debug_trial_mode` to "active" or "expired" to override
     #if DEBUG
     if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
-      let now = Int(Date().timeIntervalSince1970)
-      switch debugMode {
-      case "active":
-        self.trialMetadata = TrialMetadataResponse(
-          trialStartedAt: now - 3600,
-          trialEndsAt: now + (2 * 24 * 3600) + 3600,
-          trialRemainingSeconds: (2 * 24 * 3600) + 3600,
-          trialExpired: false,
-          trialDurationSeconds: 3 * 24 * 3600,
-          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
-          planAfterTrial: "Free"
-        )
-        return
-      case "warning":
-        // 12h remaining — yellow state (1h < remaining <= 24h)
-        self.trialMetadata = TrialMetadataResponse(
-          trialStartedAt: now - (2 * 24 * 3600) - (12 * 3600),
-          trialEndsAt: now + (12 * 3600),
-          trialRemainingSeconds: 12 * 3600,
-          trialExpired: false,
-          trialDurationSeconds: 3 * 24 * 3600,
-          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
-          planAfterTrial: "Free"
-        )
-        return
-      case "expiring":
-        self.trialMetadata = TrialMetadataResponse(
-          trialStartedAt: now - (3 * 24 * 3600) + 1800,
-          trialEndsAt: now + 1800,
-          trialRemainingSeconds: 1800,
-          trialExpired: false,
-          trialDurationSeconds: 3 * 24 * 3600,
-          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
-          planAfterTrial: "Free"
-        )
-        return
-      case "expired":
-        self.trialMetadata = TrialMetadataResponse(
-          trialStartedAt: now - (4 * 24 * 3600),
-          trialEndsAt: now - (1 * 24 * 3600),
-          trialRemainingSeconds: 0,
-          trialExpired: true,
-          trialDurationSeconds: 3 * 24 * 3600,
-          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
-          planAfterTrial: "Free"
-        )
-        return
-      case "realtime":
-        // Real-time trial that actually counts down and expires.
-        // First call seeds an end-time 120s from now in UserDefaults.
-        // Subsequent calls compute remaining from that fixed end-time.
-        let endKey = "debug_trial_end_time"
-        let trialDuration = 120 // 2-minute trial for testing
-        var endTime = UserDefaults.standard.integer(forKey: endKey)
-        if endTime == 0 {
-          endTime = now + trialDuration
-          UserDefaults.standard.set(endTime, forKey: endKey)
-          log("DEBUG trial: seeded end time \(endTime) (\(trialDuration)s from now)")
-        }
-        let remaining = max(0, endTime - now)
-        let isExpired = remaining == 0
-        self.trialMetadata = TrialMetadataResponse(
-          trialStartedAt: endTime - trialDuration,
-          trialEndsAt: endTime,
-          trialRemainingSeconds: remaining,
-          trialExpired: isExpired,
-          trialDurationSeconds: trialDuration,
-          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
-          planAfterTrial: "Free"
-        )
-        if isExpired && !self.isPaywalled {
-          self.isPaywalled = true
-        }
-        return
-      default:
-        break
-      }
+      applyDebugTrialMode(debugMode)
+      return
     }
     #endif
 
-    Task {
+    Task { @MainActor in
       do {
         let metadata = try await APIClient.shared.getTrialMetadata()
         self.trialMetadata = metadata
-        // Sync paywall flag from trial state
         if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
         } else if !metadata.trialExpired && self.isPaywalled {
-          // Clear paywall when trial is no longer expired (user paid/BYOK activated)
           self.isPaywalled = false
         }
       } catch {
@@ -274,7 +190,50 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Start periodic trial metadata refresh (60s interval, 10s in DEBUG realtime mode).
+  #if DEBUG
+  private func applyDebugTrialMode(_ mode: String) {
+    let now = Int(Date().timeIntervalSince1970)
+    let features = ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"]
+    let dur = 3 * 24 * 3600
+
+    func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
+      TrialMetadataResponse(
+        trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
+        trialRemainingSeconds: remaining, trialExpired: expired,
+        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+      )
+    }
+
+    switch mode {
+    case "active":
+      self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
+    case "warning":
+      self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
+    case "expiring":
+      self.trialMetadata = mock(remaining: 1800, expired: false)
+    case "expired":
+      self.trialMetadata = mock(remaining: 0, expired: true)
+    case "realtime":
+      let endKey = "debug_trial_end_time"
+      let rtDur = 120
+      var endTime = UserDefaults.standard.integer(forKey: endKey)
+      if endTime == 0 {
+        endTime = now + rtDur
+        UserDefaults.standard.set(endTime, forKey: endKey)
+      }
+      let remaining = max(0, endTime - now)
+      self.trialMetadata = TrialMetadataResponse(
+        trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
+        trialRemainingSeconds: remaining, trialExpired: remaining == 0,
+        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+      )
+      if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
+    default:
+      break
+    }
+  }
+  #endif
+
   func startTrialMetadataRefresh() {
     trialRefreshTimer?.invalidate()
     fetchTrialMetadata()
@@ -290,7 +249,6 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Stop trial refresh (e.g. on sign-out).
   func stopTrialMetadataRefresh() {
     trialRefreshTimer?.invalidate()
     trialRefreshTimer = nil
