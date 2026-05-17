@@ -180,7 +180,8 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   // "waiting for transcript or photos" placeholder forever. Mirror the
   // proven start path (battery_info_widget._startRecording).
   Future<void> _startPhoneRecording(BuildContext context) async {
-    HapticFeedback.mediumImpact();
+    // No haptic here — the option() wrapper already fires lightImpact() on tap;
+    // a mediumImpact() on top of it double-vibrates on a single tap.
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
     if (captureProvider.recordingState != RecordingState.record) {
