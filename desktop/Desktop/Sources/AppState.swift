@@ -264,6 +264,9 @@ class AppState: ObservableObject {
         // Sync paywall flag from trial state
         if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
+        } else if !metadata.trialExpired && self.isPaywalled {
+          // Clear paywall when trial is no longer expired (user paid/BYOK activated)
+          self.isPaywalled = false
         }
       } catch {
         log("AppState: failed to fetch trial metadata: \(error.localizedDescription)")
