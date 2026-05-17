@@ -26,7 +26,7 @@ from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
 from utils.other.endpoints import check_rate_limit_inline
-from utils.executors import run_blocking, db_executor, postprocess_executor
+from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -87,11 +87,11 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
 
     api_key = authorization.replace('Bearer ', '')
-    if not verify_api_key(app_id, api_key):
+    if not await run_blocking(critical_executor, verify_api_key, app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integration API key")
 
     # Rate limit per app+user
-    check_rate_limit_inline(f"{app_id}:{uid}", "integration:conversations")
+    await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}", "integration:conversations")
 
     # Verify if the app exists
     app = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)

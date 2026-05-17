@@ -673,7 +673,9 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     persona_data = {
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
-        'username': increment_username((user.get('display_name') or 'MyPersona').replace(' ', '').lower()),
+        'username': await run_blocking(
+            db_executor, increment_username, (user.get('display_name') or 'MyPersona').replace(' ', '').lower()
+        ),
         'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
         'image': '',  # Empty image as specified in the task
         'uid': uid,
@@ -1729,12 +1731,12 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
 @router.post('/v1/apps/enable')
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_available_app_by_id(app_id, uid)
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.private is not None:
-        if app.private and app.uid != uid and not is_tester(uid):
+        if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         client = get_webhook_client()
@@ -1744,11 +1746,15 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
+    if app.is_paid and await run_blocking(db_executor, get_is_user_paid_app, app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
     await run_blocking(db_executor, enable_app, uid, app_id)
-    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
+    if (
+        (app.private is None or not app.private)
+        and (app.uid is None or app.uid != uid)
+        and not await run_blocking(db_executor, is_tester, uid)
+    ):
         await run_blocking(db_executor, increase_app_installs_count, app_id)
     return {'status': 'ok'}
 
