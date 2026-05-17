@@ -1621,6 +1621,11 @@ class TestV2EndpointExecution:
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
             module._run_full_pipeline_background = MagicMock()
 
+            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            module.run_blocking = _passthrough_run_blocking
+
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
 

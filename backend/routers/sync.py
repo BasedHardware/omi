@@ -1629,10 +1629,12 @@ async def sync_local_files_v2(
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
-        paths = _retrieve_file_paths_v2(files, uid, job_id)
+        paths = await run_blocking(storage_executor, _retrieve_file_paths_v2, files, uid, job_id)
 
         # Create Redis job — total_segments=0 until VAD completes in background
-        create_sync_job(uid, total_files=len(files), total_segments=0, job_id=job_id)
+        await run_blocking(
+            critical_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id
+        )
 
         # Capture event loop for async calls from background thread
         loop_v2 = asyncio.get_running_loop()
