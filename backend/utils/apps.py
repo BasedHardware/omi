@@ -831,8 +831,8 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
 
-    update_persona_in_db(persona)
-    delete_app_cache_by_id(persona['id'])
+    await run_blocking(db_executor, update_persona_in_db, persona)
+    await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
 
 
 def increment_username(username: str):

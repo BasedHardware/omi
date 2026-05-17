@@ -50,7 +50,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
     # Create import job
-    job = create_import_job(uid, ImportSourceType.limitless)
+    job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
     os.makedirs(TEMP_DIR, exist_ok=True)

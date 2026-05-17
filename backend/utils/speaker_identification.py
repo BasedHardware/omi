@@ -8,7 +8,7 @@ import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
-from utils.executors import storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -429,7 +429,9 @@ async def extract_speaker_samples(
                 storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
+            success = await run_blocking(
+                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+            )
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
@@ -442,7 +444,9 @@ async def extract_speaker_samples(
                     embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
-                    users_db.set_person_speaker_embedding(uid, person_id, embedding_list)
+                    await run_blocking(
+                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
+                    )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )
