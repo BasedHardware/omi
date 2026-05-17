@@ -1370,8 +1370,7 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'])
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
-    # Migrate app ownership in the database
-    migrate_app_owner_id_db(uid, old_id)
+    await run_blocking(critical_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Start async tasks to migrate memories and update persona connected accounts
     asyncio.create_task(migrate_memories(old_id, uid))
@@ -1382,23 +1381,20 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
 
 async def update_omi_persona_connected_accounts(uid: str):
     try:
-        # Get all personas owned by the user
-        personas = get_omi_persona_apps_by_uid_db(uid)
+        personas = await run_blocking(critical_executor, get_omi_persona_apps_by_uid_db, uid)
 
-        # Update each persona to add 'omi' to connected_accounts
         for persona in personas:
             connected_accounts = persona.get('connected_accounts', [])
             if 'omi' not in connected_accounts:
                 connected_accounts.append('omi')
 
-                # Update the persona with the new connected_accounts
                 update_data = persona
                 update_data['connected_accounts'] = connected_accounts
                 update_data['updated_at'] = datetime.now(timezone.utc)
                 update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
                 update_data['description'] = generate_persona_desc(uid, update_data['name'])
 
-                update_app_in_db(update_data)
+                await run_blocking(critical_executor, update_app_in_db, update_data)
                 delete_app_cache_by_id(persona['id'])
     except Exception as e:
         logger.error(f"Error updating persona connected accounts: {e}")

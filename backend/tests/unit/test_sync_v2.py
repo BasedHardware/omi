@@ -540,7 +540,7 @@ class TestV2EndpointContract:
     def test_v2_handles_429_hard_restricted(self):
         """v2 must check hard restriction at the top."""
         body = self._get_v2_post_body()
-        assert 'is_hard_restricted(uid)' in body
+        assert 'is_hard_restricted' in body and 'uid' in body
 
     def test_v2_reraises_http_exceptions(self):
         """v2 must re-raise HTTPException from fast-path helpers."""

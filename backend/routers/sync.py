@@ -1609,10 +1609,10 @@ async def sync_local_files_v2(
     a background thread. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if is_hard_restricted(uid):
+    if await run_blocking(critical_executor, is_hard_restricted, uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
 
-    should_lock = not has_transcription_credits(uid)
+    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
     source = ConversationSource.omi
