@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
-from utils.executors import critical_executor, storage_executor, run_blocking
+from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
 import logging
 
@@ -206,7 +206,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:
-        segments = await run_blocking(critical_executor, _run_file_vad, file_path)
+        segments = await run_blocking(sync_executor, _run_file_vad, file_path)
 
     if cache:
         redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)

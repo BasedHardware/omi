@@ -66,7 +66,7 @@ class TestSyncV2Structure:
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
     def test_v2_submits_to_non_critical_executor(self):
-        """v2 must submit background work via submit_with_context(storage_executor) to avoid deadlock."""
+        """v2 must submit background work via submit_with_context(postprocess_executor) to avoid deadlock."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -76,8 +76,8 @@ class TestSyncV2Structure:
 
         assert 'submit_with_context' in func_body, "v2 must use submit_with_context for background worker"
         assert '_run_full_pipeline_background' in func_body, "v2 must submit the full pipeline background worker"
-        assert 'storage_executor' in func_body, (
-            "v2 coordinator dispatch must use storage_executor (not critical_executor) — "
+        assert 'postprocess_executor' in func_body, (
+            "v2 coordinator dispatch must use postprocess_executor (not critical_executor) — "
             "passing critical_executor would nest executors and cause deadlock"
         )
 

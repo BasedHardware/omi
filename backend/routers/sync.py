@@ -15,7 +15,14 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import httpx
 
-from utils.executors import critical_executor, storage_executor, sync_executor, run_blocking, submit_with_context
+from utils.executors import (
+    critical_executor,
+    postprocess_executor,
+    storage_executor,
+    sync_executor,
+    run_blocking,
+    submit_with_context,
+)
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -1637,9 +1644,9 @@ async def sync_local_files_v2(
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg thread
 
-        # Run in storage_executor (fire-and-forget, avoids deadlock with critical_executor)
+        # Run in postprocess_executor (fire-and-forget coordinator for decode/VAD/STT/LLM)
         submit_with_context(
-            storage_executor,
+            postprocess_executor,
             _run_full_pipeline_background,
             job_id,
             uid,
