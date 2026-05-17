@@ -60,14 +60,18 @@ jobs:
           python -m pip install build twine
           python -m pip install -e ".[dev]"
 
-      - name: Verify tag matches pyproject version
+      - name: Verify tag matches package version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          PYPROJECT_VERSION="$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")"
+          # Version is single-sourced from omi_cli.__version__ (pyproject uses
+          # [tool.setuptools.dynamic]). Read the resolved value from the
+          # installed package so the tag, the wheel, and `omi --version` are
+          # all checked against the same literal.
+          PKG_VERSION="$(python -c "import omi_cli; print(omi_cli.__version__)")"
           TAG_VERSION="${GITHUB_REF_NAME#omi-cli-v}"
-          echo "tag=$GITHUB_REF_NAME -> $TAG_VERSION ; pyproject=$PYPROJECT_VERSION"
-          if [ "$PYPROJECT_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME (-> $TAG_VERSION) does not match pyproject version $PYPROJECT_VERSION. Bump pyproject.toml or fix the tag."
+          echo "tag=$GITHUB_REF_NAME -> $TAG_VERSION ; package=$PKG_VERSION"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (-> $TAG_VERSION) does not match omi_cli.__version__ $PKG_VERSION. Bump omi_cli/__init__.py or fix the tag."
             exit 1
           fi
 
