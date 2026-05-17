@@ -358,6 +358,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               else if (_nonDiscardedConversationCount(convoProvider) < 3 &&
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&
+                  !convoProvider.isAwaitingInitialFetchRetry &&
                   !convoProvider.showStarredOnly &&
                   convoProvider.selectedFolderId == null)
                 // Friendly hero for users who haven't built up enough
@@ -368,7 +369,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
                   !convoProvider.isLoadingConversations &&
-                  !convoProvider.isFetchingConversations)
+                  !convoProvider.isFetchingConversations &&
+                  !convoProvider.isAwaitingInitialFetchRetry)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
@@ -378,7 +380,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ),
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
-                  (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
+                  (convoProvider.isLoadingConversations ||
+                      convoProvider.isFetchingConversations ||
+                      convoProvider.isAwaitingInitialFetchRetry))
                 _buildLoadingShimmer()
               else
                 SliverList(
