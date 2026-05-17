@@ -617,12 +617,17 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                stripe_utils.modify_subscription(subscription_id, metadata={"uid": uid, "app_id": app_id})
+                await run_blocking(
+                    stripe_executor,
+                    stripe_utils.modify_subscription,
+                    subscription_id,
+                    metadata={"uid": uid, "app_id": app_id},
+                )
                 # Store the customer ID for app subscription so that it is easy to cancel the subscription
                 customer_id = session.get("customer")
                 if customer_id:
-                    set_user_app_sub_customer_id(app_id, uid, customer_id)
-            paid_app(app_id, uid)
+                    await run_blocking(db_executor, set_user_app_sub_customer_id, app_id, uid, customer_id)
+            await run_blocking(db_executor, paid_app, app_id, uid)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
         elif client_reference_id or session.get('metadata', {}).get('sub_type'):
