@@ -224,6 +224,33 @@ class AppState: ObservableObject {
           planAfterTrial: "Free"
         )
         return
+      case "realtime":
+        // Real-time trial that actually counts down and expires.
+        // First call seeds an end-time 120s from now in UserDefaults.
+        // Subsequent calls compute remaining from that fixed end-time.
+        let endKey = "debug_trial_end_time"
+        let trialDuration = 120 // 2-minute trial for testing
+        var endTime = UserDefaults.standard.integer(forKey: endKey)
+        if endTime == 0 {
+          endTime = now + trialDuration
+          UserDefaults.standard.set(endTime, forKey: endKey)
+          log("DEBUG trial: seeded end time \(endTime) (\(trialDuration)s from now)")
+        }
+        let remaining = max(0, endTime - now)
+        let isExpired = remaining == 0
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: endTime - trialDuration,
+          trialEndsAt: endTime,
+          trialRemainingSeconds: remaining,
+          trialExpired: isExpired,
+          trialDurationSeconds: trialDuration,
+          trialFeatures: ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"],
+          planAfterTrial: "Free"
+        )
+        if isExpired && !self.isPaywalled {
+          self.isPaywalled = true
+        }
+        return
       default:
         break
       }
@@ -244,11 +271,16 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Start periodic trial metadata refresh (60s interval).
+  /// Start periodic trial metadata refresh (60s interval, 10s in DEBUG realtime mode).
   func startTrialMetadataRefresh() {
     trialRefreshTimer?.invalidate()
     fetchTrialMetadata()
-    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+    #if DEBUG
+    let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
+    #else
+    let interval: TimeInterval = 60
+    #endif
+    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
       Task { @MainActor in
         self?.fetchTrialMetadata()
       }
