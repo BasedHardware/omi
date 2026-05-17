@@ -37,11 +37,19 @@ from omi_cli.auth.store import store_oauth_tokens, update_oauth_id_token
 from omi_cli.config import Profile
 from omi_cli.errors import AuthError, UsageError
 
-# Public Firebase Web API key for the ``based-hardware`` Firebase project.
+# Public Firebase API key for the ``based-hardware`` Firebase project.
 # Firebase API keys are *not* secrets — they identify which project a
 # REST request targets and are embedded in every public web/mobile build.
 # See https://firebase.google.com/docs/projects/api-keys.
-_FIREBASE_API_KEY = "AIzaSyAqRWo5RN8YhlzNzBEWJ3GxG3S_1SJlxx4"
+#
+# IMPORTANT: this MUST be a key with no application restriction. A CLI sends
+# no ``Referer`` / app-bundle, so a referrer-locked *web* key (or an Android
+# SHA / iOS bundle restricted key) 403s here with API_KEY_HTTP_REFERRER_BLOCKED.
+# This is the project's Windows key — Firebase has no Windows-app restriction
+# mechanism, so it can't be silently re-locked the way the web/android/ios
+# keys can. Do NOT swap this back to the ``based-hardware`` web key
+# (AIzaSyAqRWo5RN8Y…); that is exactly what broke browser login in 0.2.0.
+_FIREBASE_API_KEY = "AIzaSyA88gHcmiAxjN_aE23tHRWXOgFfapyO6dk"
 _FIREBASE_SIGNIN_URL = (
     "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken" f"?key={_FIREBASE_API_KEY}"
 )
