@@ -629,8 +629,9 @@ async def _websocket_util_trigger(
             receive_task=receive_task,
             bg_tasks=bg_main_tasks,
             finite_tasks=None,
-            label=f"pusher:{uid}",
+            label="pusher",
         )
+        logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid}")
 
         if receive_task.done() and not receive_task.cancelled():
             exc = receive_task.exception()
@@ -645,7 +646,7 @@ async def _websocket_util_trigger(
             except asyncio.CancelledError:
                 pass
 
-        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label=f"pusher:{uid}:bg", cancel=False)
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
@@ -653,7 +654,7 @@ async def _websocket_util_trigger(
         websocket_active = False
 
         all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
-        await drain_tasks(all_to_cancel, timeout=5.0, label=f"pusher:{uid}:cleanup", cancel=True)
+        await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
