@@ -18,9 +18,16 @@ from typing import Any
 DEFAULT_BASE_URL = "http://127.0.0.1:8765"
 
 
-def request_json(method: str, base_url: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def request_json(
+    method: str,
+    base_url: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    ok_statuses: set[int] | None = None,
+) -> dict[str, Any]:
     data = None
     headers = {"Accept": "application/json"}
+    ok_statuses = ok_statuses or {200}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -33,9 +40,14 @@ def request_json(method: str, base_url: str, path: str, body: dict[str, Any] | N
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
+            if response.status not in ok_statuses:
+                payload = response.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"{method} {path} failed with HTTP {response.status}: {payload}")
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         payload = error.read().decode("utf-8", errors="replace")
+        if error.code in ok_statuses:
+            return json.loads(payload) if payload else {}
         raise RuntimeError(f"{method} {path} failed with HTTP {error.code}: {payload}") from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"{method} {path} failed: {error.reason}") from error
@@ -164,7 +176,18 @@ def main() -> int:
             conversation[key] = value
 
     request_json("GET", args.base_url, "/health")
-    created = request_json("POST", args.base_url, "/v1/conversations", conversation)["conversation"]
+    if "id" in conversation:
+        existing = request_json(
+            "GET",
+            args.base_url,
+            f"/v1/conversations/{urllib.parse.quote(conversation['id'])}",
+            ok_statuses={200, 404},
+        )
+        created = existing.get("conversation")
+    else:
+        created = None
+    if created is None:
+        created = request_json("POST", args.base_url, "/v1/conversations", conversation)["conversation"]
     conversation_id = created["id"]
 
     for index, segment in enumerate(segments):

@@ -622,7 +622,17 @@ pub struct TranscriptRepository {
 }
 
 impl TranscriptRepository {
-    pub fn append(&self, new: NewTranscriptSegment) -> Result<TranscriptSegment> {
+    pub fn append(&self, new: NewTranscriptSegment) -> Result<AppendTranscriptResult> {
+        if let Some(existing) =
+            self.get_by_conversation_index(&new.conversation_id, new.segment_index)?
+        {
+            return if transcript_matches_new(&existing, &new)? {
+                Ok(AppendTranscriptResult::Existing(existing))
+            } else {
+                Ok(AppendTranscriptResult::Conflict(existing))
+            };
+        }
+
         let now = Utc::now();
         let segment = TranscriptSegment {
             id: new.id,
@@ -676,7 +686,7 @@ impl TranscriptRepository {
         )
         .context("failed to insert transcript segment")?;
 
-        Ok(segment)
+        Ok(AppendTranscriptResult::Inserted(segment))
     }
 
     pub fn list_for_conversation(&self, conversation_id: &str) -> Result<Vec<TranscriptSegment>> {
@@ -701,6 +711,27 @@ impl TranscriptRepository {
         collect_rows(rows)
     }
 
+    pub fn get_by_conversation_index(
+        &self,
+        conversation_id: &str,
+        segment_index: i64,
+    ) -> Result<Option<TranscriptSegment>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, conversation_id, session_id, speaker_id, speaker_label, text, start_ms,
+                   end_ms, segment_index, source, created_at, updated_at, deleted_at, cloud_id,
+                   sync_version, sync_state, metadata_json
+            FROM transcript_segments
+            WHERE conversation_id = ?1 AND segment_index = ?2 AND deleted_at IS NULL
+            "#,
+            params![conversation_id, segment_index],
+            map_transcript_segment,
+        )
+        .optional()
+        .context("failed to fetch transcript segment by index")
+    }
+
     pub fn next_segment_index(&self, conversation_id: &str) -> Result<i64> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         conn.query_row(
@@ -710,6 +741,32 @@ impl TranscriptRepository {
         )
         .context("failed to fetch next segment index")
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppendTranscriptResult {
+    Inserted(TranscriptSegment),
+    Existing(TranscriptSegment),
+    Conflict(TranscriptSegment),
+}
+
+fn transcript_matches_new(
+    existing: &TranscriptSegment,
+    new: &NewTranscriptSegment,
+) -> Result<bool> {
+    let source = new.source.as_deref().unwrap_or("local");
+    let metadata_json = json_or_empty_object(new.metadata.clone())?;
+    Ok(existing.id == new.id
+        && existing.conversation_id == new.conversation_id
+        && existing.session_id == new.session_id
+        && existing.speaker_id == new.speaker_id
+        && existing.speaker_label == new.speaker_label
+        && existing.text == new.text
+        && existing.start_ms == new.start_ms
+        && existing.end_ms == new.end_ms
+        && existing.segment_index == new.segment_index
+        && existing.source == source
+        && existing.metadata_json == metadata_json)
 }
 
 pub struct ProcessingJobRepository {
@@ -793,6 +850,53 @@ impl ProcessingJobRepository {
         )
         .optional()
         .context("failed to fetch processing job")
+    }
+
+    pub fn reusable_for_conversation(
+        &self,
+        kind: &str,
+        conversation_id: &str,
+    ) -> Result<Option<ProcessingJob>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, kind, status, target_conversation_id, retry_count, max_retries, last_error,
+                       payload_json, result_json, queued_at, started_at, completed_at, failed_at,
+                       created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state
+                FROM processing_jobs
+                WHERE kind = ?1
+                  AND target_conversation_id = ?2
+                  AND deleted_at IS NULL
+                  AND (
+                    status IN ('queued', 'running')
+                    OR (
+                      status = 'completed'
+                      AND julianday(completed_at) >= COALESCE(
+                        (
+                          SELECT MAX(julianday(updated_at))
+                          FROM transcript_segments
+                          WHERE conversation_id = ?2 AND deleted_at IS NULL
+                        ),
+                        julianday(completed_at)
+                      )
+                    )
+                  )
+                ORDER BY
+                  CASE status
+                    WHEN 'running' THEN 0
+                    WHEN 'queued' THEN 1
+                    ELSE 2
+                  END,
+                  updated_at DESC
+                LIMIT 1
+                "#,
+            )
+            .context("failed to prepare reusable processing job query")?;
+
+        stmt.query_row(params![kind, conversation_id], map_processing_job)
+            .optional()
+            .context("failed to fetch reusable processing job")
     }
 
     pub fn list(&self) -> Result<Vec<ProcessingJob>> {
@@ -959,6 +1063,50 @@ impl MemoryRepository {
         Ok(memory)
     }
 
+    pub fn upsert(&self, new: NewMemory) -> Result<Memory> {
+        let now = Utc::now();
+        let metadata_json = json_or_empty_object(new.metadata)?;
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO memories (
+                id, content, category, conversation_id, created_at, updated_at, deleted_at,
+                cloud_id, sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?5, NULL, NULL, 0, 'local', ?6)
+            ON CONFLICT(id) DO UPDATE SET
+                content = excluded.content,
+                category = excluded.category,
+                conversation_id = excluded.conversation_id,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL,
+                metadata_json = excluded.metadata_json,
+                sync_version = memories.sync_version + 1,
+                sync_state = 'local'
+            "#,
+            params![
+                new.id,
+                new.content,
+                new.category,
+                new.conversation_id,
+                now,
+                metadata_json
+            ],
+        )
+        .context("failed to upsert memory")?;
+        drop(conn);
+        self.get(&new.id)?
+            .ok_or_else(|| anyhow::anyhow!("memory missing after upsert"))
+    }
+
+    pub fn soft_delete_local_processing_except(
+        &self,
+        conversation_id: &str,
+        keep_ids: &[String],
+    ) -> Result<usize> {
+        soft_delete_local_processing_except(&self.conn, "memories", conversation_id, keep_ids)
+    }
+
     pub fn get(&self, id: &str) -> Result<Option<Memory>> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         conn.query_row(
@@ -1090,6 +1238,60 @@ impl ActionItemRepository {
         )
         .context("failed to create action item")?;
         Ok(action_item)
+    }
+
+    pub fn upsert(&self, new: NewActionItem) -> Result<ActionItem> {
+        let now = Utc::now();
+        let description = new.description.unwrap_or_default();
+        let status = new.status.unwrap_or_else(|| "open".to_string());
+        let metadata_json = json_or_empty_object(new.metadata)?;
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO action_items (
+                id, conversation_id, title, description, status, due_at, completed_at, created_at,
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7, NULL, NULL, 0, 'local', ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                conversation_id = excluded.conversation_id,
+                title = excluded.title,
+                description = excluded.description,
+                status = excluded.status,
+                due_at = excluded.due_at,
+                completed_at = CASE
+                    WHEN excluded.status = 'completed' THEN COALESCE(action_items.completed_at, excluded.updated_at)
+                    ELSE NULL
+                END,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL,
+                metadata_json = excluded.metadata_json,
+                sync_version = action_items.sync_version + 1,
+                sync_state = 'local'
+            "#,
+            params![
+                new.id,
+                new.conversation_id,
+                new.title,
+                description,
+                status,
+                new.due_at,
+                now,
+                metadata_json
+            ],
+        )
+        .context("failed to upsert action item")?;
+        drop(conn);
+        self.get(&new.id)?
+            .ok_or_else(|| anyhow::anyhow!("action item missing after upsert"))
+    }
+
+    pub fn soft_delete_local_processing_except(
+        &self,
+        conversation_id: &str,
+        keep_ids: &[String],
+    ) -> Result<usize> {
+        soft_delete_local_processing_except(&self.conn, "action_items", conversation_id, keep_ids)
     }
 
     pub fn get(&self, id: &str) -> Result<Option<ActionItem>> {
@@ -1696,6 +1898,34 @@ fn soft_delete_by_id(
     Ok(changed > 0)
 }
 
+fn soft_delete_local_processing_except(
+    conn: &Arc<Mutex<Connection>>,
+    table: &str,
+    conversation_id: &str,
+    keep_ids: &[String],
+) -> Result<usize> {
+    let now = Utc::now();
+    let conn = conn.lock().expect("SQLite connection mutex poisoned");
+    let keep_ids_json =
+        serde_json::to_string(keep_ids).context("failed to serialize local processing ids")?;
+    let changed = conn
+        .execute(
+            &format!(
+                r#"
+                UPDATE {table}
+                SET deleted_at = ?3, updated_at = ?3, sync_version = sync_version + 1
+                WHERE conversation_id = ?1
+                  AND deleted_at IS NULL
+                  AND json_extract(metadata_json, '$.source') = 'local_processing'
+                  AND id NOT IN (SELECT value FROM json_each(?2))
+                "#
+            ),
+            params![conversation_id, keep_ids_json, now],
+        )
+        .with_context(|| format!("failed to delete stale local processing rows from {table}"))?;
+    Ok(changed)
+}
+
 impl ProcessingJobStatus {
     fn as_str(&self) -> &'static str {
         match self {
@@ -1796,6 +2026,61 @@ mod tests {
         );
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].text, "We need local persistence.");
+
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_transcript_append_is_existing_or_conflict() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-duplicate-segment"]);
+
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-duplicate-segment".to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+
+        let new_segment = NewTranscriptSegment {
+            id: deterministic_id("seg", &[&conversation_id, "0"]),
+            conversation_id: conversation_id.clone(),
+            session_id: "session-duplicate-segment".to_string(),
+            speaker_id: Some("speaker-1".to_string()),
+            speaker_label: Some("Alice".to_string()),
+            text: "Retry-safe transcript append.".to_string(),
+            start_ms: 0,
+            end_ms: 1200,
+            segment_index: 0,
+            source: None,
+            metadata: Some(serde_json::json!({"source": "test"})),
+        };
+
+        assert!(matches!(
+            store.transcripts().append(new_segment.clone())?,
+            AppendTranscriptResult::Inserted(_)
+        ));
+        assert!(matches!(
+            store.transcripts().append(new_segment)?,
+            AppendTranscriptResult::Existing(_)
+        ));
+
+        let conflict = store.transcripts().append(NewTranscriptSegment {
+            id: deterministic_id("seg", &[&conversation_id, "0"]),
+            conversation_id,
+            session_id: "session-duplicate-segment".to_string(),
+            speaker_id: Some("speaker-1".to_string()),
+            speaker_label: Some("Alice".to_string()),
+            text: "Different content at the same segment index.".to_string(),
+            start_ms: 0,
+            end_ms: 1200,
+            segment_index: 0,
+            source: None,
+            metadata: Some(serde_json::json!({"source": "test"})),
+        })?;
+        assert!(matches!(conflict, AppendTranscriptResult::Conflict(_)));
 
         Ok(())
     }

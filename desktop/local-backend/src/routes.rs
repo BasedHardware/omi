@@ -12,8 +12,9 @@ use serde_json::{json, Map, Value};
 use crate::{
     processing,
     storage::{
-        deterministic_id, NewActionItem, NewConversation, NewMemory, NewProcessingJob,
-        NewTranscriptSegment, UpdateActionItem, UpdateConversation, UpdateMemory, UpdateProfile,
+        deterministic_id, AppendTranscriptResult, NewActionItem, NewConversation, NewMemory,
+        NewProcessingJob, NewTranscriptSegment, UpdateActionItem, UpdateConversation, UpdateMemory,
+        UpdateProfile,
     },
     AppState,
 };
@@ -75,6 +76,13 @@ impl ApiError {
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
+
+    fn conflict(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
             message: message.into(),
         }
     }
@@ -314,7 +322,7 @@ async fn append_transcript_segment(
     let id = request.id.unwrap_or_else(|| {
         deterministic_id("seg", &[&conversation_id, &segment_index.to_string()])
     });
-    let segment = state
+    let append_result = state
         .store
         .transcripts()
         .append(NewTranscriptSegment {
@@ -331,6 +339,16 @@ async fn append_transcript_segment(
             metadata: request.metadata,
         })
         .map_err(ApiError::internal)?;
+    let segment = match append_result {
+        AppendTranscriptResult::Inserted(segment) | AppendTranscriptResult::Existing(segment) => {
+            segment
+        }
+        AppendTranscriptResult::Conflict(_) => {
+            return Err(ApiError::conflict(
+                "transcript segment already exists with different content at this index",
+            ));
+        }
+    };
     Ok(Json(json!({ "transcript_segment": segment })))
 }
 
@@ -344,6 +362,15 @@ async fn finalize_transcript(
         .get(&conversation_id)
         .map_err(ApiError::internal)?
         .ok_or_else(|| ApiError::not_found("conversation"))?;
+    if let Some(job) = state
+        .store
+        .processing_jobs()
+        .reusable_for_conversation("finalize_transcript", &conversation_id)
+        .map_err(ApiError::internal)?
+    {
+        return Ok(Json(json!({ "processing_job": job })));
+    }
+
     let job = state
         .store
         .processing_jobs()

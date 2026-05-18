@@ -244,9 +244,21 @@ fn persist_processing_output(
         )?
         .ok_or_else(|| anyhow!("conversation missing while persisting processing output"))?;
 
+    let action_item_ids = output
+        .action_items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            deterministic_id("act", &[conversation_id, &index.to_string(), &item.title])
+        })
+        .collect::<Vec<_>>();
+    store
+        .action_items()
+        .soft_delete_local_processing_except(conversation_id, &action_item_ids)?;
+
     for (index, item) in output.action_items.iter().enumerate() {
-        store.action_items().create(NewActionItem {
-            id: deterministic_id("act", &[conversation_id, &index.to_string(), &item.title]),
+        store.action_items().upsert(NewActionItem {
+            id: action_item_ids[index].clone(),
             conversation_id: Some(conversation_id.to_string()),
             title: item.title.clone(),
             description: Some(item.description.clone()),
@@ -256,12 +268,24 @@ fn persist_processing_output(
         })?;
     }
 
-    for (index, memory) in output.memories.iter().enumerate() {
-        store.memories().create(NewMemory {
-            id: deterministic_id(
+    let memory_ids = output
+        .memories
+        .iter()
+        .enumerate()
+        .map(|(index, memory)| {
+            deterministic_id(
                 "mem",
                 &[conversation_id, &index.to_string(), &memory.content],
-            ),
+            )
+        })
+        .collect::<Vec<_>>();
+    store
+        .memories()
+        .soft_delete_local_processing_except(conversation_id, &memory_ids)?;
+
+    for (index, memory) in output.memories.iter().enumerate() {
+        store.memories().upsert(NewMemory {
+            id: memory_ids[index].clone(),
             content: memory.content.clone(),
             category: memory.category.clone(),
             conversation_id: Some(conversation_id.to_string()),
@@ -354,6 +378,68 @@ mod tests {
 
         let result: Value = serde_json::from_str(&job.result_json)?;
         assert_eq!(result["provider"], "fallback");
+
+        Ok(())
+    }
+
+    #[test]
+    fn provider_style_processing_outputs_are_retry_safe() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-provider-retry"]);
+
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-provider-retry".to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+
+        let output = ProcessingOutput {
+            title: "Provider summary".to_string(),
+            overview: "Provider overview".to_string(),
+            action_items: vec![ExtractedActionItem {
+                title: "Review retry behavior".to_string(),
+                description: "Confirm local processing upserts deterministic rows.".to_string(),
+            }],
+            memories: vec![ExtractedMemory {
+                content: "User prefers retry-safe local imports.".to_string(),
+                category: Some("preference".to_string()),
+            }],
+            provider: "openai_compatible".to_string(),
+        };
+
+        persist_processing_output(&store, &conversation_id, &output)?;
+        persist_processing_output(&store, &conversation_id, &output)?;
+
+        let action_items = store.action_items().list()?;
+        let memories = store.memories().list()?;
+        assert_eq!(action_items.len(), 1);
+        assert_eq!(action_items[0].title, "Review retry behavior");
+        assert_eq!(memories.len(), 1);
+        assert_eq!(
+            memories[0].content,
+            "User prefers retry-safe local imports."
+        );
+
+        let replacement = ProcessingOutput {
+            title: "Provider summary".to_string(),
+            overview: "Provider overview".to_string(),
+            action_items: vec![ExtractedActionItem {
+                title: "Ship retry behavior".to_string(),
+                description: "Replace stale local processing rows.".to_string(),
+            }],
+            memories: Vec::new(),
+            provider: "openai_compatible".to_string(),
+        };
+        persist_processing_output(&store, &conversation_id, &replacement)?;
+
+        let action_items = store.action_items().list()?;
+        let memories = store.memories().list()?;
+        assert_eq!(action_items.len(), 1);
+        assert_eq!(action_items[0].title, "Ship retry behavior");
+        assert!(memories.is_empty());
 
         Ok(())
     }

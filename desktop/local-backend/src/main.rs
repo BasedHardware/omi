@@ -255,6 +255,71 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn duplicate_finalize_reuses_active_and_current_completed_job() -> Result<()> {
+        let app = test_app()?;
+
+        let created = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({"session_id": "session-finalize-retry"})),
+        )
+        .await?;
+        let conversation_id = created["conversation"]["id"].as_str().unwrap();
+        request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v1/conversations/{conversation_id}/transcript-segments"),
+            Some(json!({
+                "text": "Finalize should be retry safe.",
+                "start_ms": 0,
+                "end_ms": 1000,
+                "segment_index": 0
+            })),
+        )
+        .await?;
+
+        let first = request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v1/conversations/{conversation_id}/finalize-transcript"),
+            None,
+        )
+        .await?;
+        let second = request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v1/conversations/{conversation_id}/finalize-transcript"),
+            None,
+        )
+        .await?;
+        assert_eq!(
+            first["processing_job"]["id"],
+            second["processing_job"]["id"]
+        );
+        assert_eq!(second["processing_job"]["status"], "queued");
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/processing-jobs/process-next",
+            None,
+        )
+        .await?;
+        let third = request_json(
+            app,
+            Method::POST,
+            &format!("/v1/conversations/{conversation_id}/finalize-transcript"),
+            None,
+        )
+        .await?;
+        assert_eq!(first["processing_job"]["id"], third["processing_job"]["id"]);
+        assert_eq!(third["processing_job"]["status"], "completed");
+
+        Ok(())
+    }
+
     fn test_app() -> Result<Router> {
         let config = Config {
             bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),

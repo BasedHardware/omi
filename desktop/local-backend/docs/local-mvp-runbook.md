@@ -119,6 +119,12 @@ The helper:
 - verifies search finds the imported transcript text
 - prints the conversation ID plus read and search `curl` commands
 
+For retry tests, pass a stable `--conversation-id` and run the same command
+again. The helper reuses the existing conversation, exact duplicate transcript
+segments return the existing row, and finalize returns an already active or
+current completed processing job instead of piling up duplicate queued work. A
+different segment body at an existing `segment_index` returns HTTP 409.
+
 JSON fixtures are also supported. The file may be a list of segment strings, a
 list of segment objects, or an object with conversation fields plus `segments`
 or `transcript_segments`:
