@@ -10,7 +10,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     set_user_webhook_db,
 )
-from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success
+from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
@@ -27,6 +27,13 @@ def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):
     if should_disable:
         logger.warning(f'Dev webhook auto-disabled: uid={uid} type={wtype} after {100} consecutive failures')
         disable_user_webhook_db(uid, wtype)
+        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        send_notification(
+            uid,
+            'Developer Webhook Auto-Disabled',
+            f'Your {wtype_str} webhook has been auto-disabled after {_DEV_FAILURE_THRESHOLD} consecutive failures. '
+            'Please fix your endpoint and re-enable it from developer settings.',
+        )
 
 
 async def conversation_created_webhook(uid, memory: Conversation):
@@ -137,13 +144,16 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 record_dev_webhook_success(uid, WebhookType.realtime_transcript)
-                if response.status_code == 200:
-                    response_data = response.json()
-                    if not response_data:
-                        return
-                    message = response_data.get('message', '')
-                    if len(message) > 5:
-                        send_webhook_notification(uid, message)
+                try:
+                    if response.status_code == 200:
+                        response_data = response.json()
+                        if not response_data:
+                            return
+                        message = response_data.get('message', '')
+                        if len(message) > 5:
+                            send_webhook_notification(uid, message)
+                except Exception:
+                    pass
             else:
                 cb.record_failure()
                 should_disable = record_dev_webhook_failure(
