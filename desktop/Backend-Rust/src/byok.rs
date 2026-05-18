@@ -237,37 +237,42 @@ impl ByokStateCache {
         }
 
         // Cache miss or stale — fetch from Firestore
-        let state = match firestore.get_user_byok_state(uid).await {
-            Ok(s) => s,
+        let (state, should_cache) = match firestore.get_user_byok_state(uid).await {
+            Ok(s) => (s, true),
             Err(e) => {
+                // Fail open but do NOT cache the error-default. A transient
+                // Firestore blip should not poison the cache and make an
+                // active BYOK user look paywalled for 30 seconds.
                 tracing::warn!(
-                    "byok: failed to fetch BYOK state for uid={}: {}, failing open",
+                    "byok: failed to fetch BYOK state for uid={}: {}, failing open (not cached)",
                     uid,
                     e
                 );
-                ByokState::default()
+                return ByokState::default();
             }
         };
 
-        // Store in cache (evict oldest if at capacity)
-        let mut cache = self.cache.lock().await;
-        if cache.len() >= BYOK_CACHE_MAX_ENTRIES && !cache.contains_key(uid) {
-            // Evict the oldest entry
-            if let Some(oldest_key) = cache
-                .iter()
-                .min_by_key(|(_, v)| v.cached_at)
-                .map(|(k, _)| k.clone())
-            {
-                cache.remove(&oldest_key);
+        // Store successful results in cache (evict oldest if at capacity)
+        if should_cache {
+            let mut cache = self.cache.lock().await;
+            if cache.len() >= BYOK_CACHE_MAX_ENTRIES && !cache.contains_key(uid) {
+                // Evict the oldest entry
+                if let Some(oldest_key) = cache
+                    .iter()
+                    .min_by_key(|(_, v)| v.cached_at)
+                    .map(|(k, _)| k.clone())
+                {
+                    cache.remove(&oldest_key);
+                }
             }
+            cache.insert(
+                uid.to_string(),
+                CacheEntry {
+                    state: state.clone(),
+                    cached_at: Instant::now(),
+                },
+            );
         }
-        cache.insert(
-            uid.to_string(),
-            CacheEntry {
-                state: state.clone(),
-                cached_at: Instant::now(),
-            },
-        );
 
         state
     }
