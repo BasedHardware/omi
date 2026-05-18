@@ -12,6 +12,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
+use crate::byok;
 use crate::AppState;
 
 const OPENAI_TTS_MODEL_ID: &str = "gpt-4o-mini-tts";
@@ -163,16 +164,8 @@ fn openai_key_for_request<'a>(
     headers: &'a HeaderMap,
     byok_stripped: bool,
 ) -> Result<(&'a str, bool), TtsProxyError> {
-    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
-    if !byok_stripped {
-        if let Some(value) = headers
-            .get("x-byok-openai")
-            .and_then(|value| value.to_str().ok())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            return Ok((value, false));
-        }
+    if let Some(value) = byok::get_byok_key_if_active(headers, byok::HEADER_OPENAI, byok_stripped) {
+        return Ok((value, false));
     }
 
     let key = state
