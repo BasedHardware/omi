@@ -9,13 +9,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod health;
+mod storage;
 
 use config::Config;
 use health::health;
+use storage::Store;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
+    pub store: Store,
 }
 
 #[tokio::main]
@@ -24,10 +27,12 @@ async fn main() -> Result<()> {
 
     let config = Config::from_env()?;
     fs::create_dir_all(&config.data_dir)?;
+    let store = Store::open(config.data_dir.join("omi-local-backend.sqlite"))?;
 
     let bind_addr = config.bind_addr;
     let state = AppState {
         config: Arc::new(config),
+        store,
     };
 
     let app = Router::new()

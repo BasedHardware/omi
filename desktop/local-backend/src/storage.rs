@@ -1,0 +1,927 @@
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+const MIGRATIONS: &[Migration] = &[Migration {
+    version: 1,
+    name: "initial_local_storage",
+    sql: r#"
+        CREATE TABLE conversations (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            overview TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'open',
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX idx_conversations_session_id ON conversations(session_id);
+        CREATE INDEX idx_conversations_updated_at ON conversations(updated_at);
+        CREATE INDEX idx_conversations_deleted_at ON conversations(deleted_at);
+
+        CREATE TABLE transcript_segments (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            session_id TEXT NOT NULL,
+            speaker_id TEXT,
+            speaker_label TEXT,
+            text TEXT NOT NULL,
+            start_ms INTEGER NOT NULL,
+            end_ms INTEGER NOT NULL,
+            segment_index INTEGER NOT NULL,
+            source TEXT NOT NULL DEFAULT 'local',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE(conversation_id, segment_index)
+        );
+
+        CREATE INDEX idx_transcript_segments_conversation ON transcript_segments(conversation_id, segment_index);
+        CREATE INDEX idx_transcript_segments_session ON transcript_segments(session_id);
+
+        CREATE TABLE memories (
+            id TEXT PRIMARY KEY,
+            content TEXT NOT NULL,
+            category TEXT,
+            conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE action_items (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'open',
+            due_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE local_settings (
+            key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local'
+        );
+
+        CREATE TABLE local_profiles (
+            id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL DEFAULT '',
+            timezone TEXT,
+            locale TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE processing_jobs (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'completed', 'failed')),
+            target_conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            max_retries INTEGER NOT NULL DEFAULT 3,
+            last_error TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            result_json TEXT NOT NULL DEFAULT '{}',
+            queued_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            failed_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local'
+        );
+
+        CREATE INDEX idx_processing_jobs_status ON processing_jobs(status, queued_at);
+        CREATE INDEX idx_processing_jobs_conversation ON processing_jobs(target_conversation_id);
+
+        CREATE TABLE sync_outbox (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            next_attempt_at TEXT,
+            completed_at TEXT
+        );
+
+        CREATE INDEX idx_sync_outbox_status ON sync_outbox(status, next_attempt_at, created_at);
+        CREATE INDEX idx_sync_outbox_entity ON sync_outbox(entity_type, entity_id);
+
+        CREATE TABLE local_files (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+            kind TEXT NOT NULL,
+            path TEXT NOT NULL,
+            media_type TEXT,
+            byte_size INTEGER,
+            checksum TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT,
+            cloud_id TEXT,
+            sync_version INTEGER NOT NULL DEFAULT 0,
+            sync_state TEXT NOT NULL DEFAULT 'local',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE INDEX idx_local_files_conversation ON local_files(conversation_id);
+
+        CREATE VIRTUAL TABLE conversation_search USING fts5(
+            conversation_id UNINDEXED,
+            source_type UNINDEXED,
+            source_id UNINDEXED,
+            title,
+            overview,
+            transcript_text,
+            tokenize = 'unicode61'
+        );
+
+        CREATE TRIGGER conversations_ai AFTER INSERT ON conversations BEGIN
+            INSERT INTO conversation_search(conversation_id, source_type, source_id, title, overview, transcript_text)
+            VALUES (new.id, 'conversation', new.id, new.title, new.overview, '');
+        END;
+
+        CREATE TRIGGER conversations_au AFTER UPDATE OF title, overview, deleted_at ON conversations BEGIN
+            DELETE FROM conversation_search WHERE source_type = 'conversation' AND source_id = old.id;
+            INSERT INTO conversation_search(conversation_id, source_type, source_id, title, overview, transcript_text)
+            SELECT new.id, 'conversation', new.id, new.title, new.overview, ''
+            WHERE new.deleted_at IS NULL;
+        END;
+
+        CREATE TRIGGER conversations_ad AFTER DELETE ON conversations BEGIN
+            DELETE FROM conversation_search WHERE conversation_id = old.id;
+        END;
+
+        CREATE TRIGGER transcript_segments_ai AFTER INSERT ON transcript_segments BEGIN
+            INSERT INTO conversation_search(conversation_id, source_type, source_id, title, overview, transcript_text)
+            SELECT new.conversation_id, 'segment', new.id, c.title, c.overview, new.text
+            FROM conversations c
+            WHERE c.id = new.conversation_id AND new.deleted_at IS NULL AND c.deleted_at IS NULL;
+        END;
+
+        CREATE TRIGGER transcript_segments_au AFTER UPDATE OF text, deleted_at ON transcript_segments BEGIN
+            DELETE FROM conversation_search WHERE source_type = 'segment' AND source_id = old.id;
+            INSERT INTO conversation_search(conversation_id, source_type, source_id, title, overview, transcript_text)
+            SELECT new.conversation_id, 'segment', new.id, c.title, c.overview, new.text
+            FROM conversations c
+            WHERE c.id = new.conversation_id AND new.deleted_at IS NULL AND c.deleted_at IS NULL;
+        END;
+
+        CREATE TRIGGER transcript_segments_ad AFTER DELETE ON transcript_segments BEGIN
+            DELETE FROM conversation_search WHERE source_type = 'segment' AND source_id = old.id;
+        END;
+    "#,
+}];
+
+#[derive(Clone)]
+pub struct Store {
+    conn: Arc<Mutex<Connection>>,
+}
+
+struct Migration {
+    version: i64,
+    name: &'static str,
+    sql: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Conversation {
+    pub id: String,
+    pub session_id: String,
+    pub title: String,
+    pub overview: String,
+    pub status: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptSegment {
+    pub id: String,
+    pub conversation_id: String,
+    pub session_id: String,
+    pub speaker_id: Option<String>,
+    pub speaker_label: Option<String>,
+    pub text: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub segment_index: i64,
+    pub source: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub conversation_id: String,
+    pub title: String,
+    pub overview: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcessingJob {
+    pub id: String,
+    pub kind: String,
+    pub status: ProcessingJobStatus,
+    pub target_conversation_id: Option<String>,
+    pub retry_count: i64,
+    pub max_retries: i64,
+    pub last_error: Option<String>,
+    pub payload_json: String,
+    pub result_json: String,
+    pub queued_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub failed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessingJobStatus {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+}
+
+impl Store {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let conn = Connection::open(path.as_ref()).with_context(|| {
+            format!("failed to open SQLite store at {}", path.as_ref().display())
+        })?;
+        configure_connection(&conn)?;
+        run_migrations(&conn)?;
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    #[cfg(test)]
+    fn open_in_memory() -> Result<Self> {
+        let conn = Connection::open_in_memory().context("failed to open in-memory SQLite store")?;
+        configure_connection(&conn)?;
+        run_migrations(&conn)?;
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
+    }
+
+    pub fn conversations(&self) -> ConversationRepository {
+        ConversationRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn transcripts(&self) -> TranscriptRepository {
+        TranscriptRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn processing_jobs(&self) -> ProcessingJobRepository {
+        ProcessingJobRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn search(&self) -> SearchRepository {
+        SearchRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+}
+
+pub struct ConversationRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ConversationRepository {
+    pub fn create(&self, new: NewConversation) -> Result<Conversation> {
+        let now = Utc::now();
+        let conversation = Conversation {
+            id: new.id,
+            session_id: new.session_id,
+            title: new.title,
+            overview: new.overview,
+            status: "open".to_string(),
+            started_at: new.started_at.unwrap_or(now),
+            ended_at: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+            metadata_json: json_or_empty_object(new.metadata)?,
+        };
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO conversations (
+                id, session_id, title, overview, status, started_at, ended_at, created_at,
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "#,
+            params![
+                conversation.id,
+                conversation.session_id,
+                conversation.title,
+                conversation.overview,
+                conversation.status,
+                conversation.started_at,
+                conversation.ended_at,
+                conversation.created_at,
+                conversation.updated_at,
+                conversation.deleted_at,
+                conversation.cloud_id,
+                conversation.sync_version,
+                conversation.sync_state,
+                conversation.metadata_json
+            ],
+        )
+        .context("failed to insert conversation")?;
+
+        Ok(conversation)
+    }
+
+    pub fn get(&self, id: &str) -> Result<Option<Conversation>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
+                   updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+            FROM conversations
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_conversation,
+        )
+        .optional()
+        .context("failed to fetch conversation")
+    }
+}
+
+pub struct TranscriptRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl TranscriptRepository {
+    pub fn append(&self, new: NewTranscriptSegment) -> Result<TranscriptSegment> {
+        let now = Utc::now();
+        let segment = TranscriptSegment {
+            id: new.id,
+            conversation_id: new.conversation_id,
+            session_id: new.session_id,
+            speaker_id: new.speaker_id,
+            speaker_label: new.speaker_label,
+            text: new.text,
+            start_ms: new.start_ms,
+            end_ms: new.end_ms,
+            segment_index: new.segment_index,
+            source: new.source.unwrap_or_else(|| "local".to_string()),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+            metadata_json: json_or_empty_object(new.metadata)?,
+        };
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO transcript_segments (
+                id, conversation_id, session_id, speaker_id, speaker_label, text, start_ms,
+                end_ms, segment_index, source, created_at, updated_at, deleted_at, cloud_id,
+                sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            "#,
+            params![
+                segment.id,
+                segment.conversation_id,
+                segment.session_id,
+                segment.speaker_id,
+                segment.speaker_label,
+                segment.text,
+                segment.start_ms,
+                segment.end_ms,
+                segment.segment_index,
+                segment.source,
+                segment.created_at,
+                segment.updated_at,
+                segment.deleted_at,
+                segment.cloud_id,
+                segment.sync_version,
+                segment.sync_state,
+                segment.metadata_json
+            ],
+        )
+        .context("failed to insert transcript segment")?;
+
+        Ok(segment)
+    }
+
+    pub fn list_for_conversation(&self, conversation_id: &str) -> Result<Vec<TranscriptSegment>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, conversation_id, session_id, speaker_id, speaker_label, text, start_ms,
+                       end_ms, segment_index, source, created_at, updated_at, deleted_at, cloud_id,
+                       sync_version, sync_state, metadata_json
+                FROM transcript_segments
+                WHERE conversation_id = ?1 AND deleted_at IS NULL
+                ORDER BY segment_index ASC
+                "#,
+            )
+            .context("failed to prepare transcript segment list query")?;
+
+        let rows = stmt
+            .query_map(params![conversation_id], map_transcript_segment)
+            .context("failed to list transcript segments")?;
+
+        collect_rows(rows)
+    }
+}
+
+pub struct ProcessingJobRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ProcessingJobRepository {
+    pub fn enqueue(&self, new: NewProcessingJob) -> Result<ProcessingJob> {
+        let now = Utc::now();
+        let job = ProcessingJob {
+            id: new.id,
+            kind: new.kind,
+            status: ProcessingJobStatus::Queued,
+            target_conversation_id: new.target_conversation_id,
+            retry_count: 0,
+            max_retries: new.max_retries.unwrap_or(3),
+            last_error: None,
+            payload_json: json_or_empty_object(new.payload)?,
+            result_json: "{}".to_string(),
+            queued_at: now,
+            started_at: None,
+            completed_at: None,
+            failed_at: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+        };
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO processing_jobs (
+                id, kind, status, target_conversation_id, retry_count, max_retries, last_error,
+                payload_json, result_json, queued_at, started_at, completed_at, failed_at,
+                created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            "#,
+            params![
+                job.id,
+                job.kind,
+                job.status.as_str(),
+                job.target_conversation_id,
+                job.retry_count,
+                job.max_retries,
+                job.last_error,
+                job.payload_json,
+                job.result_json,
+                job.queued_at,
+                job.started_at,
+                job.completed_at,
+                job.failed_at,
+                job.created_at,
+                job.updated_at,
+                job.deleted_at,
+                job.cloud_id,
+                job.sync_version,
+                job.sync_state
+            ],
+        )
+        .context("failed to enqueue processing job")?;
+
+        Ok(job)
+    }
+}
+
+pub struct SearchRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl SearchRepository {
+    pub fn conversations(&self, query: &str, limit: i64) -> Result<Vec<SearchResult>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT c.id, c.title, c.overview
+                FROM conversations c
+                JOIN (
+                    SELECT DISTINCT conversation_id
+                    FROM conversation_search
+                    WHERE conversation_search MATCH ?1
+                ) matches ON matches.conversation_id = c.id
+                WHERE c.deleted_at IS NULL
+                ORDER BY c.updated_at DESC
+                LIMIT ?2
+                "#,
+            )
+            .context("failed to prepare conversation search query")?;
+
+        let rows = stmt
+            .query_map(params![query, limit], |row| {
+                Ok(SearchResult {
+                    conversation_id: row.get(0)?,
+                    title: row.get(1)?,
+                    overview: row.get(2)?,
+                })
+            })
+            .context("failed to search conversations")?;
+
+        collect_rows(rows)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewConversation {
+    pub id: String,
+    pub session_id: String,
+    pub title: String,
+    pub overview: String,
+    pub started_at: Option<DateTime<Utc>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewTranscriptSegment {
+    pub id: String,
+    pub conversation_id: String,
+    pub session_id: String,
+    pub speaker_id: Option<String>,
+    pub speaker_label: Option<String>,
+    pub text: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub segment_index: i64,
+    pub source: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewProcessingJob {
+    pub id: String,
+    pub kind: String,
+    pub target_conversation_id: Option<String>,
+    pub max_retries: Option<i64>,
+    pub payload: Option<serde_json::Value>,
+}
+
+pub fn deterministic_id(prefix: &str, parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(prefix.as_bytes());
+    for part in parts {
+        hasher.update([0]);
+        hasher.update(part.as_bytes());
+    }
+    let digest = hasher.finalize();
+    format!("{prefix}_{digest:x}")
+        .chars()
+        .take(prefix.len() + 1 + 32)
+        .collect()
+}
+
+fn configure_connection(conn: &Connection) -> Result<()> {
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .context("failed to enable SQLite foreign keys")?;
+    conn.pragma_update(None, "journal_mode", "WAL")
+        .context("failed to enable SQLite WAL journal mode")?;
+    conn.pragma_update(None, "busy_timeout", 5000)
+        .context("failed to set SQLite busy timeout")?;
+    Ok(())
+}
+
+fn run_migrations(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .context("failed to create schema_migrations table")?;
+
+    for migration in MIGRATIONS {
+        let applied = conn
+            .query_row(
+                "SELECT 1 FROM schema_migrations WHERE version = ?1",
+                params![migration.version],
+                |_| Ok(()),
+            )
+            .optional()
+            .context("failed to check migration state")?
+            .is_some();
+
+        if applied {
+            continue;
+        }
+
+        let tx = conn
+            .unchecked_transaction()
+            .context("failed to start migration transaction")?;
+        tx.execute_batch(migration.sql)
+            .with_context(|| format!("failed to apply migration {}", migration.name))?;
+        tx.execute(
+            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, ?3)",
+            params![migration.version, migration.name, Utc::now()],
+        )
+        .context("failed to record migration")?;
+        tx.commit().context("failed to commit migration")?;
+    }
+
+    Ok(())
+}
+
+fn json_or_empty_object(value: Option<serde_json::Value>) -> Result<String> {
+    serde_json::to_string(&value.unwrap_or_else(|| serde_json::json!({})))
+        .context("failed to serialize JSON metadata")
+}
+
+fn collect_rows<T>(
+    rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>>,
+) -> Result<Vec<T>> {
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .context("failed to collect SQLite rows")
+}
+
+fn map_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Conversation> {
+    Ok(Conversation {
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        title: row.get(2)?,
+        overview: row.get(3)?,
+        status: row.get(4)?,
+        started_at: row.get(5)?,
+        ended_at: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        deleted_at: row.get(9)?,
+        cloud_id: row.get(10)?,
+        sync_version: row.get(11)?,
+        sync_state: row.get(12)?,
+        metadata_json: row.get(13)?,
+    })
+}
+
+fn map_transcript_segment(row: &rusqlite::Row<'_>) -> rusqlite::Result<TranscriptSegment> {
+    Ok(TranscriptSegment {
+        id: row.get(0)?,
+        conversation_id: row.get(1)?,
+        session_id: row.get(2)?,
+        speaker_id: row.get(3)?,
+        speaker_label: row.get(4)?,
+        text: row.get(5)?,
+        start_ms: row.get(6)?,
+        end_ms: row.get(7)?,
+        segment_index: row.get(8)?,
+        source: row.get(9)?,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
+        deleted_at: row.get(12)?,
+        cloud_id: row.get(13)?,
+        sync_version: row.get(14)?,
+        sync_state: row.get(15)?,
+        metadata_json: row.get(16)?,
+    })
+}
+
+impl ProcessingJobStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn migrations_create_expected_tables_and_pragmas() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conn = store.conn.lock().expect("SQLite connection mutex poisoned");
+
+        let foreign_keys: i64 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+        assert_eq!(foreign_keys, 1);
+
+        for table in [
+            "conversations",
+            "transcript_segments",
+            "memories",
+            "action_items",
+            "local_settings",
+            "local_profiles",
+            "processing_jobs",
+            "sync_outbox",
+            "local_files",
+            "conversation_search",
+        ] {
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1",
+                params![table],
+                |row| row.get(0),
+            )?;
+            assert_eq!(exists, 1, "missing table {table}");
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn conversation_and_segments_persist_after_reopen() -> Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("local.sqlite");
+        let conversation_id = deterministic_id("conv", &["session-a"]);
+
+        {
+            let store = Store::open(&db_path)?;
+            store.conversations().create(NewConversation {
+                id: conversation_id.clone(),
+                session_id: "session-a".to_string(),
+                title: "Planning sync".to_string(),
+                overview: "MVP storage discussion".to_string(),
+                started_at: None,
+                metadata: None,
+            })?;
+            store.transcripts().append(NewTranscriptSegment {
+                id: deterministic_id("seg", &[&conversation_id, "0"]),
+                conversation_id: conversation_id.clone(),
+                session_id: "session-a".to_string(),
+                speaker_id: Some("speaker-1".to_string()),
+                speaker_label: Some("Alice".to_string()),
+                text: "We need local persistence.".to_string(),
+                start_ms: 0,
+                end_ms: 1500,
+                segment_index: 0,
+                source: None,
+                metadata: None,
+            })?;
+        }
+
+        let reopened = Store::open(&db_path)?;
+        let conversation = reopened.conversations().get(&conversation_id)?;
+        let segments = reopened
+            .transcripts()
+            .list_for_conversation(&conversation_id)?;
+
+        assert_eq!(
+            conversation.expect("conversation should persist").title,
+            "Planning sync"
+        );
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].text, "We need local persistence.");
+
+        Ok(())
+    }
+
+    #[test]
+    fn fts_search_matches_conversation_and_transcript_text() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-search"]);
+
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-search".to_string(),
+            title: "Weekly design review".to_string(),
+            overview: "Discuss local backend schema".to_string(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store.transcripts().append(NewTranscriptSegment {
+            id: deterministic_id("seg", &[&conversation_id, "0"]),
+            conversation_id: conversation_id.clone(),
+            session_id: "session-search".to_string(),
+            speaker_id: None,
+            speaker_label: None,
+            text: "The transcript mentions vector clocks and durable outbox sync.".to_string(),
+            start_ms: 0,
+            end_ms: 3000,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+
+        let title_results = store.search().conversations("design", 10)?;
+        assert_eq!(title_results.len(), 1);
+        assert_eq!(title_results[0].conversation_id, conversation_id);
+
+        let transcript_results = store.search().conversations("durable", 10)?;
+        assert_eq!(transcript_results.len(), 1);
+        assert_eq!(transcript_results[0].title, "Weekly design review");
+
+        Ok(())
+    }
+
+    #[test]
+    fn processing_jobs_start_queued_with_retry_metadata() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let job = store.processing_jobs().enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["summarize", "conversation-1"]),
+            kind: "summarize_conversation".to_string(),
+            target_conversation_id: None,
+            max_retries: Some(5),
+            payload: Some(serde_json::json!({"conversation_id": "conversation-1"})),
+        })?;
+
+        assert_eq!(job.status, ProcessingJobStatus::Queued);
+        assert_eq!(job.retry_count, 0);
+        assert_eq!(job.max_retries, 5);
+        assert!(job.last_error.is_none());
+
+        Ok(())
+    }
+}
