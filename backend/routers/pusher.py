@@ -28,7 +28,7 @@ from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, sleep_until_shutdown
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -174,6 +174,7 @@ async def _websocket_util_trigger(
         return
 
     websocket_active = True
+    shutdown_event = asyncio.Event()
     websocket_close_code = 1000
 
     # audio bytes
@@ -286,7 +287,7 @@ async def _websocket_util_trigger(
             del chunk_data
 
         while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0:
-            await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            await sleep_until_shutdown(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -319,7 +320,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(speaker_sample_queue) > 0:
-            await asyncio.sleep(SPEAKER_SAMPLE_PROCESS_INTERVAL)
+            await sleep_until_shutdown(shutdown_event, SPEAKER_SAMPLE_PROCESS_INTERVAL)
 
             if not speaker_sample_queue:
                 continue
@@ -365,7 +366,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(transcript_queue) > 0:
-            await asyncio.sleep(TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
+            await sleep_until_shutdown(shutdown_event, TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
 
             if not transcript_queue:
                 continue
@@ -392,7 +393,9 @@ async def _websocket_util_trigger(
             try:
                 await asyncio.wait_for(audio_bytes_event.wait(), timeout=1.0)
             except asyncio.TimeoutError:
-                continue  # Check websocket_active and queue on timeout
+                if shutdown_event.is_set() and not audio_bytes_queue:
+                    break
+                continue
 
             audio_bytes_event.clear()
 
@@ -646,11 +649,13 @@ async def _websocket_util_trigger(
             except asyncio.CancelledError:
                 pass
 
+        shutdown_event.set()
         await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
     finally:
+        shutdown_event.set()
         websocket_active = False
 
         all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
