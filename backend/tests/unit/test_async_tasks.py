@@ -686,3 +686,87 @@ class TestSleepUntilShutdown:
             assert result is False
 
         asyncio.run(_run())
+
+    def test_negative_timeout_returns_false(self):
+        async def _run():
+            event = asyncio.Event()
+            result = await sleep_until_shutdown(event, -1.0)
+            assert result is False
+
+        asyncio.run(_run())
+
+    def test_negative_timeout_with_event_set_returns_true(self):
+        async def _run():
+            event = asyncio.Event()
+            event.set()
+            result = await sleep_until_shutdown(event, -1.0)
+            assert result is True
+
+        asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# Boundary tests for utility edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestUtilityBoundaries:
+    def test_drain_zero_timeout_completes(self):
+        async def _run():
+            async def hang():
+                await asyncio.sleep(999)
+
+            task = asyncio.create_task(hang(), name="test:hang")
+            await drain_tasks([task], timeout=0, label="test", cancel=True)
+            assert task.done()
+
+        asyncio.run(_run())
+
+    def test_drain_negative_timeout(self):
+        async def _run():
+            async def hang():
+                await asyncio.sleep(999)
+
+            task = asyncio.create_task(hang(), name="test:hang")
+            force = await drain_tasks([task], timeout=-1.0, label="test", cancel=True)
+            assert task.done()
+
+        asyncio.run(_run())
+
+    def test_gather_concurrency_one(self):
+        async def _run():
+            max_concurrent = 0
+            current = 0
+
+            async def track(i):
+                nonlocal max_concurrent, current
+                current += 1
+                max_concurrent = max(max_concurrent, current)
+                await asyncio.sleep(0.01)
+                current -= 1
+                return i
+
+            results = await gather_with_logging(*[track(i) for i in range(5)], label="test", max_concurrency=1)
+            assert max_concurrent == 1
+            assert all(r.ok for r in results)
+
+        asyncio.run(_run())
+
+    def test_gather_chunked_respects_chunk_size(self):
+        async def _run():
+            call_order = []
+
+            async def record(i):
+                call_order.append(('start', i))
+                await asyncio.sleep(0.01)
+                call_order.append(('end', i))
+                return i
+
+            results = await gather_chunked([record(i) for i in range(6)], chunk_size=2, label="test")
+            assert len(results) == 6
+            # Chunk 1 (0,1) must complete before chunk 2 (2,3) starts
+            end_of_first_chunk = max(idx for idx, (op, i) in enumerate(call_order) if op == 'end' and i < 2)
+            start_of_second_chunk = min(idx for idx, (op, i) in enumerate(call_order) if op == 'start' and i >= 2)
+            assert end_of_first_chunk < start_of_second_chunk
+
+        asyncio.run(_run())
