@@ -872,12 +872,11 @@ class TestAsyncCoordinatorSemaphore:
         with open(sync_path) as f:
             return f.read()
 
-    def test_semaphore_is_loop_scoped(self):
-        """Semaphore must be keyed by event loop ID, not module-level."""
+    def test_semaphore_delegates_to_http_client(self):
+        """Semaphore must use http_client._get_semaphore (CLAUDE.md rule 4)."""
         source = self._read_sync_source()
         assert '_get_sync_pipeline_semaphore()' in source, "Must use loop-scoped semaphore getter"
-        assert '_sync_semaphores' in source, "Must have loop-keyed semaphore cache"
-        assert 'asyncio.get_running_loop()' in source
+        assert '_get_semaphore' in source, "Must delegate to http_client._get_semaphore"
 
     def test_semaphore_limit_is_16(self):
         """Semaphore cap must be 16 (2x the old 8-slot postprocess_executor)."""
@@ -887,17 +886,12 @@ class TestAsyncCoordinatorSemaphore:
         if end == -1:
             end = source.find('\nasync def ', start + 1)
         func_body = source[start:end]
-        assert 'Semaphore(16)' in func_body
+        assert "'sync_pipeline', 16" in func_body
 
-    def test_semaphore_cache_has_prune(self):
-        """Semaphore cache must prune when it grows large to prevent leaks."""
+    def test_semaphore_no_duplicate_cache(self):
+        """sync.py must NOT have its own _sync_semaphores cache (use http_client's)."""
         source = self._read_sync_source()
-        start = source.index('def _get_sync_pipeline_semaphore')
-        end = source.find('\ndef ', start + 1)
-        if end == -1:
-            end = source.find('\nasync def ', start + 1)
-        func_body = source[start:end]
-        assert '.clear()' in func_body
+        assert '_sync_semaphores' not in source, "Must not duplicate semaphore cache — use http_client"
 
 
 # ---------------------------------------------------------------------------

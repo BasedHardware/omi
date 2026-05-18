@@ -58,6 +58,7 @@ from utils.other.storage import (
 
 from utils import encryption
 from utils.byok import get_byok_keys, set_byok_keys
+from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
@@ -1350,25 +1351,9 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     return paths
 
 
-_sync_semaphores: dict[tuple[int, str], asyncio.Semaphore] = {}
-
-
 def _get_sync_pipeline_semaphore() -> asyncio.Semaphore:
-    """Return a loop-scoped semaphore capping concurrent sync pipelines.
-
-    Semaphores are event-loop-bound. Using the same pattern as http_client.py
-    to key by (loop_id, name) prevents RuntimeError when multiple loops exist.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-        key = (id(loop), 'sync_pipeline')
-    except RuntimeError:
-        return asyncio.Semaphore(16)
-    if key not in _sync_semaphores:
-        if len(_sync_semaphores) > 10:
-            _sync_semaphores.clear()
-        _sync_semaphores[key] = asyncio.Semaphore(16)
-    return _sync_semaphores[key]
+    """Return a loop-scoped semaphore capping concurrent sync pipelines."""
+    return _get_semaphore('sync_pipeline', 16)
 
 
 async def _run_full_pipeline_background_async(
