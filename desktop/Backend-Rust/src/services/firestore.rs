@@ -4696,6 +4696,137 @@ impl FirestoreService {
         Ok(doc)
     }
 
+    // =========================================================================
+    // BYOK & SUBSCRIPTION (used by paywall + BYOK validation)
+    // =========================================================================
+
+    /// Read the BYOK enrollment state from `users/{uid}.byok` in Firestore.
+    ///
+    /// Returns `ByokState::default()` (inactive) on any parse error so a
+    /// Firestore blip never blocks a user.
+    pub async fn get_user_byok_state(
+        &self,
+        uid: &str,
+    ) -> Result<crate::byok::ByokState, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let fields = doc.get("fields").cloned().unwrap_or_default();
+
+        // Navigate: fields.byok.mapValue.fields
+        let byok_fields = match fields
+            .get("byok")
+            .and_then(|v| v.get("mapValue"))
+            .and_then(|v| v.get("fields"))
+        {
+            Some(f) => f,
+            None => return Ok(crate::byok::ByokState::default()),
+        };
+
+        let active = byok_fields
+            .get("active")
+            .and_then(|v| v.get("booleanValue"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // Parse fingerprints map: byok.fingerprints.mapValue.fields.{provider}.stringValue
+        let mut fingerprints = std::collections::HashMap::new();
+        if let Some(fp_fields) = byok_fields
+            .get("fingerprints")
+            .and_then(|v| v.get("mapValue"))
+            .and_then(|v| v.get("fields"))
+            .and_then(|v| v.as_object())
+        {
+            for (provider, val) in fp_fields {
+                if let Some(fp_str) = val.get("stringValue").and_then(|v| v.as_str()) {
+                    fingerprints.insert(provider.clone(), fp_str.to_string());
+                }
+            }
+        }
+
+        // Parse last_seen_at as timestampValue
+        let last_seen_at = byok_fields
+            .get("last_seen_at")
+            .and_then(|v| v.get("timestampValue"))
+            .and_then(|v| v.as_str())
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc));
+
+        Ok(crate::byok::ByokState {
+            active,
+            fingerprints,
+            last_seen_at,
+        })
+    }
+
+    /// Read subscription plan from `users/{uid}.subscription.plan`.
+    /// Returns `"basic"` if missing or unparseable (fail-open).
+    /// Handles legacy `"free"` → `"basic"` migration (matches Python).
+    pub async fn get_user_subscription_plan(
+        &self,
+        uid: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let fields = doc.get("fields").cloned().unwrap_or_default();
+
+        let plan = fields
+            .get("subscription")
+            .and_then(|v| v.get("mapValue"))
+            .and_then(|v| v.get("fields"))
+            .and_then(|v| v.get("plan"))
+            .and_then(|v| v.get("stringValue"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("basic")
+            .to_string();
+
+        // Handle migration from old "free" plan identifier
+        if plan == "free" {
+            return Ok("basic".to_string());
+        }
+
+        Ok(plan)
+    }
+
+    /// Get user account creation time from Firebase Auth Identity Toolkit REST API.
+    ///
+    /// Returns creation timestamp in milliseconds, or None if lookup fails.
+    /// Uses the same service-account auth as `delete_firebase_auth_user`.
+    pub async fn get_user_creation_time(
+        &self,
+        project_id: &str,
+        uid: &str,
+    ) -> Result<Option<i64>, Box<dyn std::error::Error + Send + Sync>> {
+        let access_token = self.get_access_token().await?;
+        let url = format!(
+            "https://identitytoolkit.googleapis.com/v1/projects/{}/accounts:lookup",
+            project_id
+        );
+
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "localId": [uid] }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Firebase accounts:lookup failed: {}", error_text).into());
+        }
+
+        let body: serde_json::Value = response.json().await?;
+
+        // Response: { "users": [{ "createdAt": "1234567890000", ... }] }
+        let created_at_ms = body
+            .get("users")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|user| user.get("createdAt"))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok());
+
+        Ok(created_at_ms)
+    }
+
     /// Update user document fields (partial update)
     async fn update_user_fields(
         &self,
