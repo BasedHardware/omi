@@ -230,8 +230,11 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                     uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
                 )
 
-            if message := response.json().get('message', ''):
-                results[app.id] = message
+            try:
+                if message := response.json().get('message', ''):
+                    results[app.id] = message
+            except Exception:
+                pass
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__
@@ -694,23 +697,26 @@ async def _async_trigger_realtime_integrations(
                     conversation_id=conversation_id,
                 )
 
-            response_data = response.json()
-            if not response_data:
-                return
+            try:
+                response_data = response.json()
+                if not response_data:
+                    return
 
-            # message
-            message = response_data.get('message', '')
-            if message and len(message) > 5:
-                send_app_notification(uid, app.name, app.id, message)
-                results[app.id] = message
-
-            # proactive_notification
-            noti = response_data.get('notification', None)
-            if app.has_capability("proactive_notification"):
-                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                    message = _process_proactive_notification(uid, app, noti)
-                if message:
+                # message
+                message = response_data.get('message', '')
+                if message and len(message) > 5:
+                    send_app_notification(uid, app.name, app.id, message)
                     results[app.id] = message
+
+                # proactive_notification
+                noti = response_data.get('notification', None)
+                if app.has_capability("proactive_notification"):
+                    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                        message = _process_proactive_notification(uid, app, noti)
+                    if message:
+                        results[app.id] = message
+            except Exception:
+                pass
 
         except Exception as e:
             cb.record_failure()
