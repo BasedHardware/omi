@@ -82,8 +82,6 @@ impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let status = if self.error == "trial_expired" {
             StatusCode::PAYMENT_REQUIRED
-        } else if self.error == "byok_validation_failed" {
-            StatusCode::FORBIDDEN
         } else {
             StatusCode::UNAUTHORIZED
         };
@@ -234,16 +232,12 @@ impl From<PaywalledAuthUser> for AuthUser {
     }
 }
 
-/// Authenticated user extractor that ALSO enforces:
-/// 1. BYOK fingerprint validation (SHA-256 against Firestore enrollment)
-/// 2. Desktop trial paywall (plan + BYOK + account age)
+/// Authenticated user extractor that ALSO enforces the desktop trial paywall.
 ///
-/// If the user is BYOK-active but sends mismatched fingerprints → HTTP 403.
-/// If the user is past their trial → HTTP 402.
-///
-/// `byok_stripped`: true if the request carried BYOK headers that were silently
-/// cleared (non-enrolled user or expired heartbeat). Route handlers should check
-/// this flag and ignore BYOK headers when true.
+/// Same token-verification flow as `AuthUser`, then a follow-up call to the
+/// Python `/v1/users/me/paywall` endpoint (cached 5min in-memory). If the
+/// user is past their trial, the extractor short-circuits with
+/// `error: "trial_expired"` which `AuthError::IntoResponse` maps to HTTP 402.
 ///
 /// Use this for every $-incurring route handler in the Rust backend:
 /// proxy.rs (Gemini), chat_completions.rs (Anthropic), screen_activity.rs
@@ -253,7 +247,6 @@ pub struct PaywalledAuthUser {
     pub uid: String,
     pub name: Option<String>,
     pub email: Option<String>,
-    pub byok_stripped: bool,
 }
 
 #[async_trait]
@@ -264,7 +257,7 @@ where
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Get + extract bearer token
+        // Get + extract bearer token (we'll forward it to the paywall endpoint)
         let auth_header = parts
             .headers
             .get("Authorization")
@@ -292,44 +285,10 @@ where
 
         let (uid, name, email) = firebase_auth.0.verify_token(token).await?;
 
-        // BYOK fingerprint validation (issue #7357).
-        // Validates SHA-256 fingerprints against Firestore enrollment.
-        // Non-BYOK users who send BYOK headers get them silently cleared.
-        let mut byok_stripped = false;
-        if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
-            // Get the Firestore service from the paywall checker (shares the same Arc)
-            if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-                let byok_state = byok_ext
-                    .0
-                    .get_or_fetch(&uid, &checker.0.firestore)
-                    .await;
-
-                match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
-                    Ok(crate::byok::ByokValidation::Active) => {
-                        // BYOK keys validated, proceed with user's keys
-                    }
-                    Ok(crate::byok::ByokValidation::Inactive { clear_headers }) => {
-                        byok_stripped = clear_headers;
-                    }
-                    Err(error_msg) => {
-                        tracing::warn!(
-                            "BYOK validation failed for uid={}: {}",
-                            uid,
-                            error_msg
-                        );
-                        return Err(AuthError {
-                            error: "byok_validation_failed".to_string(),
-                            message: error_msg,
-                        });
-                    }
-                }
-            }
-        }
-
-        // Paywall check — fail open if Firestore is unreachable so a backend
+        // Paywall check — fail open if Python is unreachable so a backend
         // outage never makes paying users look paywalled.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, &parts.headers, byok_stripped).await {
+            if checker.0.is_paywalled(&uid, token).await {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),
@@ -337,17 +296,12 @@ where
             }
         } else {
             tracing::warn!(
-                "PaywalledAuthUser: PaywallChecker extension missing, failing open for uid={}",
+                "PaywalledAuthUser: PaywallChecker extension missing, falling open for uid={}",
                 uid
             );
         }
 
-        Ok(PaywalledAuthUser {
-            uid,
-            name,
-            email,
-            byok_stripped,
-        })
+        Ok(PaywalledAuthUser { uid, name, email })
     }
 }
 
@@ -356,11 +310,4 @@ pub fn paywall_checker_extension(
     checker: Arc<crate::paywall::PaywallChecker>,
 ) -> axum::Extension<crate::paywall::PaywallCheckerExt> {
     axum::Extension(crate::paywall::PaywallCheckerExt(checker))
-}
-
-/// Layer that adds the BYOK state cache to request extensions.
-pub fn byok_cache_extension(
-    cache: Arc<crate::byok::ByokStateCache>,
-) -> axum::Extension<crate::byok::ByokCacheExt> {
-    axum::Extension(crate::byok::ByokCacheExt(cache))
 }
