@@ -688,77 +688,61 @@ class TestReEnableHealthCheckGate:
         assert endpoints == ['https://new-fixed.example.com/api']
 
 
+def _load_validate_helper():
+    """Load validate_app_endpoints_for_reenable directly from source, bypassing heavy deps."""
+    _utils_apps_key = "utils.apps"
+    if _utils_apps_key in sys.modules and hasattr(sys.modules[_utils_apps_key], 'validate_app_endpoints_for_reenable'):
+        return sys.modules[_utils_apps_key].validate_app_endpoints_for_reenable
+    _saved = {}
+    _mock_modules = [
+        "database.redis_db",
+        "database.apps",
+        "database.auth",
+        "database.cache",
+        "database.conversations",
+        "database.memories",
+        "database.users",
+        "utils.stripe",
+        "utils.llm",
+        "utils.llm.persona",
+        "utils.llm.usage_tracker",
+        "utils.social",
+        "utils.conversations",
+        "utils.conversations.factory",
+        "utils.conversations.render",
+        "models.app",
+    ]
+    for mod_name in _mock_modules:
+        _saved[mod_name] = sys.modules.get(mod_name)
+        sys.modules[mod_name] = MagicMock()
+    spec = importlib.util.spec_from_file_location(
+        _utils_apps_key,
+        os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'apps.py'),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_utils_apps_key] = mod
+    spec.loader.exec_module(mod)
+    for mod_name, orig in _saved.items():
+        if orig is not None:
+            sys.modules[mod_name] = orig
+    return mod.validate_app_endpoints_for_reenable
+
+
 class TestReEnableRouterBehavior:
-    """Router-level tests for the re-enable health check gate in apps.py update_app."""
+    """Tests for the production validate_app_endpoints_for_reenable helper from utils.apps."""
 
-    @staticmethod
-    def _run_health_check(app_dict, update_dict):
-        """Execute the re-enable health check logic extracted from apps.py:753-805.
-
-        Returns None on success, raises HTTPException on failure.
-        """
-        from urllib.parse import urlparse
-        from fastapi import HTTPException
-
-        if not (update_dict.get('disabled') is False and app_dict.get('disabled')):
-            return None
-
-        updated_ext = (
-            (update_dict.get('external_integration') or {})
-            if isinstance(update_dict.get('external_integration'), dict)
-            else {}
-        )
-        existing_ext = app_dict.get('external_integration') or {}
-        endpoints_to_check = []
-        seen_urls = set()
-        webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
-            seen_urls.add(webhook_url)
-        mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
-        if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
-            seen_urls.add(mcp_url)
-        chat_tools = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
-        for tool in chat_tools:
-            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            method = tool.get('method', 'POST') if isinstance(tool, dict) else getattr(tool, 'method', 'POST')
-            if ep and ep not in seen_urls:
-                endpoints_to_check.append(('chat tool', ep, method.upper(), True))
-                seen_urls.add(ep)
-        if not endpoints_to_check:
-            raise HTTPException(
-                status_code=400,
-                detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
-            )
-        for label, url, method, require_2xx in endpoints_to_check:
-            try:
-                resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
-                if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
-                    )
-            except httpx.TimeoutException:
-                raise HTTPException(
-                    status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
-                )
-            except httpx.ConnectError:
-                raise HTTPException(
-                    status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
-                )
-            except HTTPException:
-                raise
-        return None
+    @pytest.fixture(autouse=True)
+    def _load_helper(self):
+        self._validate = _load_validate_helper()
 
     def test_no_endpoints_returns_400(self):
         """Re-enable with no configured endpoints should return 400."""
         from fastapi import HTTPException
 
-        app = {'disabled': True, 'external_integration': {}, 'chat_tools': []}
-        update = {'disabled': False}
+        app = {'external_integration': {}, 'chat_tools': []}
+        update = {}
         with pytest.raises(HTTPException) as exc_info:
-            self._run_health_check(app, update)
+            self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'No configured endpoints' in exc_info.value.detail
 
@@ -766,55 +750,48 @@ class TestReEnableRouterBehavior:
         """Webhook returning 500 should block re-enable."""
         from fastapi import HTTPException
 
-        app = {'disabled': True, 'external_integration': {'webhook_url': 'https://example.com/wh'}, 'chat_tools': []}
-        update = {'disabled': False}
+        app = {'external_integration': {'webhook_url': 'https://example.com/wh'}, 'chat_tools': []}
+        update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("httpx.request", return_value=mock_resp):
+        with patch("utils.apps.httpx.request", return_value=mock_resp):
             with pytest.raises(HTTPException) as exc_info:
-                self._run_health_check(app, update)
+                self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert '500' in exc_info.value.detail
 
     def test_webhook_healthy_allows_reenable(self):
         """Webhook returning 200 should allow re-enable."""
-        app = {'disabled': True, 'external_integration': {'webhook_url': 'https://example.com/wh'}, 'chat_tools': []}
-        update = {'disabled': False}
+        app = {'external_integration': {'webhook_url': 'https://example.com/wh'}, 'chat_tools': []}
+        update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("httpx.request", return_value=mock_resp):
-            result = self._run_health_check(app, update)
-        assert result is None
+        with patch("utils.apps.httpx.request", return_value=mock_resp):
+            self._validate(app, update, 'app-1')
 
     def test_mcp_non_2xx_allowed(self):
         """MCP returning 401 (auth required) should still allow re-enable."""
-        app = {
-            'disabled': True,
-            'external_integration': {'mcp_server_url': 'https://mcp.example.com'},
-            'chat_tools': [],
-        }
-        update = {'disabled': False}
+        app = {'external_integration': {'mcp_server_url': 'https://mcp.example.com'}, 'chat_tools': []}
+        update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 401
-        with patch("httpx.request", return_value=mock_resp):
-            result = self._run_health_check(app, update)
-        assert result is None
+        with patch("utils.apps.httpx.request", return_value=mock_resp):
+            self._validate(app, update, 'app-1')
 
     def test_chat_tool_non_2xx_blocks_reenable(self):
         """Chat tool returning 404 should block re-enable."""
         from fastapi import HTTPException
 
         app = {
-            'disabled': True,
             'external_integration': {},
             'chat_tools': [{'endpoint': 'https://tool.example.com/api', 'name': 't', 'method': 'POST'}],
         }
-        update = {'disabled': False}
+        update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 404
-        with patch("httpx.request", return_value=mock_resp):
+        with patch("utils.apps.httpx.request", return_value=mock_resp):
             with pytest.raises(HTTPException) as exc_info:
-                self._run_health_check(app, update)
+                self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert '404' in exc_info.value.detail
 
@@ -822,11 +799,11 @@ class TestReEnableRouterBehavior:
         """Timeout on any endpoint should block re-enable."""
         from fastapi import HTTPException
 
-        app = {'disabled': True, 'external_integration': {'webhook_url': 'https://slow.example.com'}, 'chat_tools': []}
-        update = {'disabled': False}
-        with patch("httpx.request", side_effect=httpx.TimeoutException("timeout")):
+        app = {'external_integration': {'webhook_url': 'https://slow.example.com'}, 'chat_tools': []}
+        update = {}
+        with patch("utils.apps.httpx.request", side_effect=httpx.TimeoutException("timeout")):
             with pytest.raises(HTTPException) as exc_info:
-                self._run_health_check(app, update)
+                self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'timed out' in exc_info.value.detail
 
@@ -834,22 +811,21 @@ class TestReEnableRouterBehavior:
         """Connection error on any endpoint should block re-enable."""
         from fastapi import HTTPException
 
-        app = {'disabled': True, 'external_integration': {'webhook_url': 'https://down.example.com'}, 'chat_tools': []}
-        update = {'disabled': False}
-        with patch("httpx.request", side_effect=httpx.ConnectError("refused")):
+        app = {'external_integration': {'webhook_url': 'https://down.example.com'}, 'chat_tools': []}
+        update = {}
+        with patch("utils.apps.httpx.request", side_effect=httpx.ConnectError("refused")):
             with pytest.raises(HTTPException) as exc_info:
-                self._run_health_check(app, update)
+                self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert 'Cannot connect' in exc_info.value.detail
 
     def test_all_endpoints_checked(self):
         """All configured endpoints must be probed before allowing re-enable."""
         app = {
-            'disabled': True,
             'external_integration': {'webhook_url': 'https://a.com/wh', 'mcp_server_url': 'https://b.com/mcp'},
             'chat_tools': [{'endpoint': 'https://c.com/tool', 'name': 't', 'method': 'GET'}],
         }
-        update = {'disabled': False}
+        update = {}
         call_urls = []
 
         def mock_request(method, url, **kwargs):
@@ -858,8 +834,8 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("httpx.request", side_effect=mock_request):
-            self._run_health_check(app, update)
+        with patch("utils.apps.httpx.request", side_effect=mock_request):
+            self._validate(app, update, 'app-1')
 
         assert len(call_urls) == 3
         methods = [m for m, _ in call_urls]
@@ -875,11 +851,10 @@ class TestReEnableRouterBehavior:
         from fastapi import HTTPException
 
         app = {
-            'disabled': True,
             'external_integration': {'webhook_url': 'https://ok.com/wh'},
             'chat_tools': [{'endpoint': 'https://broken.com/tool', 'name': 't'}],
         }
-        update = {'disabled': False}
+        update = {}
         call_count = [0]
 
         def mock_request(method, url, **kwargs):
@@ -888,8 +863,8 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200 if call_count[0] == 1 else 503
             return resp
 
-        with patch("httpx.request", side_effect=mock_request):
+        with patch("utils.apps.httpx.request", side_effect=mock_request):
             with pytest.raises(HTTPException) as exc_info:
-                self._run_health_check(app, update)
+                self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert '503' in exc_info.value.detail
