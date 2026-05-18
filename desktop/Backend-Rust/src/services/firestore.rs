@@ -4757,21 +4757,32 @@ impl FirestoreService {
         })
     }
 
-    /// Read subscription plan from `users/{uid}.subscription.plan`.
-    /// Returns `"basic"` if missing or unparseable (fail-open).
-    /// Handles legacy `"free"` → `"basic"` migration (matches Python).
-    pub async fn get_user_subscription_plan(
+    /// Read the effective subscription plan for paywall purposes.
+    ///
+    /// Mirrors Python's `get_user_valid_subscription()`:
+    /// - Basic plan with active status → returns "basic"
+    /// - Paid plan with `current_period_end` still in the future → returns the plan name
+    /// - Paid plan with expired `current_period_end` → falls back to "basic"
+    /// - Missing/unparseable → returns "basic" (fail-open)
+    /// - Handles legacy `"free"` → `"basic"` migration
+    pub async fn get_user_effective_plan(
         &self,
         uid: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let doc = self.get_user_document(uid).await?;
         let fields = doc.get("fields").cloned().unwrap_or_default();
 
-        let plan = fields
+        let sub_fields = match fields
             .get("subscription")
             .and_then(|v| v.get("mapValue"))
             .and_then(|v| v.get("fields"))
-            .and_then(|v| v.get("plan"))
+        {
+            Some(f) => f.clone(),
+            None => return Ok("basic".to_string()),
+        };
+
+        let mut plan = sub_fields
+            .get("plan")
             .and_then(|v| v.get("stringValue"))
             .and_then(|v| v.as_str())
             .unwrap_or("basic")
@@ -4779,8 +4790,35 @@ impl FirestoreService {
 
         // Handle migration from old "free" plan identifier
         if plan == "free" {
-            return Ok("basic".to_string());
+            plan = "basic".to_string();
         }
+
+        // Basic plan: always valid (no expiry to check)
+        if plan == "basic" {
+            return Ok(plan);
+        }
+
+        // Paid plan: check current_period_end.
+        // If it's in the past, the subscription is expired → fall back to basic.
+        // This matches Python's get_user_valid_subscription() which returns
+        // get_default_basic_subscription() when period_end < now.
+        if let Some(period_end) = sub_fields
+            .get("current_period_end")
+            .and_then(|v| v.get("integerValue"))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+        {
+            let now_epoch = chrono::Utc::now().timestamp();
+            if period_end < now_epoch {
+                tracing::info!(
+                    "paywall: paid plan '{}' expired for uid={} (period_end={} < now={}), falling back to basic",
+                    plan, uid, period_end, now_epoch
+                );
+                return Ok("basic".to_string());
+            }
+        }
+        // If current_period_end is missing on a paid plan, treat as valid
+        // (fail-open: don't downgrade without evidence)
 
         Ok(plan)
     }
