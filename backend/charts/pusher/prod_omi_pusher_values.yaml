@@ -285,8 +285,8 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 0.35
-    memory: 3Gi
+    cpu: 0.7
+    memory: 4.5Gi
   limits:
     cpu: 0.7
     memory: 4.5Gi
