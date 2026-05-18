@@ -1,0 +1,33 @@
+[package]
+name = "omi-app"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "omi"
+path = "src/main.rs"
+
+[dependencies]
+dioxus = { version = "0.6", features = ["desktop", "router"] }
+dioxus-free-icons = { version = "0.9", features = ["lucide"] }
+
+# Workspace deps
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+
+# Auth + config
+webbrowser = "0.8"
+urlencoding = "2.1"
+
+# Sibling crates
+omi-capture = { path = "../omi-capture" }
+omi-audio = { path = "../omi-audio" }
+omi-ble = { path = "../omi-ble" }
+omi-db = { path = "../omi-db" }
+omi-transcription = { path = "../omi-transcription" }

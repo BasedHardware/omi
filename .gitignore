@@ -221,3 +221,11 @@ app/macos/Runner/LocalDev.entitlements
 # Generated browser snapshots (contain PII)
 builds-snapshot.md
 *-snapshot.md
+
+
+# WebView2 cache
+**/EBWebView/
+**/WebView2/
+**/DawnGraphiteCache/
+**/DawnCache/
+target/
