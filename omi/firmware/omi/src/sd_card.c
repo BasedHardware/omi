@@ -401,6 +401,22 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
     }
 
     if (header->start_seq != base_seq) {
+        if (header->start_seq > base_seq && ring_state.capacity_packets != 0U &&
+            ((header->start_seq - base_seq) % ring_state.capacity_packets) == 0U) {
+            uint64_t overwritten_end_seq = base_seq + RAW_PACKETS_PER_BATCH;
+            if (ring_state.read_seq < overwritten_end_seq) {
+                ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
+                ring_state.read_seq = overwritten_end_seq;
+                (void)persist_ring_metadata();
+            }
+
+            LOG_WRN("stale read window for seq %llu: slot now holds batch %llu, advancing read_seq to %llu",
+                    (unsigned long long)seq,
+                    (unsigned long long)header->start_seq,
+                    (unsigned long long)ring_state.read_seq);
+            return -ERANGE;
+        }
+
         LOG_ERR("batch start mismatch for seq %llu: hdr=%llu base=%llu",
                 (unsigned long long)seq,
                 (unsigned long long)header->start_seq,
@@ -488,6 +504,15 @@ static int flush_current_batch(bool sync_requested)
     }
 
     uint64_t new_write_seq = current_batch_base_seq + current_batch_packets;
+
+    if (ring_state.write_seq <= current_batch_base_seq && current_batch_base_seq >= ring_state.capacity_packets) {
+        uint64_t overwritten_end_seq = current_batch_base_seq - ring_state.capacity_packets + RAW_PACKETS_PER_BATCH;
+        if (ring_state.read_seq < overwritten_end_seq) {
+            ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
+            ring_state.read_seq = overwritten_end_seq;
+        }
+    }
+
     if ((new_write_seq - ring_state.read_seq) > ring_state.capacity_packets) {
         uint64_t overflow = (new_write_seq - ring_state.read_seq) - ring_state.capacity_packets;
         ring_state.read_seq += overflow;
