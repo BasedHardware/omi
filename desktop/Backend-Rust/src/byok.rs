@@ -531,4 +531,103 @@ mod tests {
             })
         );
     }
+
+    // --- Edge cases: empty / partial fingerprints ---
+
+    #[test]
+    fn validate_active_byok_empty_fingerprints() {
+        // Active BYOK user with empty fingerprint map — all headers pass
+        // (no enrolled fingerprints to check against)
+        let state = ByokState {
+            active: true,
+            fingerprints: HashMap::new(),
+            last_seen_at: Some(Utc::now()),
+        };
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(result, Ok(ByokValidation::Active));
+    }
+
+    #[test]
+    fn validate_active_byok_partial_enrollment() {
+        // Active BYOK user enrolled for only openai + gemini.
+        // Request sends all 4 headers — validates only the 2 enrolled.
+        let mut fp = HashMap::new();
+        fp.insert("openai".to_string(), hex::encode(Sha256::digest(b"sk-o")));
+        fp.insert("gemini".to_string(), hex::encode(Sha256::digest(b"sk-g")));
+        let state = active_state_with_fingerprints(fp);
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(result, Ok(ByokValidation::Active));
+    }
+
+    #[test]
+    fn validate_active_byok_partial_enrollment_mismatch() {
+        // Active BYOK user enrolled for openai + gemini, but request sends
+        // wrong key for gemini → mismatch even though anthropic/deepgram are ok
+        let mut fp = HashMap::new();
+        fp.insert("openai".to_string(), hex::encode(Sha256::digest(b"sk-o")));
+        fp.insert("gemini".to_string(), hex::encode(Sha256::digest(b"WRONG")));
+        let state = active_state_with_fingerprints(fp);
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("gemini"));
+    }
+
+    #[test]
+    fn validate_active_byok_partial_headers_match_enrollment() {
+        // Active user enrolled for only openai. Request sends only openai header.
+        // Should pass — the one enrolled fingerprint matches.
+        let mut fp = HashMap::new();
+        fp.insert("openai".to_string(), hex::encode(Sha256::digest(b"sk-o")));
+        let state = active_state_with_fingerprints(fp);
+        let headers = headers_with(&[("x-byok-openai", "sk-o")]);
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(result, Ok(ByokValidation::Active));
+    }
+
+    #[test]
+    fn validate_active_byok_unknown_provider_in_fingerprints_skipped() {
+        // Fingerprints contain a provider not in HEADER_TO_PROVIDER — should be skipped
+        let mut fp = fingerprints_for_keys();
+        fp.insert("unknown_provider".to_string(), "deadbeef".to_string());
+        let state = active_state_with_fingerprints(fp);
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(result, Ok(ByokValidation::Active));
+    }
+
+    #[test]
+    fn validate_heartbeat_exactly_at_ttl_boundary() {
+        // Heartbeat exactly at 7 days (604800 seconds) — should still be valid (<=)
+        let state = ByokState {
+            active: true,
+            fingerprints: fingerprints_for_keys(),
+            last_seen_at: Some(Utc::now() - chrono::Duration::seconds(BYOK_HEARTBEAT_TTL_SECS)),
+        };
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(result, Ok(ByokValidation::Active));
+    }
+
+    #[test]
+    fn validate_heartbeat_one_second_past_ttl() {
+        // Heartbeat at 7 days + 1 second — should be expired
+        let state = ByokState {
+            active: true,
+            fingerprints: fingerprints_for_keys(),
+            last_seen_at: Some(
+                Utc::now() - chrono::Duration::seconds(BYOK_HEARTBEAT_TTL_SECS + 1),
+            ),
+        };
+        let headers = all_byok_headers_with_keys();
+        let result = validate_byok_request("uid", &headers, &state);
+        assert_eq!(
+            result,
+            Ok(ByokValidation::Inactive {
+                clear_headers: true
+            })
+        );
+    }
 }
