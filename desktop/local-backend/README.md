@@ -86,3 +86,19 @@ services. In local daemon mode:
 Unavailable capabilities fail before building a request to Omi-hosted services.
 Local conversation CRUD/search/settings flows continue to use the configured
 loopback daemon URL and do not require Firebase auth.
+
+## Architecture And E2E Validation
+
+The durable MVP architecture note and validation checklist live in
+`docs/architecture.md`.
+
+Run the local daemon API smoke test:
+
+```bash
+desktop/local-backend/tools/e2e_smoke.sh
+```
+
+The smoke starts the daemon on a temporary loopback port, creates and updates a
+conversation, appends/finalizes transcript segments, waits for fallback
+processing, checks job status, restarts the daemon, and verifies persisted
+conversation/search output without Omi cloud credentials.
