@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.411",
+      "date": "2026-05-18",
+      "changes": [
+        "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
+      ]
+    },
     {
       "version": "0.11.409",
       "date": "2026-05-18",
