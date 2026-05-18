@@ -240,6 +240,22 @@ async def test_log_executor_health_silent_below_threshold(caplog):
 
 
 @pytest.mark.asyncio
+async def test_log_executor_health_silent_at_exact_threshold(caplog):
+    """Utilization at exactly the threshold (70.0) must NOT trigger a warning (> not >=)."""
+    at_threshold_metrics = [
+        {'name': 'test-pool', 'max_workers': 10, 'active_count': 7, 'queue_depth': 0, 'utilization_pct': 70.0},
+    ]
+    with patch('utils.executors.get_executor_metrics', return_value=at_threshold_metrics):
+        with patch('utils.executors.asyncio.sleep', side_effect=[None, asyncio.CancelledError]):
+            with caplog.at_level(logging.WARNING, logger='utils.executors'):
+                try:
+                    await log_executor_health(interval_seconds=1, utilization_threshold_pct=70.0)
+                except asyncio.CancelledError:
+                    pass
+    assert not any('executor_pool_health' in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_log_executor_health_swallows_exceptions(caplog):
     """log_executor_health must swallow exceptions from get_executor_metrics and keep looping."""
     call_count = 0
