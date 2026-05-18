@@ -121,6 +121,48 @@ async def log_executor_health(interval_seconds: int = 60, utilization_threshold_
             pass
 
 
+_background_tasks: set[asyncio.Task] = set()
+
+
+def start_background_task(coro, *, name: str) -> asyncio.Task:
+    """Schedule *coro* as a tracked background task with exception logging.
+
+    Use this instead of bare ``asyncio.create_task()`` for production
+    fire-and-forget work.  Bare ``create_task`` silently drops exceptions
+    and can be garbage-collected if the caller doesn't keep a reference.
+    """
+    task = asyncio.create_task(coro, name=name)
+    _background_tasks.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if t.cancelled():
+            logger.info('background_task cancelled: %s', t.get_name())
+            return
+        exc = t.exception()
+        if exc:
+            logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
+
+    task.add_done_callback(_done)
+    return task
+
+
+def get_background_task_count() -> int:
+    """Return the number of currently tracked background tasks."""
+    return len(_background_tasks)
+
+
+async def drain_background_tasks(timeout: float = 10.0) -> int:
+    """Cancel and await all tracked background tasks at shutdown. Returns count cancelled."""
+    tasks = list(_background_tasks)
+    if not tasks:
+        return 0
+    for t in tasks:
+        t.cancel()
+    await asyncio.wait(tasks, timeout=timeout)
+    return len(tasks)
+
+
 def shutdown_executors():
     """Shut down all shared executors. Called at app shutdown."""
     for executor in _ALL_EXECUTORS:

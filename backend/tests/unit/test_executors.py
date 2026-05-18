@@ -12,9 +12,13 @@ import pytest
 
 from utils.executors import (
     MonitoredThreadPoolExecutor,
+    _background_tasks,
+    drain_background_tasks,
+    get_background_task_count,
     get_executor_metrics,
     log_executor_health,
     run_blocking,
+    start_background_task,
     submit_with_context,
     _ALL_EXECUTORS,
 )
@@ -200,6 +204,99 @@ def test_all_executors_are_monitored():
     """All registered executors must be MonitoredThreadPoolExecutor instances."""
     for executor in _ALL_EXECUTORS:
         assert isinstance(executor, MonitoredThreadPoolExecutor), f'{executor} is not MonitoredThreadPoolExecutor'
+
+
+# ---------------------------------------------------------------------------
+# log_executor_health tests
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# start_background_task tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_start_background_task_runs_coroutine():
+    """start_background_task must execute the coroutine and return a Task."""
+    result = {}
+
+    async def work():
+        result['done'] = True
+        return 42
+
+    task = start_background_task(work(), name='test-run')
+    assert isinstance(task, asyncio.Task)
+    assert task.get_name() == 'test-run'
+    await task
+    assert result['done'] is True
+    assert task.result() == 42
+
+
+@pytest.mark.asyncio
+async def test_start_background_task_tracks_and_removes():
+    """Task must be in _background_tasks while running, removed after completion."""
+    event = asyncio.Event()
+
+    async def wait_for_signal():
+        await event.wait()
+
+    task = start_background_task(wait_for_signal(), name='test-track')
+    assert task in _background_tasks
+    assert get_background_task_count() >= 1
+    event.set()
+    await task
+    await asyncio.sleep(0)  # let done callback fire
+    assert task not in _background_tasks
+
+
+@pytest.mark.asyncio
+async def test_start_background_task_logs_exceptions(caplog):
+    """Exceptions in background tasks must be logged, not silently swallowed."""
+
+    async def fail():
+        raise RuntimeError('bg-boom')
+
+    with caplog.at_level(logging.ERROR, logger='utils.executors'):
+        task = start_background_task(fail(), name='test-exc')
+        await asyncio.sleep(0.05)
+    assert any('background_task failed: test-exc' in r.message for r in caplog.records)
+    assert task not in _background_tasks
+
+
+@pytest.mark.asyncio
+async def test_start_background_task_logs_cancellation(caplog):
+    """Cancelled background tasks must log info, not error."""
+
+    async def forever():
+        await asyncio.sleep(3600)
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        task = start_background_task(forever(), name='test-cancel')
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        await asyncio.sleep(0)
+    assert any('background_task cancelled: test-cancel' in r.message for r in caplog.records)
+    assert task not in _background_tasks
+
+
+@pytest.mark.asyncio
+async def test_drain_background_tasks_cancels_all():
+    """drain_background_tasks must cancel and await all tracked tasks."""
+    events = [asyncio.Event() for _ in range(3)]
+
+    async def wait(e):
+        await e.wait()
+
+    tasks = [start_background_task(wait(e), name=f'drain-{i}') for i, e in enumerate(events)]
+    assert get_background_task_count() >= 3
+    cancelled = await drain_background_tasks(timeout=2.0)
+    assert cancelled == 3
+    for t in tasks:
+        assert t.done()
 
 
 # ---------------------------------------------------------------------------

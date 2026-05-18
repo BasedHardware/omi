@@ -66,7 +66,7 @@ class TestSyncV2Structure:
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
     def test_v2_dispatches_async_coordinator(self):
-        """v2 must dispatch background work via asyncio.create_task (async coordinator, #7361)."""
+        """v2 must dispatch background work via start_background_task (async coordinator, #7361)."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -74,7 +74,7 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'asyncio.create_task' in func_body, "v2 must use asyncio.create_task for async coordinator"
+        assert 'start_background_task' in func_body, "v2 must use start_background_task for async coordinator"
         assert '_run_full_pipeline_background_async' in func_body, "v2 must dispatch the async pipeline coordinator"
         assert 'submit_with_context' not in func_body, (
             "v2 must NOT use submit_with_context — async coordinator runs on event loop, "
@@ -2134,8 +2134,8 @@ class TestBYOKContextPropagation:
         with open(path) as f:
             return f.read()
 
-    def test_v2_uses_create_task_for_context_inheritance(self):
-        """v2 must use asyncio.create_task which auto-inherits ContextVars (BYOK keys)."""
+    def test_v2_uses_start_background_task_for_context_inheritance(self):
+        """v2 must use start_background_task which wraps create_task (auto-inherits ContextVars/BYOK)."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -2143,7 +2143,7 @@ class TestBYOKContextPropagation:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'asyncio.create_task' in func_body, "v2 must use asyncio.create_task for context inheritance"
+        assert 'start_background_task' in func_body, "v2 must use start_background_task for context inheritance"
 
     def test_async_coordinator_clears_byok_in_finally(self):
         """Async coordinator must clear BYOK context in its finally block."""

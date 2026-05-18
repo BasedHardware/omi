@@ -61,7 +61,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.executors import log_executor_health
+from utils.executors import drain_background_tasks, log_executor_health
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -157,6 +157,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 
 

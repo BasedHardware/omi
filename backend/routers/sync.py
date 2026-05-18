@@ -22,6 +22,7 @@ from utils.executors import (
     storage_executor,
     sync_executor,
     run_blocking,
+    start_background_task,
     submit_with_context,
 )
 
@@ -1674,7 +1675,7 @@ async def sync_local_files_v2(
 
         # Async coordinator: runs on event loop, offloads blocking work to pools.
         # No thread pool slot held for the full pipeline duration (fixes #7361).
-        task = asyncio.create_task(
+        start_background_task(
             _run_full_pipeline_background_async(
                 job_id,
                 uid,
@@ -1683,9 +1684,9 @@ async def sync_local_files_v2(
                 should_lock,
                 job_dir,
                 conversation_id,
-            )
+            ),
+            name=f'sync_pipeline:{job_id}',
         )
-        task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
         return JSONResponse(
             status_code=202,
