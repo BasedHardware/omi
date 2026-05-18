@@ -51,7 +51,29 @@ that no other process is already using the selected port.
 
 ## Launch Desktop In Local Daemon Mode
 
-The desktop app selects local mode through environment variables:
+For developer/user-test runs, the desktop launcher can supervise the local
+daemon. It checks `/health`, starts `desktop/local-backend` only if the daemon
+is unreachable, and stops only the daemon process it started when the launcher
+exits:
+
+```bash
+cd desktop
+OMI_DESKTOP_BACKEND_MODE=local \
+OMI_LOCAL_DAEMON_SUPERVISE=1 \
+OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765 \
+OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
+OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
+./run.sh
+```
+
+The invalid cloud URLs make accidental cloud routing obvious during a user test.
+Local conversation, transcript, memory, action item, settings, and search flows
+should use `OMI_LOCAL_DAEMON_URL`. The launcher path targets the development app
+bundle only (`Omi Dev.app` / `com.omi.desktop-dev`) and must not be used to
+manage `/Applications/omi.app`.
+
+To keep using a manually managed daemon, start it first and launch the desktop
+app with the same local-mode environment:
 
 ```bash
 cd desktop
@@ -61,10 +83,6 @@ OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
 OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
 ./run.sh
 ```
-
-The invalid cloud URLs make accidental cloud routing obvious during a user test.
-Local conversation, transcript, memory, action item, settings, and search flows
-should use `OMI_LOCAL_DAEMON_URL`.
 
 ## Import Transcript Data
 

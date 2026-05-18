@@ -21,8 +21,11 @@ Options (via environment variables):
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
+  OMI_DESKTOP_BACKEND_MODE=local  Route MVP data flows to the local daemon
+  OMI_LOCAL_DAEMON_SUPERVISE=1    In local mode, start desktop/local-backend if /health is unreachable
+  OMI_LOCAL_DAEMON_URL="..."      Local daemon URL (default: http://127.0.0.1:8765)
 
-Required files:
+Required files for cloud backend mode:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
   Backend-Rust/google-credentials.json  GCP service account key
 
@@ -36,6 +39,8 @@ Examples:
   ./run.sh                                  # Full local dev (backend + tunnel + app)
   OMI_SKIP_BACKEND=1 ./run.sh               # App only (backend running elsewhere)
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
+  OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_SUPERVISE=1 ./run.sh
+                                            # Local daemon mode with dev supervisor
   ./run.sh --yolo                            # Quick start: use prod backend, no local services
 USAGE
     exit 0
@@ -141,11 +146,57 @@ fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
+LOCAL_DAEMON_DIR="$(cd "$(dirname "$0")/local-backend" && pwd)"
 BACKEND_PID=""
+LOCAL_DAEMON_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
 
-# Cleanup function to stop backend, auth, and tunnel on exit
+is_local_daemon_mode() {
+    local mode
+    mode="$(printf '%s' "${OMI_DESKTOP_BACKEND_MODE:-${OMI_BACKEND_MODE:-}}" | tr '[:upper:]' '[:lower:]')"
+    case "$mode" in
+        local|local-daemon|local_daemon|daemon) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_local_daemon_url() {
+    local url="${OMI_LOCAL_DAEMON_URL:-http://127.0.0.1:8765}"
+    url="${url%/}"
+    export OMI_LOCAL_DAEMON_URL="$url"
+}
+
+configure_local_daemon_mode() {
+    if ! is_local_daemon_mode; then
+        return
+    fi
+
+    normalize_local_daemon_url
+    export OMI_SKIP_BACKEND="${OMI_SKIP_BACKEND:-1}"
+    export OMI_SKIP_TUNNEL="${OMI_SKIP_TUNNEL:-1}"
+
+    if [ -z "${OMI_LOCAL_BACKEND_PORT:-}" ]; then
+        OMI_LOCAL_BACKEND_PORT="$(python3 - "$OMI_LOCAL_DAEMON_URL" <<'PY'
+from urllib.parse import urlparse
+import sys
+
+parsed = urlparse(sys.argv[1])
+print(parsed.port or 8765)
+PY
+)"
+        export OMI_LOCAL_BACKEND_PORT
+    fi
+    export OMI_LOCAL_BACKEND_HOST="${OMI_LOCAL_BACKEND_HOST:-127.0.0.1}"
+}
+
+local_daemon_health_ok() {
+    curl -fsS "${OMI_LOCAL_DAEMON_URL}/health" >/dev/null 2>&1
+}
+
+configure_local_daemon_mode
+
+# Cleanup function to stop only services started by this dev launcher.
 cleanup() {
     if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
         echo "Stopping tunnel (PID: $TUNNEL_PID)..."
@@ -154,6 +205,11 @@ cleanup() {
     if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Stopping backend (PID: $BACKEND_PID)..."
         kill "$BACKEND_PID" 2>/dev/null || true
+    fi
+    if [ -n "$LOCAL_DAEMON_PID" ] && kill -0 "$LOCAL_DAEMON_PID" 2>/dev/null; then
+        echo "Stopping local daemon (PID: $LOCAL_DAEMON_PID)..."
+        kill "$LOCAL_DAEMON_PID" 2>/dev/null || true
+        wait "$LOCAL_DAEMON_PID" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -169,7 +225,9 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Kill any old Rust backend by process name (port-agnostic)
+# Kill any old dev cloud-shaped Rust backend by process name (port-agnostic).
+# Do not kill omi-local-backend here; local daemon mode may use a manually
+# managed daemon that this launcher should only detect.
 pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
     substep "Killing old backend (PID: $pid)"
     kill -9 "$pid" 2>/dev/null || true
@@ -240,7 +298,7 @@ if [ ! -f ".env" ] && [ -f "../backend/.env" ]; then
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
-if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
+if [ ! -f ".env" ] && [ "$1" != "--yolo" ] && ! is_local_daemon_mode; then
     echo ""
     echo "=== First-time setup ==="
     echo "No .env file found at $BACKEND_DIR/.env"
@@ -278,6 +336,7 @@ fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
 fi
+configure_local_daemon_mode
 
 # Read backend PORT from env (default: 10201, never use 8080)
 BACKEND_PORT="${PORT:-10201}"
@@ -308,11 +367,59 @@ if [ -z "$FIREBASE_PROJECT_ID" ] && [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     echo "    FIREBASE_PROJECT_ID=based-hardware-dev   # dev Firestore"
     exit 1
 fi
-if [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
+if is_local_daemon_mode; then
+    substep "Local daemon mode: skipping cloud backend credential requirements"
+elif [ -n "$FIREBASE_AUTH_PROJECT_ID" ]; then
     substep "Auth project: tokens validated against $FIREBASE_AUTH_PROJECT_ID, Firestore on $FIREBASE_PROJECT_ID"
+    substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
+else
+    substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
 fi
-substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
 cd - > /dev/null
+
+# ─── Local daemon health preflight / dev supervision ──────────────────
+if is_local_daemon_mode; then
+    step "Checking local daemon health..."
+    if local_daemon_health_ok; then
+        substep "Local daemon is ready at $OMI_LOCAL_DAEMON_URL"
+    elif [ "${OMI_LOCAL_DAEMON_SUPERVISE:-0}" = "1" ]; then
+        LOCAL_DAEMON_LOG="${OMI_LOCAL_DAEMON_LOG:-/tmp/omi-local-backend-dev.log}"
+        substep "Starting local daemon from $LOCAL_DAEMON_DIR"
+        cd "$LOCAL_DAEMON_DIR"
+        cargo run --quiet > "$LOCAL_DAEMON_LOG" 2>&1 &
+        LOCAL_DAEMON_PID=$!
+        cd - > /dev/null
+
+        for i in {1..80}; do
+            if local_daemon_health_ok; then
+                substep "Local daemon is ready at $OMI_LOCAL_DAEMON_URL (PID: $LOCAL_DAEMON_PID)"
+                break
+            fi
+            if ! kill -0 "$LOCAL_DAEMON_PID" 2>/dev/null; then
+                echo "ERROR: Local daemon exited during startup. Log:"
+                sed -n '1,160p' "$LOCAL_DAEMON_LOG" 2>/dev/null || true
+                exit 1
+            fi
+            sleep 0.25
+        done
+
+        if ! local_daemon_health_ok; then
+            echo "ERROR: Timed out waiting for local daemon health at $OMI_LOCAL_DAEMON_URL/health"
+            echo "Log: $LOCAL_DAEMON_LOG"
+            sed -n '1,160p' "$LOCAL_DAEMON_LOG" 2>/dev/null || true
+            exit 1
+        fi
+    else
+        echo "ERROR: Local daemon mode is enabled, but $OMI_LOCAL_DAEMON_URL/health is unreachable."
+        echo ""
+        echo "Start it manually:"
+        echo "  cd desktop/local-backend && cargo run"
+        echo ""
+        echo "Or let this dev launcher supervise it:"
+        echo "  OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_SUPERVISE=1 ./run.sh"
+        exit 1
+    fi
+fi
 
 # ─── Start Rust backend ───────────────────────────────────────────────
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
@@ -481,6 +588,18 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
+
+set_bundle_env() {
+    local key="$1"
+    local value="$2"
+    local env_file="$APP_BUNDLE/Contents/Resources/.env"
+    if grep -q "^${key}=" "$env_file"; then
+        sed -i '' "s|^${key}=.*|${key}=${value}|" "$env_file"
+    else
+        echo "${key}=${value}" >> "$env_file"
+    fi
+}
+
 # Set OMI_DESKTOP_API_URL: tunnel URL if available, otherwise from .env or local backend
 if [ -n "$TUNNEL_URL" ]; then
     EFFECTIVE_API_URL="$TUNNEL_URL"
@@ -489,12 +608,14 @@ elif [ -n "$OMI_DESKTOP_API_URL" ]; then
 else
     EFFECTIVE_API_URL="http://localhost:$BACKEND_PORT"
 fi
-if grep -q "^OMI_DESKTOP_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    sed -i '' "s|^OMI_DESKTOP_API_URL=.*|OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
-else
-    echo "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
-fi
+set_bundle_env "OMI_DESKTOP_API_URL" "$EFFECTIVE_API_URL"
 substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
+if is_local_daemon_mode; then
+    set_bundle_env "OMI_DESKTOP_BACKEND_MODE" "local"
+    set_bundle_env "OMI_LOCAL_DAEMON_URL" "$OMI_LOCAL_DAEMON_URL"
+    substep "OMI_DESKTOP_BACKEND_MODE=local"
+    substep "OMI_LOCAL_DAEMON_URL=$OMI_LOCAL_DAEMON_URL"
+fi
 # Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
 if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     FIREBASE_KEY="${FIREBASE_API_KEY:-}"
