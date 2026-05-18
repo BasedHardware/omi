@@ -310,6 +310,10 @@ async def sleep_until_shutdown(event: asyncio.Event, seconds: float) -> bool:
     Returns True if woken early by the event (shutdown requested),
     False if the full sleep elapsed normally.
     """
+    if event.is_set():
+        return True
+    if seconds <= 0:
+        return False
     try:
         await asyncio.wait_for(event.wait(), timeout=seconds)
         return True
