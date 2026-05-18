@@ -4709,52 +4709,7 @@ impl FirestoreService {
         uid: &str,
     ) -> Result<crate::byok::ByokState, Box<dyn std::error::Error + Send + Sync>> {
         let doc = self.get_user_document(uid).await?;
-        let fields = doc.get("fields").cloned().unwrap_or_default();
-
-        // Navigate: fields.byok.mapValue.fields
-        let byok_fields = match fields
-            .get("byok")
-            .and_then(|v| v.get("mapValue"))
-            .and_then(|v| v.get("fields"))
-        {
-            Some(f) => f,
-            None => return Ok(crate::byok::ByokState::default()),
-        };
-
-        let active = byok_fields
-            .get("active")
-            .and_then(|v| v.get("booleanValue"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        // Parse fingerprints map: byok.fingerprints.mapValue.fields.{provider}.stringValue
-        let mut fingerprints = std::collections::HashMap::new();
-        if let Some(fp_fields) = byok_fields
-            .get("fingerprints")
-            .and_then(|v| v.get("mapValue"))
-            .and_then(|v| v.get("fields"))
-            .and_then(|v| v.as_object())
-        {
-            for (provider, val) in fp_fields {
-                if let Some(fp_str) = val.get("stringValue").and_then(|v| v.as_str()) {
-                    fingerprints.insert(provider.clone(), fp_str.to_string());
-                }
-            }
-        }
-
-        // Parse last_seen_at as timestampValue
-        let last_seen_at = byok_fields
-            .get("last_seen_at")
-            .and_then(|v| v.get("timestampValue"))
-            .and_then(|v| v.as_str())
-            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc));
-
-        Ok(crate::byok::ByokState {
-            active,
-            fingerprints,
-            last_seen_at,
-        })
+        Ok(parse_byok_state_from_doc(&doc))
     }
 
     /// Read the effective subscription plan for paywall purposes.
@@ -4770,69 +4725,31 @@ impl FirestoreService {
         uid: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let doc = self.get_user_document(uid).await?;
-        let fields = doc.get("fields").cloned().unwrap_or_default();
+        let plan = parse_effective_plan_from_doc(&doc);
 
-        let sub_fields = match fields
-            .get("subscription")
-            .and_then(|v| v.get("mapValue"))
-            .and_then(|v| v.get("fields"))
-        {
-            Some(f) => f.clone(),
-            None => return Ok("basic".to_string()),
-        };
+        // Log interesting fallback cases for paid plans
+        if let Some(fields) = doc.get("fields") {
+            if let Some(sub_fields) = fields
+                .get("subscription")
+                .and_then(|v| v.get("mapValue"))
+                .and_then(|v| v.get("fields"))
+            {
+                let raw_plan = sub_fields
+                    .get("plan")
+                    .and_then(|v| v.get("stringValue"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("basic");
 
-        let mut plan = sub_fields
-            .get("plan")
-            .and_then(|v| v.get("stringValue"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("basic")
-            .to_string();
-
-        // Handle migration from old "free" plan identifier
-        if plan == "free" {
-            plan = "basic".to_string();
-        }
-
-        // Basic plan: always valid (no expiry to check)
-        if plan == "basic" {
-            return Ok(plan);
-        }
-
-        // Paid plan: check current_period_end.
-        // If it's in the past, the subscription is expired → fall back to basic.
-        // This matches Python's get_user_valid_subscription() which returns
-        // get_default_basic_subscription() when period_end < now.
-        // Python's get_user_valid_subscription only returns a paid plan when
-        // current_period_end exists AND is still in the future. Missing or
-        // unparseable current_period_end → fall back to basic.
-        match sub_fields
-            .get("current_period_end")
-            .and_then(|v| v.get("integerValue"))
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<i64>().ok())
-        {
-            Some(period_end) => {
-                let now_epoch = chrono::Utc::now().timestamp();
-                if period_end < now_epoch {
+                if raw_plan != "basic" && raw_plan != "free" && plan == "basic" {
                     tracing::info!(
-                        "paywall: paid plan '{}' expired for uid={} (period_end={} < now={}), falling back to basic",
-                        plan, uid, period_end, now_epoch
+                        "paywall: paid plan '{}' fell back to basic for uid={} (expired or missing period_end)",
+                        raw_plan, uid
                     );
-                    Ok("basic".to_string())
-                } else {
-                    Ok(plan)
                 }
             }
-            None => {
-                // Missing current_period_end on a paid plan → fall back to basic
-                // (matches Python which returns default basic subscription)
-                tracing::info!(
-                    "paywall: paid plan '{}' missing current_period_end for uid={}, falling back to basic",
-                    plan, uid
-                );
-                Ok("basic".to_string())
-            }
         }
+
+        Ok(plan)
     }
 
     /// Get user account creation time from Firebase Auth Identity Toolkit REST API.
@@ -9935,6 +9852,112 @@ impl Default for Structured {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pure parsing functions (extracted from FirestoreService for testability)
+// ---------------------------------------------------------------------------
+
+/// Parse BYOK state from a Firestore user document JSON.
+/// Returns `ByokState::default()` (inactive) if the byok field is missing or malformed.
+fn parse_byok_state_from_doc(doc: &Value) -> crate::byok::ByokState {
+    let fields = match doc.get("fields") {
+        Some(f) => f,
+        None => return crate::byok::ByokState::default(),
+    };
+
+    let byok_fields = match fields
+        .get("byok")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+    {
+        Some(f) => f,
+        None => return crate::byok::ByokState::default(),
+    };
+
+    let active = byok_fields
+        .get("active")
+        .and_then(|v| v.get("booleanValue"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut fingerprints = std::collections::HashMap::new();
+    if let Some(fp_fields) = byok_fields
+        .get("fingerprints")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+        .and_then(|v| v.as_object())
+    {
+        for (provider, val) in fp_fields {
+            if let Some(fp_str) = val.get("stringValue").and_then(|v| v.as_str()) {
+                fingerprints.insert(provider.clone(), fp_str.to_string());
+            }
+        }
+    }
+
+    let last_seen_at = byok_fields
+        .get("last_seen_at")
+        .and_then(|v| v.get("timestampValue"))
+        .and_then(|v| v.as_str())
+        .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    crate::byok::ByokState {
+        active,
+        fingerprints,
+        last_seen_at,
+    }
+}
+
+/// Parse effective subscription plan from a Firestore user document JSON.
+/// Returns "basic" if the subscription field is missing, malformed, or expired.
+fn parse_effective_plan_from_doc(doc: &Value) -> String {
+    let fields = match doc.get("fields") {
+        Some(f) => f,
+        None => return "basic".to_string(),
+    };
+
+    let sub_fields = match fields
+        .get("subscription")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+    {
+        Some(f) => f,
+        None => return "basic".to_string(),
+    };
+
+    let mut plan = sub_fields
+        .get("plan")
+        .and_then(|v| v.get("stringValue"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("basic")
+        .to_string();
+
+    if plan == "free" {
+        plan = "basic".to_string();
+    }
+
+    if plan == "basic" {
+        return plan;
+    }
+
+    // Paid plan: check current_period_end
+    match sub_fields
+        .get("current_period_end")
+        .and_then(|v| v.get("integerValue"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<i64>().ok())
+    {
+        Some(period_end) => {
+            let now_epoch = chrono::Utc::now().timestamp();
+            if period_end < now_epoch {
+                "basic".to_string()
+            } else {
+                plan
+            }
+        }
+        None => "basic".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -9945,5 +9968,227 @@ mod tests {
         assert_eq!(id.len(), 20);
         assert_eq!(id, document_id_from_seed("test content"));
         assert_ne!(id, document_id_from_seed("different content"));
+    }
+
+    // --- Firestore BYOK state parsing tests ---
+
+    #[test]
+    fn parse_byok_state_full_document() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "fingerprints": {
+                                "mapValue": {
+                                    "fields": {
+                                        "openai": { "stringValue": "abc123" },
+                                        "anthropic": { "stringValue": "def456" }
+                                    }
+                                }
+                            },
+                            "last_seen_at": {
+                                "timestampValue": "2026-05-18T10:00:00Z"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert_eq!(state.fingerprints.len(), 2);
+        assert_eq!(state.fingerprints.get("openai").unwrap(), "abc123");
+        assert_eq!(state.fingerprints.get("anthropic").unwrap(), "def456");
+        assert!(state.last_seen_at.is_some());
+    }
+
+    #[test]
+    fn parse_byok_state_missing_byok_field() {
+        let doc = json!({ "fields": { "name": { "stringValue": "Alice" } } });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+        assert!(state.fingerprints.is_empty());
+        assert!(state.last_seen_at.is_none());
+    }
+
+    #[test]
+    fn parse_byok_state_missing_fields() {
+        let doc = json!({});
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+    }
+
+    #[test]
+    fn parse_byok_state_active_false() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": false }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+        assert!(state.fingerprints.is_empty());
+    }
+
+    #[test]
+    fn parse_byok_state_no_fingerprints() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "last_seen_at": { "timestampValue": "2026-05-18T10:00:00Z" }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert!(state.fingerprints.is_empty());
+    }
+
+    #[test]
+    fn parse_byok_state_malformed_timestamp() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "last_seen_at": { "timestampValue": "not-a-date" }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert!(state.last_seen_at.is_none());
+    }
+
+    // --- Firestore subscription plan parsing tests ---
+
+    #[test]
+    fn parse_plan_pro_with_future_expiry() {
+        let future_ts = chrono::Utc::now().timestamp() + 86400; // +1 day
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" },
+                            "current_period_end": { "integerValue": future_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "pro");
+    }
+
+    #[test]
+    fn parse_plan_pro_expired() {
+        let past_ts = chrono::Utc::now().timestamp() - 86400; // -1 day
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" },
+                            "current_period_end": { "integerValue": past_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_pro_missing_period_end() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_basic() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "basic" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_free_migrated_to_basic() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "free" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_missing_subscription() {
+        let doc = json!({ "fields": {} });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_missing_fields_key() {
+        let doc = json!({});
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_enterprise_valid() {
+        let future_ts = chrono::Utc::now().timestamp() + 86400;
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "enterprise" },
+                            "current_period_end": { "integerValue": future_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "enterprise");
     }
 }
