@@ -301,6 +301,65 @@ pub struct ProcessingJob {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub content: String,
+    pub category: Option<String>,
+    pub conversation_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionItem {
+    pub id: String,
+    pub conversation_id: Option<String>,
+    pub title: String,
+    pub description: String,
+    pub status: String,
+    pub due_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalProfile {
+    pub id: String,
+    pub display_name: String,
+    pub timezone: Option<String>,
+    pub locale: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalSetting {
+    pub key: String,
+    pub value_json: String,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub cloud_id: Option<String>,
+    pub sync_version: i64,
+    pub sync_state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProcessingJobStatus {
     Queued,
@@ -323,7 +382,7 @@ impl Store {
     }
 
     #[cfg(test)]
-    fn open_in_memory() -> Result<Self> {
+    pub(crate) fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory().context("failed to open in-memory SQLite store")?;
         configure_connection(&conn)?;
         run_migrations(&conn)?;
@@ -353,6 +412,30 @@ impl Store {
 
     pub fn search(&self) -> SearchRepository {
         SearchRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn memories(&self) -> MemoryRepository {
+        MemoryRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn action_items(&self) -> ActionItemRepository {
+        ActionItemRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn profile(&self) -> ProfileRepository {
+        ProfileRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn settings(&self) -> SettingsRepository {
+        SettingsRepository {
             conn: Arc::clone(&self.conn),
         }
     }
@@ -427,6 +510,83 @@ impl ConversationRepository {
         )
         .optional()
         .context("failed to fetch conversation")
+    }
+
+    pub fn list(&self, limit: i64) -> Result<Vec<Conversation>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
+                       updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+                FROM conversations
+                WHERE deleted_at IS NULL
+                ORDER BY updated_at DESC
+                LIMIT ?1
+                "#,
+            )
+            .context("failed to prepare conversation list query")?;
+        let rows = stmt
+            .query_map(params![limit], map_conversation)
+            .context("failed to list conversations")?;
+        collect_rows(rows)
+    }
+
+    pub fn update(&self, id: &str, update: UpdateConversation) -> Result<Option<Conversation>> {
+        let Some(mut conversation) = self.get(id)? else {
+            return Ok(None);
+        };
+        if let Some(title) = update.title {
+            conversation.title = title;
+        }
+        if let Some(overview) = update.overview {
+            conversation.overview = overview;
+        }
+        if let Some(status) = update.status {
+            conversation.status = status;
+        }
+        if let Some(ended_at) = update.ended_at {
+            conversation.ended_at = ended_at;
+        }
+        if let Some(metadata) = update.metadata {
+            conversation.metadata_json = json_or_empty_object(Some(metadata))?;
+        }
+        conversation.updated_at = Utc::now();
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            UPDATE conversations
+            SET title = ?2, overview = ?3, status = ?4, ended_at = ?5, updated_at = ?6,
+                metadata_json = ?7, sync_version = sync_version + 1
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![
+                conversation.id,
+                conversation.title,
+                conversation.overview,
+                conversation.status,
+                conversation.ended_at,
+                conversation.updated_at,
+                conversation.metadata_json
+            ],
+        )
+        .context("failed to update conversation")?;
+
+        drop(conn);
+        self.get(id)
+    }
+
+    pub fn soft_delete(&self, id: &str) -> Result<bool> {
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let changed = conn
+            .execute(
+                "UPDATE conversations SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+                params![id, now],
+            )
+            .context("failed to delete conversation")?;
+        Ok(changed > 0)
     }
 }
 
@@ -513,6 +673,16 @@ impl TranscriptRepository {
 
         collect_rows(rows)
     }
+
+    pub fn next_segment_index(&self, conversation_id: &str) -> Result<i64> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            "SELECT COALESCE(MAX(segment_index) + 1, 0) FROM transcript_segments WHERE conversation_id = ?1",
+            params![conversation_id],
+            |row| row.get(0),
+        )
+        .context("failed to fetch next segment index")
+    }
 }
 
 pub struct ProcessingJobRepository {
@@ -580,10 +750,465 @@ impl ProcessingJobRepository {
 
         Ok(job)
     }
+
+    pub fn get(&self, id: &str) -> Result<Option<ProcessingJob>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, kind, status, target_conversation_id, retry_count, max_retries, last_error,
+                   payload_json, result_json, queued_at, started_at, completed_at, failed_at,
+                   created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state
+            FROM processing_jobs
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_processing_job,
+        )
+        .optional()
+        .context("failed to fetch processing job")
+    }
+
+    pub fn list(&self) -> Result<Vec<ProcessingJob>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, kind, status, target_conversation_id, retry_count, max_retries, last_error,
+                       payload_json, result_json, queued_at, started_at, completed_at, failed_at,
+                       created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state
+                FROM processing_jobs
+                WHERE deleted_at IS NULL
+                ORDER BY queued_at DESC
+                "#,
+            )
+            .context("failed to prepare processing job list query")?;
+        let rows = stmt
+            .query_map([], map_processing_job)
+            .context("failed to list processing jobs")?;
+        collect_rows(rows)
+    }
 }
 
 pub struct SearchRepository {
     conn: Arc<Mutex<Connection>>,
+}
+
+pub struct MemoryRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl MemoryRepository {
+    pub fn create(&self, new: NewMemory) -> Result<Memory> {
+        let now = Utc::now();
+        let memory = Memory {
+            id: new.id,
+            content: new.content,
+            category: new.category,
+            conversation_id: new.conversation_id,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+            metadata_json: json_or_empty_object(new.metadata)?,
+        };
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO memories (
+                id, content, category, conversation_id, created_at, updated_at, deleted_at,
+                cloud_id, sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "#,
+            params![
+                memory.id,
+                memory.content,
+                memory.category,
+                memory.conversation_id,
+                memory.created_at,
+                memory.updated_at,
+                memory.deleted_at,
+                memory.cloud_id,
+                memory.sync_version,
+                memory.sync_state,
+                memory.metadata_json
+            ],
+        )
+        .context("failed to create memory")?;
+        Ok(memory)
+    }
+
+    pub fn get(&self, id: &str) -> Result<Option<Memory>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, content, category, conversation_id, created_at, updated_at, deleted_at,
+                   cloud_id, sync_version, sync_state, metadata_json
+            FROM memories
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_memory,
+        )
+        .optional()
+        .context("failed to fetch memory")
+    }
+
+    pub fn list(&self) -> Result<Vec<Memory>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, content, category, conversation_id, created_at, updated_at, deleted_at,
+                       cloud_id, sync_version, sync_state, metadata_json
+                FROM memories
+                WHERE deleted_at IS NULL
+                ORDER BY updated_at DESC
+                "#,
+            )
+            .context("failed to prepare memory list query")?;
+        let rows = stmt
+            .query_map([], map_memory)
+            .context("failed to list memories")?;
+        collect_rows(rows)
+    }
+
+    pub fn update(&self, id: &str, update: UpdateMemory) -> Result<Option<Memory>> {
+        let Some(mut memory) = self.get(id)? else {
+            return Ok(None);
+        };
+        if let Some(content) = update.content {
+            memory.content = content;
+        }
+        if let Some(category) = update.category {
+            memory.category = category;
+        }
+        if let Some(conversation_id) = update.conversation_id {
+            memory.conversation_id = conversation_id;
+        }
+        if let Some(metadata) = update.metadata {
+            memory.metadata_json = json_or_empty_object(Some(metadata))?;
+        }
+        memory.updated_at = Utc::now();
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            UPDATE memories
+            SET content = ?2, category = ?3, conversation_id = ?4, updated_at = ?5,
+                metadata_json = ?6, sync_version = sync_version + 1
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![
+                memory.id,
+                memory.content,
+                memory.category,
+                memory.conversation_id,
+                memory.updated_at,
+                memory.metadata_json
+            ],
+        )
+        .context("failed to update memory")?;
+        drop(conn);
+        self.get(id)
+    }
+
+    pub fn soft_delete(&self, id: &str) -> Result<bool> {
+        soft_delete_by_id(&self.conn, "memories", id, "memory")
+    }
+}
+
+pub struct ActionItemRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ActionItemRepository {
+    pub fn create(&self, new: NewActionItem) -> Result<ActionItem> {
+        let now = Utc::now();
+        let action_item = ActionItem {
+            id: new.id,
+            conversation_id: new.conversation_id,
+            title: new.title,
+            description: new.description.unwrap_or_default(),
+            status: new.status.unwrap_or_else(|| "open".to_string()),
+            due_at: new.due_at,
+            completed_at: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+            metadata_json: json_or_empty_object(new.metadata)?,
+        };
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO action_items (
+                id, conversation_id, title, description, status, due_at, completed_at, created_at,
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "#,
+            params![
+                action_item.id,
+                action_item.conversation_id,
+                action_item.title,
+                action_item.description,
+                action_item.status,
+                action_item.due_at,
+                action_item.completed_at,
+                action_item.created_at,
+                action_item.updated_at,
+                action_item.deleted_at,
+                action_item.cloud_id,
+                action_item.sync_version,
+                action_item.sync_state,
+                action_item.metadata_json
+            ],
+        )
+        .context("failed to create action item")?;
+        Ok(action_item)
+    }
+
+    pub fn get(&self, id: &str) -> Result<Option<ActionItem>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, conversation_id, title, description, status, due_at, completed_at,
+                   created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state,
+                   metadata_json
+            FROM action_items
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_action_item,
+        )
+        .optional()
+        .context("failed to fetch action item")
+    }
+
+    pub fn list(&self) -> Result<Vec<ActionItem>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, conversation_id, title, description, status, due_at, completed_at,
+                       created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state,
+                       metadata_json
+                FROM action_items
+                WHERE deleted_at IS NULL
+                ORDER BY updated_at DESC
+                "#,
+            )
+            .context("failed to prepare action item list query")?;
+        let rows = stmt
+            .query_map([], map_action_item)
+            .context("failed to list action items")?;
+        collect_rows(rows)
+    }
+
+    pub fn update(&self, id: &str, update: UpdateActionItem) -> Result<Option<ActionItem>> {
+        let Some(mut action_item) = self.get(id)? else {
+            return Ok(None);
+        };
+        if let Some(title) = update.title {
+            action_item.title = title;
+        }
+        if let Some(description) = update.description {
+            action_item.description = description;
+        }
+        if let Some(status) = update.status {
+            action_item.status = status;
+            if action_item.status == "completed" && action_item.completed_at.is_none() {
+                action_item.completed_at = Some(Utc::now());
+            }
+        }
+        if let Some(due_at) = update.due_at {
+            action_item.due_at = due_at;
+        }
+        if let Some(conversation_id) = update.conversation_id {
+            action_item.conversation_id = conversation_id;
+        }
+        if let Some(metadata) = update.metadata {
+            action_item.metadata_json = json_or_empty_object(Some(metadata))?;
+        }
+        action_item.updated_at = Utc::now();
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            UPDATE action_items
+            SET conversation_id = ?2, title = ?3, description = ?4, status = ?5, due_at = ?6,
+                completed_at = ?7, updated_at = ?8, metadata_json = ?9,
+                sync_version = sync_version + 1
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![
+                action_item.id,
+                action_item.conversation_id,
+                action_item.title,
+                action_item.description,
+                action_item.status,
+                action_item.due_at,
+                action_item.completed_at,
+                action_item.updated_at,
+                action_item.metadata_json
+            ],
+        )
+        .context("failed to update action item")?;
+        drop(conn);
+        self.get(id)
+    }
+
+    pub fn soft_delete(&self, id: &str) -> Result<bool> {
+        soft_delete_by_id(&self.conn, "action_items", id, "action item")
+    }
+}
+
+pub struct ProfileRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ProfileRepository {
+    pub fn get_or_create_default(&self) -> Result<LocalProfile> {
+        if let Some(profile) = self.get("local")? {
+            return Ok(profile);
+        }
+        self.upsert(UpdateProfile {
+            display_name: Some(String::new()),
+            timezone: None,
+            locale: None,
+            metadata: None,
+        })
+    }
+
+    pub fn get(&self, id: &str) -> Result<Option<LocalProfile>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, display_name, timezone, locale, created_at, updated_at, deleted_at,
+                   cloud_id, sync_version, sync_state, metadata_json
+            FROM local_profiles
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_local_profile,
+        )
+        .optional()
+        .context("failed to fetch local profile")
+    }
+
+    pub fn upsert(&self, update: UpdateProfile) -> Result<LocalProfile> {
+        let now = Utc::now();
+        let current = self.get("local")?;
+        let display_name = update
+            .display_name
+            .or_else(|| current.as_ref().map(|profile| profile.display_name.clone()))
+            .unwrap_or_default();
+        let timezone = update.timezone.or_else(|| {
+            current
+                .as_ref()
+                .and_then(|profile| profile.timezone.clone())
+        });
+        let locale = update
+            .locale
+            .or_else(|| current.as_ref().and_then(|profile| profile.locale.clone()));
+        let metadata_json = match update.metadata {
+            Some(metadata) => json_or_empty_object(Some(metadata))?,
+            None => current
+                .as_ref()
+                .map(|profile| profile.metadata_json.clone())
+                .unwrap_or_else(|| "{}".to_string()),
+        };
+        let created_at = current
+            .as_ref()
+            .map(|profile| profile.created_at)
+            .unwrap_or(now);
+
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO local_profiles (
+                id, display_name, timezone, locale, created_at, updated_at, deleted_at, cloud_id,
+                sync_version, sync_state, metadata_json
+            )
+            VALUES ('local', ?1, ?2, ?3, ?4, ?5, NULL, NULL, 0, 'local', ?6)
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                timezone = excluded.timezone,
+                locale = excluded.locale,
+                updated_at = excluded.updated_at,
+                metadata_json = excluded.metadata_json,
+                sync_version = local_profiles.sync_version + 1
+            "#,
+            params![
+                display_name,
+                timezone,
+                locale,
+                created_at,
+                now,
+                metadata_json
+            ],
+        )
+        .context("failed to upsert local profile")?;
+        drop(conn);
+        self.get("local")?
+            .context("local profile missing after upsert")
+    }
+}
+
+pub struct SettingsRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl SettingsRepository {
+    pub fn list(&self) -> Result<Vec<LocalSetting>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT key, value_json, updated_at, deleted_at, cloud_id, sync_version, sync_state
+                FROM local_settings
+                WHERE deleted_at IS NULL
+                ORDER BY key ASC
+                "#,
+            )
+            .context("failed to prepare settings list query")?;
+        let rows = stmt
+            .query_map([], map_local_setting)
+            .context("failed to list settings")?;
+        collect_rows(rows)
+    }
+
+    pub fn upsert_many(
+        &self,
+        values: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Vec<LocalSetting>> {
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        for (key, value) in values {
+            let value_json =
+                serde_json::to_string(&value).context("failed to serialize setting value")?;
+            conn.execute(
+                r#"
+                INSERT INTO local_settings (key, value_json, updated_at, deleted_at, cloud_id, sync_version, sync_state)
+                VALUES (?1, ?2, ?3, NULL, NULL, 0, 'local')
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = excluded.updated_at,
+                    deleted_at = NULL,
+                    sync_version = local_settings.sync_version + 1
+                "#,
+                params![key, value_json, now],
+            )
+            .context("failed to upsert local setting")?;
+        }
+        drop(conn);
+        self.list()
+    }
 }
 
 impl SearchRepository {
@@ -652,6 +1277,61 @@ pub struct NewProcessingJob {
     pub target_conversation_id: Option<String>,
     pub max_retries: Option<i64>,
     pub payload: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateConversation {
+    pub title: Option<String>,
+    pub overview: Option<String>,
+    pub status: Option<String>,
+    pub ended_at: Option<Option<DateTime<Utc>>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewMemory {
+    pub id: String,
+    pub content: String,
+    pub category: Option<String>,
+    pub conversation_id: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateMemory {
+    pub content: Option<String>,
+    pub category: Option<Option<String>>,
+    pub conversation_id: Option<Option<String>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewActionItem {
+    pub id: String,
+    pub conversation_id: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    pub due_at: Option<DateTime<Utc>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateActionItem {
+    pub conversation_id: Option<Option<String>>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub status: Option<String>,
+    pub due_at: Option<Option<DateTime<Utc>>>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateProfile {
+    pub display_name: Option<String>,
+    pub timezone: Option<String>,
+    pub locale: Option<String>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 pub fn deterministic_id(prefix: &str, parts: &[&str]) -> String {
@@ -773,6 +1453,113 @@ fn map_transcript_segment(row: &rusqlite::Row<'_>) -> rusqlite::Result<Transcrip
     })
 }
 
+fn map_processing_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProcessingJob> {
+    let status: String = row.get(2)?;
+    Ok(ProcessingJob {
+        id: row.get(0)?,
+        kind: row.get(1)?,
+        status: ProcessingJobStatus::from_db(&status),
+        target_conversation_id: row.get(3)?,
+        retry_count: row.get(4)?,
+        max_retries: row.get(5)?,
+        last_error: row.get(6)?,
+        payload_json: row.get(7)?,
+        result_json: row.get(8)?,
+        queued_at: row.get(9)?,
+        started_at: row.get(10)?,
+        completed_at: row.get(11)?,
+        failed_at: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
+        deleted_at: row.get(15)?,
+        cloud_id: row.get(16)?,
+        sync_version: row.get(17)?,
+        sync_state: row.get(18)?,
+    })
+}
+
+fn map_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
+    Ok(Memory {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        category: row.get(2)?,
+        conversation_id: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        deleted_at: row.get(6)?,
+        cloud_id: row.get(7)?,
+        sync_version: row.get(8)?,
+        sync_state: row.get(9)?,
+        metadata_json: row.get(10)?,
+    })
+}
+
+fn map_action_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ActionItem> {
+    Ok(ActionItem {
+        id: row.get(0)?,
+        conversation_id: row.get(1)?,
+        title: row.get(2)?,
+        description: row.get(3)?,
+        status: row.get(4)?,
+        due_at: row.get(5)?,
+        completed_at: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        deleted_at: row.get(9)?,
+        cloud_id: row.get(10)?,
+        sync_version: row.get(11)?,
+        sync_state: row.get(12)?,
+        metadata_json: row.get(13)?,
+    })
+}
+
+fn map_local_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalProfile> {
+    Ok(LocalProfile {
+        id: row.get(0)?,
+        display_name: row.get(1)?,
+        timezone: row.get(2)?,
+        locale: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        deleted_at: row.get(6)?,
+        cloud_id: row.get(7)?,
+        sync_version: row.get(8)?,
+        sync_state: row.get(9)?,
+        metadata_json: row.get(10)?,
+    })
+}
+
+fn map_local_setting(row: &rusqlite::Row<'_>) -> rusqlite::Result<LocalSetting> {
+    Ok(LocalSetting {
+        key: row.get(0)?,
+        value_json: row.get(1)?,
+        updated_at: row.get(2)?,
+        deleted_at: row.get(3)?,
+        cloud_id: row.get(4)?,
+        sync_version: row.get(5)?,
+        sync_state: row.get(6)?,
+    })
+}
+
+fn soft_delete_by_id(
+    conn: &Arc<Mutex<Connection>>,
+    table: &str,
+    id: &str,
+    entity_name: &str,
+) -> Result<bool> {
+    let now = Utc::now();
+    let conn = conn.lock().expect("SQLite connection mutex poisoned");
+    let changed = conn
+        .execute(
+            &format!(
+                "UPDATE {table} SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL"
+            ),
+            params![id, now],
+        )
+        .with_context(|| format!("failed to delete {entity_name}"))?;
+    Ok(changed > 0)
+}
+
 impl ProcessingJobStatus {
     fn as_str(&self) -> &'static str {
         match self {
@@ -780,6 +1567,15 @@ impl ProcessingJobStatus {
             Self::Running => "running",
             Self::Completed => "completed",
             Self::Failed => "failed",
+        }
+    }
+
+    fn from_db(value: &str) -> Self {
+        match value {
+            "running" => Self::Running,
+            "completed" => Self::Completed,
+            "failed" => Self::Failed,
+            _ => Self::Queued,
         }
     }
 }

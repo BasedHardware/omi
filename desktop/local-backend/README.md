@@ -32,3 +32,40 @@ curl http://127.0.0.1:8765/health
 
 The response includes the service name, local mode, package version, bind
 address, and resolved data directory.
+
+## MVP HTTP API
+
+The local daemon exposes JSON endpoints for the desktop MVP:
+
+- `GET /health`, `GET /version`, `GET /profile/status`
+- `GET|POST /v1/conversations`
+- `GET|PATCH|DELETE /v1/conversations/:id`
+- `POST /v1/conversations/:id/transcript-segments`
+- `POST /v1/conversations/:id/finalize-transcript`
+- `GET /v1/search/conversations?q=<text>`
+- `GET|POST /v1/memories`
+- `GET|PATCH|DELETE /v1/memories/:id`
+- `GET|POST /v1/action-items`
+- `GET|PATCH|DELETE /v1/action-items/:id`
+- `GET|PUT /v1/profile`
+- `GET|PUT /v1/settings`
+- `GET /v1/processing-jobs`
+- `GET /v1/processing-jobs/:id`
+- `GET /v1/processing-jobs/status`
+
+Finalizing transcript ingestion currently enqueues a local `finalize_transcript`
+processing job. Later processing workers can consume the same durable
+`processing_jobs` rows and update queued/running/completed/failed state.
+
+## Differences From The Cloud API
+
+The local daemon is intentionally unauthenticated on loopback for the MVP. It
+does not require Firebase ID tokens, does not return paywall errors, does not
+create GCS signed URLs, and does not depend on Redis, Firestore, pusher, or
+agent-proxy coordination.
+
+Local responses use explicit JSON errors with `source: "local_daemon"`. Profile
+status reports `authenticated: false` because local-first mode does not imply an
+Omi cloud account. Cloud IDs and sync fields are retained in storage models so a
+future sync adapter can map local records to cloud records without making cloud
+state the source of truth.
