@@ -761,7 +761,7 @@ def update_app(
         if webhook_url:
             try:
                 resp = httpx.post(webhook_url, json={}, timeout=10.0, follow_redirects=True)
-                if resp.status_code < 200 or resp.status_code >= 500:
+                if resp.status_code < 200 or resp.status_code >= 300:
                     raise HTTPException(
                         status_code=400,
                         detail=f'Webhook endpoint returned {resp.status_code}. Fix the endpoint before re-enabling.',
