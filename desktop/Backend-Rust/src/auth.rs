@@ -329,7 +329,7 @@ where
         // Paywall check — fail open if Firestore is unreachable so a backend
         // outage never makes paying users look paywalled.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, &parts.headers).await {
+            if checker.0.is_paywalled(&uid, &parts.headers, byok_stripped).await {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),
