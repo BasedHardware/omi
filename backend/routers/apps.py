@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import asyncio
 import time
 from datetime import datetime, timezone
+
+import httpx
 from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ValidationError
@@ -50,6 +53,8 @@ from database.apps import (
     search_apps_db,
 )
 from database.webhook_health import record_app_webhook_success
+
+logger = logging.getLogger(__name__)
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -747,10 +752,35 @@ def update_app(
     if external_integration := data.get('external_integration'):
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
-    update_app_in_db(update_dict)
-
     if update_dict.get('disabled') is False and app.get('disabled'):
+        ext = app.get('external_integration') or {}
+        webhook_url = ext.get('webhook_url', '')
+        if webhook_url:
+            try:
+                resp = httpx.head(webhook_url, timeout=10.0, follow_redirects=True)
+                if resp.status_code < 200 or resp.status_code >= 300:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f'Webhook endpoint returned {resp.status_code}. Fix the endpoint before re-enabling.',
+                    )
+            except httpx.TimeoutException:
+                raise HTTPException(
+                    status_code=400, detail='Webhook endpoint timed out. Fix the endpoint before re-enabling.'
+                )
+            except httpx.ConnectError:
+                raise HTTPException(
+                    status_code=400, detail='Cannot connect to webhook endpoint. Fix the endpoint before re-enabling.'
+                )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.warning(f'Webhook health check failed for {app_id}: {e}')
+                raise HTTPException(
+                    status_code=400, detail='Webhook health check failed. Fix the endpoint before re-enabling.'
+                )
         record_app_webhook_success(app_id)
+
+    update_app_in_db(update_dict)
 
     # payment link
     upsert_app_payment_link(
