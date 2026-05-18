@@ -12,6 +12,7 @@ from utils.async_tasks import (
     gather_with_logging,
     gather_chunked,
     create_named_task,
+    sleep_until_shutdown,
 )
 
 # ---------------------------------------------------------------------------
@@ -605,3 +606,66 @@ class TestStructuralUsage:
                 imports.extend(alias.name for alias in node.names)
 
         assert 'gather_with_logging' in imports
+
+
+# ---------------------------------------------------------------------------
+# Tests for sleep_until_shutdown
+# ---------------------------------------------------------------------------
+
+
+class TestSleepUntilShutdown:
+    def test_returns_false_on_normal_sleep(self):
+        async def _run():
+            event = asyncio.Event()
+            result = await sleep_until_shutdown(event, 0.05)
+            assert result is False
+
+        asyncio.run(_run())
+
+    def test_returns_true_when_event_already_set(self):
+        async def _run():
+            event = asyncio.Event()
+            event.set()
+            result = await sleep_until_shutdown(event, 10.0)
+            assert result is True
+
+        asyncio.run(_run())
+
+    def test_wakes_early_when_event_set_during_sleep(self):
+        async def _run():
+            event = asyncio.Event()
+
+            async def _set_after():
+                await asyncio.sleep(0.05)
+                event.set()
+
+            asyncio.create_task(_set_after())
+            t0 = asyncio.get_event_loop().time()
+            result = await sleep_until_shutdown(event, 10.0)
+            elapsed = asyncio.get_event_loop().time() - t0
+            assert result is True
+            assert elapsed < 1.0
+
+        asyncio.run(_run())
+
+    def test_polling_loop_exits_on_shutdown(self):
+        async def _run():
+            event = asyncio.Event()
+            iterations = 0
+
+            async def _poller():
+                nonlocal iterations
+                while True:
+                    iterations += 1
+                    if await sleep_until_shutdown(event, 0.02):
+                        break
+
+            async def _shutdown():
+                await asyncio.sleep(0.07)
+                event.set()
+
+            asyncio.create_task(_shutdown())
+            await _poller()
+            assert iterations >= 2
+
+        asyncio.run(_run())
