@@ -669,3 +669,20 @@ class TestSleepUntilShutdown:
             assert iterations >= 2
 
         asyncio.run(_run())
+
+    def test_zero_timeout_with_event_set_returns_true(self):
+        async def _run():
+            event = asyncio.Event()
+            event.set()
+            result = await sleep_until_shutdown(event, 0)
+            assert result is True
+
+        asyncio.run(_run())
+
+    def test_zero_timeout_without_event_returns_false(self):
+        async def _run():
+            event = asyncio.Event()
+            result = await sleep_until_shutdown(event, 0)
+            assert result is False
+
+        asyncio.run(_run())
