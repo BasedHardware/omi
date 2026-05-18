@@ -593,28 +593,27 @@ class TestReEnableHealthCheckGate:
         from urllib.parse import urlparse
 
         app = self._build_app(chat_tools=[{'endpoint': 'https://bad-tool.example.com/api', 'name': 'tool1'}])
-        updated_ext = app['external_integration']
         existing_ext = app['external_integration']
 
         endpoints_to_check = []
-        webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
+        webhook_url = existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url))
-        mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+            endpoints_to_check.append(('webhook', webhook_url, True))
+        mcp_url = existing_ext.get('mcp_server_url', '')
         if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url))
-        seen_hosts = {urlparse(url).netloc for _, url in endpoints_to_check if url}
+            endpoints_to_check.append(('MCP server', mcp_url, False))
+        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
         for tool in app.get('chat_tools', []):
             ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
             if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep))
+                endpoints_to_check.append(('chat tool', ep, True))
                 seen_hosts.add(urlparse(ep).netloc)
 
         assert len(endpoints_to_check) == 1
-        assert endpoints_to_check[0] == ('chat tool', 'https://bad-tool.example.com/api')
+        assert endpoints_to_check[0] == ('chat tool', 'https://bad-tool.example.com/api', True)
 
-    def test_mcp_only_app_included_in_health_check(self):
-        """MCP-only app must have its mcp_server_url checked."""
+    def test_mcp_only_app_reachability_check(self):
+        """MCP-only app must be checked but only for reachability (require_2xx=False)."""
         from urllib.parse import urlparse
 
         app = self._build_app(mcp_server_url='https://mcp.example.com/mcp')
@@ -623,13 +622,16 @@ class TestReEnableHealthCheckGate:
         endpoints_to_check = []
         webhook_url = existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url))
+            endpoints_to_check.append(('webhook', webhook_url, True))
         mcp_url = existing_ext.get('mcp_server_url', '')
         if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url))
+            endpoints_to_check.append(('MCP server', mcp_url, False))
 
         assert len(endpoints_to_check) == 1
-        assert endpoints_to_check[0] == ('MCP server', 'https://mcp.example.com/mcp')
+        label, url, require_2xx = endpoints_to_check[0]
+        assert label == 'MCP server'
+        assert url == 'https://mcp.example.com/mcp'
+        assert require_2xx is False
 
     def test_all_endpoints_collected(self):
         """When all endpoint types are configured, all must be validated."""
@@ -645,19 +647,19 @@ class TestReEnableHealthCheckGate:
         endpoints_to_check = []
         webhook_url = existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url))
+            endpoints_to_check.append(('webhook', webhook_url, True))
         mcp_url = existing_ext.get('mcp_server_url', '')
         if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url))
-        seen_hosts = {urlparse(url).netloc for _, url in endpoints_to_check if url}
+            endpoints_to_check.append(('MCP server', mcp_url, False))
+        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
         for tool in app.get('chat_tools', []):
             ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
             if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep))
+                endpoints_to_check.append(('chat tool', ep, True))
                 seen_hosts.add(urlparse(ep).netloc)
 
         assert len(endpoints_to_check) == 3
-        labels = [label for label, _ in endpoints_to_check]
+        labels = [label for label, _, _ in endpoints_to_check]
         assert 'webhook' in labels
         assert 'MCP server' in labels
         assert 'chat tool' in labels
@@ -675,13 +677,21 @@ class TestReEnableHealthCheckGate:
         endpoints_to_check = []
         webhook_url = existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url))
-        seen_hosts = {urlparse(url).netloc for _, url in endpoints_to_check if url}
+            endpoints_to_check.append(('webhook', webhook_url, True))
+        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
         for tool in app.get('chat_tools', []):
             ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
             if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep))
+                endpoints_to_check.append(('chat tool', ep, True))
                 seen_hosts.add(urlparse(ep).netloc)
 
         assert len(endpoints_to_check) == 1
         assert endpoints_to_check[0][0] == 'webhook'
+
+    def test_updated_chat_tools_preferred_over_existing(self):
+        """Re-enable should use updated chat tools from manifest, not stale DB values."""
+        app = self._build_app(chat_tools=[{'endpoint': 'https://old-broken.example.com/api', 'name': 'old'}])
+        update_dict_tools = [{'endpoint': 'https://new-fixed.example.com/api', 'name': 'new'}]
+        chat_tools = update_dict_tools or app.get('chat_tools') or []
+        endpoints = [(t.get('endpoint', '') if isinstance(t, dict) else getattr(t, 'endpoint', '')) for t in chat_tools]
+        assert endpoints == ['https://new-fixed.example.com/api']
