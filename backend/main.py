@@ -61,6 +61,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.executors import log_executor_health
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -151,8 +152,6 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")
 async def startup_event():
-    from utils.executors import log_executor_health
-
     asyncio.create_task(log_executor_health())
 
 
