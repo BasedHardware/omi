@@ -106,6 +106,7 @@ from utils.apps import (
     build_capability_groups_response,
     group_capability_apps_by_category,
     build_capability_category_groups_response,
+    validate_app_endpoints_for_reenable,
 )
 
 from database.memories import migrate_memories
@@ -751,57 +752,7 @@ def update_app(
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     if update_dict.get('disabled') is False and app.get('disabled'):
-        updated_ext = (
-            (update_dict.get('external_integration') or {})
-            if isinstance(update_dict.get('external_integration'), dict)
-            else {}
-        )
-        existing_ext = app.get('external_integration') or {}
-        endpoints_to_check = []
-        seen_urls = set()
-        webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
-            seen_urls.add(webhook_url)
-        mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
-        if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
-            seen_urls.add(mcp_url)
-        chat_tools = update_dict.get('chat_tools') or app.get('chat_tools') or []
-        for tool in chat_tools:
-            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            method = tool.get('method', 'POST') if isinstance(tool, dict) else getattr(tool, 'method', 'POST')
-            if ep and ep not in seen_urls:
-                endpoints_to_check.append(('chat tool', ep, method.upper(), True))
-                seen_urls.add(ep)
-        if not endpoints_to_check:
-            raise HTTPException(
-                status_code=400,
-                detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
-            )
-        for label, url, method, require_2xx in endpoints_to_check:
-            try:
-                resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
-                if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
-                    )
-            except httpx.TimeoutException:
-                raise HTTPException(
-                    status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
-                )
-            except httpx.ConnectError:
-                raise HTTPException(
-                    status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
-                )
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
-                raise HTTPException(
-                    status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
-                )
+        validate_app_endpoints_for_reenable(app, update_dict, app_id)
         record_app_webhook_success(app_id)
 
     update_app_in_db(update_dict)
