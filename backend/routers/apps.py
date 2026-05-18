@@ -49,6 +49,7 @@ from database.apps import (
     set_app_popular_db,
     search_apps_db,
 )
+from database.webhook_health import record_app_webhook_success
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -747,6 +748,9 @@ def update_app(
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     update_app_in_db(update_dict)
+
+    if update_dict.get('disabled') is False and app.get('disabled'):
+        record_app_webhook_success(app_id)
 
     # payment link
     upsert_app_payment_link(
