@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::{
+    processing,
     storage::{
         deterministic_id, NewActionItem, NewConversation, NewMemory, NewProcessingJob,
         NewTranscriptSegment, UpdateActionItem, UpdateConversation, UpdateMemory, UpdateProfile,
@@ -58,6 +59,7 @@ pub fn router() -> Router<AppState> {
                 .delete(delete_action_item),
         )
         .route("/v1/processing-jobs", get(list_processing_jobs))
+        .route("/v1/processing-jobs/process-next", post(process_next_job))
         .route("/v1/processing-jobs/status", get(processing_status))
         .route("/v1/processing-jobs/:id", get(get_processing_job))
 }
@@ -626,6 +628,13 @@ async fn get_processing_job(
         .get(&id)
         .map_err(ApiError::internal)?
         .ok_or_else(|| ApiError::not_found("processing job"))?;
+    Ok(Json(json!({ "processing_job": job })))
+}
+
+async fn process_next_job(State(state): State<AppState>) -> ApiResult<Value> {
+    let job = processing::process_next_job(&state.store)
+        .await
+        .map_err(ApiError::internal)?;
     Ok(Json(json!({ "processing_job": job })))
 }
 

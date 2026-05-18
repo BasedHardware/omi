@@ -787,6 +787,98 @@ impl ProcessingJobRepository {
             .context("failed to list processing jobs")?;
         collect_rows(rows)
     }
+
+    pub fn claim_next_queued(&self) -> Result<Option<ProcessingJob>> {
+        let Some(job) = self.next_queued()? else {
+            return Ok(None);
+        };
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let changed = conn
+            .execute(
+                r#"
+                UPDATE processing_jobs
+                SET status = 'running', started_at = ?2, updated_at = ?2, last_error = NULL
+                WHERE id = ?1 AND status = 'queued' AND deleted_at IS NULL
+                "#,
+                params![job.id, now],
+            )
+            .context("failed to claim processing job")?;
+        drop(conn);
+
+        if changed == 0 {
+            Ok(None)
+        } else {
+            self.get(&job.id)
+        }
+    }
+
+    pub fn complete(&self, id: &str, result: serde_json::Value) -> Result<Option<ProcessingJob>> {
+        let now = Utc::now();
+        let result_json =
+            serde_json::to_string(&result).context("failed to serialize job result")?;
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let changed = conn
+            .execute(
+                r#"
+                UPDATE processing_jobs
+                SET status = 'completed', result_json = ?2, completed_at = ?3, updated_at = ?3,
+                    last_error = NULL, sync_version = sync_version + 1
+                WHERE id = ?1 AND deleted_at IS NULL
+                "#,
+                params![id, result_json, now],
+            )
+            .context("failed to complete processing job")?;
+        drop(conn);
+
+        if changed == 0 {
+            Ok(None)
+        } else {
+            self.get(id)
+        }
+    }
+
+    pub fn fail(&self, id: &str, error: &str) -> Result<Option<ProcessingJob>> {
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let changed = conn
+            .execute(
+                r#"
+                UPDATE processing_jobs
+                SET status = 'failed', last_error = ?2, failed_at = ?3, updated_at = ?3,
+                    retry_count = retry_count + 1, sync_version = sync_version + 1
+                WHERE id = ?1 AND deleted_at IS NULL
+                "#,
+                params![id, error, now],
+            )
+            .context("failed to mark processing job failed")?;
+        drop(conn);
+
+        if changed == 0 {
+            Ok(None)
+        } else {
+            self.get(id)
+        }
+    }
+
+    fn next_queued(&self) -> Result<Option<ProcessingJob>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, kind, status, target_conversation_id, retry_count, max_retries, last_error,
+                   payload_json, result_json, queued_at, started_at, completed_at, failed_at,
+                   created_at, updated_at, deleted_at, cloud_id, sync_version, sync_state
+            FROM processing_jobs
+            WHERE status = 'queued' AND deleted_at IS NULL
+            ORDER BY queued_at ASC
+            LIMIT 1
+            "#,
+            [],
+            map_processing_job,
+        )
+        .optional()
+        .context("failed to fetch next queued processing job")
+    }
 }
 
 pub struct SearchRepository {
@@ -1181,6 +1273,21 @@ impl SettingsRepository {
             .query_map([], map_local_setting)
             .context("failed to list settings")?;
         collect_rows(rows)
+    }
+
+    pub fn get(&self, key: &str) -> Result<Option<LocalSetting>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT key, value_json, updated_at, deleted_at, cloud_id, sync_version, sync_state
+            FROM local_settings
+            WHERE key = ?1 AND deleted_at IS NULL
+            "#,
+            params![key],
+            map_local_setting,
+        )
+        .optional()
+        .context("failed to fetch local setting")
     }
 
     pub fn upsert_many(

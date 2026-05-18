@@ -9,6 +9,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod health;
+mod processing;
+mod providers;
 mod routes;
 mod storage;
 
@@ -33,8 +35,9 @@ async fn main() -> Result<()> {
     let bind_addr = config.bind_addr;
     let state = AppState {
         config: Arc::new(config),
-        store,
+        store: store.clone(),
     };
+    processing::spawn_worker(store);
 
     let app = app(state);
 
