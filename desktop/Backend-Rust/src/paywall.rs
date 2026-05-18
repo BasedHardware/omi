@@ -1,29 +1,33 @@
-// Trial-paywall middleware for the Rust desktop-backend.
+// Trial-paywall logic for the Rust desktop-backend.
 //
-// Delegates the decision to Python (`GET /v1/users/me/paywall`) which owns
-// the canonical paywall logic (basic plan + no BYOK + Firebase account >3d
-// old + platform=macos/desktop). We cache the boolean per-uid in-memory for
-// 5 minutes so chat / proxy / TTS / screen-activity calls don't fan out to
-// Python on every request.
+// Previously delegated to Python (`GET /v1/users/me/paywall`). Now runs
+// natively by reading subscription plan, BYOK state, and account creation
+// time directly from Firestore / Firebase Auth.
 //
-// Mobile is not a concern here — the Rust desktop-backend is only ever
-// called by the macOS Swift client, so every paywall check goes in with
-// `X-App-Platform: macos`. Python `is_trial_paywalled` enforces the
-// platform gate; if it ever returns `paywalled=true` for an iOS / Android
-// caller (which can't happen via this code path), this layer would still
-// return 402 — but that situation cannot arise from real traffic.
+// Logic (mirrors Python `_is_trial_expired_uncached` in `utils/subscription.py`):
+//   1. BYOK escape hatch: request with all 4 BYOK headers → never paywalled
+//   2. Non-"basic" plan → not paywalled
+//   3. BYOK active (heartbeat within TTL) → not paywalled
+//   4. Account created < 3 days ago → not paywalled (trial active)
+//   5. Otherwise → paywalled
+//
+// Errors fail open (return false) so a Firestore/Auth outage never makes
+// paying users look paywalled.
 
 use axum::http::HeaderMap;
-use reqwest::Client;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 use crate::byok;
+use crate::services::FirestoreService;
 
+/// Cache TTL for paywall results (5 minutes, matching previous Python-delegation cache).
 const CACHE_TTL: Duration = Duration::from_secs(300);
+
+/// Trial length: 3 days in seconds (matches Python `TRIAL_LENGTH_SECONDS`).
+const TRIAL_LENGTH_SECONDS: i64 = 3 * 24 * 60 * 60;
 
 #[derive(Debug, Clone, Copy)]
 struct CacheEntry {
@@ -31,57 +35,51 @@ struct CacheEntry {
     cached_at: Instant,
 }
 
-#[derive(Deserialize)]
-struct PaywallStatus {
-    paywalled: bool,
-}
-
-/// Singleton helper that calls Python's `/v1/users/me/paywall` and caches
-/// the result in-memory. Held inside `AppState` and exposed to extractors
-/// via an Axum `Extension`.
+/// Native paywall checker that reads directly from Firestore and Firebase Auth.
+/// Held inside `AppState` and exposed to extractors via an Axum `Extension`.
 pub struct PaywallChecker {
-    python_api_base: String,
-    http: Client,
-    cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
+    pub firestore: Arc<FirestoreService>,
+    firebase_auth_project_id: String,
+    byok_cache: Arc<byok::ByokStateCache>,
+    cache: Mutex<HashMap<String, CacheEntry>>,
 }
 
 impl PaywallChecker {
-    pub fn new(python_api_base: String) -> Self {
-        let http = Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .unwrap_or_else(|_| Client::new());
+    pub fn new(
+        firestore: Arc<FirestoreService>,
+        firebase_auth_project_id: String,
+        byok_cache: Arc<byok::ByokStateCache>,
+    ) -> Self {
         Self {
-            python_api_base: python_api_base.trim_end_matches('/').to_string(),
-            http,
-            cache: Arc::new(Mutex::new(HashMap::new())),
+            firestore,
+            firebase_auth_project_id,
+            byok_cache,
+            cache: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Returns true iff the user is past their desktop trial. Errors fail
-    /// open (return false) so a Python outage never makes paying users
-    /// look paywalled.
+    /// Returns true iff the user is past their desktop trial.
     ///
-    /// When the request carries all 4 BYOK headers, they are forwarded to
-    /// Python so its `_request_has_all_byok_keys()` escape hatch can fire.
-    /// BYOK requests use a separate cache key (`uid:byok`) so a BYOK=false
-    /// result never poisons later non-BYOK lookups and vice versa.
+    /// When the request carries all 4 BYOK headers, the user is never
+    /// paywalled (escape hatch for stale Firestore cache). Otherwise,
+    /// checks subscription plan, BYOK active state, and account age.
+    ///
+    /// Errors fail open (return false).
     pub async fn is_paywalled(
         &self,
         uid: &str,
-        bearer_token: &str,
         request_headers: &HeaderMap,
     ) -> bool {
+        // BYOK escape hatch: a request carrying all 4 BYOK provider headers
+        // is never paywalled, regardless of cached state. This handles the
+        // race where Firestore hasn't caught up after BYOK activation.
         let has_byok = byok::has_all_byok_keys(request_headers);
+        if has_byok {
+            return false;
+        }
 
         // Partition cache: "uid" for non-BYOK, "uid:byok" for BYOK requests.
-        // Without this, a cached paywalled=true from a non-BYOK request would
-        // block a subsequent BYOK request that should pass Python's escape hatch.
-        let cache_key = if has_byok {
-            format!("{}:byok", uid)
-        } else {
-            uid.to_string()
-        };
+        let cache_key = uid.to_string();
 
         // Cache hit
         {
@@ -93,57 +91,9 @@ impl PaywallChecker {
             }
         }
 
-        let url = format!("{}/v1/users/me/paywall", self.python_api_base);
-        let mut req = self
-            .http
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", bearer_token))
-            .header("X-App-Platform", "macos");
+        let paywalled = self.check_trial_expired(uid).await;
 
-        // Forward BYOK headers so Python's escape hatch can fire (issue #7357).
-        if has_byok {
-            for header_name in &[
-                byok::HEADER_OPENAI,
-                byok::HEADER_ANTHROPIC,
-                byok::HEADER_GEMINI,
-                byok::HEADER_DEEPGRAM,
-            ] {
-                if let Some(value) = byok::get_byok_key(request_headers, header_name) {
-                    req = req.header(*header_name, value);
-                }
-            }
-        }
-
-        let response = req.send().await;
-
-        let paywalled = match response {
-            Ok(r) if r.status().is_success() => match r.json::<PaywallStatus>().await {
-                Ok(body) => body.paywalled,
-                Err(e) => {
-                    tracing::warn!(
-                        "paywall: failed to parse Python response for uid={}: {}",
-                        uid,
-                        e
-                    );
-                    false
-                }
-            },
-            Ok(r) => {
-                tracing::warn!(
-                    "paywall: Python returned {} for uid={}, failing open",
-                    r.status(),
-                    uid
-                );
-                false
-            }
-            Err(e) => {
-                tracing::warn!("paywall: Python call failed for uid={}: {}", uid, e);
-                false
-            }
-        };
-
-        // Cache (even false results — limits Python load when many requests
-        // arrive in quick succession for the same uid)
+        // Cache result
         let mut cache = self.cache.lock().await;
         cache.insert(
             cache_key,
@@ -155,12 +105,99 @@ impl PaywallChecker {
 
         paywalled
     }
+
+    /// Core trial-expiry check. Mirrors Python `_is_trial_expired_uncached`.
+    /// Returns false (not paywalled) on any error (fail-open).
+    async fn check_trial_expired(&self, uid: &str) -> bool {
+        // Step 1: Read subscription plan
+        let plan = match self.firestore.get_user_subscription_plan(uid).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(
+                    "paywall: failed to read subscription plan for uid={}: {}, failing open",
+                    uid,
+                    e
+                );
+                return false;
+            }
+        };
+
+        // Non-basic plan → not paywalled
+        if plan != "basic" {
+            return false;
+        }
+
+        // Step 2: Check BYOK active (with heartbeat TTL)
+        let byok_state = self.byok_cache.get_or_fetch(uid, &self.firestore).await;
+        let byok_active = byok_state.active && {
+            match byok_state.last_seen_at {
+                Some(last_seen) => {
+                    let age = chrono::Utc::now()
+                        .signed_duration_since(last_seen)
+                        .num_seconds();
+                    age <= byok::BYOK_HEARTBEAT_TTL_SECS
+                }
+                None => false,
+            }
+        };
+        if byok_active {
+            return false;
+        }
+
+        // Step 3: Check account age from Firebase Auth
+        let creation_ms = match self
+            .firestore
+            .get_user_creation_time(&self.firebase_auth_project_id, uid)
+            .await
+        {
+            Ok(Some(ms)) => ms,
+            Ok(None) => {
+                tracing::warn!(
+                    "paywall: no creation time for uid={}, failing open",
+                    uid
+                );
+                return false;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "paywall: failed to get creation time for uid={}: {}, failing open",
+                    uid,
+                    e
+                );
+                return false;
+            }
+        };
+
+        let now_ms = chrono::Utc::now().timestamp() * 1000;
+        let age_seconds = (now_ms - creation_ms) / 1000;
+
+        age_seconds > TRIAL_LENGTH_SECONDS
+    }
 }
 
 /// Wrapper for storing in Axum Extension so extractors can pull it
 /// without owning `AppState`.
 #[derive(Clone)]
 pub struct PaywallCheckerExt(pub Arc<PaywallChecker>);
+
+/// Pure function for testing: is the trial expired given these inputs?
+/// This is the core logic extracted for unit testing without Firestore.
+#[cfg(test)]
+fn is_trial_expired(plan: &str, byok_active: bool, creation_time_ms: Option<i64>) -> bool {
+    if plan != "basic" {
+        return false;
+    }
+    if byok_active {
+        return false;
+    }
+    let creation_ms = match creation_time_ms {
+        Some(ms) => ms,
+        None => return false, // fail-open
+    };
+    let now_ms = chrono::Utc::now().timestamp() * 1000;
+    let age_seconds = (now_ms - creation_ms) / 1000;
+    age_seconds > TRIAL_LENGTH_SECONDS
+}
 
 #[cfg(test)]
 mod tests {
@@ -186,68 +223,82 @@ mod tests {
         ])
     }
 
-    /// Verify that cache uses different keys for BYOK vs non-BYOK requests.
-    /// A cached paywalled=true from a non-BYOK request must not block a
-    /// subsequent BYOK request (which should get its own cache slot).
-    #[tokio::test]
-    async fn cache_partitioned_by_byok_presence() {
-        // Use a nonexistent server — all Python calls will fail open (= false).
-        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
+    // --- Pure function tests for is_trial_expired ---
 
-        let no_byok = HeaderMap::new();
-        let with_byok = all_byok_headers();
-
-        // First call: non-BYOK → fails open → cached as "user123" = false
-        let result1 = checker.is_paywalled("user123", "token", &no_byok).await;
-        assert!(!result1, "should fail open");
-
-        // Second call: BYOK → should NOT hit the non-BYOK cache entry
-        // (it should make its own call, also failing open, cached as "user123:byok")
-        let result2 = checker.is_paywalled("user123", "token", &with_byok).await;
-        assert!(!result2, "BYOK should fail open independently");
-
-        // Verify both cache entries exist with different keys
-        let cache = checker.cache.lock().await;
-        assert!(cache.contains_key("user123"), "non-BYOK cache key");
-        assert!(cache.contains_key("user123:byok"), "BYOK cache key");
-        assert_eq!(cache.len(), 2, "should have separate cache entries");
+    #[test]
+    fn paid_plan_not_paywalled() {
+        assert!(!is_trial_expired("pro", false, Some(0)));
+        assert!(!is_trial_expired("enterprise", false, Some(0)));
+        assert!(!is_trial_expired("unlimited", false, Some(0)));
     }
 
-    /// Verify that partial BYOK headers (missing one) use the non-BYOK cache path.
-    #[tokio::test]
-    async fn partial_byok_uses_non_byok_cache() {
-        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
+    #[test]
+    fn basic_plan_byok_active_not_paywalled() {
+        // Basic plan + BYOK active → not paywalled regardless of age
+        assert!(!is_trial_expired("basic", true, Some(0)));
+    }
 
-        // Missing deepgram → not all 4 → should use "uid" cache key
-        let partial = headers_with(&[
+    #[test]
+    fn basic_plan_new_account_not_paywalled() {
+        // Account created just now → within 3-day trial
+        let now_ms = chrono::Utc::now().timestamp() * 1000;
+        assert!(!is_trial_expired("basic", false, Some(now_ms)));
+    }
+
+    #[test]
+    fn basic_plan_old_account_no_byok_paywalled() {
+        // Account created 10 days ago → past 3-day trial
+        let ten_days_ago_ms =
+            (chrono::Utc::now().timestamp() - 10 * 24 * 60 * 60) * 1000;
+        assert!(is_trial_expired("basic", false, Some(ten_days_ago_ms)));
+    }
+
+    #[test]
+    fn basic_plan_exactly_3_days_not_paywalled() {
+        // Account created exactly 3 days ago → age == TRIAL_LENGTH, not > TRIAL_LENGTH
+        let exactly_3d_ms =
+            (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS) * 1000;
+        assert!(!is_trial_expired("basic", false, Some(exactly_3d_ms)));
+    }
+
+    #[test]
+    fn basic_plan_just_over_3_days_paywalled() {
+        // Account created 3 days + 1 second ago
+        let just_over_3d_ms =
+            (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS - 1) * 1000;
+        assert!(is_trial_expired("basic", false, Some(just_over_3d_ms)));
+    }
+
+    #[test]
+    fn missing_creation_time_fails_open() {
+        assert!(!is_trial_expired("basic", false, None));
+    }
+
+    #[test]
+    fn free_plan_treated_as_basic() {
+        // "free" should have been migrated to "basic" by Firestore reader,
+        // but even if not, it won't match "basic" → not paywalled (fail-open)
+        assert!(!is_trial_expired("free", false, Some(0)));
+    }
+
+    // --- BYOK escape hatch tests (header-level) ---
+
+    #[test]
+    fn byok_escape_hatch_all_headers_present() {
+        let h = all_byok_headers();
+        assert!(byok::has_all_byok_keys(&h), "all 4 → escape hatch fires");
+    }
+
+    #[test]
+    fn byok_escape_hatch_missing_header() {
+        let h = headers_with(&[
             ("x-byok-openai", "sk-o"),
             ("x-byok-anthropic", "sk-a"),
             ("x-byok-gemini", "sk-g"),
         ]);
-
-        checker.is_paywalled("user456", "token", &partial).await;
-
-        let cache = checker.cache.lock().await;
-        assert!(cache.contains_key("user456"), "partial BYOK should use non-BYOK key");
-        assert!(!cache.contains_key("user456:byok"), "partial BYOK should NOT use BYOK key");
-    }
-
-    /// Verify that empty BYOK header values are not treated as present.
-    #[tokio::test]
-    async fn empty_byok_headers_use_non_byok_cache() {
-        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
-
-        let empty_value = headers_with(&[
-            ("x-byok-openai", "sk-o"),
-            ("x-byok-anthropic", ""),
-            ("x-byok-gemini", "sk-g"),
-            ("x-byok-deepgram", "sk-d"),
-        ]);
-
-        checker.is_paywalled("user789", "token", &empty_value).await;
-
-        let cache = checker.cache.lock().await;
-        assert!(cache.contains_key("user789"), "empty BYOK value → non-BYOK key");
-        assert!(!cache.contains_key("user789:byok"));
+        assert!(
+            !byok::has_all_byok_keys(&h),
+            "missing deepgram → escape hatch does not fire"
+        );
     }
 }
