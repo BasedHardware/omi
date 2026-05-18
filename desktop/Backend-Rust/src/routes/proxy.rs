@@ -163,14 +163,15 @@ async fn gemini_proxy(
         .send()
         .await
         .map_err(|e| {
-            tracing::error!("gemini_proxy: BYOK upstream request failed: {}", e);
+            // Use without_url() to avoid leaking BYOK API key from the query string
+            tracing::error!("gemini_proxy: BYOK upstream request failed: {}", e.without_url());
             ProxyError::Status(StatusCode::BAD_GATEWAY)
         })?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("gemini_proxy: failed to read upstream body: {}", e);
+        tracing::error!("gemini_proxy: failed to read upstream body: {}", e.without_url());
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     })?;
 
@@ -379,7 +380,8 @@ async fn gemini_stream_proxy(
         .send()
         .await
         .map_err(|e| {
-            tracing::error!("gemini_stream_proxy: BYOK upstream request failed: {}", e);
+            // Use without_url() to avoid leaking BYOK API key from the query string
+            tracing::error!("gemini_stream_proxy: BYOK upstream request failed: {}", e.without_url());
             ProxyError::Status(StatusCode::BAD_GATEWAY)
         })?;
 
