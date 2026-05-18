@@ -6,6 +6,7 @@ Implements structured concurrency primitives that replace raw asyncio.gather():
 - gather_with_logging(): bounded fan-out with exception observability
 - gather_chunked(): chunked fan-out for large coroutine lists
 - create_named_task(): tracked task creation with done-callback cleanup
+- sleep_until_shutdown(): interruptible sleep that wakes on shutdown event
 
 These replace ad-hoc asyncio.gather() patterns that cause:
 1. Silent exception swallowing (return_exceptions=True with no inspection)
@@ -301,6 +302,19 @@ async def gather_chunked(
 # ---------------------------------------------------------------------------
 # create_named_task — tracked task creation
 # ---------------------------------------------------------------------------
+
+
+async def sleep_until_shutdown(event: asyncio.Event, seconds: float) -> bool:
+    """Sleep for `seconds` but wake immediately if `event` is set.
+
+    Returns True if woken early by the event (shutdown requested),
+    False if the full sleep elapsed normally.
+    """
+    try:
+        await asyncio.wait_for(event.wait(), timeout=seconds)
+        return True
+    except asyncio.TimeoutError:
+        return False
 
 
 def create_named_task(
