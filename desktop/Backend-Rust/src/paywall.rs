@@ -13,12 +13,15 @@
 // caller (which can't happen via this code path), this layer would still
 // return 402 — but that situation cannot arise from real traffic.
 
+use axum::http::HeaderMap;
 use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
+
+use crate::byok;
 
 const CACHE_TTL: Duration = Duration::from_secs(300);
 
@@ -58,11 +61,32 @@ impl PaywallChecker {
     /// Returns true iff the user is past their desktop trial. Errors fail
     /// open (return false) so a Python outage never makes paying users
     /// look paywalled.
-    pub async fn is_paywalled(&self, uid: &str, bearer_token: &str) -> bool {
+    ///
+    /// When the request carries all 4 BYOK headers, they are forwarded to
+    /// Python so its `_request_has_all_byok_keys()` escape hatch can fire.
+    /// BYOK requests use a separate cache key (`uid:byok`) so a BYOK=false
+    /// result never poisons later non-BYOK lookups and vice versa.
+    pub async fn is_paywalled(
+        &self,
+        uid: &str,
+        bearer_token: &str,
+        request_headers: &HeaderMap,
+    ) -> bool {
+        let has_byok = byok::has_all_byok_keys(request_headers);
+
+        // Partition cache: "uid" for non-BYOK, "uid:byok" for BYOK requests.
+        // Without this, a cached paywalled=true from a non-BYOK request would
+        // block a subsequent BYOK request that should pass Python's escape hatch.
+        let cache_key = if has_byok {
+            format!("{}:byok", uid)
+        } else {
+            uid.to_string()
+        };
+
         // Cache hit
         {
             let cache = self.cache.lock().await;
-            if let Some(entry) = cache.get(uid) {
+            if let Some(entry) = cache.get(&cache_key) {
                 if entry.cached_at.elapsed() < CACHE_TTL {
                     return entry.paywalled;
                 }
@@ -70,13 +94,27 @@ impl PaywallChecker {
         }
 
         let url = format!("{}/v1/users/me/paywall", self.python_api_base);
-        let response = self
+        let mut req = self
             .http
             .get(&url)
             .header("Authorization", format!("Bearer {}", bearer_token))
-            .header("X-App-Platform", "macos")
-            .send()
-            .await;
+            .header("X-App-Platform", "macos");
+
+        // Forward BYOK headers so Python's escape hatch can fire (issue #7357).
+        if has_byok {
+            for header_name in &[
+                byok::HEADER_OPENAI,
+                byok::HEADER_ANTHROPIC,
+                byok::HEADER_GEMINI,
+                byok::HEADER_DEEPGRAM,
+            ] {
+                if let Some(value) = byok::get_byok_key(request_headers, header_name) {
+                    req = req.header(*header_name, value);
+                }
+            }
+        }
+
+        let response = req.send().await;
 
         let paywalled = match response {
             Ok(r) if r.status().is_success() => match r.json::<PaywallStatus>().await {
@@ -108,7 +146,7 @@ impl PaywallChecker {
         // arrive in quick succession for the same uid)
         let mut cache = self.cache.lock().await;
         cache.insert(
-            uid.to_string(),
+            cache_key,
             CacheEntry {
                 paywalled,
                 cached_at: Instant::now(),
