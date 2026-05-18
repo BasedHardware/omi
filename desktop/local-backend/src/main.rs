@@ -154,6 +154,15 @@ mod tests {
         .await?;
         assert_eq!(job["processing_job"]["status"], "queued");
 
+        let starred = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/conversations/{conversation_id}"),
+            Some(json!({"starred": true})),
+        )
+        .await?;
+        assert_eq!(starred["conversation"]["starred"], true);
+
         let conversation = request_json(
             app.clone(),
             Method::GET,
@@ -161,6 +170,7 @@ mod tests {
             None,
         )
         .await?;
+        assert_eq!(conversation["conversation"]["starred"], true);
         assert_eq!(
             conversation["transcript_segments"]
                 .as_array()

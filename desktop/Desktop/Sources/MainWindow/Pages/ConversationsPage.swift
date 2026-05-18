@@ -61,6 +61,10 @@ struct ConversationsPage: View {
   @State private var isMerging: Bool = false
   @State private var mergeError: String? = nil
 
+  private var isLocalDaemonMode: Bool {
+    DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+  }
+
   var body: some View {
     Group {
       if let selected = selectedConversation {
@@ -127,7 +131,9 @@ struct ConversationsPage: View {
         }
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)) {
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationOpenConversationRequested)
+    ) {
       notification in
       handleAutomationOpenConversation(notification)
     }
@@ -177,7 +183,8 @@ struct ConversationsPage: View {
     Task {
       await appState.refreshConversations()
       await MainActor.run {
-        guard let conversation = appState.conversations.first(where: { $0.id == conversationId }) else {
+        guard let conversation = appState.conversations.first(where: { $0.id == conversationId })
+        else {
           log("Desktop automation: conversation \(conversationId) not found")
           return
         }
@@ -283,14 +290,16 @@ struct ConversationsPage: View {
       .padding(.vertical, 12)
 
       // Folder tabs strip
-      FolderTabsStrip(
-        appState: appState,
-        onCreateFolder: { showCreateFolderSheet = true },
-        onEditFolder: { folder in editingFolder = folder },
-        onDeleteFolder: { folder in deletingFolder = folder }
-      )
-      .padding(.horizontal, 24)
-      .padding(.bottom, 12)
+      if !isLocalDaemonMode {
+        FolderTabsStrip(
+          appState: appState,
+          onCreateFolder: { showCreateFolderSheet = true },
+          onEditFolder: { folder in editingFolder = folder },
+          onDeleteFolder: { folder in deletingFolder = folder }
+        )
+        .padding(.horizontal, 24)
+        .padding(.bottom, 12)
+      }
 
       // List - show search results or regular conversations
       if !searchQuery.isEmpty {

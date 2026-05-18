@@ -232,6 +232,7 @@ struct UpdateConversationRequest {
     status: Option<String>,
     ended_at: Option<DateTime<Utc>>,
     metadata: Option<Value>,
+    starred: Option<bool>,
 }
 
 async fn update_conversation(
@@ -250,6 +251,7 @@ async fn update_conversation(
                 status: request.status,
                 ended_at: request.ended_at.map(Some),
                 metadata: request.metadata,
+                starred: request.starred,
             },
         )
         .map_err(ApiError::internal)?

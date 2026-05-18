@@ -122,7 +122,7 @@ actor APIClient {
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
 
-    return try await performRequest(request)
+    return try await performRequest(request, retryOnUnauthorized: requireAuth)
   }
 
   func post<T: Decodable, B: Encodable>(
@@ -139,7 +139,7 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
     request.httpBody = try JSONEncoder().encode(body)
 
-    return try await performRequest(request)
+    return try await performRequest(request, retryOnUnauthorized: requireAuth)
   }
 
   func post<T: Decodable>(
@@ -153,7 +153,7 @@ actor APIClient {
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
 
-    return try await performRequest(request)
+    return try await performRequest(request, retryOnUnauthorized: requireAuth)
   }
 
   func put<T: Decodable, B: Encodable>(
@@ -169,7 +169,7 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
     request.httpBody = try JSONEncoder().encode(body)
 
-    return try await performRequest(request)
+    return try await performRequest(request, retryOnUnauthorized: requireAuth)
   }
 
   func delete(
@@ -216,7 +216,9 @@ actor APIClient {
     return response.settings
   }
 
-  func updateSelectedBackendSettings(_ values: [String: String]) async throws -> [LocalDaemonSetting] {
+  func updateSelectedBackendSettings(_ values: [String: String]) async throws
+    -> [LocalDaemonSetting]
+  {
     let target = selectedBackendTarget
     guard target.mode == .localDaemon else {
       return []
@@ -232,7 +234,9 @@ actor APIClient {
 
   // MARK: - Request Execution
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+  private func performRequest<T: Decodable>(_ request: URLRequest, retryOnUnauthorized: Bool)
+    async throws -> T
+  {
     let (data, response) = try await session.data(for: request)
 
     guard let httpResponse = response as? HTTPURLResponse else {
@@ -241,6 +245,9 @@ actor APIClient {
 
     // Handle 401 - token might be expired
     if httpResponse.statusCode == 401 {
+      guard retryOnUnauthorized else {
+        throw APIError.unauthorized
+      }
       // Try to refresh token and retry once
       let authService = await MainActor.run { AuthService.shared }
       _ = try await authService.getIdToken(forceRefresh: true)
@@ -467,6 +474,21 @@ extension APIClient {
 
   /// Updates the starred status of a conversation
   func setConversationStarred(id: String, starred: Bool) async throws {
+    struct StarredUpdate: Encodable {
+      let starred: Bool
+    }
+
+    let target = mvpBackendTarget
+    if target.mode == .localDaemon {
+      let _: LocalConversationEnvelope = try await patch(
+        "v1/conversations/\(id)",
+        body: StarredUpdate(starred: starred),
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+      return
+    }
+
     let url = URL(string: baseURL + "v1/conversations/\(id)/starred?starred=\(starred)")!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
@@ -742,6 +764,13 @@ extension APIClient {
   func mergeConversations(ids: [String], reprocess: Bool = true) async throws
     -> MergeConversationsResponse
   {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_merge",
+        reason: "Conversation merge is not implemented in local daemon mode yet."
+      )
+    }
+
     struct MergeRequest: Encodable {
       let conversationIds: [String]
       let reprocess: Bool
@@ -760,6 +789,13 @@ extension APIClient {
 
   /// Gets all folders for the user
   func getFolders() async throws -> [Folder] {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_folders",
+        reason: "Conversation folders are not implemented in local daemon mode yet."
+      )
+    }
+
     return try await get("v1/folders")
   }
 
@@ -767,6 +803,13 @@ extension APIClient {
   func createFolder(name: String, description: String? = nil, color: String? = nil) async throws
     -> Folder
   {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_folders",
+        reason: "Conversation folders are not implemented in local daemon mode yet."
+      )
+    }
+
     let body = CreateFolderRequest(name: name, description: description, color: color)
     return try await post("v1/folders", body: body)
   }
@@ -776,12 +819,26 @@ extension APIClient {
     id: String, name: String? = nil, description: String? = nil, color: String? = nil,
     order: Int? = nil
   ) async throws -> Folder {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_folders",
+        reason: "Conversation folders are not implemented in local daemon mode yet."
+      )
+    }
+
     let body = UpdateFolderRequest(name: name, description: description, color: color, order: order)
     return try await patch("v1/folders/\(id)", body: body)
   }
 
   /// Deletes a folder
   func deleteFolder(id: String, moveToFolderId: String? = nil) async throws {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_folders",
+        reason: "Conversation folders are not implemented in local daemon mode yet."
+      )
+    }
+
     var endpoint = "v1/folders/\(id)"
     if let moveToId = moveToFolderId {
       endpoint += "?move_to_folder_id=\(moveToId)"
@@ -791,6 +848,13 @@ extension APIClient {
 
   /// Moves a conversation to a folder
   func moveConversationToFolder(conversationId: String, folderId: String?) async throws {
+    if mvpBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "conversation_folders",
+        reason: "Conversation folders are not implemented in local daemon mode yet."
+      )
+    }
+
     let body = MoveToFolderRequest(folderId: folderId)
     let url = URL(string: baseURL + "v1/conversations/\(conversationId)/folder")!
     var request = URLRequest(url: url)
@@ -1292,9 +1356,10 @@ private struct LocalConversation: Decodable {
   let endedAt: Date?
   let createdAt: Date
   let deletedAt: Date?
+  let starred: Bool
 
   enum CodingKeys: String, CodingKey {
-    case id, title, overview, status
+    case id, title, overview, status, starred
     case sessionId = "session_id"
     case startedAt = "started_at"
     case endedAt = "ended_at"
@@ -1326,7 +1391,7 @@ private struct LocalConversation: Decodable {
       discarded: false,
       deleted: deletedAt != nil,
       isLocked: false,
-      starred: false,
+      starred: starred,
       folderId: nil,
       inputDeviceName: nil
     )
@@ -1977,8 +2042,9 @@ struct MemoryBatchItem: Encodable {
   let tags: [String]
   let headline: String?
 
-  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
-  {
+  init(
+    content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil
+  ) {
     self.content = content
     self.visibility = visibility
     self.tags = tags
@@ -4246,11 +4312,11 @@ struct NotificationSettingsResponse: Codable {
 }
 
 enum SubscriptionPlanType: String, Codable {
-  case basic      // display "Free"
+  case basic  // display "Free"
   case unlimited  // legacy — display "Unlimited (legacy)"
   case architect  // display "Architect" ($400/mo, cost_usd quota)
-  case pro        // backward compat: old Firestore docs may still say "pro"
-  case `operator` // new — display "Operator"
+  case pro  // backward compat: old Firestore docs may still say "pro"
+  case `operator`  // new — display "Operator"
 }
 
 enum SubscriptionStatusType: String, Codable {
@@ -4315,7 +4381,10 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let features: [String]
   let prices: [SubscriptionPriceOption]
 
-  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+  init(
+    id: String, title: String, subtitle: String? = nil, description: String? = nil,
+    eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []
+  ) {
     self.id = id
     self.title = title
     self.subtitle = subtitle
@@ -4732,7 +4801,8 @@ extension APIClient {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    request.setValue(
+      "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
     var body = Data()
     let lineBreak = "\r\n"
@@ -5243,14 +5313,14 @@ extension APIClient {
   /// Current-month chat usage + the plan's cap. Backed by Python backend
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
   struct ChatUsageQuota: Decodable {
-    let plan: String       // display name: "Free" | "Plus" | "Pro"
-    let planType: String   // internal id: "basic" | "unlimited" | "architect"
-    let unit: String       // "questions" | "cost_usd"
+    let plan: String  // display name: "Free" | "Plus" | "Pro"
+    let planType: String  // internal id: "basic" | "unlimited" | "architect"
+    let unit: String  // "questions" | "cost_usd"
     let used: Double
-    let limit: Double?     // nil means unlimited
+    let limit: Double?  // nil means unlimited
     let percent: Double
     let allowed: Bool
-    let resetAt: Int?      // unix seconds — start of next UTC month
+    let resetAt: Int?  // unix seconds — start of next UTC month
 
     enum CodingKeys: String, CodingKey {
       case plan
@@ -5265,7 +5335,8 @@ extension APIClient {
   }
 
   func fetchChatUsageQuota() async -> ChatUsageQuota? {
-    guard DesktopBackendEnvironment.isCapability(.payments, availableIn: selectedBackendTarget.mode) else {
+    guard DesktopBackendEnvironment.isCapability(.payments, availableIn: selectedBackendTarget.mode)
+    else {
       log("APIClient: Chat quota disabled in local daemon mode")
       return nil
     }

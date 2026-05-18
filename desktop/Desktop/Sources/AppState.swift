@@ -15,13 +15,13 @@ struct SegmentTranslation: Identifiable {
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
   var id: String { segmentId ?? "\(speaker)-\(start)" }
-  var segmentId: String?   // Backend-assigned UUID
+  var segmentId: String?  // Backend-assigned UUID
   var speaker: Int
   var text: String
   var start: Double
   var end: Double
   var isUser: Bool = false
-  var personId: String?    // Backend-assigned person ID from speaker identification
+  var personId: String?  // Backend-assigned person ID from speaker identification
   var translations: [SegmentTranslation] = []
 }
 
@@ -813,73 +813,73 @@ class AppState: ObservableObject {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        let isNowGranted = settings.authorizationStatus == .authorized
-        self.hasNotificationPermission = isNowGranted
-        self.notificationAlertStyle = settings.alertStyle
+        DispatchQueue.main.async {
+          let isNowGranted = settings.authorizationStatus == .authorized
+          self.hasNotificationPermission = isNowGranted
+          self.notificationAlertStyle = settings.alertStyle
 
-        // Log the current notification settings
-        let authStatus =
-          switch settings.authorizationStatus {
-          case .notDetermined: "notDetermined"
-          case .denied: "denied"
-          case .authorized: "authorized"
-          case .provisional: "provisional"
-          case .ephemeral: "ephemeral"
-          @unknown default: "unknown"
-          }
-        let alertStyleName =
-          switch settings.alertStyle {
-          case .none: "NONE (no banners)"
-          case .banner: "BANNER"
-          case .alert: "ALERT"
-          @unknown default: "unknown"
-          }
-        log(
-          "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
-        )
-
-        // Track notification settings in analytics only when they change
-        let soundEnabled = settings.soundSetting == .enabled
-        let badgeEnabled = settings.badgeSetting == .enabled
-        let settingsChanged =
-          authStatus != self.lastNotificationAuthStatus
-          || alertStyleName != self.lastNotificationAlertStyle
-          || soundEnabled != self.lastNotificationSoundEnabled
-          || badgeEnabled != self.lastNotificationBadgeEnabled
-
-        if settingsChanged {
-          AnalyticsManager.shared.notificationSettingsChecked(
-            authStatus: authStatus,
-            alertStyle: alertStyleName,
-            soundEnabled: soundEnabled,
-            badgeEnabled: badgeEnabled,
-            bannersDisabled: settings.alertStyle == .none
+          // Log the current notification settings
+          let authStatus =
+            switch settings.authorizationStatus {
+            case .notDetermined: "notDetermined"
+            case .denied: "denied"
+            case .authorized: "authorized"
+            case .provisional: "provisional"
+            case .ephemeral: "ephemeral"
+            @unknown default: "unknown"
+            }
+          let alertStyleName =
+            switch settings.alertStyle {
+            case .none: "NONE (no banners)"
+            case .banner: "BANNER"
+            case .alert: "ALERT"
+            @unknown default: "unknown"
+            }
+          log(
+            "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
           )
 
-          // Detect regression: was authorized, now reverted to notDetermined
-          // This happens on macOS 26+ where the OS silently revokes notification permission
-          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-            log(
-              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+          // Track notification settings in analytics only when they change
+          let soundEnabled = settings.soundSetting == .enabled
+          let badgeEnabled = settings.badgeSetting == .enabled
+          let settingsChanged =
+            authStatus != self.lastNotificationAuthStatus
+            || alertStyleName != self.lastNotificationAlertStyle
+            || soundEnabled != self.lastNotificationSoundEnabled
+            || badgeEnabled != self.lastNotificationBadgeEnabled
+
+          if settingsChanged {
+            AnalyticsManager.shared.notificationSettingsChecked(
+              authStatus: authStatus,
+              alertStyle: alertStyleName,
+              soundEnabled: soundEnabled,
+              badgeEnabled: badgeEnabled,
+              bannersDisabled: settings.alertStyle == .none
             )
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "auth_regression",
-              previousStatus: "authorized",
-              currentStatus: "notDetermined"
-            )
-            self.repairNotificationRegistrationAndRetry()
+
+            // Detect regression: was authorized, now reverted to notDetermined
+            // This happens on macOS 26+ where the OS silently revokes notification permission
+            if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+              log(
+                "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+              )
+              AnalyticsManager.shared.notificationRepairTriggered(
+                reason: "auth_regression",
+                previousStatus: "authorized",
+                currentStatus: "notDetermined"
+              )
+              self.repairNotificationRegistrationAndRetry()
+            }
+
+            // Update last known state
+            self.lastNotificationAuthStatus = authStatus
+            self.lastNotificationAlertStyle = alertStyleName
+            self.lastNotificationSoundEnabled = soundEnabled
+            self.lastNotificationBadgeEnabled = badgeEnabled
           }
 
-          // Update last known state
-          self.lastNotificationAuthStatus = authStatus
-          self.lastNotificationAlertStyle = alertStyleName
-          self.lastNotificationSoundEnabled = soundEnabled
-          self.lastNotificationBadgeEnabled = badgeEnabled
         }
-
       }
-    }
     }  // end DispatchQueue.main.async
   }
 
@@ -1519,7 +1519,9 @@ class AppState: ObservableObject {
     silentMicFallbackInProgress = true
 
     guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
-      log("Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is")
+      log(
+        "Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is"
+      )
       silentMicFallbackInProgress = false
       return
     }
@@ -1645,7 +1647,9 @@ class AppState: ObservableObject {
       // finalize the NEW conversation instead of the one we just stopped.
       // The retry service will reconcile the old session by timestamp matching.
       guard self.recordingGeneration == generationAtStop else {
-        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
+        log(
+          "Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")"
+        )
         return
       }
 
@@ -1653,15 +1657,20 @@ class AppState: ObservableObject {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
           // Validate the returned conversation matches the session we just stopped
           if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-             let convStarted = conversation.startedAt,
-             abs(convStarted.timeIntervalSince(startTime)) < 10,
-             conversation.source == .desktop {
+            let convStarted = conversation.startedAt,
+            abs(convStarted.timeIntervalSince(startTime)) < 10,
+            conversation.source == .desktop
+          {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
-            log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
+            log(
+              "Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed"
+            )
           } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
             // Force-process returned a different conversation — fall back to reconciliation
-            log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
+            log(
+              "Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp"
+            )
             await reconcileSession(sessionId: sessionId, startTime: startTime)
           }
         } else {
@@ -1700,7 +1709,9 @@ class AppState: ObservableObject {
           id: sessionId, backendId: match.id)
         log("Transcription: Reconciled session \(sessionId) → backend conversation \(match.id)")
       } else {
-        log("Transcription: No matching backend conversation found for session \(sessionId), leaving for retry")
+        log(
+          "Transcription: No matching backend conversation found for session \(sessionId), leaving for retry"
+        )
       }
     } catch {
       logError("Transcription: Reconciliation failed for session \(sessionId)", error: error)
@@ -1715,7 +1726,9 @@ class AppState: ObservableObject {
       return .discarded
     }
 
-    log("Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing")
+    log(
+      "Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing"
+    )
 
     // Capture state before rotation — memory_created event for this conversation
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
@@ -2194,6 +2207,12 @@ class AppState: ObservableObject {
   func loadFolders() async {
     guard !isLoadingFolders else { return }
 
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+      folders = []
+      selectedFolderId = nil
+      return
+    }
+
     isLoadingFolders = true
 
     do {
@@ -2330,7 +2349,7 @@ class AppState: ObservableObject {
       let idSet = Set(segmentIds)
       if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
         for segIdx in conversations[idx].transcriptSegments.indices
-          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,
@@ -2600,7 +2619,9 @@ class AppState: ObservableObject {
             // Always persist to SQLite — even if the segment was trimmed from
             // the in-memory window, the event payload has all fields needed
             if let sessionId = currentSessionId {
-              let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+              let mapped = newTranslations.map {
+                TranscriptTranslation(lang: $0.lang, text: $0.text)
+              }
               var translationsJson: String?
               if let jsonData = try? JSONEncoder().encode(mapped) {
                 translationsJson = String(data: jsonData, encoding: .utf8)

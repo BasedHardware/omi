@@ -239,6 +239,7 @@ fn persist_processing_output(
                 status: Some("processed".to_string()),
                 ended_at: None,
                 metadata: None,
+                starred: None,
             },
         )?
         .ok_or_else(|| anyhow!("conversation missing while persisting processing output"))?;

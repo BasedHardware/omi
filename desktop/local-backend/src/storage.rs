@@ -7,10 +7,11 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial_local_storage",
-    sql: r#"
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial_local_storage",
+        sql: r#"
         CREATE TABLE conversations (
             id TEXT PRIMARY KEY,
             session_id TEXT NOT NULL,
@@ -218,7 +219,16 @@ const MIGRATIONS: &[Migration] = &[Migration {
             DELETE FROM conversation_search WHERE source_type = 'segment' AND source_id = old.id;
         END;
     "#,
-}];
+    },
+    Migration {
+        version: 2,
+        name: "conversation_starred",
+        sql: r#"
+        ALTER TABLE conversations ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX idx_conversations_starred ON conversations(starred, updated_at);
+    "#,
+    },
+];
 
 #[derive(Clone)]
 pub struct Store {
@@ -247,6 +257,7 @@ pub struct Conversation {
     pub sync_version: i64,
     pub sync_state: String,
     pub metadata_json: String,
+    pub starred: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -463,6 +474,7 @@ impl ConversationRepository {
             sync_version: 0,
             sync_state: "local".to_string(),
             metadata_json: json_or_empty_object(new.metadata)?,
+            starred: false,
         };
 
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
@@ -470,9 +482,9 @@ impl ConversationRepository {
             r#"
             INSERT INTO conversations (
                 id, session_id, title, overview, status, started_at, ended_at, created_at,
-                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 conversation.id,
@@ -488,7 +500,8 @@ impl ConversationRepository {
                 conversation.cloud_id,
                 conversation.sync_version,
                 conversation.sync_state,
-                conversation.metadata_json
+                conversation.metadata_json,
+                conversation.starred
             ],
         )
         .context("failed to insert conversation")?;
@@ -501,7 +514,7 @@ impl ConversationRepository {
         conn.query_row(
             r#"
             SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
-                   updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+                   updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
             FROM conversations
             WHERE id = ?1 AND deleted_at IS NULL
             "#,
@@ -518,7 +531,7 @@ impl ConversationRepository {
             .prepare(
                 r#"
                 SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
-                       updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json
+                       updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
                 FROM conversations
                 WHERE deleted_at IS NULL
                 ORDER BY updated_at DESC
@@ -561,6 +574,9 @@ impl ConversationRepository {
         if let Some(metadata) = update.metadata {
             conversation.metadata_json = json_or_empty_object(Some(metadata))?;
         }
+        if let Some(starred) = update.starred {
+            conversation.starred = starred;
+        }
         conversation.updated_at = Utc::now();
 
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
@@ -568,7 +584,7 @@ impl ConversationRepository {
             r#"
             UPDATE conversations
             SET title = ?2, overview = ?3, status = ?4, ended_at = ?5, updated_at = ?6,
-                metadata_json = ?7, sync_version = sync_version + 1
+                metadata_json = ?7, starred = ?8, sync_version = sync_version + 1
             WHERE id = ?1 AND deleted_at IS NULL
             "#,
             params![
@@ -578,7 +594,8 @@ impl ConversationRepository {
                 conversation.status,
                 conversation.ended_at,
                 conversation.updated_at,
-                conversation.metadata_json
+                conversation.metadata_json,
+                conversation.starred
             ],
         )
         .context("failed to update conversation")?;
@@ -1403,6 +1420,7 @@ pub struct UpdateConversation {
     pub status: Option<String>,
     pub ended_at: Option<Option<DateTime<Utc>>>,
     pub metadata: Option<serde_json::Value>,
+    pub starred: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -1545,6 +1563,7 @@ fn map_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Conversation> {
         sync_version: row.get(11)?,
         sync_state: row.get(12)?,
         metadata_json: row.get(13)?,
+        starred: row.get(14)?,
     })
 }
 
@@ -1777,6 +1796,47 @@ mod tests {
         );
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].text, "We need local persistence.");
+
+        Ok(())
+    }
+
+    #[test]
+    fn conversation_starred_updates_persist() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-starred"]);
+
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-starred".to_string(),
+            title: "Starred conversation".to_string(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+
+        let updated = store
+            .conversations()
+            .update(
+                &conversation_id,
+                UpdateConversation {
+                    title: None,
+                    overview: None,
+                    status: None,
+                    ended_at: None,
+                    metadata: None,
+                    starred: Some(true),
+                },
+            )?
+            .expect("conversation should update");
+
+        assert!(updated.starred);
+        assert!(
+            store
+                .conversations()
+                .get(&conversation_id)?
+                .expect("conversation should persist")
+                .starred
+        );
 
         Ok(())
     }
