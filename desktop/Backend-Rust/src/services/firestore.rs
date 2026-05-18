@@ -4802,25 +4802,37 @@ impl FirestoreService {
         // If it's in the past, the subscription is expired → fall back to basic.
         // This matches Python's get_user_valid_subscription() which returns
         // get_default_basic_subscription() when period_end < now.
-        if let Some(period_end) = sub_fields
+        // Python's get_user_valid_subscription only returns a paid plan when
+        // current_period_end exists AND is still in the future. Missing or
+        // unparseable current_period_end → fall back to basic.
+        match sub_fields
             .get("current_period_end")
             .and_then(|v| v.get("integerValue"))
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<i64>().ok())
         {
-            let now_epoch = chrono::Utc::now().timestamp();
-            if period_end < now_epoch {
+            Some(period_end) => {
+                let now_epoch = chrono::Utc::now().timestamp();
+                if period_end < now_epoch {
+                    tracing::info!(
+                        "paywall: paid plan '{}' expired for uid={} (period_end={} < now={}), falling back to basic",
+                        plan, uid, period_end, now_epoch
+                    );
+                    Ok("basic".to_string())
+                } else {
+                    Ok(plan)
+                }
+            }
+            None => {
+                // Missing current_period_end on a paid plan → fall back to basic
+                // (matches Python which returns default basic subscription)
                 tracing::info!(
-                    "paywall: paid plan '{}' expired for uid={} (period_end={} < now={}), falling back to basic",
-                    plan, uid, period_end, now_epoch
+                    "paywall: paid plan '{}' missing current_period_end for uid={}, falling back to basic",
+                    plan, uid
                 );
-                return Ok("basic".to_string());
+                Ok("basic".to_string())
             }
         }
-        // If current_period_end is missing on a paid plan, treat as valid
-        // (fail-open: don't downgrade without evidence)
-
-        Ok(plan)
     }
 
     /// Get user account creation time from Firebase Auth Identity Toolkit REST API.
