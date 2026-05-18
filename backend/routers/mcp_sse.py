@@ -483,7 +483,7 @@ def handle_mcp_message(
 
 
 @router.get("/authorize", tags=["mcp"])
-async def mcp_authorize(
+def mcp_authorize(
     response_type: str,
     client_id: str,
     redirect_uri: str,
@@ -662,7 +662,7 @@ async def mcp_sse_get(
 
 
 @router.delete("/v1/mcp/sse", tags=["mcp"])
-async def mcp_delete_session(
+def mcp_delete_session(
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
@@ -689,7 +689,7 @@ async def mcp_delete_session(
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"])
-async def mcp_sse_info(request: Request):
+def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.
     """

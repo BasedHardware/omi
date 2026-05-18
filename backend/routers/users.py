@@ -1431,7 +1431,7 @@ def _json_default(obj):
 
 
 @router.get('/v1/users/export', tags=['v1'])
-async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
 
     def generate():

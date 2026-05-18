@@ -6,6 +6,7 @@ import uuid
 from typing import List
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
+from utils.executors import db_executor, run_blocking
 from database.redis_db import (
     set_credit_limit_notification_sent,
     has_credit_limit_notification_been_sent,
@@ -317,7 +318,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
             return response, invalid_tokens
 
         tasks = [
-            asyncio.to_thread(send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
+            run_blocking(db_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
         results = await asyncio.gather(*tasks)

@@ -117,6 +117,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
@@ -1766,7 +1767,7 @@ async def _stream_handler(
         # extract from the WAV file and store it in Firestore for future sessions.
         if has_speech_profile:
             try:
-                embedding_list = await asyncio.to_thread(user_db.get_user_speaker_embedding, uid)
+                embedding_list = await run_blocking(db_executor, user_db.get_user_speaker_embedding, uid)
                 if embedding_list:
                     user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
                     person_embeddings_cache[USER_SELF_PERSON_ID] = {
@@ -1776,12 +1777,16 @@ async def _stream_handler(
                     logger.info(f"Speaker ID: loaded user speaker embedding from Firestore {uid} {session_id}")
                 else:
                     logger.info(f"Speaker ID: no stored embedding, extracting from speech profile {uid} {session_id}")
-                    file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
+                    file_path = await run_blocking(storage_executor, get_profile_audio_if_exists, uid)
                     if file_path:
-                        with open(file_path, 'rb') as f:
-                            profile_bytes = f.read()
-                        user_embedding = await asyncio.to_thread(
-                            extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
+
+                        def _read_file(p):
+                            with open(p, 'rb') as f:
+                                return f.read()
+
+                        profile_bytes = await run_blocking(storage_executor, _read_file, file_path)
+                        user_embedding = await run_blocking(
+                            sync_executor, extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
                         )
                         del profile_bytes
                         person_embeddings_cache[USER_SELF_PERSON_ID] = {
@@ -1789,8 +1794,11 @@ async def _stream_handler(
                             'name': 'User',
                         }
                         # Store in Firestore so future sessions load directly
-                        await asyncio.to_thread(
-                            user_db.set_user_speaker_embedding, uid, user_embedding.flatten().tolist()
+                        await run_blocking(
+                            db_executor,
+                            user_db.set_user_speaker_embedding,
+                            uid,
+                            user_embedding.flatten().tolist(),
                         )
                         logger.info(f"Speaker ID: extracted and stored user embedding {uid} {session_id}")
             except Exception as e:
@@ -1931,7 +1939,7 @@ async def _stream_handler(
             wav_bytes = output_buffer.getvalue()
 
             # Extract embedding (API call)
-            query_embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "query.wav")
+            query_embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "query.wav")
 
             # Find best match
             best_match = None

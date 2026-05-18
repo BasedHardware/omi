@@ -27,7 +27,7 @@ from utils.app_integrations import (
 from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
-from utils.executors import storage_executor
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -80,7 +80,7 @@ async def _process_conversation_task(
     if byok_keys:
         set_byok_keys(byok_keys)
     try:
-        conversation_data = conversations_db.get_conversation(uid, conversation_id)
+        conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
             # Send error response
             response = {"conversation_id": conversation_id, "error": "conversation_not_found"}
@@ -93,23 +93,29 @@ async def _process_conversation_task(
         conversation = deserialize_conversation(conversation_data)
 
         if conversation.status != ConversationStatus.processing:
-            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+            await run_blocking(
+                db_executor,
+                conversations_db.update_conversation_status,
+                uid,
+                conversation.id,
+                ConversationStatus.processing,
+            )
             conversation.status = ConversationStatus.processing
 
         try:
             # Geolocation
-            geolocation = get_cached_user_geolocation(uid)
+            geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
                 conversation.geolocation = await async_get_google_maps_location(
                     geolocation.latitude, geolocation.longitude
                 )
 
-            # Run in default executor (not critical_executor) because process_conversation
-            # is a coordinator that submits child tasks to critical_executor — nesting both
-            # in the same pool causes deadlock under concurrent load.
-            # Copy the current context (which holds BYOK keys) into the worker thread so
-            # LLM client proxies see the right key when resolving per-request.
+            # Default executor (None) is intentional: process_conversation is a coordinator
+            # that fans out to llm_executor/db_executor and calls .result(). Using a named
+            # pool would risk deadlock if that pool fills with coordinators. The default
+            # executor is unbounded so coordinators can't starve children.
+            # contextvars.copy_context() carries BYOK keys into the worker thread.
             loop = asyncio.get_running_loop()
             ctx = contextvars.copy_context()
             conversation = await loop.run_in_executor(
@@ -118,7 +124,7 @@ async def _process_conversation_task(
             messages = await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
-            conversations_db.set_conversation_as_discarded(uid, conversation.id)
+            await run_blocking(db_executor, conversations_db.set_conversation_as_discarded, uid, conversation.id)
             conversation.discarded = True
             messages = []
 
@@ -161,9 +167,13 @@ async def _websocket_util_trigger(
     # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
     audio_bytes_trigger_delay_seconds = 4
-    has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
-    private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
-    cached_protection_level = users_db.get_data_protection_level(uid) if private_cloud_sync_enabled else None
+    has_audio_apps_enabled = await run_blocking(db_executor, is_audio_bytes_app_enabled, uid)
+    private_cloud_sync_enabled = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+    cached_protection_level = (
+        (await run_blocking(db_executor, users_db.get_data_protection_level, uid))
+        if private_cloud_sync_enabled
+        else None
+    )
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
@@ -232,17 +242,16 @@ async def _websocket_util_trigger(
             retries = batch.get('retries', 0)
             try:
                 chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
+                await run_blocking(
                     storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
                 )
                 del chunks_to_upload
                 try:
-                    audio_files = await loop.run_in_executor(
+                    audio_files = await run_blocking(
                         storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                     )
                     if audio_files:
-                        await loop.run_in_executor(
+                        await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,

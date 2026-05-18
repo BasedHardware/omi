@@ -15,7 +15,15 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import httpx
 
-from utils.executors import critical_executor, storage_executor, sync_executor, submit_with_context
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    postprocess_executor,
+    storage_executor,
+    sync_executor,
+    run_blocking,
+    submit_with_context,
+)
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -205,7 +213,7 @@ def precache_conversation_audio_endpoint(
                 logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    submit_with_context(critical_executor, _precache_all_parallel)
+    submit_with_context(postprocess_executor, _precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -304,7 +312,7 @@ def get_audio_signed_urls_endpoint(
                 except Exception as e:
                     logger.error(f"Error in parallel cache: {e}")
 
-        submit_with_context(critical_executor, _cache_uncached_parallel)
+        submit_with_context(postprocess_executor, _cache_uncached_parallel)
 
     return {"audio_files": result}
 
@@ -1144,8 +1152,7 @@ async def sync_local_files(
         def _run_vad(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        loop = asyncio.get_running_loop()
-        await asyncio.gather(*[loop.run_in_executor(sync_executor, _run_vad, path) for path in wav_paths])
+        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1210,11 +1217,11 @@ async def sync_local_files(
             )
 
         # Fetch user transcription preferences once before spawning threads
-        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+        transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
-            person_embeddings_cache = build_person_embeddings_cache(uid)
+            person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
             if person_embeddings_cache:
                 logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
         except Exception as e:
@@ -1223,7 +1230,7 @@ async def sync_local_files(
 
         await asyncio.gather(
             *[
-                loop.run_in_executor(
+                run_blocking(
                     sync_executor,
                     process_segment,
                     path,
@@ -1603,10 +1610,10 @@ async def sync_local_files_v2(
     a background thread. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if is_hard_restricted(uid):
+    if await run_blocking(critical_executor, is_hard_restricted, uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
 
-    should_lock = not has_transcription_credits(uid)
+    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
     source = ConversationSource.omi
@@ -1623,10 +1630,10 @@ async def sync_local_files_v2(
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
-        paths = _retrieve_file_paths_v2(files, uid, job_id)
+        paths = await run_blocking(storage_executor, _retrieve_file_paths_v2, files, uid, job_id)
 
         # Create Redis job — total_segments=0 until VAD completes in background
-        create_sync_job(uid, total_files=len(files), total_segments=0, job_id=job_id)
+        await run_blocking(db_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id)
 
         # Capture event loop for async calls from background thread
         loop_v2 = asyncio.get_running_loop()
@@ -1638,9 +1645,9 @@ async def sync_local_files_v2(
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg thread
 
-        # Run in default executor (not critical_executor) to avoid deadlock
-        loop_v2.run_in_executor(
-            None,
+        # Run in postprocess_executor (fire-and-forget coordinator for decode/VAD/STT/LLM)
+        submit_with_context(
+            postprocess_executor,
             _run_full_pipeline_background,
             job_id,
             uid,
@@ -1673,7 +1680,7 @@ async def sync_local_files_v2(
 
 
 @router.get("/v2/sync-local-files/{job_id}")
-async def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
     if not job:

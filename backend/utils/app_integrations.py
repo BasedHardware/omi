@@ -13,7 +13,7 @@ from utils.http_client import (
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import critical_executor
+from utils.executors import db_executor, run_blocking
 
 import database.notifications as notification_db
 from database import mem_db
@@ -559,8 +559,7 @@ async def _async_trigger_realtime_integrations(
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
-    loop = asyncio.get_running_loop()
-    conversation_messages = await loop.run_in_executor(critical_executor, process_mentor_notification, uid, segments)
+    conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
             mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)

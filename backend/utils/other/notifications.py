@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, time, timedelta
 
-from utils.executors import storage_executor
+from utils.executors import storage_executor, run_blocking
 
 import pytz
 
@@ -184,8 +184,7 @@ def _send_summary_notification(user_data: tuple):
 
 
 async def _send_bulk_summary_notification(users: list):
-    loop = asyncio.get_running_loop()
-    tasks = [loop.run_in_executor(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
+    tasks = [run_blocking(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
     await asyncio.gather(*tasks)
 
 

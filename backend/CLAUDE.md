@@ -144,15 +144,27 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - Semaphores: always wrap calls — `async with get_webhook_semaphore(): await client.post(...)`
   - Circuit breakers: `get_webhook_circuit_breaker(url)` for external targets — call `cb.record_success()`/`cb.record_failure()`
   - Lifecycle: lazy singletons, closed at shutdown via `close_all_clients()`
-- **Lane 2 — Executors** (`utils/executors.py`): `critical_executor` (8 workers) and `storage_executor` (16 workers). Never ad-hoc `Thread`/`ThreadPoolExecutor`. Use `loop.run_in_executor(critical_executor, fn)`.
-  - Deadlock rule: coordinators that fan out to `critical_executor` must run in default executor (`None`)
+- **Lane 2 — Executors** (`utils/executors.py`): 7 purpose-specific thread pools. Never ad-hoc `Thread`/`ThreadPoolExecutor`. Use `await run_blocking(executor, fn)` in async code or `submit_with_context(executor, fn)` for fire-and-forget.
+  - **Pool assignment** (match work type to pool):
+    - `critical_executor` (8w) — auth gates only: `_verify_ws_auth`, `validate_byok_websocket`, `check_rate_limit`, `is_hard_restricted`, session/code Redis ops in `auth.py`
+    - `db_executor` (16w) — Firestore/Redis CRUD, vector DB queries
+    - `llm_executor` (4w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation)
+    - `stripe_executor` (4w) — Stripe API calls
+    - `sync_executor` (12w) — sync endpoint pipeline work
+    - `postprocess_executor` (8w) — post-conversation processing, coordinator functions
+    - `storage_executor` (16w) — GCS uploads/downloads, audio chunk I/O
+  - **Deadlock prevention — 3 rules:**
+    1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
+    2. **Orchestration stays in async code.** The async handler coordinates via `await run_blocking(pool, fn)` — sequentially or with `asyncio.gather`. The event loop never blocks, pools stay independent.
+    3. **Coordinators must not share a pool with their children.** If a function fans out work to `storage_executor` and waits on `.result()`, that function must run on a different pool (e.g., `postprocess_executor`), never on `storage_executor` itself — otherwise all threads become coordinators and children can't run.
+  - **Audit command:** `grep -rn '\.result()' --include="*.py" | grep -v tests/ | grep -v __pycache__` — every hit must be a leaf operation or a coordinator on a different pool from its children.
 - **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
 - **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
 
 ## Common Gotchas
 
 1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)
-2. **Never `time.sleep()` in async** — use `asyncio.sleep()`. For blocking work: `loop.run_in_executor(critical_executor, fn)`
+2. **Never `time.sleep()` in async** — use `asyncio.sleep()`. For blocking work: `await run_blocking(executor, fn)` with the appropriate pool
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.
 5. **Webhook timeout = 30s** — partner integrations depend on this window. Don't change `httpx.Timeout(30.0, connect=2.0)`.

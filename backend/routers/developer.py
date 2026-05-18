@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from utils.executors import critical_executor
+from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
@@ -213,7 +213,7 @@ def create_memory(
 
     # Update personas asynchronously if visibility is public
     if memory.visibility == 'public':
-        critical_executor.submit(update_personas_async, uid)
+        postprocess_executor.submit(update_personas_async, uid)
 
     return MemoryResponse(
         id=memory_db.id,
@@ -290,7 +290,7 @@ def create_memories_batch(
 
     # Update personas if any memory is public
     if has_public:
-        critical_executor.submit(update_personas_async, uid)
+        postprocess_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [

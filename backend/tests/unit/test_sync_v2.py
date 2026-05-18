@@ -43,7 +43,7 @@ class TestSyncV2Structure:
         """GET /v2/sync-local-files/{job_id} must exist."""
         source = self._read_sync_source()
         assert '"/v2/sync-local-files/{job_id}"' in source
-        assert 'async def get_sync_job_status' in source
+        assert 'def get_sync_job_status' in source
 
     def test_v1_endpoint_unchanged(self):
         """v1 endpoint must still exist with original path and function name."""
@@ -65,8 +65,8 @@ class TestSyncV2Structure:
         assert "'job_id'" in func_body, "v2 response must include job_id"
         assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
 
-    def test_v2_submits_to_default_executor(self):
-        """v2 must submit background work via run_in_executor(None, ...) to avoid deadlock."""
+    def test_v2_submits_to_non_critical_executor(self):
+        """v2 must submit background work via submit_with_context(postprocess_executor) to avoid deadlock."""
         source = self._read_sync_source()
         start = source.index('async def sync_local_files_v2')
         next_section = source.find('\n@router.', start + 1)
@@ -74,11 +74,10 @@ class TestSyncV2Structure:
             next_section = len(source)
         func_body = source[start:next_section]
 
-        assert 'run_in_executor' in func_body, "v2 must use run_in_executor for background worker"
+        assert 'submit_with_context' in func_body, "v2 must use submit_with_context for background worker"
         assert '_run_full_pipeline_background' in func_body, "v2 must submit the full pipeline background worker"
-        none_executor_pattern = re.compile(r'run_in_executor\(\s*None\s*,')
-        assert none_executor_pattern.search(func_body), (
-            "v2 coordinator dispatch must use run_in_executor(None, ...) — "
+        assert 'postprocess_executor' in func_body, (
+            "v2 coordinator dispatch must use postprocess_executor (not critical_executor) — "
             "passing critical_executor would nest executors and cause deadlock"
         )
 
@@ -174,7 +173,7 @@ class TestSyncV2Structure:
     def test_v2_get_checks_ownership(self):
         """GET endpoint must verify job belongs to requesting user."""
         source = self._read_sync_source()
-        start = source.index('async def get_sync_job_status')
+        start = source.index('def get_sync_job_status')
         func_body = source[start:]
 
         assert "job['uid'] != uid" in func_body, "GET must check job ownership"
@@ -183,7 +182,7 @@ class TestSyncV2Structure:
     def test_v2_get_returns_404_for_missing(self):
         """GET must return 404 for expired/missing jobs."""
         source = self._read_sync_source()
-        start = source.index('async def get_sync_job_status')
+        start = source.index('def get_sync_job_status')
         func_body = source[start:]
 
         assert '404' in func_body, "GET must return 404 for missing job"
@@ -483,7 +482,7 @@ class TestV1Unchanged:
         """v1 must process segments synchronously with asyncio.gather (no background)."""
         body = self._get_v1_body()
         assert 'asyncio.gather' in body, "v1 must use asyncio.gather for segment processing"
-        assert 'run_in_executor' in body, "v1 must use run_in_executor for blocking segment work"
+        assert 'run_blocking' in body, "v1 must use run_blocking for blocking segment work"
         assert 'sync_executor' in body, "v1 must use sync_executor for segment work"
 
     def test_v1_cleanup_in_finally(self):
@@ -541,7 +540,7 @@ class TestV2EndpointContract:
     def test_v2_handles_429_hard_restricted(self):
         """v2 must check hard restriction at the top."""
         body = self._get_v2_post_body()
-        assert 'is_hard_restricted(uid)' in body
+        assert 'is_hard_restricted' in body and 'uid' in body
 
     def test_v2_reraises_http_exceptions(self):
         """v2 must re-raise HTTPException from fast-path helpers."""
@@ -1622,6 +1621,11 @@ class TestV2EndpointExecution:
             module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
             module._run_full_pipeline_background = MagicMock()
 
+            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            module.run_blocking = _passthrough_run_blocking
+
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
 
@@ -1808,8 +1812,8 @@ class TestBYOKContextPropagation:
         func_body = source[start:next_section]
 
         assert 'captured_byok' in func_body
-        dispatch_section = func_body[func_body.index('run_in_executor') :]
-        assert 'captured_byok' in dispatch_section, "captured BYOK must be passed to run_in_executor call"
+        dispatch_section = func_body[func_body.index('submit_with_context') :]
+        assert 'captured_byok' in dispatch_section, "captured BYOK must be passed to submit_with_context call"
 
     def test_background_worker_accepts_byok_parameter(self):
         """_run_full_pipeline_background must accept a byok_keys parameter."""
