@@ -243,6 +243,39 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "")
     }
 
+    func testSelectedBackendTargetDefaultsToCloudPython() {
+        let target = DesktopBackendEnvironment.selectedBackendTarget(
+            modeValue: nil,
+            pythonEnvironmentValue: "https://api.example.test",
+            localDaemonEnvironmentValue: nil
+        )
+        XCTAssertEqual(target.mode, .cloud)
+        XCTAssertEqual(target.baseURL, "https://api.example.test/")
+        XCTAssertTrue(target.requiresAuth)
+    }
+
+    func testSelectedBackendTargetSupportsLocalDaemonDefault() {
+        let target = DesktopBackendEnvironment.selectedBackendTarget(
+            modeValue: "local",
+            pythonEnvironmentValue: "https://api.example.test",
+            localDaemonEnvironmentValue: nil
+        )
+        XCTAssertEqual(target.mode, .localDaemon)
+        XCTAssertEqual(target.baseURL, "http://127.0.0.1:8765/")
+        XCTAssertFalse(target.requiresAuth)
+    }
+
+    func testSelectedBackendTargetSupportsCustomRemote() {
+        let target = DesktopBackendEnvironment.selectedBackendTarget(
+            modeValue: "custom",
+            pythonEnvironmentValue: "http://custom-backend:7777",
+            localDaemonEnvironmentValue: "http://127.0.0.1:8765"
+        )
+        XCTAssertEqual(target.mode, .customRemote)
+        XCTAssertEqual(target.baseURL, "http://custom-backend:7777/")
+        XCTAssertTrue(target.requiresAuth)
+    }
+
     func testBaseURLAndRustBackendURLAreIndependent() async {
         setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
         setenv("OMI_DESKTOP_API_URL", "http://rust:8787", 1)
@@ -272,11 +305,15 @@ final class APIClientRoutingTests: XCTestCase {
         URLCapture.reset()
         setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
         setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+        unsetenv("OMI_DESKTOP_BACKEND_MODE")
+        unsetenv("OMI_LOCAL_DAEMON_URL")
     }
 
     override func tearDown() {
         unsetenv("OMI_PYTHON_API_URL")
         unsetenv("OMI_DESKTOP_API_URL")
+        unsetenv("OMI_DESKTOP_BACKEND_MODE")
+        unsetenv("OMI_LOCAL_DAEMON_URL")
         URLCapture.reset()
         super.tearDown()
     }
@@ -291,12 +328,66 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "getConversation")
     }
 
+    func testLocalModeGetConversationRoutesToLocalDaemonWithoutAuth() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+        let client = await makeTestClient()
+        _ = try? await client.getConversation(id: "local-123") as ServerConversation
+
+        assertRoutes(URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+                     pathContains: "v1/conversations/local-123", method: "GET",
+                     label: "local getConversation")
+        XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+    }
+
     func testDeleteConversationRoutesToPython() async {
         let client = await makeTestClient()
         try? await client.deleteConversation(id: "conv-456")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/conv-456", method: "DELETE",
                      label: "deleteConversation")
+    }
+
+    func testLocalModeCreateConversationRoutesToLocalDaemonWithoutAuth() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+        let client = await makeTestClient()
+        _ = try? await client.createLocalDaemonConversation(
+            sessionId: "desktop-1",
+            title: "Local",
+            overview: "Local daemon",
+            startedAt: Date(timeIntervalSince1970: 0)
+        )
+
+        let requests = URLCapture.capturedRequests
+        assertRoutes(requests, host: "127.0.0.1", port: 8765,
+                     pathContains: "v1/conversations", method: "POST",
+                     label: "local createConversation")
+        XCTAssertNil(requests.first?.headers["Authorization"])
+    }
+
+    func testLocalModeHealthCheckRoutesToLocalDaemonWithoutAuth() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+        let client = await makeTestClient()
+        _ = try? await client.checkSelectedBackendHealth()
+
+        assertRoutes(URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+                     pathContains: "health", method: "GET",
+                     label: "local health")
+        XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+    }
+
+    func testLocalModeSettingsRoutesToLocalDaemonWithoutAuth() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+        let client = await makeTestClient()
+        _ = try? await client.updateSelectedBackendSettings(["profile_name": "Local"])
+
+        assertRoutes(URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+                     pathContains: "v1/settings", method: "PUT",
+                     label: "local settings")
+        XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
     }
 
     // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --

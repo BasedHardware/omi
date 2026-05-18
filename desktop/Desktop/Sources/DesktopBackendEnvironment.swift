@@ -1,9 +1,61 @@
 import Foundation
 
 enum DesktopBackendEnvironment {
+  enum BackendMode: Equatable {
+    case cloud
+    case localDaemon
+    case customRemote
+  }
+
+  struct BackendTarget: Equatable {
+    let mode: BackendMode
+    let baseURL: String
+    let requiresAuth: Bool
+  }
+
   static let productionPythonAPIURL = "https://api.omi.me/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+  static let defaultLocalDaemonURL = "http://127.0.0.1:8765/"
+
+  static var selectedBackendTarget: BackendTarget {
+    selectedBackendTarget(
+      modeValue: currentEnvironmentValue("OMI_DESKTOP_BACKEND_MODE")
+        ?? currentEnvironmentValue("OMI_BACKEND_MODE"),
+      pythonEnvironmentValue: currentEnvironmentValue("OMI_PYTHON_API_URL"),
+      localDaemonEnvironmentValue: currentEnvironmentValue("OMI_LOCAL_DAEMON_URL")
+    )
+  }
+
+  static func selectedBackendTarget(
+    modeValue: String?,
+    pythonEnvironmentValue: String?,
+    localDaemonEnvironmentValue: String?
+  ) -> BackendTarget {
+    switch normalizedMode(modeValue) {
+    case "local", "local-daemon", "local_daemon", "daemon":
+      return BackendTarget(
+        mode: .localDaemon,
+        baseURL: localDaemonBaseURL(environmentValue: localDaemonEnvironmentValue),
+        requiresAuth: false
+      )
+    case "custom", "remote", "custom-remote", "custom_remote":
+      return BackendTarget(
+        mode: .customRemote,
+        baseURL: pythonBaseURL(
+          useDevelopmentBackends: false,
+          environmentValue: pythonEnvironmentValue
+        ),
+        requiresAuth: true
+      )
+    default:
+      return BackendTarget(
+        mode: .cloud,
+        baseURL: pythonBaseURL(environmentValue: pythonEnvironmentValue),
+        requiresAuth: true
+      )
+    }
+  }
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(
@@ -90,6 +142,12 @@ enum DesktopBackendEnvironment {
     return ""
   }
 
+  static func localDaemonBaseURL(
+    environmentValue: String? = currentEnvironmentValue("OMI_LOCAL_DAEMON_URL")
+  ) -> String {
+    normalizedURL(environmentValue) ?? defaultLocalDaemonURL
+  }
+
   static func applyReleaseChannelDefaults() {
     guard shouldUseDevelopmentBackends else { return }
 
@@ -108,6 +166,10 @@ enum DesktopBackendEnvironment {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return trimmed.hasSuffix("/") ? trimmed : trimmed + "/"
+  }
+
+  private static func normalizedMode(_ raw: String?) -> String {
+    raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "cloud"
   }
 
   private static func currentEnvironmentValue(_ key: String) -> String? {

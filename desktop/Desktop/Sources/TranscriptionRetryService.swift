@@ -115,7 +115,7 @@ class TranscriptionRetryService {
     /// Process the retry queue (called periodically by timer)
     private func processRetryQueue() async {
         // Skip if user is signed out (tokens are cleared)
-        guard await AuthState.shared.isSignedIn else { return }
+        guard await APIClient.shared.isUsingLocalDaemon || await AuthState.shared.isSignedIn else { return }
         guard !isProcessing else {
             log("TranscriptionRetryService: Already processing, skipping")
             return
@@ -214,6 +214,11 @@ class TranscriptionRetryService {
         log("TranscriptionRetryService: Reconciling session \(sessionId) (retryCount: \(session.retryCount))")
 
         do {
+            if await APIClient.shared.isUsingLocalDaemon {
+                try await uploadSessionToLocalDaemon(session, sessionId: sessionId)
+                return
+            }
+
             // Check if backend already has a conversation for this time window
             let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
             if let existing = try? await APIClient.shared.getConversations(
@@ -251,6 +256,34 @@ class TranscriptionRetryService {
         } catch {
             logError("TranscriptionRetryService: Reconciliation failed for session \(sessionId)", error: error)
         }
+    }
+
+    private func uploadSessionToLocalDaemon(_ session: TranscriptionSessionRecord, sessionId: Int64) async throws {
+        try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
+        let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
+        guard !segments.isEmpty else {
+            try await TranscriptionStorage.shared.markSessionFailed(
+                id: sessionId, error: "No transcript segments to upload to local daemon")
+            return
+        }
+
+        let conversation = try await APIClient.shared.createLocalDaemonConversation(
+            sessionId: "desktop-\(sessionId)",
+            title: session.title,
+            overview: session.overview,
+            startedAt: session.startedAt
+        )
+
+        for segment in segments {
+            try await APIClient.shared.appendLocalDaemonTranscriptSegment(
+                conversationId: conversation.id,
+                segment: segment
+            )
+        }
+
+        try await APIClient.shared.finalizeLocalDaemonTranscript(conversationId: conversation.id)
+        try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
+        log("TranscriptionRetryService: Session \(sessionId) stored in local daemon as \(conversation.id)")
     }
 
 }
