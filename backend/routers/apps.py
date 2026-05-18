@@ -758,27 +758,30 @@ def update_app(
         )
         existing_ext = app.get('external_integration') or {}
         endpoints_to_check = []
+        seen_urls = set()
         webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, True))
+            endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
+            seen_urls.add(webhook_url)
         mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
         if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, False))
+            endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
+            seen_urls.add(mcp_url)
         chat_tools = update_dict.get('chat_tools') or app.get('chat_tools') or []
-        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
         for tool in chat_tools:
             ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep, True))
-                seen_hosts.add(urlparse(ep).netloc)
+            method = tool.get('method', 'POST') if isinstance(tool, dict) else getattr(tool, 'method', 'POST')
+            if ep and ep not in seen_urls:
+                endpoints_to_check.append(('chat tool', ep, method.upper(), True))
+                seen_urls.add(ep)
         if not endpoints_to_check:
             raise HTTPException(
                 status_code=400,
                 detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
             )
-        for label, url, require_2xx in endpoints_to_check:
+        for label, url, method, require_2xx in endpoints_to_check:
             try:
-                resp = httpx.post(url, json={}, timeout=10.0, follow_redirects=True)
+                resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
                 if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
                     raise HTTPException(
                         status_code=400,
