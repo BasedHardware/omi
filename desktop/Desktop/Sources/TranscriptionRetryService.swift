@@ -115,7 +115,9 @@ class TranscriptionRetryService {
     /// Process the retry queue (called periodically by timer)
     private func processRetryQueue() async {
         // Skip if user is signed out (tokens are cleared)
-        guard await APIClient.shared.isUsingLocalDaemon || await AuthState.shared.isSignedIn else { return }
+        let usingLocalDaemon = await APIClient.shared.isUsingLocalDaemon
+        let isSignedIn = await MainActor.run { AuthState.shared.isSignedIn }
+        guard usingLocalDaemon || isSignedIn else { return }
         guard !isProcessing else {
             log("TranscriptionRetryService: Already processing, skipping")
             return

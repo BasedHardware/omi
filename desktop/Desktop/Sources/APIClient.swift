@@ -1564,56 +1564,6 @@ struct ServerMemory: Codable, Identifiable {
     headline = try container.decodeIfPresent(String.self, forKey: .headline)
   }
 
-  init(
-    id: String,
-    content: String,
-    category: MemoryCategory,
-    createdAt: Date,
-    updatedAt: Date,
-    conversationId: String? = nil,
-    reviewed: Bool = false,
-    userReview: Bool? = nil,
-    visibility: String = "private",
-    manuallyAdded: Bool = false,
-    scoring: String? = nil,
-    source: String? = nil,
-    confidence: Double? = nil,
-    sourceApp: String? = nil,
-    contextSummary: String? = nil,
-    isRead: Bool = false,
-    isDismissed: Bool = false,
-    tags: [String] = [],
-    reasoning: String? = nil,
-    currentActivity: String? = nil,
-    inputDeviceName: String? = nil,
-    windowTitle: String? = nil,
-    headline: String? = nil
-  ) {
-    self.id = id
-    self.content = content
-    self.category = category
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-    self.conversationId = conversationId
-    self.reviewed = reviewed
-    self.userReview = userReview
-    self.visibility = visibility
-    self.manuallyAdded = manuallyAdded
-    self.scoring = scoring
-    self.source = source
-    self.confidence = confidence
-    self.sourceApp = sourceApp
-    self.contextSummary = contextSummary
-    self.isRead = isRead
-    self.isDismissed = isDismissed
-    self.tags = tags
-    self.reasoning = reasoning
-    self.currentActivity = currentActivity
-    self.inputDeviceName = inputDeviceName
-    self.windowTitle = windowTitle
-    self.headline = headline
-  }
-
   var isPublic: Bool {
     visibility == "public"
   }
@@ -1981,9 +1931,21 @@ private struct LocalMemory: Decodable {
       createdAt: createdAt,
       updatedAt: updatedAt,
       conversationId: conversationId,
+      reviewed: false,
+      userReview: nil,
       visibility: "private",
       manuallyAdded: true,
-      source: "local_daemon"
+      scoring: nil,
+      source: "local_daemon",
+      confidence: nil,
+      sourceApp: nil,
+      contextSummary: nil,
+      isRead: false,
+      isDismissed: false,
+      tags: [],
+      reasoning: nil,
+      currentActivity: nil,
+      inputDeviceName: nil
     )
   }
 }
