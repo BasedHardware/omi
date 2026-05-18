@@ -202,6 +202,24 @@ struct ConversationsPage: View {
           .scaledFont(size: 18, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
+        if isLocalDaemonMode {
+          HStack(spacing: 5) {
+            Circle()
+              .fill(OmiColors.success)
+              .frame(width: 6, height: 6)
+            Text("Local")
+              .scaledFont(size: 11, weight: .semibold)
+          }
+          .foregroundColor(OmiColors.success)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 4)
+          .background(
+            Capsule()
+              .fill(OmiColors.success.opacity(0.12))
+          )
+          .help("Using local daemon mode")
+        }
+
         Spacer()
 
         quickNoteButton

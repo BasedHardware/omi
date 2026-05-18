@@ -16,16 +16,52 @@ conversation storage, transcript ingestion, processing fallback, and search.
 No Firebase, Omi Python backend, Rust cloud backend, Redis, Firestore, GCS,
 pusher, or agent-proxy credentials are required for the local daemon path.
 
-## Start The Local Daemon
+## Primary Desktop Launch
 
-From the repo root:
+For user-test runs, use one command from the repo root. This launches the
+development app bundle only (`Omi Dev.app` / `com.omi.desktop-dev`), checks the
+local daemon health endpoint, starts `desktop/local-backend` if needed, and
+keeps Omi-hosted backend URLs deliberately invalid so accidental cloud routing
+is obvious:
 
 ```bash
-cd desktop/local-backend
-cargo run
+cd desktop
+OMI_DESKTOP_BACKEND_MODE=local \
+OMI_LOCAL_DAEMON_SUPERVISE=1 \
+OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765 \
+OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
+OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
+./run.sh
 ```
 
-The daemon listens on `127.0.0.1:8765` by default. To keep test data isolated:
+Required environment:
+
+- `OMI_DESKTOP_BACKEND_MODE=local` selects the local daemon profile.
+- `OMI_LOCAL_DAEMON_SUPERVISE=1` lets `desktop/run.sh` start the daemon when
+  `/health` is not already reachable.
+
+Recommended test-boundary environment:
+
+- `OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765` makes the daemon URL explicit.
+- `OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001` makes accidental Python
+  backend calls fail locally.
+- `OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002` makes accidental cloud Rust
+  backend calls fail locally.
+
+Optional daemon environment:
+
+- `OMI_LOCAL_BACKEND_DATA_DIR=/tmp/omi-local-mvp` isolates SQLite data.
+- `OMI_LOCAL_BACKEND_PORT=<port>` chooses a free loopback port. Keep
+  `OMI_LOCAL_DAEMON_URL` in sync with it.
+- `OMI_LOCAL_DAEMON_LOG=/tmp/omi-local-backend-dev.log` changes the supervised
+  daemon log path.
+
+Do not use this launcher to manage `/Applications/omi.app`.
+
+## Manual Daemon Launch
+
+For API-only testing or when you do not want `desktop/run.sh` to supervise the
+daemon, start it manually from the repo root:
 
 ```bash
 cd desktop/local-backend
@@ -49,29 +85,6 @@ Expected signals:
 If health does not respond, check that the daemon terminal is still running and
 that no other process is already using the selected port.
 
-## Launch Desktop In Local Daemon Mode
-
-For developer/user-test runs, the desktop launcher can supervise the local
-daemon. It checks `/health`, starts `desktop/local-backend` only if the daemon
-is unreachable, and stops only the daemon process it started when the launcher
-exits:
-
-```bash
-cd desktop
-OMI_DESKTOP_BACKEND_MODE=local \
-OMI_LOCAL_DAEMON_SUPERVISE=1 \
-OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765 \
-OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
-OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
-./run.sh
-```
-
-The invalid cloud URLs make accidental cloud routing obvious during a user test.
-Local conversation, transcript, memory, action item, settings, and search flows
-should use `OMI_LOCAL_DAEMON_URL`. The launcher path targets the development app
-bundle only (`Omi Dev.app` / `com.omi.desktop-dev`) and must not be used to
-manage `/Applications/omi.app`.
-
 To keep using a manually managed daemon, start it first and launch the desktop
 app with the same local-mode environment:
 
@@ -83,6 +96,17 @@ OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
 OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
 ./run.sh
 ```
+
+## Confirm Local Mode In The App
+
+The Conversations header shows a `Local` chip when the app is using local daemon
+mode. Settings → About also includes a Backend Mode card with the selected
+daemon URL, auth requirement, `/health` result, data directory, and whether
+processing is using deterministic fallback or an OpenAI-compatible provider.
+
+Cloud-only folder and public share controls are hidden in local mode. Merge and
+folder API calls fail locally before building an Omi-hosted request if they are
+reached from another surface.
 
 ## Import Transcript Data
 
@@ -172,6 +196,42 @@ curl http://127.0.0.1:8765/v1/processing-jobs/status
 After finalization, the conversation status should become `processed`. Search
 results should include the imported conversation when the query appears in the
 title, overview, or transcript text.
+
+## Local Provider Configuration
+
+Processing works without provider keys by using deterministic fallback. To force
+that path, clear provider settings:
+
+```bash
+curl -X PUT http://127.0.0.1:8765/v1/settings \
+  -H 'content-type: application/json' \
+  -d '{"ai_provider": null, "provider": null}'
+```
+
+To test a direct OpenAI-compatible provider without editing source code, store
+the provider configuration in the local daemon settings:
+
+```bash
+curl -X PUT http://127.0.0.1:8765/v1/settings \
+  -H 'content-type: application/json' \
+  -d '{
+    "ai_provider": {
+      "kind": "openai_compatible",
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "api_key": "'"$OPENAI_API_KEY"'"
+    }
+  }'
+```
+
+Inspect the active settings:
+
+```bash
+curl http://127.0.0.1:8765/v1/settings
+```
+
+Provider keys remain in the local daemon SQLite settings table and are sent
+directly to the configured provider, not to Omi-hosted backend services.
 
 ## What Works Without Omi-Hosted Services
 

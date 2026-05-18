@@ -224,6 +224,10 @@ struct SettingsContentView: View {
 
   // Loading states
   @State private var isLoadingSettings: Bool = false
+  @State private var backendHealth: LocalDaemonHealth?
+  @State private var backendSettings: [LocalDaemonSetting] = []
+  @State private var backendStatusError: String?
+  @State private var isLoadingBackendStatus: Bool = false
   @State private var userSubscription: UserSubscriptionResponse?
   @State private var isLoadingSubscription: Bool = false
   @State private var subscriptionError: String?
@@ -479,6 +483,7 @@ struct SettingsContentView: View {
         selectedSection = .advanced
       }
       loadBackendSettings()
+      refreshSelectedBackendStatus()
       loadSubscriptionInfo()
       // Sync transcription state with appState
       isTranscribing = appState.isTranscribing
@@ -1874,18 +1879,23 @@ struct SettingsContentView: View {
       settingsCard(settingId: "planusage.overage") {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 10) {
-            Image(systemName: info.excessQuestions > 0
-              ? "dollarsign.circle.fill"
-              : "checkmark.circle.fill")
-              .scaledFont(size: 18)
-              .foregroundColor(info.excessQuestions > 0
+            Image(
+              systemName: info.excessQuestions > 0
+                ? "dollarsign.circle.fill"
+                : "checkmark.circle.fill"
+            )
+            .scaledFont(size: 18)
+            .foregroundColor(
+              info.excessQuestions > 0
                 ? OmiColors.warning
                 : OmiColors.success)
-            Text(info.excessQuestions > 0
-              ? "Usage-based overage"
-              : "No overage yet this cycle")
-              .scaledFont(size: 14, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              info.excessQuestions > 0
+                ? "Usage-based overage"
+                : "No overage yet this cycle"
+            )
+            .scaledFont(size: 14, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
             Spacer()
             if info.excessQuestions > 0 {
               Text(String(format: "$%.2f", info.overageUsd))
@@ -1980,7 +1990,9 @@ struct SettingsContentView: View {
     .frame(minWidth: 440, minHeight: 360)
   }
 
-  private func overageExplainerRow(_ label: String, value: String, emphasized: Bool = false) -> some View {
+  private func overageExplainerRow(_ label: String, value: String, emphasized: Bool = false)
+    -> some View
+  {
     HStack {
       Text(label)
         .scaledFont(size: 12)
@@ -2072,13 +2084,17 @@ struct SettingsContentView: View {
             // only show the hard "upgrade" copy on Free and other hard-capped
             // plans.
             if let info = overageInfo, info.isOveragePlan {
-              Text("You're past your included limit — extra usage is billed as overage at end of cycle.")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.warning)
+              Text(
+                "You're past your included limit — extra usage is billed as overage at end of cycle."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
             } else {
-              Text("You've reached this month's limit. Upgrade your plan or wait until the next reset.")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.warning)
+              Text(
+                "You've reached this month's limit. Upgrade your plan or wait until the next reset."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
             }
           } else if quota.percent >= 80.0 {
             Text("You're close to your monthly limit.")
@@ -3095,9 +3111,11 @@ struct SettingsContentView: View {
             Text("Chat Prompt Lab")
               .scaledFont(size: 15, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Text("Iterate on chat system prompts with real questions, AI grading, and production ratings")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+            Text(
+              "Iterate on chat system prompts with real questions, AI grading, and production ratings"
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
           }
           Spacer()
           Button("Open") {
@@ -5751,6 +5769,8 @@ struct SettingsContentView: View {
 
   private var aboutSection: some View {
     VStack(spacing: 20) {
+      backendStatusCard
+
       settingsCard(settingId: "about.version") {
         VStack(spacing: 16) {
           // App info
@@ -5957,6 +5977,120 @@ struct SettingsContentView: View {
     }
   }
 
+  private var backendStatusCard: some View {
+    let target = DesktopBackendEnvironment.selectedBackendTarget
+    return settingsCard(settingId: "about.backend") {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(spacing: 10) {
+          Circle()
+            .fill(backendStatusColor(for: target.mode))
+            .frame(width: 10, height: 10)
+
+          VStack(alignment: .leading, spacing: 2) {
+            Text(backendModeTitle(for: target.mode))
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text(target.baseURL)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .textSelection(.enabled)
+          }
+
+          Spacer()
+
+          if isLoadingBackendStatus {
+            ProgressView()
+              .controlSize(.small)
+          } else {
+            Button("Refresh") {
+              refreshSelectedBackendStatus()
+            }
+            .buttonStyle(.bordered)
+          }
+        }
+
+        Divider()
+          .background(OmiColors.backgroundQuaternary)
+
+        VStack(spacing: 8) {
+          backendStatusRow(
+            title: "Authentication",
+            value: target.requiresAuth ? "Firebase token required" : "No auth for loopback MVP"
+          )
+
+          if target.mode == .localDaemon {
+            backendStatusRow(
+              title: "Health",
+              value: backendHealth.map { "\($0.service) \($0.version)" }
+                ?? backendStatusError
+                ?? "Not checked"
+            )
+
+            backendStatusRow(
+              title: "Data Directory",
+              value: backendHealth?.dataDir ?? "Unavailable until /health responds"
+            )
+
+            backendStatusRow(
+              title: "Processing Provider",
+              value: localProcessingProviderStatus
+            )
+          } else {
+            backendStatusRow(title: "Mode", value: "Omi-hosted backend services enabled")
+          }
+        }
+      }
+    }
+  }
+
+  private var localProcessingProviderStatus: String {
+    let providerSetting = backendSettings.first { $0.key == "ai_provider" || $0.key == "provider" }
+    guard let providerSetting else {
+      return "Deterministic fallback"
+    }
+    if providerSetting.valueJson.contains("\"api_key\"")
+      || providerSetting.valueJson.contains("\"key\"")
+    {
+      return "OpenAI-compatible provider configured"
+    }
+    return "Deterministic fallback"
+  }
+
+  private func backendStatusRow(title: String, value: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Text(title)
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+        .frame(width: 130, alignment: .leading)
+      Text(value)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textSecondary)
+        .textSelection(.enabled)
+      Spacer()
+    }
+  }
+
+  private func backendModeTitle(for mode: DesktopBackendEnvironment.BackendMode) -> String {
+    switch mode {
+    case .cloud:
+      return "Backend Mode: Cloud"
+    case .localDaemon:
+      return "Backend Mode: Local Daemon"
+    case .customRemote:
+      return "Backend Mode: Custom Remote"
+    }
+  }
+
+  private func backendStatusColor(for mode: DesktopBackendEnvironment.BackendMode) -> Color {
+    switch mode {
+    case .localDaemon:
+      return backendHealth == nil ? OmiColors.warning : OmiColors.success
+    case .cloud, .customRemote:
+      return OmiColors.purplePrimary
+    }
+  }
+
   // MARK: - Helper Views
 
   private func fontShortcutRow(label: String, keys: String) -> some View {
@@ -6125,7 +6259,8 @@ struct SettingsContentView: View {
     // on the right. Hide the user's current plan — they already see it above.
     // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
     let order = ["unlimited": 0, "operator": 1, "architect": 2]
-    return mergedPlanCatalog
+    return
+      mergedPlanCatalog
       .filter { !isCurrentSubscriptionPlan($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
@@ -6171,7 +6306,7 @@ struct SettingsContentView: View {
   /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
   private func isCurrentSubscriptionOperator() -> Bool {
     guard let subscription = userSubscription?.subscription,
-          let currentPriceId = subscription.currentPriceId
+      let currentPriceId = subscription.currentPriceId
     else { return false }
     for plan in subscriptionPlansForDisplay {
       guard plan.title == "Operator" else { continue }
@@ -6805,7 +6940,8 @@ struct SettingsContentView: View {
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
           // Mirror to UserDefaults so NotificationService can throttle without a backend roundtrip.
-          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          UserDefaults.standard.set(
+            notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -6840,6 +6976,43 @@ struct SettingsContentView: View {
     }
   }
 
+  private func refreshSelectedBackendStatus() {
+    guard !isLoadingBackendStatus else { return }
+    isLoadingBackendStatus = true
+    backendStatusError = nil
+
+    Task {
+      let target = DesktopBackendEnvironment.selectedBackendTarget
+      guard target.mode == .localDaemon else {
+        await MainActor.run {
+          backendHealth = nil
+          backendSettings = []
+          isLoadingBackendStatus = false
+        }
+        return
+      }
+
+      do {
+        async let health = APIClient.shared.checkSelectedBackendHealth()
+        async let settings = APIClient.shared.getSelectedBackendSettings()
+        let (resolvedHealth, resolvedSettings) = try await (health, settings)
+        await MainActor.run {
+          backendHealth = resolvedHealth
+          backendSettings = resolvedSettings
+          backendStatusError = nil
+          isLoadingBackendStatus = false
+        }
+      } catch {
+        await MainActor.run {
+          backendHealth = nil
+          backendSettings = []
+          backendStatusError = error.localizedDescription
+          isLoadingBackendStatus = false
+        }
+      }
+    }
+  }
+
   private func loadSubscriptionInfo() {
     guard !isLoadingSubscription else { return }
     isLoadingSubscription = true
@@ -6864,10 +7037,13 @@ struct SettingsContentView: View {
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
           if subscription.subscription.plan != .basic,
-             subscription.subscription.status == .active,
-             AppState.current?.isPaywalled == true {
+            subscription.subscription.status == .active,
+            AppState.current?.isPaywalled == true
+          {
             AppState.current?.isPaywalled = false
-            log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+            log(
+              "Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active"
+            )
           }
           isLoadingSubscription = false
         }
@@ -6923,8 +7099,8 @@ struct SettingsContentView: View {
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
-       let subscription = userSubscription?.subscription,
-       !subscription.cancelAtPeriodEnd
+      let subscription = userSubscription?.subscription,
+      !subscription.cancelAtPeriodEnd
     {
       Task {
         do {

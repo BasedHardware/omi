@@ -10,6 +10,21 @@ dependencies.
 For a complete user-test walkthrough, including desktop launch environment and
 transcript import, see `docs/local-mvp-runbook.md`.
 
+Primary desktop local-mode user-test command:
+
+```bash
+cd desktop
+OMI_DESKTOP_BACKEND_MODE=local \
+OMI_LOCAL_DAEMON_SUPERVISE=1 \
+OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765 \
+OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001 \
+OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
+./run.sh
+```
+
+This targets only the development app bundle and supervises the local daemon if
+`/health` is not already reachable.
+
 ```bash
 cd desktop/local-backend
 cargo run
@@ -103,6 +118,10 @@ desktop/local-backend/tools/import_transcript.py /path/to/transcript.txt
 The helper creates a conversation, appends transcript segments, finalizes
 ingestion, waits for local processing, verifies search, and prints read/search
 commands for the imported conversation.
+
+Local processing uses deterministic fallback unless an OpenAI-compatible
+provider is configured through `PUT /v1/settings`; see the runbook for set and
+clear commands.
 
 ## Architecture And E2E Validation
 
