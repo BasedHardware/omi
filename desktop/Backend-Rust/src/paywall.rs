@@ -161,3 +161,93 @@ impl PaywallChecker {
 /// without owning `AppState`.
 #[derive(Clone)]
 pub struct PaywallCheckerExt(pub Arc<PaywallChecker>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers_with(pairs: &[(&str, &str)]) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        for (k, v) in pairs {
+            map.insert(
+                axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                v.parse().unwrap(),
+            );
+        }
+        map
+    }
+
+    fn all_byok_headers() -> HeaderMap {
+        headers_with(&[
+            ("x-byok-openai", "sk-o"),
+            ("x-byok-anthropic", "sk-a"),
+            ("x-byok-gemini", "sk-g"),
+            ("x-byok-deepgram", "sk-d"),
+        ])
+    }
+
+    /// Verify that cache uses different keys for BYOK vs non-BYOK requests.
+    /// A cached paywalled=true from a non-BYOK request must not block a
+    /// subsequent BYOK request (which should get its own cache slot).
+    #[tokio::test]
+    async fn cache_partitioned_by_byok_presence() {
+        // Use a nonexistent server — all Python calls will fail open (= false).
+        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
+
+        let no_byok = HeaderMap::new();
+        let with_byok = all_byok_headers();
+
+        // First call: non-BYOK → fails open → cached as "user123" = false
+        let result1 = checker.is_paywalled("user123", "token", &no_byok).await;
+        assert!(!result1, "should fail open");
+
+        // Second call: BYOK → should NOT hit the non-BYOK cache entry
+        // (it should make its own call, also failing open, cached as "user123:byok")
+        let result2 = checker.is_paywalled("user123", "token", &with_byok).await;
+        assert!(!result2, "BYOK should fail open independently");
+
+        // Verify both cache entries exist with different keys
+        let cache = checker.cache.lock().await;
+        assert!(cache.contains_key("user123"), "non-BYOK cache key");
+        assert!(cache.contains_key("user123:byok"), "BYOK cache key");
+        assert_eq!(cache.len(), 2, "should have separate cache entries");
+    }
+
+    /// Verify that partial BYOK headers (missing one) use the non-BYOK cache path.
+    #[tokio::test]
+    async fn partial_byok_uses_non_byok_cache() {
+        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
+
+        // Missing deepgram → not all 4 → should use "uid" cache key
+        let partial = headers_with(&[
+            ("x-byok-openai", "sk-o"),
+            ("x-byok-anthropic", "sk-a"),
+            ("x-byok-gemini", "sk-g"),
+        ]);
+
+        checker.is_paywalled("user456", "token", &partial).await;
+
+        let cache = checker.cache.lock().await;
+        assert!(cache.contains_key("user456"), "partial BYOK should use non-BYOK key");
+        assert!(!cache.contains_key("user456:byok"), "partial BYOK should NOT use BYOK key");
+    }
+
+    /// Verify that empty BYOK header values are not treated as present.
+    #[tokio::test]
+    async fn empty_byok_headers_use_non_byok_cache() {
+        let checker = PaywallChecker::new("http://127.0.0.1:1".to_string());
+
+        let empty_value = headers_with(&[
+            ("x-byok-openai", "sk-o"),
+            ("x-byok-anthropic", ""),
+            ("x-byok-gemini", "sk-g"),
+            ("x-byok-deepgram", "sk-d"),
+        ]);
+
+        checker.is_paywalled("user789", "token", &empty_value).await;
+
+        let cache = checker.cache.lock().await;
+        assert!(cache.contains_key("user789"), "empty BYOK value → non-BYOK key");
+        assert!(!cache.contains_key("user789:byok"));
+    }
+}
