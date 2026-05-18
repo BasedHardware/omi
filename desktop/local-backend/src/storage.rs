@@ -532,6 +532,16 @@ impl ConversationRepository {
         collect_rows(rows)
     }
 
+    pub fn count(&self) -> Result<i64> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            "SELECT COUNT(*) FROM conversations WHERE deleted_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .context("failed to count conversations")
+    }
+
     pub fn update(&self, id: &str, update: UpdateConversation) -> Result<Option<Conversation>> {
         let Some(mut conversation) = self.get(id)? else {
             return Ok(None);

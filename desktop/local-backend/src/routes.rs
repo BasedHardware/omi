@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
             "/v1/conversations",
             get(list_conversations).post(create_conversation),
         )
+        .route("/v1/conversations/count", get(count_conversations))
         .route(
             "/v1/conversations/:id",
             get(get_conversation)
@@ -159,6 +160,15 @@ async fn list_conversations(
         .list(limit_or_default(query.limit))
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "conversations": conversations })))
+}
+
+async fn count_conversations(State(state): State<AppState>) -> ApiResult<Value> {
+    let count = state
+        .store
+        .conversations()
+        .count()
+        .map_err(ApiError::internal)?;
+    Ok(Json(json!({ "count": count })))
 }
 
 #[derive(Deserialize)]

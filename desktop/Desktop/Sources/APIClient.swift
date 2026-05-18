@@ -594,14 +594,18 @@ extension APIClient {
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing]
   ) async throws -> Int {
+    struct CountResponse: Decodable {
+      let count: Int
+    }
+
     let target = mvpBackendTarget
     if target.mode == .localDaemon {
-      let response: LocalConversationsResponse = try await get(
-        "v1/conversations?limit=10000",
+      let response: CountResponse = try await get(
+        "v1/conversations/count",
         requireAuth: false,
         customBaseURL: target.baseURL
       )
-      return response.conversations.count
+      return response.count
     }
 
     if let cache = conversationsCountCache, let time = conversationsCountCacheTime,
@@ -620,10 +624,6 @@ extension APIClient {
     }
 
     let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
-
-    struct CountResponse: Decodable {
-      let count: Int
-    }
 
     let response: CountResponse = try await get(endpoint)
     conversationsCountCache = response.count
@@ -2188,9 +2188,10 @@ extension APIClient {
         let title: String?
         let description: String?
         let dueAt: String?
+        let status: String?
 
         enum CodingKeys: String, CodingKey {
-          case title, description
+          case title, description, status
           case dueAt = "due_at"
         }
       }
@@ -2199,7 +2200,8 @@ extension APIClient {
         body: LocalUpdateRequest(
           title: description,
           description: description,
-          dueAt: dueAt.map { formatter.string(from: $0) }
+          dueAt: dueAt.map { formatter.string(from: $0) },
+          status: completed.map { $0 ? "completed" : "open" }
         ),
         requireAuth: false,
         customBaseURL: target.baseURL
