@@ -1350,7 +1350,25 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     return paths
 
 
-_SYNC_PIPELINE_SEMAPHORE = asyncio.Semaphore(16)
+_sync_semaphores: dict[tuple[int, str], asyncio.Semaphore] = {}
+
+
+def _get_sync_pipeline_semaphore() -> asyncio.Semaphore:
+    """Return a loop-scoped semaphore capping concurrent sync pipelines.
+
+    Semaphores are event-loop-bound. Using the same pattern as http_client.py
+    to key by (loop_id, name) prevents RuntimeError when multiple loops exist.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        key = (id(loop), 'sync_pipeline')
+    except RuntimeError:
+        return asyncio.Semaphore(16)
+    if key not in _sync_semaphores:
+        if len(_sync_semaphores) > 10:
+            _sync_semaphores.clear()
+        _sync_semaphores[key] = asyncio.Semaphore(16)
+    return _sync_semaphores[key]
 
 
 async def _run_full_pipeline_background_async(
@@ -1368,7 +1386,7 @@ async def _run_full_pipeline_background_async(
     thread pools via run_blocking(). The coordinator itself holds zero thread pool
     slots — only leaf operations use threads, and only for their actual duration.
     """
-    async with _SYNC_PIPELINE_SEMAPHORE:
+    async with _get_sync_pipeline_semaphore():
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
