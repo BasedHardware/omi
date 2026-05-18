@@ -8,13 +8,14 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Router,
 };
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
+use crate::byok;
 use crate::AppState;
 
 use super::rate_limit::{self, RateDecision};
@@ -80,6 +81,7 @@ impl IntoResponse for ProxyError {
 async fn gemini_proxy(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
+    headers: HeaderMap,
     Path(path): Path<String>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
@@ -108,24 +110,77 @@ async fn gemini_proxy(
         ProxyError::Status(StatusCode::BAD_REQUEST)
     })?;
 
-    // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
-    if decision == RateDecision::Reject {
-        tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
-        return Err(ProxyError::RateLimited);
+    // BYOK: check for user-provided Gemini API key (issue #7357).
+    // When present, use AI Studio with the user's key, skip Vertex AI routing
+    // and server-key rate limiting (the user pays their own bill).
+    let byok_gemini_key = byok::get_byok_key(&headers, byok::HEADER_GEMINI);
+    let is_byok = byok_gemini_key.is_some();
+
+    // Rate limit check — skip when using BYOK key
+    if !is_byok {
+        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        if decision == RateDecision::Reject {
+            tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
+            return Err(ProxyError::RateLimited);
+        }
+
+        // Apply model degradation if needed
+        let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+        if effective_path != path {
+            tracing::info!(
+                "gemini_proxy: degraded uid={} {} -> {}",
+                user.uid,
+                path,
+                effective_path
+            );
+        }
+
+        // Non-BYOK path: use server key with Vertex AI / AI Studio routing
+        return gemini_proxy_server_key(
+            &state, &user, &effective_path, action, model, &sanitized_body,
+        )
+        .await;
     }
 
-    // Apply model degradation if needed
-    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
-    if effective_path != path {
-        tracing::info!(
-            "gemini_proxy: degraded uid={} {} -> {}",
-            user.uid,
-            path,
-            effective_path
-        );
-    }
+    // BYOK path: always use AI Studio with the user's API key.
+    // Vertex AI requires our service account — can't mix with user's API key.
+    // Skip Vertex-specific transforms (embedContent→predict) since AI Studio
+    // handles embedContent natively.
+    let byok_key = byok_gemini_key.unwrap();
+    tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
+    let url = build_gemini_url(&path, byok_key);
+    let upstream = reqwest::Client::new()
+        .post(&url)
+        .header("content-type", "application/json")
+        .body(sanitized_body)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!("gemini_proxy: BYOK upstream request failed: {}", e);
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
+        })?;
+
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = upstream.bytes().await.map_err(|e| {
+        tracing::error!("gemini_proxy: failed to read upstream body: {}", e);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    })?;
+
+    Ok((status, bytes).into_response())
+}
+
+/// Non-BYOK Gemini proxy: uses server key with Vertex AI / AI Studio routing,
+/// rate limiting, model degradation, and body transforms.
+async fn gemini_proxy_server_key(
+    state: &AppState,
+    user: &AuthUser,
+    effective_path: &str,
+    action: &str,
+    model: &str,
+    sanitized_body: &[u8],
+) -> Result<Response, ProxyError> {
     // Resolve provider route: single dispatch point for all provider-specific behavior.
     // Returns provider, action override, and body transforms needed.
     use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
@@ -133,12 +188,12 @@ async fn gemini_proxy(
 
     // Apply request body transform if needed (e.g., embedContent → predict format)
     let request_body = match route.request_transform {
-        BodyTransform::EmbedToPredict => transform_embed_request_to_vertex(&sanitized_body)
+        BodyTransform::EmbedToPredict => transform_embed_request_to_vertex(sanitized_body)
             .map_err(|e| {
                 tracing::warn!("gemini_proxy: embed body transform failed: {}", e);
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?,
-        BodyTransform::None => sanitized_body.clone(),
+        BodyTransform::None => sanitized_body.to_vec(),
     };
 
     // Apply Vertex action override (e.g., :embedContent → :predict)
@@ -171,11 +226,11 @@ async fn gemini_proxy(
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
                         tracing::warn!("gemini_proxy: Vertex AI token failed, falling back to API key: {}", e);
-                        let url = build_gemini_url(&effective_path, gemini_key);
+                        let url = build_gemini_url(effective_path, gemini_key);
                         reqwest::Client::new()
                             .post(&url)
                             .header("content-type", "application/json")
-                            .body(sanitized_body.clone())
+                            .body(sanitized_body.to_vec())
                             .send()
                             .await
                     } else {
@@ -188,11 +243,11 @@ async fn gemini_proxy(
             // Vertex AI requested but not configured → AI Studio
             let gemini_key = state.config.gemini_api_key.as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-            let url = build_gemini_url(&effective_path, gemini_key);
+            let url = build_gemini_url(effective_path, gemini_key);
             reqwest::Client::new()
                 .post(&url)
                 .header("content-type", "application/json")
-                .body(sanitized_body.clone())
+                .body(sanitized_body.to_vec())
                 .send()
                 .await
         }
@@ -200,11 +255,11 @@ async fn gemini_proxy(
         // AI Studio route
         let gemini_key = state.config.gemini_api_key.as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-        let url = build_gemini_url(&effective_path, gemini_key);
+        let url = build_gemini_url(effective_path, gemini_key);
         reqwest::Client::new()
             .post(&url)
             .header("content-type", "application/json")
-            .body(sanitized_body.clone())
+            .body(sanitized_body.to_vec())
             .send()
             .await
     };
@@ -245,6 +300,7 @@ async fn gemini_proxy(
 async fn gemini_stream_proxy(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
+    headers: HeaderMap,
     Path(path): Path<String>,
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
@@ -273,24 +329,71 @@ async fn gemini_stream_proxy(
         ProxyError::Status(StatusCode::BAD_REQUEST)
     })?;
 
-    // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
-    if decision == RateDecision::Reject {
-        tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
-        return Err(ProxyError::RateLimited);
+    // BYOK: check for user-provided Gemini API key (issue #7357).
+    let byok_gemini_key = byok::get_byok_key(&headers, byok::HEADER_GEMINI);
+    let is_byok = byok_gemini_key.is_some();
+
+    // Rate limit check — skip when using BYOK key
+    if !is_byok {
+        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        if decision == RateDecision::Reject {
+            tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
+            return Err(ProxyError::RateLimited);
+        }
+
+        // Apply model degradation if needed
+        let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+        if effective_path != path {
+            tracing::info!(
+                "gemini_stream_proxy: degraded uid={} {} -> {}",
+                user.uid,
+                path,
+                effective_path
+            );
+        }
+
+        // Non-BYOK: server key with Vertex AI / AI Studio routing
+        return gemini_stream_server_key(&state, &effective_path, action, model, sanitized_body, &query).await;
     }
 
-    // Apply model degradation if needed
-    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
-    if effective_path != path {
-        tracing::info!(
-            "gemini_stream_proxy: degraded uid={} {} -> {}",
-            user.uid,
-            path,
-            effective_path
-        );
-    }
+    // BYOK path: always use AI Studio with user's key, skip Vertex AI.
+    let byok_key = byok_gemini_key.unwrap();
+    tracing::info!("gemini_stream_proxy: using BYOK Gemini key for uid={}", user.uid);
 
+    let upstream_url = build_gemini_stream_url(&path, byok_key, &query);
+    let upstream = reqwest::Client::new()
+        .post(&upstream_url)
+        .header("content-type", "application/json")
+        .body(sanitized_body)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!("gemini_stream_proxy: BYOK upstream request failed: {}", e);
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
+        })?;
+
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+
+    let stream = upstream.bytes_stream();
+    let body = axum::body::Body::from_stream(stream);
+
+    Ok(Response::builder()
+        .status(status)
+        .header("content-type", "text/event-stream")
+        .body(body)
+        .unwrap())
+}
+
+/// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
+async fn gemini_stream_server_key(
+    state: &AppState,
+    effective_path: &str,
+    action: &str,
+    model: &str,
+    sanitized_body: Vec<u8>,
+    query: &std::collections::HashMap<String, String>,
+) -> Result<Response, ProxyError> {
     // Resolve provider route (same dispatch as non-streaming proxy)
     use crate::llm::model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
@@ -298,12 +401,12 @@ async fn gemini_stream_proxy(
     // Build and send request: Vertex AI or AI Studio
     let upstream = if route.provider == Provider::VertexAi {
         if let Some(ref vertex) = state.vertex_auth {
-            let mut url = vertex.build_url_from_path(&effective_path).ok_or_else(|| {
+            let mut url = vertex.build_url_from_path(effective_path).ok_or_else(|| {
                 tracing::error!("gemini_stream_proxy: failed to parse path for Vertex AI: {}", effective_path);
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?;
             // Append extra query params (e.g., alt=sse) for streaming
-            for (k, v) in &query {
+            for (k, v) in query {
                 url.push(if url.contains('?') { '&' } else { '?' });
                 url.push_str(&urlencoding::encode(k));
                 url.push('=');
@@ -322,7 +425,7 @@ async fn gemini_stream_proxy(
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
-                        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+                        let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
                         reqwest::Client::new()
                             .post(&upstream_url)
                             .header("content-type", "application/json")
@@ -339,7 +442,7 @@ async fn gemini_stream_proxy(
             // Vertex AI requested but not configured → AI Studio
             let gemini_key = state.config.gemini_api_key.as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-            let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+            let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
             reqwest::Client::new()
                 .post(&upstream_url)
                 .header("content-type", "application/json")
@@ -351,7 +454,7 @@ async fn gemini_stream_proxy(
         // AI Studio route
         let gemini_key = state.config.gemini_api_key.as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+        let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
         reqwest::Client::new()
             .post(&upstream_url)
             .header("content-type", "application/json")
