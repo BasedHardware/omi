@@ -305,6 +305,7 @@ enum APIError: LocalizedError {
   case unauthorized
   case httpError(statusCode: Int)
   case decodingError(Error)
+  case featureUnavailable(feature: String, reason: String)
 
   var errorDescription: String? {
     switch self {
@@ -316,6 +317,8 @@ enum APIError: LocalizedError {
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
+    case .featureUnavailable(let feature, let reason):
+      return "\(feature) is unavailable: \(reason)"
     }
   }
 }
@@ -356,6 +359,17 @@ extension APIClient {
 
   private var mvpBackendTarget: DesktopBackendEnvironment.BackendTarget {
     selectedBackendTarget
+  }
+
+  private func requireCapability(_ capability: DesktopBackendEnvironment.Capability) throws {
+    let target = selectedBackendTarget
+    guard DesktopBackendEnvironment.isCapability(capability, availableIn: target.mode) else {
+      throw APIError.featureUnavailable(
+        feature: capability.rawValue,
+        reason: DesktopBackendEnvironment.unavailableReason(for: capability, in: target.mode)
+          ?? "Unavailable in the selected backend mode."
+      )
+    }
   }
 
   private static func isoString(_ date: Date) -> String {
@@ -471,6 +485,8 @@ extension APIClient {
   ///   - id: The conversation ID
   ///   - visibility: The visibility level ("shared", "public", or "private")
   func setConversationVisibility(id: String, visibility: String = "shared") async throws {
+    try requireCapability(.publicSharing)
+
     let url = URL(
       string: baseURL
         + "v1/conversations/\(id)/visibility?value=\(visibility)&visibility=\(visibility)")!
@@ -490,6 +506,8 @@ extension APIClient {
   /// - Parameter id: The conversation ID
   /// - Returns: The shareable URL for the conversation
   func getConversationShareLink(id: String) async throws -> String {
+    try requireCapability(.publicSharing)
+
     // Set visibility to shared
     try await setConversationVisibility(id: id, visibility: "shared")
     // Return the web URL for the shared conversation
@@ -2331,6 +2349,8 @@ extension APIClient {
 
   /// Shares tasks and returns a shareable URL
   func shareTasks(taskIds: [String]) async throws -> ShareTasksResponse {
+    try requireCapability(.publicSharing)
+
     struct ShareRequest: Encodable {
       let taskIds: [String]
       enum CodingKeys: String, CodingKey {
@@ -3935,11 +3955,15 @@ extension APIClient {
 
   /// Fetches private cloud sync setting
   func getPrivateCloudSync() async throws -> PrivateCloudSyncResponse {
+    try requireCapability(.cloudSync)
+
     return try await get("v1/users/private-cloud-sync")
   }
 
   /// Sets private cloud sync
   func setPrivateCloudSync(enabled: Bool) async throws {
+    try requireCapability(.cloudSync)
+
     let url = URL(string: baseURL + "v1/users/private-cloud-sync?value=\(enabled)")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -4680,6 +4704,8 @@ extension APIClient {
 
   /// Share chat messages and get a shareable URL
   func shareChatMessages(messageIds: [String]) async throws -> ShareChatResponse {
+    try requireCapability(.publicSharing)
+
     struct ShareRequest: Encodable {
       let message_ids: [String]
     }
@@ -4994,6 +5020,8 @@ extension APIClient {
 
   /// Provision a cloud agent VM for the current user (fire-and-forget)
   func provisionAgentVM() async throws -> AgentProvisionResponse {
+    try requireCapability(.managedAgentVM)
+
     return try await post("v2/agent/provision", customBaseURL: rustBackendURL)
   }
 
@@ -5009,6 +5037,8 @@ extension APIClient {
 
   /// Get current agent VM status
   func getAgentStatus() async throws -> AgentStatusResponse? {
+    try requireCapability(.managedAgentVM)
+
     return try await get("v2/agent/status", customBaseURL: rustBackendURL)
   }
 }
@@ -5033,18 +5063,26 @@ struct Person: Codable, Identifiable {
 extension APIClient {
 
   func getUserSubscription() async throws -> UserSubscriptionResponse {
+    try requireCapability(.payments)
+
     return try await get("v1/users/me/subscription")
   }
 
   func getAvailablePlans() async throws -> AvailablePlansResponse {
+    try requireCapability(.payments)
+
     return try await get("v1/payments/available-plans")
   }
 
   func getOverageInfo() async throws -> OverageInfoResponse {
+    try requireCapability(.payments)
+
     return try await get("v1/payments/overage-info")
   }
 
   func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
+    try requireCapability(.payments)
+
     struct Request: Encodable {
       let priceId: String
 
@@ -5057,6 +5095,8 @@ extension APIClient {
   }
 
   func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+    try requireCapability(.payments)
+
     struct Request: Encodable {
       let priceId: String
 
@@ -5069,6 +5109,8 @@ extension APIClient {
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
+    try requireCapability(.payments)
+
     return try await post("v1/payments/customer-portal")
   }
 
@@ -5221,6 +5263,11 @@ extension APIClient {
   }
 
   func fetchChatUsageQuota() async -> ChatUsageQuota? {
+    guard DesktopBackendEnvironment.isCapability(.payments, availableIn: selectedBackendTarget.mode) else {
+      log("APIClient: Chat quota disabled in local daemon mode")
+      return nil
+    }
+
     do {
       let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
       log(
@@ -5250,6 +5297,8 @@ extension APIClient {
   }
 
   func fetchApiKeys() async throws -> ApiKeysResponse {
+    try requireCapability(.omiBackendProviderProxy)
+
     return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
   }
 
@@ -5266,6 +5315,8 @@ extension APIClient {
   }
 
   func synthesizeSpeech(request body: TtsSynthesizeRequest) async throws -> Data {
+    try requireCapability(.omiBackendProviderProxy)
+
     let base = rustBackendURL
     guard !base.isEmpty, let url = URL(string: base + "v1/tts/synthesize") else {
       throw APIError.invalidResponse

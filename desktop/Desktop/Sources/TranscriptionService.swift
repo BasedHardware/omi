@@ -163,6 +163,18 @@ class TranscriptionService {
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
     init(language: String = "en", mode: StreamingMode = .conversation, contextKeywords: [String] = []) throws {
+        guard DesktopBackendEnvironment.isCapability(
+            .hostedTranscription,
+            availableIn: DesktopBackendEnvironment.selectedBackendTarget.mode
+        ) else {
+            throw TranscriptionError.webSocketError(
+                DesktopBackendEnvironment.unavailableReason(
+                    for: .hostedTranscription,
+                    in: DesktopBackendEnvironment.selectedBackendTarget.mode
+                ) ?? "Hosted transcription is unavailable in local daemon mode"
+            )
+        }
+
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
         self.streamingMode = mode
@@ -179,6 +191,18 @@ class TranscriptionService {
         guard forBatchOnly else {
             throw TranscriptionError.webSocketError("Use init(language:) for streaming mode")
         }
+        guard DesktopBackendEnvironment.isCapability(
+            .hostedTranscription,
+            availableIn: DesktopBackendEnvironment.selectedBackendTarget.mode
+        ) else {
+            throw TranscriptionError.webSocketError(
+                DesktopBackendEnvironment.unavailableReason(
+                    for: .hostedTranscription,
+                    in: DesktopBackendEnvironment.selectedBackendTarget.mode
+                ) ?? "Hosted transcription is unavailable in local daemon mode"
+            )
+        }
+
         // Batch mode uses Firebase auth + Python backend — no DG key needed
         self.apiKey = ""
         self.language = language
@@ -581,6 +605,18 @@ extension TranscriptionService {
         apiKey: String? = nil,
         contextKeywords: [String] = []
     ) async throws -> String? {
+        guard DesktopBackendEnvironment.isCapability(
+            .hostedTranscription,
+            availableIn: DesktopBackendEnvironment.selectedBackendTarget.mode
+        ) else {
+            throw TranscriptionError.webSocketError(
+                DesktopBackendEnvironment.unavailableReason(
+                    for: .hostedTranscription,
+                    in: DesktopBackendEnvironment.selectedBackendTarget.mode
+                ) ?? "Hosted transcription is unavailable in local daemon mode"
+            )
+        }
+
         // Always use Firebase auth + Python backend
         let authService = await MainActor.run { AuthService.shared }
         let authHeader = try await authService.getAuthHeader()

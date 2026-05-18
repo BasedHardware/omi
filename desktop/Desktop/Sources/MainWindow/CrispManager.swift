@@ -67,6 +67,15 @@ class CrispManager: ObservableObject {
     ///   from lifecycle unit tests that want to exercise observer registration
     ///   without touching the network, auth state, or firing real notifications.
     func start(performInitialPoll: Bool = true) {
+        guard DesktopBackendEnvironment.isCapability(
+            .crispSupport,
+            availableIn: DesktopBackendEnvironment.selectedBackendTarget.mode
+        ) else {
+            stop()
+            log("CrispManager: disabled in local daemon mode")
+            return
+        }
+
         guard !isStarted else { return }
         isStarted = true
 

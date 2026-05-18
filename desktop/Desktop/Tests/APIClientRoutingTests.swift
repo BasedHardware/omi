@@ -107,6 +107,19 @@ private func assertRoutes(
     XCTAssertEqual(req.method, method, "\(label): wrong HTTP method", file: file, line: line)
 }
 
+private func assertUnavailable(
+    _ error: Error?,
+    capability: DesktopBackendEnvironment.Capability,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    guard let error, case APIError.featureUnavailable(let feature, _) = error else {
+        XCTFail("expected featureUnavailable for \(capability.rawValue), got \(String(describing: error))", file: file, line: line)
+        return
+    }
+    XCTAssertEqual(feature, capability.rawValue, file: file, line: line)
+}
+
 // MARK: - Tests
 
 final class APIClientRoutingTests: XCTestCase {
@@ -276,6 +289,31 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertTrue(target.requiresAuth)
     }
 
+    func testLocalDaemonCapabilityMatrixDisablesCloudBoundFeatures() {
+        let capabilities = Dictionary(
+            uniqueKeysWithValues: DesktopBackendEnvironment.capabilities(for: .localDaemon)
+                .map { ($0.capability, $0) }
+        )
+
+        XCTAssertEqual(capabilities[.localConversationData]?.available, true)
+        XCTAssertEqual(capabilities[.firebaseSignIn]?.available, true)
+        XCTAssertEqual(capabilities[.managedAgentVM]?.available, false)
+        XCTAssertEqual(capabilities[.omiBackendProviderProxy]?.available, false)
+        XCTAssertEqual(capabilities[.publicSharing]?.available, false)
+        XCTAssertEqual(capabilities[.cloudSync]?.available, false)
+        XCTAssertEqual(capabilities[.payments]?.available, false)
+        XCTAssertEqual(capabilities[.crispSupport]?.available, false)
+        XCTAssertEqual(capabilities[.hostedTranscription]?.available, false)
+        XCTAssertNotNil(capabilities[.managedAgentVM]?.reason)
+    }
+
+    func testCloudCapabilityMatrixAllowsCloudBoundFeatures() {
+        for state in DesktopBackendEnvironment.capabilities(for: .cloud) {
+            XCTAssertTrue(state.available, "\(state.capability.rawValue) should be available in cloud mode")
+            XCTAssertNil(state.reason)
+        }
+    }
+
     func testBaseURLAndRustBackendURLAreIndependent() async {
         setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
         setenv("OMI_DESKTOP_API_URL", "http://rust:8787", 1)
@@ -388,6 +426,69 @@ final class APIClientRoutingTests: XCTestCase {
                      pathContains: "v1/settings", method: "PUT",
                      label: "local settings")
         XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+    }
+
+    func testLocalModeMVPConversationFlowsIgnoreInvalidCloudURLs() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_PYTHON_API_URL", "http://omi-cloud-invalid:9001", 1)
+        setenv("OMI_DESKTOP_API_URL", "http://omi-rust-invalid:9002", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:9876", 1)
+        let client = await makeTestClient()
+
+        _ = try? await client.getConversations()
+        _ = try? await client.getConversation(id: "local-123") as ServerConversation
+        _ = try? await client.searchConversations(query: "offline")
+        try? await client.updateConversationTitle(id: "local-123", title: "Offline")
+        _ = try? await client.updateSelectedBackendSettings(["profile_name": "Offline"])
+
+        let requests = URLCapture.capturedRequests
+        XCTAssertEqual(requests.count, 5)
+        XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 9876 })
+        XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+        XCTAssertFalse(requests.contains { $0.url.host == "omi-cloud-invalid" || $0.url.host == "omi-rust-invalid" })
+    }
+
+    func testLocalModeCloudOnlyFeaturesFailBeforeNetworkRequests() async {
+        setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+        setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+        let client = await makeTestClient()
+
+        do {
+            _ = try await client.provisionAgentVM()
+            XCTFail("expected managed agent VM to be unavailable")
+        } catch {
+            assertUnavailable(error, capability: .managedAgentVM)
+        }
+
+        do {
+            _ = try await client.fetchApiKeys()
+            XCTFail("expected backend provider proxy to be unavailable")
+        } catch {
+            assertUnavailable(error, capability: .omiBackendProviderProxy)
+        }
+
+        do {
+            _ = try await client.getUserSubscription()
+            XCTFail("expected payments to be unavailable")
+        } catch {
+            assertUnavailable(error, capability: .payments)
+        }
+
+        do {
+            _ = try await client.shareChatMessages(messageIds: ["m1"])
+            XCTFail("expected public sharing to be unavailable")
+        } catch {
+            assertUnavailable(error, capability: .publicSharing)
+        }
+
+        do {
+            try await client.setPrivateCloudSync(enabled: true)
+            XCTFail("expected cloud sync to be unavailable")
+        } catch {
+            assertUnavailable(error, capability: .cloudSync)
+        }
+
+        XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
     }
 
     // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --

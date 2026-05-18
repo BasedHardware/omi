@@ -69,3 +69,20 @@ status reports `authenticated: false` because local-first mode does not imply an
 Omi cloud account. Cloud IDs and sync fields are retained in storage models so a
 future sync adapter can map local records to cloud records without making cloud
 state the source of truth.
+
+## Local-First Capability Boundaries
+
+Desktop local daemon mode uses `DesktopBackendEnvironment.Capability` as the
+capability matrix for deciding what UI/API flows may call into cloud-bound
+services. In local daemon mode:
+
+- Available: local conversation data, local transcript ingestion, local search,
+  local memories, local action items, local settings, and optional Firebase
+  sign-in as an account-only feature.
+- Unavailable: managed agent VM provisioning/sync, Omi backend provider proxies,
+  hosted transcription endpoints, public sharing links, Omi cloud sync,
+  subscriptions/payments/quotas, and Crisp support messaging.
+
+Unavailable capabilities fail before building a request to Omi-hosted services.
+Local conversation CRUD/search/settings flows continue to use the configured
+loopback daemon URL and do not require Firebase auth.

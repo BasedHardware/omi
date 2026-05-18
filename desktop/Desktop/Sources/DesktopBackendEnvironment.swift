@@ -7,6 +7,24 @@ enum DesktopBackendEnvironment {
     case customRemote
   }
 
+  enum Capability: String, CaseIterable, Equatable {
+    case localConversationData
+    case firebaseSignIn
+    case managedAgentVM
+    case omiBackendProviderProxy
+    case publicSharing
+    case cloudSync
+    case payments
+    case crispSupport
+    case hostedTranscription
+  }
+
+  struct CapabilityState: Equatable {
+    let capability: Capability
+    let available: Bool
+    let reason: String?
+  }
+
   struct BackendTarget: Equatable {
     let mode: BackendMode
     let baseURL: String
@@ -146,6 +164,62 @@ enum DesktopBackendEnvironment {
     environmentValue: String? = currentEnvironmentValue("OMI_LOCAL_DAEMON_URL")
   ) -> String {
     normalizedURL(environmentValue) ?? defaultLocalDaemonURL
+  }
+
+  static func capabilities(for mode: BackendMode) -> [CapabilityState] {
+    Capability.allCases.map { capability in
+      CapabilityState(
+        capability: capability,
+        available: isCapability(capability, availableIn: mode),
+        reason: unavailableReason(for: capability, in: mode)
+      )
+    }
+  }
+
+  static func isCapability(_ capability: Capability, availableIn mode: BackendMode) -> Bool {
+    guard mode == .localDaemon else {
+      return true
+    }
+
+    switch capability {
+    case .localConversationData:
+      return true
+    case .firebaseSignIn:
+      return true
+    case .managedAgentVM,
+         .omiBackendProviderProxy,
+         .publicSharing,
+         .cloudSync,
+         .payments,
+         .crispSupport,
+         .hostedTranscription:
+      return false
+    }
+  }
+
+  static func unavailableReason(for capability: Capability, in mode: BackendMode) -> String? {
+    guard !isCapability(capability, availableIn: mode) else {
+      return nil
+    }
+
+    switch capability {
+    case .managedAgentVM:
+      return "Managed agent VMs are cloud-only and are disabled in local daemon mode."
+    case .omiBackendProviderProxy:
+      return "Omi backend provider proxies are not used in local daemon mode. Configure direct local provider settings instead."
+    case .publicSharing:
+      return "Public sharing requires Omi cloud-hosted URLs and is unavailable in local daemon mode."
+    case .cloudSync:
+      return "Cloud sync is intentionally disabled while local data is the source of truth."
+    case .payments:
+      return "Subscription and payment-gated features require Omi cloud services."
+    case .crispSupport:
+      return "Crisp support messaging is cloud-bound and is disabled in local daemon mode."
+    case .hostedTranscription:
+      return "Hosted transcription endpoints are disabled in local daemon mode; local transcripts are stored through the local daemon."
+    case .localConversationData, .firebaseSignIn:
+      return nil
+    }
   }
 
   static func applyReleaseChannelDefaults() {
