@@ -1664,7 +1664,9 @@ async def sync_local_files_v2(
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
-        paths = await run_blocking(storage_executor, _retrieve_file_paths_v2, files, uid, job_id)
+        # Use sync_executor, NOT storage_executor — storage is saturated with
+        # background pipeline cleanup/GCS work and would queue the 202 response.
+        paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(db_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id)

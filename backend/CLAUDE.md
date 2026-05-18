@@ -157,7 +157,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (12w) — sync endpoint pipeline work
     - `postprocess_executor` (8w) — post-conversation processing, coordinator functions
-    - `storage_executor` (16w) — GCS uploads/downloads, audio chunk I/O
+    - `storage_executor` (32w) — GCS uploads/downloads, audio chunk I/O
   - **Deadlock prevention — 4 rules:**
     1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
     2. **Orchestration stays in async code.** The async handler coordinates via `await run_blocking(pool, fn)` — sequentially or with `asyncio.gather`. The event loop never blocks, pools stay independent.

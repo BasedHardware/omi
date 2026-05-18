@@ -61,7 +61,7 @@ llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=4, thread_nam
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=12, thread_name_prefix="sync")
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=8, thread_name_prefix="postproc")
-storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=16, thread_name_prefix="storage")
+storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=32, thread_name_prefix="storage")
 
 _ALL_EXECUTORS = [
     critical_executor,

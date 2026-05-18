@@ -215,6 +215,22 @@ class TestSyncV2Structure:
         assert 'get_user_transcription_preferences' not in func_body, "prefs fetch moved to bg"
         assert 'build_person_embeddings_cache' not in func_body, "cache build moved to bg"
 
+    def test_v2_fast_path_uses_sync_executor(self):
+        """Fast-path file save must use sync_executor, not storage_executor (#7372)."""
+        source = self._read_sync_source()
+        start = source.index('async def sync_local_files_v2')
+        next_section = source.find('\n@router.', start + 1)
+        if next_section == -1:
+            next_section = len(source)
+        func_body = source[start:next_section]
+
+        assert (
+            'run_blocking(sync_executor' in func_body
+        ), "fast-path file save must use sync_executor to avoid storage_executor saturation (#7372)"
+        assert (
+            'run_blocking(storage_executor' not in func_body
+        ), "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
+
 
 # ---------------------------------------------------------------------------
 # 2. Redis sync_jobs module tests
@@ -2073,6 +2089,9 @@ class TestBulkheadExecutors:
         assert 'max_workers=12' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=8' in source
+        from utils.executors import storage_executor
+
+        assert storage_executor._max_workers == 32, "storage_executor must have 32 workers (#7372)"
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()
