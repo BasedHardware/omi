@@ -757,29 +757,47 @@ def update_app(
             else {}
         )
         existing_ext = app.get('external_integration') or {}
+        endpoints_to_check = []
         webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
         if webhook_url:
+            endpoints_to_check.append(('webhook', webhook_url))
+        mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+        if mcp_url:
+            endpoints_to_check.append(('MCP server', mcp_url))
+        chat_tools = app.get('chat_tools') or []
+        seen_hosts = {urlparse(url).netloc for _, url in endpoints_to_check if url}
+        for tool in chat_tools:
+            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
+            if ep and urlparse(ep).netloc not in seen_hosts:
+                endpoints_to_check.append(('chat tool', ep))
+                seen_hosts.add(urlparse(ep).netloc)
+        if not endpoints_to_check:
+            raise HTTPException(
+                status_code=400,
+                detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
+            )
+        for label, url in endpoints_to_check:
             try:
-                resp = httpx.post(webhook_url, json={}, timeout=10.0, follow_redirects=True)
+                resp = httpx.post(url, json={}, timeout=10.0, follow_redirects=True)
                 if resp.status_code < 200 or resp.status_code >= 300:
                     raise HTTPException(
                         status_code=400,
-                        detail=f'Webhook endpoint returned {resp.status_code}. Fix the endpoint before re-enabling.',
+                        detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
                     )
             except httpx.TimeoutException:
                 raise HTTPException(
-                    status_code=400, detail='Webhook endpoint timed out. Fix the endpoint before re-enabling.'
+                    status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
                 )
             except httpx.ConnectError:
                 raise HTTPException(
-                    status_code=400, detail='Cannot connect to webhook endpoint. Fix the endpoint before re-enabling.'
+                    status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
                 )
             except HTTPException:
                 raise
             except Exception as e:
-                logger.warning(f'Webhook health check failed for {app_id}: {e}')
+                logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
                 raise HTTPException(
-                    status_code=400, detail='Webhook health check failed. Fix the endpoint before re-enabling.'
+                    status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
                 )
         record_app_webhook_success(app_id)
 
