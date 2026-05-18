@@ -65,20 +65,26 @@ impl PaywallChecker {
     /// checks subscription plan, BYOK active state, and account age.
     ///
     /// Errors fail open (return false).
+    /// `byok_stripped`: true if BYOK validation determined the user is not
+    /// BYOK-enrolled (headers were silently cleared). When true, the BYOK
+    /// escape hatch is disabled — the raw headers cannot be trusted.
     pub async fn is_paywalled(
         &self,
         uid: &str,
         request_headers: &HeaderMap,
+        byok_stripped: bool,
     ) -> bool {
         // BYOK escape hatch: a request carrying all 4 BYOK provider headers
         // is never paywalled, regardless of cached state. This handles the
         // race where Firestore hasn't caught up after BYOK activation.
-        let has_byok = byok::has_all_byok_keys(request_headers);
-        if has_byok {
+        // SECURITY: Only trust the escape hatch if BYOK validation did NOT
+        // strip the headers (i.e. the user is actually BYOK-enrolled or
+        // validation hasn't run). A non-enrolled user forging all 4 headers
+        // will have byok_stripped=true, so they can't bypass the paywall.
+        if !byok_stripped && byok::has_all_byok_keys(request_headers) {
             return false;
         }
 
-        // Partition cache: "uid" for non-BYOK, "uid:byok" for BYOK requests.
         let cache_key = uid.to_string();
 
         // Cache hit
@@ -109,8 +115,8 @@ impl PaywallChecker {
     /// Core trial-expiry check. Mirrors Python `_is_trial_expired_uncached`.
     /// Returns false (not paywalled) on any error (fail-open).
     async fn check_trial_expired(&self, uid: &str) -> bool {
-        // Step 1: Read subscription plan
-        let plan = match self.firestore.get_user_subscription_plan(uid).await {
+        // Step 1: Read effective subscription plan (checks current_period_end for paid plans)
+        let plan = match self.firestore.get_user_effective_plan(uid).await {
             Ok(p) => p,
             Err(e) => {
                 tracing::warn!(
