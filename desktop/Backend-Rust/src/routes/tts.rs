@@ -90,6 +90,7 @@ async fn tts_synthesize(
     headers: HeaderMap,
     Json(request): Json<TtsSynthesizeRequest>,
 ) -> Result<Response, TtsProxyError> {
+    let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     let text = request.text.trim();
     if text.is_empty() {
@@ -111,7 +112,7 @@ async fn tts_synthesize(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let (api_key, uses_server_key) = openai_key_for_request(&state, &headers)?;
+    let (api_key, uses_server_key) = openai_key_for_request(&state, &headers, byok_stripped)?;
     if uses_server_key {
         check_server_tts_rate_limit(&state, &user.uid, char_count).await?;
     }
@@ -160,14 +161,18 @@ async fn tts_synthesize(
 fn openai_key_for_request<'a>(
     state: &'a AppState,
     headers: &'a HeaderMap,
+    byok_stripped: bool,
 ) -> Result<(&'a str, bool), TtsProxyError> {
-    if let Some(value) = headers
-        .get("x-byok-openai")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        return Ok((value, false));
+    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
+    if !byok_stripped {
+        if let Some(value) = headers
+            .get("x-byok-openai")
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Ok((value, false));
+        }
     }
 
     let key = state
