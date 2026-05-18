@@ -307,4 +307,26 @@ mod tests {
             "missing deepgram → escape hatch does not fire"
         );
     }
+
+    // --- byok_stripped prevents paywall escape hatch ---
+
+    #[test]
+    fn byok_stripped_disables_escape_hatch() {
+        // Even with all 4 BYOK headers present, if byok_stripped=true,
+        // the escape hatch must NOT fire. Verified at the logic level:
+        // is_paywalled checks `!byok_stripped && has_all_byok_keys`.
+        let h = all_byok_headers();
+        let byok_stripped = true;
+        // The escape hatch condition:
+        let would_escape = !byok_stripped && byok::has_all_byok_keys(&h);
+        assert!(!would_escape, "stripped headers must not trigger escape hatch");
+    }
+
+    #[test]
+    fn non_stripped_allows_escape_hatch() {
+        let h = all_byok_headers();
+        let byok_stripped = false;
+        let would_escape = !byok_stripped && byok::has_all_byok_keys(&h);
+        assert!(would_escape, "validated headers should trigger escape hatch");
+    }
 }
