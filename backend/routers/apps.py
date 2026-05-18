@@ -760,26 +760,26 @@ def update_app(
         endpoints_to_check = []
         webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
         if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url))
+            endpoints_to_check.append(('webhook', webhook_url, True))
         mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
         if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url))
-        chat_tools = app.get('chat_tools') or []
-        seen_hosts = {urlparse(url).netloc for _, url in endpoints_to_check if url}
+            endpoints_to_check.append(('MCP server', mcp_url, False))
+        chat_tools = update_dict.get('chat_tools') or app.get('chat_tools') or []
+        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
         for tool in chat_tools:
             ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
             if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep))
+                endpoints_to_check.append(('chat tool', ep, True))
                 seen_hosts.add(urlparse(ep).netloc)
         if not endpoints_to_check:
             raise HTTPException(
                 status_code=400,
                 detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
             )
-        for label, url in endpoints_to_check:
+        for label, url, require_2xx in endpoints_to_check:
             try:
                 resp = httpx.post(url, json={}, timeout=10.0, follow_redirects=True)
-                if resp.status_code < 200 or resp.status_code >= 300:
+                if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
                     raise HTTPException(
                         status_code=400,
                         detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
