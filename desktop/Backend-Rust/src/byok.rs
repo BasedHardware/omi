@@ -68,6 +68,23 @@ pub fn get_byok_key<'a>(headers: &'a HeaderMap, header_name: &str) -> Option<&'a
         .filter(|v| !v.is_empty())
 }
 
+/// Extract a BYOK key for a provider, respecting the `byok_stripped` flag.
+///
+/// When `byok_stripped` is true (non-enrolled user or expired heartbeat), returns
+/// `None` regardless of header presence — forcing fallback to server-managed keys.
+/// Route handlers should use this instead of calling `get_byok_key` directly.
+pub fn get_byok_key_if_active<'a>(
+    headers: &'a HeaderMap,
+    header_name: &str,
+    byok_stripped: bool,
+) -> Option<&'a str> {
+    if byok_stripped {
+        None
+    } else {
+        get_byok_key(headers, header_name)
+    }
+}
+
 /// True if the request carries non-empty values for all four BYOK provider headers.
 ///
 /// This mirrors Python's `_request_has_all_byok_keys()`. Presence of all four
@@ -628,6 +645,64 @@ mod tests {
             Ok(ByokValidation::Inactive {
                 clear_headers: true
             })
+        );
+    }
+
+    // --- get_byok_key_if_active tests (used by route handlers) ---
+
+    #[test]
+    fn key_if_active_stripped_returns_none() {
+        // byok_stripped=true → always returns None, even if header is present
+        let h = headers_with(&[("x-byok-gemini", "sk-real-key")]);
+        assert_eq!(get_byok_key_if_active(&h, HEADER_GEMINI, true), None);
+    }
+
+    #[test]
+    fn key_if_active_not_stripped_returns_key() {
+        // byok_stripped=false → returns the header value
+        let h = headers_with(&[("x-byok-gemini", "sk-real-key")]);
+        assert_eq!(
+            get_byok_key_if_active(&h, HEADER_GEMINI, false),
+            Some("sk-real-key")
+        );
+    }
+
+    #[test]
+    fn key_if_active_not_stripped_missing_header_returns_none() {
+        // byok_stripped=false but header missing → None (natural fallback)
+        let h = HeaderMap::new();
+        assert_eq!(get_byok_key_if_active(&h, HEADER_GEMINI, false), None);
+    }
+
+    #[test]
+    fn key_if_active_all_providers_stripped() {
+        // Verify all 4 provider headers are blocked when stripped
+        let h = all_byok_headers_with_keys();
+        assert_eq!(get_byok_key_if_active(&h, HEADER_OPENAI, true), None);
+        assert_eq!(get_byok_key_if_active(&h, HEADER_ANTHROPIC, true), None);
+        assert_eq!(get_byok_key_if_active(&h, HEADER_GEMINI, true), None);
+        assert_eq!(get_byok_key_if_active(&h, HEADER_DEEPGRAM, true), None);
+    }
+
+    #[test]
+    fn key_if_active_all_providers_not_stripped() {
+        // Verify all 4 provider headers are returned when not stripped
+        let h = all_byok_headers_with_keys();
+        assert_eq!(
+            get_byok_key_if_active(&h, HEADER_OPENAI, false),
+            Some("sk-o")
+        );
+        assert_eq!(
+            get_byok_key_if_active(&h, HEADER_ANTHROPIC, false),
+            Some("sk-a")
+        );
+        assert_eq!(
+            get_byok_key_if_active(&h, HEADER_GEMINI, false),
+            Some("sk-g")
+        );
+        assert_eq!(
+            get_byok_key_if_active(&h, HEADER_DEEPGRAM, false),
+            Some("sk-d")
         );
     }
 }
