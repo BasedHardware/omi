@@ -467,12 +467,7 @@ async fn chat_completions(
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
-    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
-    let byok_anthropic_key = if byok_stripped {
-        None
-    } else {
-        byok::get_byok_key(&headers, byok::HEADER_ANTHROPIC)
-    };
+    let byok_anthropic_key = byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
     let is_byok = byok_anthropic_key.is_some();
 
     // Rate limiting — skip when using BYOK key
