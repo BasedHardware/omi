@@ -80,9 +80,6 @@ pub struct Config {
     pub vertex_project_id: Option<String>,
     /// GCP region for Vertex AI (default: us-central1)
     pub vertex_location: String,
-    /// Python backend base URL used for cross-service calls (e.g. paywall status).
-    /// Defaults to https://api.omi.me; override with OMI_PYTHON_API_URL for staging/dev.
-    pub python_api_base: String,
 }
 
 impl Config {
@@ -152,10 +149,6 @@ impl Config {
                 .ok(),
             vertex_location: env::var("GCP_LOCATION")
                 .unwrap_or_else(|_| "us-central1".to_string()),
-            python_api_base: env::var("OMI_PYTHON_API_URL")
-                .unwrap_or_else(|_| "https://api.omi.me".to_string())
-                .trim_end_matches('/')
-                .to_string(),
         }
     }
 
