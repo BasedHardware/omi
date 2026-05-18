@@ -445,7 +445,7 @@ class TestFullPipelineBackground:
         body = self._get_bg_func_body()
         assert body.startswith('async def'), "Pipeline must be async — coordinator runs on event loop"
         assert 'await run_blocking(' in body, "Async coordinator must offload blocking work to pools"
-        assert '_SYNC_PIPELINE_SEMAPHORE' in body, "Async coordinator must use semaphore for concurrency cap"
+        assert '_get_sync_pipeline_semaphore' in body, "Async coordinator must use loop-scoped semaphore"
 
     def test_background_uses_asyncio_wait_for_timeout(self):
         """Segment and VAD tasks must use asyncio.wait_for with timeout=300."""
@@ -792,9 +792,9 @@ class TestAsyncCoordinatorStructure:
         assert 'run_blocking(storage_executor, shutil.rmtree' in body
 
     def test_async_coordinator_uses_semaphore(self):
-        """Async coordinator must use _SYNC_PIPELINE_SEMAPHORE for concurrency cap."""
+        """Async coordinator must use loop-scoped semaphore for concurrency cap."""
         body = self._get_bg_func_body()
-        assert '_SYNC_PIPELINE_SEMAPHORE' in body
+        assert '_get_sync_pipeline_semaphore' in body
 
     def test_async_coordinator_marks_failed_on_exception(self):
         """Async coordinator must call mark_job_failed for error cases."""
@@ -856,6 +856,48 @@ class TestAsyncCoordinatorStructure:
         body = self._get_bg_func_body()
         assert 'submit_with_context' not in body, "Async coordinator must not use submit_with_context"
         assert '.result(' not in body, "Async coordinator must not call future.result()"
+
+
+# ---------------------------------------------------------------------------
+# 7b. Async coordinator behavioral test
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncCoordinatorSemaphore:
+    """Verify the loop-scoped semaphore limits concurrent sync pipelines."""
+
+    @staticmethod
+    def _read_sync_source():
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            return f.read()
+
+    def test_semaphore_is_loop_scoped(self):
+        """Semaphore must be keyed by event loop ID, not module-level."""
+        source = self._read_sync_source()
+        assert '_get_sync_pipeline_semaphore()' in source, "Must use loop-scoped semaphore getter"
+        assert '_sync_semaphores' in source, "Must have loop-keyed semaphore cache"
+        assert 'asyncio.get_running_loop()' in source
+
+    def test_semaphore_limit_is_16(self):
+        """Semaphore cap must be 16 (2x the old 8-slot postprocess_executor)."""
+        source = self._read_sync_source()
+        start = source.index('def _get_sync_pipeline_semaphore')
+        end = source.find('\ndef ', start + 1)
+        if end == -1:
+            end = source.find('\nasync def ', start + 1)
+        func_body = source[start:end]
+        assert 'Semaphore(16)' in func_body
+
+    def test_semaphore_cache_has_prune(self):
+        """Semaphore cache must prune when it grows large to prevent leaks."""
+        source = self._read_sync_source()
+        start = source.index('def _get_sync_pipeline_semaphore')
+        end = source.find('\ndef ', start + 1)
+        if end == -1:
+            end = source.find('\nasync def ', start + 1)
+        func_body = source[start:end]
+        assert '.clear()' in func_body
 
 
 # ---------------------------------------------------------------------------
