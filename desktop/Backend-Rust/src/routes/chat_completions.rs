@@ -453,6 +453,7 @@ async fn chat_completions(
     headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
 ) -> Result<Response, StatusCode> {
+    let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     // Validate model
     let route = resolve_model(&req.model).ok_or_else(|| {
@@ -466,7 +467,12 @@ async fn chat_completions(
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
-    let byok_anthropic_key = byok::get_byok_key(&headers, byok::HEADER_ANTHROPIC);
+    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
+    let byok_anthropic_key = if byok_stripped {
+        None
+    } else {
+        byok::get_byok_key(&headers, byok::HEADER_ANTHROPIC)
+    };
     let is_byok = byok_anthropic_key.is_some();
 
     // Rate limiting — skip when using BYOK key
