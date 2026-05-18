@@ -2,15 +2,18 @@
 
 import asyncio
 import contextvars
+import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import pytest
 
 from utils.executors import (
     MonitoredThreadPoolExecutor,
     get_executor_metrics,
+    log_executor_health,
     run_blocking,
     submit_with_context,
     _ALL_EXECUTORS,
@@ -197,3 +200,60 @@ def test_all_executors_are_monitored():
     """All registered executors must be MonitoredThreadPoolExecutor instances."""
     for executor in _ALL_EXECUTORS:
         assert isinstance(executor, MonitoredThreadPoolExecutor), f'{executor} is not MonitoredThreadPoolExecutor'
+
+
+# ---------------------------------------------------------------------------
+# log_executor_health tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_log_executor_health_warns_above_threshold(caplog):
+    """log_executor_health must emit a warning when any pool exceeds the threshold."""
+    saturated_metrics = [
+        {'name': 'test-pool', 'max_workers': 4, 'active_count': 4, 'queue_depth': 0, 'utilization_pct': 100.0},
+    ]
+    with patch('utils.executors.get_executor_metrics', return_value=saturated_metrics):
+        with patch('utils.executors.asyncio.sleep', side_effect=[None, asyncio.CancelledError]):
+            with caplog.at_level(logging.WARNING, logger='utils.executors'):
+                try:
+                    await log_executor_health(interval_seconds=1, utilization_threshold_pct=70.0)
+                except asyncio.CancelledError:
+                    pass
+    assert any('executor_pool_health' in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_log_executor_health_silent_below_threshold(caplog):
+    """log_executor_health must not log when all pools are below the threshold."""
+    idle_metrics = [
+        {'name': 'test-pool', 'max_workers': 8, 'active_count': 1, 'queue_depth': 0, 'utilization_pct': 12.5},
+    ]
+    with patch('utils.executors.get_executor_metrics', return_value=idle_metrics):
+        with patch('utils.executors.asyncio.sleep', side_effect=[None, asyncio.CancelledError]):
+            with caplog.at_level(logging.WARNING, logger='utils.executors'):
+                try:
+                    await log_executor_health(interval_seconds=1, utilization_threshold_pct=70.0)
+                except asyncio.CancelledError:
+                    pass
+    assert not any('executor_pool_health' in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_log_executor_health_swallows_exceptions(caplog):
+    """log_executor_health must swallow exceptions from get_executor_metrics and keep looping."""
+    call_count = 0
+
+    def _exploding_metrics():
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("boom")
+
+    side_effects = [None, None, asyncio.CancelledError]
+    with patch('utils.executors.get_executor_metrics', side_effect=_exploding_metrics):
+        with patch('utils.executors.asyncio.sleep', side_effect=side_effects):
+            try:
+                await log_executor_health(interval_seconds=1)
+            except asyncio.CancelledError:
+                pass
+    assert call_count == 2, f"Expected 2 calls before cancel, got {call_count}"

@@ -901,6 +901,290 @@ class TestAsyncCoordinatorSemaphore:
 
 
 # ---------------------------------------------------------------------------
+# 7c. Async coordinator scenario coverage tests (#7361 tester round 1)
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncCoordinatorScenarios:
+    """Structural tests covering pipeline scenarios: decode failure, empty decode,
+    VAD error/timeout, zero segments, DG budget, partial/all segment failure,
+    prefs/cache fallback, target_conversation_id forwarding, and cleanup."""
+
+    @staticmethod
+    def _get_bg_func_body():
+        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+        with open(sync_path) as f:
+            source = f.read()
+        start = source.index('async def _run_full_pipeline_background_async')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        return source[start:next_boundary]
+
+    # --- Decode failure scenarios ---
+
+    def test_decode_http_exception_marks_failed(self):
+        """HTTPException during decode must mark job failed with detail."""
+        body = self._get_bg_func_body()
+        assert 'except HTTPException as e:' in body
+        http_except_idx = body.index('except HTTPException as e:')
+        after = body[http_except_idx : http_except_idx + 200]
+        assert 'mark_job_failed' in after
+        assert 'Decode failed' in after
+
+    def test_decode_generic_exception_marks_failed(self):
+        """Generic Exception during decode must mark job failed."""
+        body = self._get_bg_func_body()
+        decode_section = body[body.index('decode_files_to_wav') : body.index('stage_timings[\'decode_ms\']')]
+        except_blocks = [i for i in range(len(decode_section)) if decode_section[i:].startswith('except Exception')]
+        assert len(except_blocks) >= 1, "Decode must catch generic Exception"
+        after_except = decode_section[except_blocks[0] :]
+        assert 'mark_job_failed' in after_except
+
+    def test_decode_failure_cleans_up_raw_paths(self):
+        """Raw file cleanup must happen in finally after decode, even on failure."""
+        body = self._get_bg_func_body()
+        decode_start = body.index('decode_files_to_wav')
+        decode_region = body[decode_start : decode_start + 600]
+        assert 'finally:' in decode_region
+        finally_idx = decode_region.index('finally:')
+        after_finally = decode_region[finally_idx:]
+        assert '_cleanup_files, raw_paths' in after_finally
+
+    def test_decode_failure_returns_early(self):
+        """Decode failure must return immediately, not fall through to VAD."""
+        body = self._get_bg_func_body()
+        decode_section = body[body.index('decode_files_to_wav') : body.index('Phase 2')]
+        return_count = decode_section.count('return')
+        assert return_count >= 2, "Decode failure paths must return early (HTTPException + generic)"
+
+    # --- Empty decode ---
+
+    def test_empty_decode_completes_with_zero_segments(self):
+        """Empty wav_paths must complete job with 0 segments, not fail."""
+        body = self._get_bg_func_body()
+        empty_check_idx = body.index('if not wav_paths:')
+        vad_phase_idx = body.index('Phase 2: VAD')
+        section = body[empty_check_idx:vad_phase_idx]
+        assert 'mark_job_completed' in section
+        assert "'total_segments': 0" in section
+        assert "'failed_segments': 0" in section
+
+    def test_empty_decode_does_not_run_vad(self):
+        """Empty wav_paths must return before VAD phase."""
+        body = self._get_bg_func_body()
+        empty_check_idx = body.index('if not wav_paths:')
+        vad_phase_idx = body.index('Phase 2: VAD')
+        return_after_empty = body[empty_check_idx:vad_phase_idx]
+        assert 'return' in return_after_empty
+
+    # --- VAD error/timeout ---
+
+    def test_vad_timeout_captured_as_error(self):
+        """VAD TimeoutError must be captured and appended to vad_errors."""
+        body = self._get_bg_func_body()
+        assert 'asyncio.TimeoutError' in body
+        timeout_idx = body.index('isinstance(r, asyncio.TimeoutError)')
+        after = body[timeout_idx : timeout_idx + 200]
+        assert 'vad_errors.append' in after
+        assert 'VAD timed out' in after
+
+    def test_vad_executor_error_captured(self):
+        """Generic executor error during VAD must be captured."""
+        body = self._get_bg_func_body()
+        vad_region = body[body.index('vad_results = await asyncio.gather') : body.index('stage_timings[\'vad_ms\']')]
+        assert 'isinstance(r, Exception)' in vad_region
+        assert 'VAD executor error' in vad_region
+
+    def test_vad_errors_mark_job_failed_and_cleanup(self):
+        """VAD errors must clean up segmented paths and mark job failed."""
+        body = self._get_bg_func_body()
+        vad_error_check = body[body.index('if vad_errors:') :]
+        vad_error_section = vad_error_check[: vad_error_check.index('return') + 10]
+        assert '_cleanup_files, list(segmented_paths)' in vad_error_section
+        assert 'mark_job_failed' in vad_error_section
+        assert 'VAD failed for' in vad_error_section
+
+    def test_vad_clears_segmented_paths_on_error(self):
+        """On VAD failure, segmented_paths must be cleared after cleanup."""
+        body = self._get_bg_func_body()
+        vad_error_section = body[body.index('if vad_errors:') : body.index('Phase 3')]
+        assert 'segmented_paths = set()' in vad_error_section
+
+    def test_vad_error_detail_truncated(self):
+        """VAD error detail must truncate after 3 errors to prevent huge messages."""
+        body = self._get_bg_func_body()
+        assert 'vad_errors[:3]' in body
+        assert 'and {len(vad_errors) - 3} more' in body
+
+    # --- Zero segments after VAD ---
+
+    def test_zero_segments_completes_not_fails(self):
+        """Zero segments after VAD (all silence) must complete with 0 segments."""
+        body = self._get_bg_func_body()
+        zero_check_idx = body.index('if total_segments == 0:')
+        fair_use_idx = body.index('FAIR_USE_ENABLED')
+        section = body[zero_check_idx:fair_use_idx]
+        assert 'mark_job_completed' in section
+        assert "'total_segments': 0" in section
+        assert 'return' in section
+
+    # --- DG budget ---
+
+    def test_dg_budget_exhausted_marks_failed(self):
+        """DG budget exhausted must mark job failed with descriptive message."""
+        body = self._get_bg_func_body()
+        assert 'is_dg_budget_exhausted' in body
+        dg_section = body[body.index('is_dg_budget_exhausted') :]
+        dg_early = dg_section[:500]
+        assert 'mark_job_failed' in dg_early
+        assert 'DG budget exhausted' in dg_early
+
+    def test_dg_budget_exhausted_cleans_up_segments(self):
+        """DG budget exhaustion must clean up segmented_paths before returning."""
+        body = self._get_bg_func_body()
+        dg_section = body[body.index('is_dg_budget_exhausted') : body.index('is_locked = should_lock')]
+        assert '_cleanup_files, list(segmented_paths)' in dg_section
+
+    def test_dg_budget_not_exhausted_continues(self):
+        """When DG budget is NOT exhausted, pipeline continues to segment processing."""
+        body = self._get_bg_func_body()
+        dg_section_end = body.index('is_locked = should_lock')
+        after_dg = body[dg_section_end:]
+        assert 'Phase 4: Fetch prefs' in after_dg
+        assert '_process_one_segment' in after_dg
+
+    def test_dg_budget_check_error_is_non_fatal(self):
+        """DG budget check exception must be logged but not fail the pipeline."""
+        body = self._get_bg_func_body()
+        dg_check_region = body[body.index('DG budget gate') : body.index('is_locked = should_lock')]
+        assert "except Exception as e:" in dg_check_region
+        assert "DG budget check error" in dg_check_region
+
+    def test_dg_usage_recorded_after_processing(self):
+        """DG usage recording must happen after segment processing, not before."""
+        body = self._get_bg_func_body()
+        processing_end = body.index("stage_timings['stt_llm_ms']")
+        record_dg_idx = body.index('record_dg_usage_ms')
+        assert record_dg_idx > processing_end
+
+    # --- Partial / all segment failure ---
+
+    def test_segment_timeout_captured(self):
+        """Segment TimeoutError must be captured in segment_errors."""
+        body = self._get_bg_func_body()
+        seg_section = body[body.index('seg_results = await asyncio.gather') :]
+        seg_early = seg_section[:500]
+        assert 'isinstance(r, asyncio.TimeoutError)' in seg_early
+        assert 'Segment timed out' in seg_early
+
+    def test_segment_errors_included_in_result(self):
+        """segment_errors must be included in the final result sent to mark_job_completed."""
+        body = self._get_bg_func_body()
+        result_section = body[body.index("# Build result") :]
+        assert 'failed_segments' in result_section
+        assert 'segment_errors' in result_section
+        assert 'segment_errors[:10]' in result_section
+
+    def test_partial_failure_still_completes(self):
+        """Partial segment failure must still call mark_job_completed (not mark_job_failed)."""
+        body = self._get_bg_func_body()
+        build_result_idx = body.index("# Build result")
+        general_except_idx = body.index("sync_v2 bg failed job=")
+        result_section = body[build_result_idx:general_except_idx]
+        assert 'mark_job_completed' in result_section
+
+    def test_segment_errors_capped_at_10(self):
+        """segment_errors in result must be capped to prevent large Redis values."""
+        body = self._get_bg_func_body()
+        assert 'segment_errors[:10]' in body
+
+    # --- Prefs / cache fallback ---
+
+    def test_prefs_fetched_from_db(self):
+        """Transcription prefs must be fetched via run_blocking(db_executor, ...)."""
+        body = self._get_bg_func_body()
+        assert 'get_user_transcription_preferences' in body
+        assert 'db_executor' in body
+
+    def test_person_embeddings_fallback_on_error(self):
+        """Person embeddings cache failure must fall back to empty dict, not crash."""
+        body = self._get_bg_func_body()
+        embeddings_section = body[body.index('build_person_embeddings_cache') : body.index('Phase 5')]
+        assert 'except Exception' in embeddings_section
+        assert 'person_embeddings_cache = {}' in embeddings_section
+
+    def test_person_embeddings_logged_on_failure(self):
+        """Person embeddings failure must be logged as warning."""
+        body = self._get_bg_func_body()
+        embeddings_section = body[body.index('build_person_embeddings_cache') : body.index('Phase 5')]
+        assert 'failed to load person embeddings' in embeddings_section
+
+    # --- target_conversation_id forwarding ---
+
+    def test_target_conversation_id_in_signature(self):
+        """target_conversation_id must be in the function signature."""
+        body = self._get_bg_func_body()
+        sig_end = body.index('):')
+        sig = body[:sig_end]
+        assert 'target_conversation_id' in sig
+
+    def test_target_conversation_id_forwarded_to_process_segment(self):
+        """target_conversation_id must be passed through to _process_one_segment / process_segment."""
+        body = self._get_bg_func_body()
+        process_segment_section = body[body.index('def _process_one_segment') :]
+        process_segment_call = process_segment_section[:500]
+        assert 'target_conversation_id' in process_segment_call
+
+    # --- Cleanup on success and failure ---
+
+    def test_finally_clears_byok_keys(self):
+        """Finally block must clear BYOK keys to prevent context leaks."""
+        body = self._get_bg_func_body()
+        finally_idx = body.rindex('finally:')
+        after_finally = body[finally_idx:]
+        assert 'set_byok_keys({})' in after_finally
+
+    def test_finally_cleans_segmented_paths(self):
+        """Finally block must clean up segmented_paths."""
+        body = self._get_bg_func_body()
+        finally_idx = body.rindex('finally:')
+        after_finally = body[finally_idx:]
+        assert '_cleanup_files, list(segmented_paths)' in after_finally
+
+    def test_finally_cleans_wav_paths(self):
+        """Finally block must clean up wav_paths."""
+        body = self._get_bg_func_body()
+        finally_idx = body.rindex('finally:')
+        after_finally = body[finally_idx:]
+        assert '_cleanup_files, wav_paths' in after_finally
+
+    def test_finally_removes_job_directory(self):
+        """Finally block must remove job directory via shutil.rmtree."""
+        body = self._get_bg_func_body()
+        finally_idx = body.rindex('finally:')
+        after_finally = body[finally_idx:]
+        assert 'shutil.rmtree' in after_finally
+        assert 'job_dir' in after_finally
+
+    def test_general_exception_marks_failed(self):
+        """General except Exception must mark job failed with error message."""
+        body = self._get_bg_func_body()
+        main_except = body[body.index("except Exception as e:\n            logger.error(f'sync_v2 bg failed") :]
+        main_except_early = main_except[:200]
+        assert 'mark_job_failed' in main_except_early
+
+    def test_cleanup_order_byok_before_files(self):
+        """BYOK keys must be cleared before file cleanup in finally."""
+        body = self._get_bg_func_body()
+        finally_idx = body.rindex('finally:')
+        after_finally = body[finally_idx:]
+        byok_pos = after_finally.index('set_byok_keys({})')
+        cleanup_pos = after_finally.index('_cleanup_files')
+        assert byok_pos < cleanup_pos, "BYOK must be cleared before file cleanup"
+
+
+# ---------------------------------------------------------------------------
 # 8. v2 endpoint execution tests via FastAPI TestClient
 # ---------------------------------------------------------------------------
 
