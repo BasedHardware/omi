@@ -1,13 +1,20 @@
-"""Tests for utils/executors.py run_blocking and submit_with_context."""
+"""Tests for utils/executors.py run_blocking, submit_with_context, and MonitoredThreadPoolExecutor."""
 
 import asyncio
 import contextvars
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from utils.executors import run_blocking, submit_with_context
+from utils.executors import (
+    MonitoredThreadPoolExecutor,
+    get_executor_metrics,
+    run_blocking,
+    submit_with_context,
+    _ALL_EXECUTORS,
+)
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
@@ -89,3 +96,104 @@ def test_submit_with_context_returns_future_with_result():
 
     future = submit_with_context(_test_executor, double, 21)
     assert future.result(timeout=5) == 42
+
+
+# ---------------------------------------------------------------------------
+# MonitoredThreadPoolExecutor tests
+# ---------------------------------------------------------------------------
+
+
+def test_monitored_executor_is_threadpoolexecutor():
+    """MonitoredThreadPoolExecutor must be a proper ThreadPoolExecutor subclass."""
+    assert issubclass(MonitoredThreadPoolExecutor, ThreadPoolExecutor)
+
+
+def test_monitored_executor_tracks_active_count():
+    """active_count must increment during task execution and decrement after."""
+    executor = MonitoredThreadPoolExecutor(name="test-active", max_workers=2)
+    assert executor.active_count == 0
+    event = threading.Event()
+    captured = {}
+
+    def block_and_capture():
+        captured['active'] = executor.active_count
+        event.wait(timeout=5)
+
+    future = executor.submit(block_and_capture)
+    time.sleep(0.05)
+    assert executor.active_count >= 1
+    event.set()
+    future.result(timeout=5)
+    time.sleep(0.05)
+    assert executor.active_count == 0
+    assert captured['active'] >= 1
+    executor.shutdown(wait=False)
+
+
+def test_monitored_executor_has_name():
+    """MonitoredThreadPoolExecutor must expose its name attribute."""
+    executor = MonitoredThreadPoolExecutor(name="my-pool", max_workers=1)
+    assert executor.name == "my-pool"
+    executor.shutdown(wait=False)
+
+
+def test_monitored_executor_submit_returns_result():
+    """submit must still return a working Future with the correct result."""
+    executor = MonitoredThreadPoolExecutor(name="test-result", max_workers=1)
+    future = executor.submit(lambda x: x * 3, 7)
+    assert future.result(timeout=5) == 21
+    executor.shutdown(wait=False)
+
+
+def test_monitored_executor_propagates_exceptions():
+    """Exceptions in submitted tasks must propagate through the Future."""
+    executor = MonitoredThreadPoolExecutor(name="test-exc", max_workers=1)
+
+    def fail():
+        raise RuntimeError("boom")
+
+    future = executor.submit(fail)
+    with pytest.raises(RuntimeError, match="boom"):
+        future.result(timeout=5)
+    assert executor.active_count == 0
+    executor.shutdown(wait=False)
+
+
+# ---------------------------------------------------------------------------
+# get_executor_metrics tests
+# ---------------------------------------------------------------------------
+
+
+def test_get_executor_metrics_returns_all_pools():
+    """get_executor_metrics must return one entry per registered executor."""
+    metrics = get_executor_metrics()
+    assert len(metrics) == len(_ALL_EXECUTORS)
+    names = {m['name'] for m in metrics}
+    expected = {'critical', 'db', 'llm', 'stripe', 'sync', 'postprocess', 'storage'}
+    assert names == expected
+
+
+def test_get_executor_metrics_fields():
+    """Each metric entry must have the required fields."""
+    metrics = get_executor_metrics()
+    for m in metrics:
+        assert 'name' in m
+        assert 'max_workers' in m
+        assert 'active_count' in m
+        assert 'queue_depth' in m
+        assert 'utilization_pct' in m
+        assert isinstance(m['utilization_pct'], float)
+
+
+def test_get_executor_metrics_idle_utilization():
+    """Idle executors must report 0% utilization."""
+    metrics = get_executor_metrics()
+    for m in metrics:
+        assert m['active_count'] >= 0
+        assert m['utilization_pct'] >= 0.0
+
+
+def test_all_executors_are_monitored():
+    """All registered executors must be MonitoredThreadPoolExecutor instances."""
+    for executor in _ALL_EXECUTORS:
+        assert isinstance(executor, MonitoredThreadPoolExecutor), f'{executor} is not MonitoredThreadPoolExecutor'
