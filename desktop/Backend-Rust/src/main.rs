@@ -23,6 +23,7 @@ impl FormatTime for BackendTimer {
 }
 
 mod auth;
+mod byok;
 mod config;
 mod encryption;
 mod llm;
