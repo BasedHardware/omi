@@ -53,8 +53,6 @@ from database.apps import (
     search_apps_db,
 )
 from database.webhook_health import record_app_webhook_success
-
-logger = logging.getLogger(__name__)
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -753,12 +751,17 @@ def update_app(
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     if update_dict.get('disabled') is False and app.get('disabled'):
-        ext = app.get('external_integration') or {}
-        webhook_url = ext.get('webhook_url', '')
+        updated_ext = (
+            (update_dict.get('external_integration') or {})
+            if isinstance(update_dict.get('external_integration'), dict)
+            else {}
+        )
+        existing_ext = app.get('external_integration') or {}
+        webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
         if webhook_url:
             try:
-                resp = httpx.head(webhook_url, timeout=10.0, follow_redirects=True)
-                if resp.status_code < 200 or resp.status_code >= 300:
+                resp = httpx.post(webhook_url, json={}, timeout=10.0, follow_redirects=True)
+                if resp.status_code < 200 or resp.status_code >= 500:
                     raise HTTPException(
                         status_code=400,
                         detail=f'Webhook endpoint returned {resp.status_code}. Fix the endpoint before re-enabling.',
