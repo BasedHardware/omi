@@ -588,105 +588,89 @@ class TestReEnableHealthCheckGate:
             'chat_tools': chat_tools or [],
         }
 
+    @staticmethod
+    def _collect_endpoints(existing_ext, chat_tools, update_ext=None):
+        """Mirror the endpoint collection logic from apps.py re-enable gate."""
+        update_ext = update_ext or {}
+        endpoints = []
+        seen_urls = set()
+        webhook_url = update_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
+        if webhook_url:
+            endpoints.append(('webhook', webhook_url, 'POST', True))
+            seen_urls.add(webhook_url)
+        mcp_url = update_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+        if mcp_url:
+            endpoints.append(('MCP server', mcp_url, 'POST', False))
+            seen_urls.add(mcp_url)
+        for tool in chat_tools:
+            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
+            method = tool.get('method', 'POST') if isinstance(tool, dict) else getattr(tool, 'method', 'POST')
+            if ep and ep not in seen_urls:
+                endpoints.append(('chat tool', ep, method.upper(), True))
+                seen_urls.add(ep)
+        return endpoints
+
     def test_chat_tool_only_app_unhealthy_blocks_reenable(self):
         """A chat-tool-only app with unhealthy endpoint must not be re-enabled."""
-        from urllib.parse import urlparse
-
         app = self._build_app(chat_tools=[{'endpoint': 'https://bad-tool.example.com/api', 'name': 'tool1'}])
-        existing_ext = app['external_integration']
-
-        endpoints_to_check = []
-        webhook_url = existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, True))
-        mcp_url = existing_ext.get('mcp_server_url', '')
-        if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, False))
-        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
-        for tool in app.get('chat_tools', []):
-            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep, True))
-                seen_hosts.add(urlparse(ep).netloc)
-
-        assert len(endpoints_to_check) == 1
-        assert endpoints_to_check[0] == ('chat tool', 'https://bad-tool.example.com/api', True)
+        eps = self._collect_endpoints(app['external_integration'], app['chat_tools'])
+        assert len(eps) == 1
+        assert eps[0] == ('chat tool', 'https://bad-tool.example.com/api', 'POST', True)
 
     def test_mcp_only_app_reachability_check(self):
         """MCP-only app must be checked but only for reachability (require_2xx=False)."""
-        from urllib.parse import urlparse
-
         app = self._build_app(mcp_server_url='https://mcp.example.com/mcp')
-        existing_ext = app['external_integration']
-
-        endpoints_to_check = []
-        webhook_url = existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, True))
-        mcp_url = existing_ext.get('mcp_server_url', '')
-        if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, False))
-
-        assert len(endpoints_to_check) == 1
-        label, url, require_2xx = endpoints_to_check[0]
+        eps = self._collect_endpoints(app['external_integration'], [])
+        assert len(eps) == 1
+        label, url, method, require_2xx = eps[0]
         assert label == 'MCP server'
         assert url == 'https://mcp.example.com/mcp'
         assert require_2xx is False
 
     def test_all_endpoints_collected(self):
         """When all endpoint types are configured, all must be validated."""
-        from urllib.parse import urlparse
-
         app = self._build_app(
             webhook_url='https://hook.example.com/wh',
             mcp_server_url='https://mcp.example.com/mcp',
             chat_tools=[{'endpoint': 'https://tools.example.com/api', 'name': 'tool1'}],
         )
-        existing_ext = app['external_integration']
-
-        endpoints_to_check = []
-        webhook_url = existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, True))
-        mcp_url = existing_ext.get('mcp_server_url', '')
-        if mcp_url:
-            endpoints_to_check.append(('MCP server', mcp_url, False))
-        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
-        for tool in app.get('chat_tools', []):
-            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep, True))
-                seen_hosts.add(urlparse(ep).netloc)
-
-        assert len(endpoints_to_check) == 3
-        labels = [label for label, _, _ in endpoints_to_check]
+        eps = self._collect_endpoints(app['external_integration'], app['chat_tools'])
+        assert len(eps) == 3
+        labels = [label for label, _, _, _ in eps]
         assert 'webhook' in labels
         assert 'MCP server' in labels
         assert 'chat tool' in labels
 
-    def test_duplicate_host_deduped(self):
-        """Chat tools on the same host as webhook_url should not be checked twice."""
-        from urllib.parse import urlparse
-
+    def test_same_host_different_path_both_checked(self):
+        """Same host but different paths must both be validated."""
         app = self._build_app(
             webhook_url='https://example.com/webhook',
             chat_tools=[{'endpoint': 'https://example.com/tool', 'name': 'tool1'}],
         )
-        existing_ext = app['external_integration']
+        eps = self._collect_endpoints(app['external_integration'], app['chat_tools'])
+        assert len(eps) == 2
+        urls = [url for _, url, _, _ in eps]
+        assert 'https://example.com/webhook' in urls
+        assert 'https://example.com/tool' in urls
 
-        endpoints_to_check = []
-        webhook_url = existing_ext.get('webhook_url', '')
-        if webhook_url:
-            endpoints_to_check.append(('webhook', webhook_url, True))
-        seen_hosts = {urlparse(url).netloc for _, url, _ in endpoints_to_check if url}
-        for tool in app.get('chat_tools', []):
-            ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-            if ep and urlparse(ep).netloc not in seen_hosts:
-                endpoints_to_check.append(('chat tool', ep, True))
-                seen_hosts.add(urlparse(ep).netloc)
+    def test_exact_duplicate_url_deduped(self):
+        """Exact duplicate URLs should not be checked twice."""
+        app = self._build_app(
+            webhook_url='https://example.com/hook',
+            chat_tools=[{'endpoint': 'https://example.com/hook', 'name': 'tool1'}],
+        )
+        eps = self._collect_endpoints(app['external_integration'], app['chat_tools'])
+        assert len(eps) == 1
+        assert eps[0][0] == 'webhook'
 
-        assert len(endpoints_to_check) == 1
-        assert endpoints_to_check[0][0] == 'webhook'
+    def test_get_chat_tool_uses_correct_method(self):
+        """Chat tool with GET method should be checked with GET, not POST."""
+        app = self._build_app(
+            chat_tools=[{'endpoint': 'https://api.example.com/search', 'name': 'search', 'method': 'GET'}]
+        )
+        eps = self._collect_endpoints(app['external_integration'], app['chat_tools'])
+        assert len(eps) == 1
+        assert eps[0] == ('chat tool', 'https://api.example.com/search', 'GET', True)
 
     def test_updated_chat_tools_preferred_over_existing(self):
         """Re-enable should use updated chat tools from manifest, not stale DB values."""
