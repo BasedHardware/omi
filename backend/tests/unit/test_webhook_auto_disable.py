@@ -754,3 +754,62 @@ class TestReEnableRouterBehavior:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
         assert '503' in exc_info.value.detail
+
+    def test_updated_chat_tools_preferred_over_stale_db(self):
+        """update_dict chat_tools should override stale app chat_tools."""
+        app = {
+            'external_integration': {},
+            'chat_tools': [{'endpoint': 'https://old-broken.example.com/api', 'name': 'old'}],
+        }
+        update = {'chat_tools': [{'endpoint': 'https://new-fixed.example.com/api', 'name': 'new'}]}
+        probed_urls = []
+
+        def mock_request(method, url, **kwargs):
+            probed_urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            return resp
+
+        with patch("utils.apps.httpx.request", side_effect=mock_request):
+            self._validate(app, update, 'app-1')
+        assert probed_urls == ['https://new-fixed.example.com/api']
+
+    def test_exact_duplicate_url_deduped(self):
+        """Same URL in webhook_url and chat_tools should be probed only once."""
+        app = {
+            'external_integration': {'webhook_url': 'https://example.com/hook'},
+            'chat_tools': [{'endpoint': 'https://example.com/hook', 'name': 't'}],
+        }
+        update = {}
+        probed_urls = []
+
+        def mock_request(method, url, **kwargs):
+            probed_urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            return resp
+
+        with patch("utils.apps.httpx.request", side_effect=mock_request):
+            self._validate(app, update, 'app-1')
+        assert probed_urls == ['https://example.com/hook']
+
+    def test_same_host_different_path_both_checked(self):
+        """Same host but different URL paths must both be probed."""
+        app = {
+            'external_integration': {'webhook_url': 'https://example.com/webhook'},
+            'chat_tools': [{'endpoint': 'https://example.com/tool', 'name': 't'}],
+        }
+        update = {}
+        probed_urls = []
+
+        def mock_request(method, url, **kwargs):
+            probed_urls.append(url)
+            resp = MagicMock()
+            resp.status_code = 200
+            return resp
+
+        with patch("utils.apps.httpx.request", side_effect=mock_request):
+            self._validate(app, update, 'app-1')
+        assert len(probed_urls) == 2
+        assert 'https://example.com/webhook' in probed_urls
+        assert 'https://example.com/tool' in probed_urls
