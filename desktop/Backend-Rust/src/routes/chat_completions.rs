@@ -8,7 +8,7 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -17,6 +17,7 @@ use futures::StreamExt;
 use serde_json::json;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
+use crate::byok;
 use crate::models::chat_completions::*;
 use crate::AppState;
 
@@ -449,6 +450,7 @@ fn make_chunk(
 async fn chat_completions(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
+    headers: HeaderMap,
     Json(req): Json<ChatCompletionRequest>,
 ) -> Result<Response, StatusCode> {
     let user: AuthUser = user.into();
@@ -462,32 +464,45 @@ async fn chat_completions(
         StatusCode::BAD_REQUEST
     })?;
 
-    // Rate limiting
-    let decision = state
-        .gemini_rate_limiter
-        .check_and_record(&user.uid, state.redis.as_ref())
-        .await;
-    if decision == RateDecision::Reject {
-        return Ok(Response::builder()
-            .status(StatusCode::TOO_MANY_REQUESTS)
-            .header("content-type", "application/json")
-            .header("retry-after", "60")
-            .body(axum::body::Body::from(
-                json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}}).to_string()
-            ))
-            .unwrap());
+    // BYOK: check for user-provided Anthropic API key (issue #7357).
+    // When present, use the user's key and skip server-key rate limiting.
+    let byok_anthropic_key = byok::get_byok_key(&headers, byok::HEADER_ANTHROPIC);
+    let is_byok = byok_anthropic_key.is_some();
+
+    // Rate limiting — skip when using BYOK key
+    if !is_byok {
+        let decision = state
+            .gemini_rate_limiter
+            .check_and_record(&user.uid, state.redis.as_ref())
+            .await;
+        if decision == RateDecision::Reject {
+            return Ok(Response::builder()
+                .status(StatusCode::TOO_MANY_REQUESTS)
+                .header("content-type", "application/json")
+                .header("retry-after", "60")
+                .body(axum::body::Body::from(
+                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}}).to_string()
+                ))
+                .unwrap());
+        }
     }
 
-    // Get API key
-    let api_key = match route.provider {
-        Provider::Anthropic => state
-            .config
-            .anthropic_api_key
-            .as_ref()
-            .ok_or_else(|| {
-                tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?,
+    // Get API key — prefer BYOK, fall back to server key
+    let api_key: String = if let Some(byok_key) = byok_anthropic_key {
+        tracing::info!("chat_completions: using BYOK Anthropic key for uid={}", user.uid);
+        byok_key.to_string()
+    } else {
+        match route.provider {
+            Provider::Anthropic => state
+                .config
+                .anthropic_api_key
+                .as_ref()
+                .ok_or_else(|| {
+                    tracing::error!("chat_completions: ANTHROPIC_API_KEY not configured");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+                .clone(),
+        }
     };
 
     // Translate request
@@ -501,21 +516,23 @@ async fn chat_completions(
     if req.stream {
         handle_streaming(
             &client,
-            api_key,
+            &api_key,
             &anthropic_req,
             route,
             &user,
             &state,
+            is_byok,
         )
         .await
     } else {
         handle_non_streaming(
             &client,
-            api_key,
+            &api_key,
             &anthropic_req,
             route,
             &user,
             &state,
+            is_byok,
         )
         .await
     }
@@ -528,6 +545,7 @@ async fn handle_non_streaming(
     route: &ModelRoute,
     user: &AuthUser,
     state: &AppState,
+    is_byok: bool,
 ) -> Result<Response, StatusCode> {
     let upstream_resp = client
         .post(ANTHROPIC_API_URL)
@@ -563,9 +581,12 @@ async fn handle_non_streaming(
         StatusCode::BAD_GATEWAY
     })?;
 
-    // Log usage
-    let cost = compute_cost(&anthropic_resp.usage, route.upstream_model);
-    log_usage(state, user, &anthropic_resp.usage, cost).await;
+    // Log usage — skip for BYOK since the user pays their own bill and
+    // including it would overstate Omi's spend in cost dashboards.
+    if !is_byok {
+        let cost = compute_cost(&anthropic_resp.usage, route.upstream_model);
+        log_usage(state, user, &anthropic_resp.usage, cost).await;
+    }
 
     let openai_resp = translate_response(&anthropic_resp, route.public_model);
 
@@ -579,6 +600,7 @@ async fn handle_streaming(
     route: &ModelRoute,
     user: &AuthUser,
     state: &AppState,
+    is_byok: bool,
 ) -> Result<Response, StatusCode> {
     let upstream_resp = client
         .post(ANTHROPIC_API_URL)
@@ -817,7 +839,8 @@ async fn handle_streaming(
                     AnthropicStreamEvent::MessageStop {} => {
                         yield Ok(Bytes::from_static(b"data: [DONE]\n\n"));
 
-                        // Log usage asynchronously
+                        // Log usage asynchronously — skip for BYOK (user pays own bill)
+                        if !is_byok {
                         if let Some(ref fu) = final_usage {
                             let merged = AnthropicUsage {
                                 input_tokens: initial_usage.as_ref().map_or(0, |u| u.input_tokens),
@@ -844,6 +867,7 @@ async fn handle_streaming(
                                 }
                             });
                         }
+                        } // if !is_byok
                     }
 
                     AnthropicStreamEvent::Ping {} => {}
