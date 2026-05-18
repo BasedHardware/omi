@@ -119,7 +119,7 @@ from utils.stt.speaker_embedding import (
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
-from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, sleep_until_shutdown
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +355,7 @@ async def _stream_handler(
             translation_language = language
 
     websocket_active = True
+    shutdown_event = asyncio.Event()
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
     # Buffer size limits to prevent memory leaks during outages/lag
@@ -489,8 +490,7 @@ async def _stream_handler(
         nonlocal dg_usage_ms_pending
 
         while websocket_active:
-            await asyncio.sleep(60)
-            if not websocket_active:
+            if await sleep_until_shutdown(shutdown_event, 60):
                 break
 
             # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
@@ -700,7 +700,8 @@ async def _stream_handler(
                     break
 
                 # next
-                await asyncio.sleep(10)
+                if await sleep_until_shutdown(shutdown_event, 10):
+                    break
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected {uid} {session_id}")
         except Exception as e:
@@ -1377,8 +1378,7 @@ async def _stream_handler(
                             f"Pusher reconnect attempt {reconnect_attempts + 1}/{PUSHER_MAX_RECONNECT_ATTEMPTS}, "
                             f"waiting {delay:.1f}s {uid} {session_id}"
                         )
-                        await asyncio.sleep(delay)
-                        if not websocket_active:
+                        if await sleep_until_shutdown(shutdown_event, delay):
                             break
 
                         try:
@@ -1407,7 +1407,8 @@ async def _stream_handler(
                         elapsed = time.monotonic() - degraded_since
                         remaining = PUSHER_DEGRADED_COOLDOWN - elapsed
                         if remaining > 0:
-                            await asyncio.sleep(min(remaining, 5.0))
+                            if await sleep_until_shutdown(shutdown_event, min(remaining, 5.0)):
+                                break
                             continue
                         # Cooldown elapsed — try a single probe
                         reconnect_state = PusherReconnectState.HALF_OPEN_PROBE
@@ -1547,7 +1548,8 @@ async def _stream_handler(
             """
             nonlocal pusher_ws, pusher_connected, websocket_active
             while websocket_active:
-                await asyncio.sleep(20)
+                if await sleep_until_shutdown(shutdown_event, 20):
+                    break
                 if pusher_connected and pusher_ws:
                     try:
                         await pusher_ws.send(struct.pack("I", 100))
@@ -2719,11 +2721,13 @@ async def _stream_handler(
             except asyncio.CancelledError:
                 pass
 
+        shutdown_event.set()
         await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="listen_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
     finally:
+        shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
