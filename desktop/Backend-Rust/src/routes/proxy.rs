@@ -85,6 +85,7 @@ async fn gemini_proxy(
     Path(path): Path<String>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
@@ -113,7 +114,12 @@ async fn gemini_proxy(
     // BYOK: check for user-provided Gemini API key (issue #7357).
     // When present, use AI Studio with the user's key, skip Vertex AI routing
     // and server-key rate limiting (the user pays their own bill).
-    let byok_gemini_key = byok::get_byok_key(&headers, byok::HEADER_GEMINI);
+    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
+    let byok_gemini_key = if byok_stripped {
+        None
+    } else {
+        byok::get_byok_key(&headers, byok::HEADER_GEMINI)
+    };
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
@@ -305,6 +311,7 @@ async fn gemini_stream_proxy(
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
@@ -330,7 +337,11 @@ async fn gemini_stream_proxy(
     })?;
 
     // BYOK: check for user-provided Gemini API key (issue #7357).
-    let byok_gemini_key = byok::get_byok_key(&headers, byok::HEADER_GEMINI);
+    let byok_gemini_key = if byok_stripped {
+        None
+    } else {
+        byok::get_byok_key(&headers, byok::HEADER_GEMINI)
+    };
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
