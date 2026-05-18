@@ -287,8 +287,10 @@ where
 
         // Paywall check — fail open if Python is unreachable so a backend
         // outage never makes paying users look paywalled.
+        // BYOK headers are forwarded to Python so its escape hatch can fire
+        // for users who have enrolled all 4 BYOK keys (issue #7357).
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, token).await {
+            if checker.0.is_paywalled(&uid, token, &parts.headers).await {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),
