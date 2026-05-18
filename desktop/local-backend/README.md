@@ -7,6 +7,9 @@ dependencies.
 
 ## Run Locally
 
+For a complete user-test walkthrough, including desktop launch environment and
+transcript import, see `docs/local-mvp-runbook.md`.
+
 ```bash
 cd desktop/local-backend
 cargo run
@@ -52,6 +55,7 @@ The local daemon exposes JSON endpoints for the desktop MVP:
 - `GET /v1/processing-jobs`
 - `GET /v1/processing-jobs/:id`
 - `GET /v1/processing-jobs/status`
+- `POST /v1/processing-jobs/process-next`
 
 Finalizing transcript ingestion currently enqueues a local `finalize_transcript`
 processing job. Later processing workers can consume the same durable
@@ -86,6 +90,19 @@ services. In local daemon mode:
 Unavailable capabilities fail before building a request to Omi-hosted services.
 Local conversation CRUD/search/settings flows continue to use the configured
 loopback daemon URL and do not require Firebase auth.
+
+Hosted transcription endpoints are intentionally unavailable in local daemon
+mode. Direct live STT parity is not part of this MVP unless a future direct
+provider path is added. For user testing, import transcript text or JSON
+fixtures through the supported helper:
+
+```bash
+desktop/local-backend/tools/import_transcript.py /path/to/transcript.txt
+```
+
+The helper creates a conversation, appends transcript segments, finalizes
+ingestion, waits for local processing, verifies search, and prints read/search
+commands for the imported conversation.
 
 ## Architecture And E2E Validation
 
