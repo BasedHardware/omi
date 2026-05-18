@@ -115,11 +115,7 @@ async fn gemini_proxy(
     // When present, use AI Studio with the user's key, skip Vertex AI routing
     // and server-key rate limiting (the user pays their own bill).
     // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
-    let byok_gemini_key = if byok_stripped {
-        None
-    } else {
-        byok::get_byok_key(&headers, byok::HEADER_GEMINI)
-    };
+    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
@@ -338,11 +334,7 @@ async fn gemini_stream_proxy(
     })?;
 
     // BYOK: check for user-provided Gemini API key (issue #7357).
-    let byok_gemini_key = if byok_stripped {
-        None
-    } else {
-        byok::get_byok_key(&headers, byok::HEADER_GEMINI)
-    };
+    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
