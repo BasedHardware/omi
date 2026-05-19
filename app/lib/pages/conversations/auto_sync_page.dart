@@ -848,6 +848,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.green, Icons.cloud_done_rounded, context.l10n.syncStatusBackedUp);
       case WalSyncDisplayState.syncing:
         return (Colors.deepPurpleAccent, Icons.sync_rounded, context.l10n.syncStatusBackingUp);
+      case WalSyncDisplayState.uploaded:
+        return (const Color(0xFF4DA3FF), Icons.cloud_sync_rounded, context.l10n.syncStatusUploaded);
       case WalSyncDisplayState.waiting:
         return (const Color(0xFF8E8E93), Icons.cloud_upload_outlined, context.l10n.syncStatusWaiting);
       case WalSyncDisplayState.retrying:
