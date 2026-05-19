@@ -61,6 +61,25 @@ if "database.apps" not in sys.modules:
 sys.modules["database.apps"].delete_app_cache_by_id = MagicMock()
 sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
 
+if "utils.executors" not in sys.modules:
+    _executors_mod = types.ModuleType("utils.executors")
+    sys.modules["utils.executors"] = _executors_mod
+_executors_mod = sys.modules["utils.executors"]
+_executors_mod.db_executor = MagicMock()
+_executors_mod.llm_executor = MagicMock()
+_executors_mod.storage_executor = MagicMock()
+_executors_mod.critical_executor = MagicMock()
+_executors_mod.postprocess_executor = MagicMock()
+_executors_mod.sync_executor = MagicMock()
+_executors_mod.stripe_executor = MagicMock()
+
+
+async def _mock_run_blocking(executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)
+
+
+_executors_mod.run_blocking = _mock_run_blocking
+
 
 def _load_app_tools_module():
     """Load app_tools module directly, bypassing __init__.py which pulls in heavy deps."""
@@ -164,8 +183,8 @@ class TestAppWebhookHealthLuaScript:
 class TestAppWebhookSuccessReset:
     """Test that success resets all failure state."""
 
-    def test_success_resets_state(self):
-        """record_app_webhook_success should call hset with zeroed failure fields."""
+    def test_success_updates_last_success_without_resetting_failures(self):
+        """record_app_webhook_success should update last_success_at without clearing failure state."""
         from database.webhook_health import record_app_webhook_success
 
         mock_r = MagicMock()
@@ -173,12 +192,9 @@ class TestAppWebhookSuccessReset:
             record_app_webhook_success("app-1")
 
         mock_r.hset.assert_called_once()
-        call_kwargs = mock_r.hset.call_args
-        mapping = call_kwargs.kwargs.get('mapping') or call_kwargs[1].get('mapping')
-        assert mapping['failure_count'] == '0'
-        assert mapping['disabled'] == '0'
-        assert mapping['notified_day1'] == '0'
-        assert mapping['notified_day2'] == '0'
+        args = mock_r.hset.call_args
+        assert args[0][0] == 'app_webhook_health:app-1'
+        assert args[0][1] == 'last_success_at'
 
     def test_success_redis_error_does_not_raise(self):
         """Redis errors during success recording should be swallowed."""
@@ -225,6 +241,26 @@ class TestIsAppWebhookDisabled:
         mock_r.hget.side_effect = Exception("Redis timeout")
         with patch("database.webhook_health.r", mock_r):
             assert is_app_webhook_disabled("app-1") is False
+
+
+class TestClearAppWebhookHealth:
+    """Test clear_app_webhook_health used on re-enable."""
+
+    def test_clear_deletes_key(self):
+        from database.webhook_health import clear_app_webhook_health
+
+        mock_r = MagicMock()
+        with patch("database.webhook_health.r", mock_r):
+            clear_app_webhook_health("app-1")
+        mock_r.delete.assert_called_once_with('app_webhook_health:app-1')
+
+    def test_clear_redis_error_does_not_raise(self):
+        from database.webhook_health import clear_app_webhook_health
+
+        mock_r = MagicMock()
+        mock_r.delete.side_effect = Exception("Redis down")
+        with patch("database.webhook_health.r", mock_r):
+            clear_app_webhook_health("app-1")
 
 
 class TestDevWebhookHealthTracking:
@@ -664,10 +700,8 @@ class TestReEnableRouterBehavior:
         with patch("utils.apps.httpx.request", return_value=mock_resp):
             self._validate(app, update, 'app-1')
 
-    def test_chat_tool_non_2xx_blocks_reenable(self):
-        """Chat tool returning 404 should block re-enable."""
-        from fastapi import HTTPException
-
+    def test_chat_tool_reachability_check_allows_non_2xx(self):
+        """Chat tool health check uses HEAD for reachability only — non-2xx is acceptable."""
         app = {
             'external_integration': {},
             'chat_tools': [{'endpoint': 'https://tool.example.com/api', 'name': 't', 'method': 'POST'}],
@@ -676,10 +710,7 @@ class TestReEnableRouterBehavior:
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         with patch("utils.apps.httpx.request", return_value=mock_resp):
-            with pytest.raises(HTTPException) as exc_info:
-                self._validate(app, update, 'app-1')
-        assert exc_info.value.status_code == 400
-        assert '404' in exc_info.value.detail
+            self._validate(app, update, 'app-1')
 
     def test_timeout_blocks_reenable(self):
         """Timeout on any endpoint should block re-enable."""
@@ -726,34 +757,36 @@ class TestReEnableRouterBehavior:
         assert len(call_urls) == 3
         methods = [m for m, _ in call_urls]
         assert 'POST' in methods
-        assert 'GET' in methods
+        assert 'HEAD' in methods
         urls = [u for _, u in call_urls]
         assert 'https://a.com/wh' in urls
         assert 'https://b.com/mcp' in urls
         assert 'https://c.com/tool' in urls
 
-    def test_second_endpoint_failure_blocks_even_if_first_healthy(self):
-        """If first endpoint is healthy but second fails, re-enable should be blocked."""
+    def test_second_webhook_failure_blocks_even_if_first_healthy(self):
+        """If webhook is healthy but MCP fails with connect error, re-enable should be blocked."""
         from fastapi import HTTPException
 
         app = {
-            'external_integration': {'webhook_url': 'https://ok.com/wh'},
-            'chat_tools': [{'endpoint': 'https://broken.com/tool', 'name': 't'}],
+            'external_integration': {'webhook_url': 'https://ok.com/wh', 'mcp_server_url': 'https://broken.com/mcp'},
+            'chat_tools': [],
         }
         update = {}
         call_count = [0]
 
         def mock_request(method, url, **kwargs):
             call_count[0] += 1
-            resp = MagicMock()
-            resp.status_code = 200 if call_count[0] == 1 else 503
-            return resp
+            if call_count[0] == 1:
+                resp = MagicMock()
+                resp.status_code = 200
+                return resp
+            raise httpx.ConnectError("refused")
 
         with patch("utils.apps.httpx.request", side_effect=mock_request):
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
-        assert '503' in exc_info.value.detail
+        assert 'Cannot connect' in exc_info.value.detail
 
     def test_updated_chat_tools_preferred_over_stale_db(self):
         """update_dict chat_tools should override stale app chat_tools."""
