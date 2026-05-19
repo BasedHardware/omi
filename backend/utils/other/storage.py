@@ -3,9 +3,10 @@ import io
 import json
 import os
 import struct
+import threading
 import wave
 from typing import List
-from concurrent.futures import as_completed
+from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
 from utils.executors import postprocess_executor, storage_executor
 
@@ -21,6 +22,11 @@ from database import users as users_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Per-request fan-out limits for storage_executor (#7387)
+_STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
+_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
+_CHUNK_WINDOW_SIZE = 8
 
 # Opus encoding constants
 OPUS_SAMPLE_RATE = 16000
@@ -753,32 +759,60 @@ def download_audio_chunks_and_merge(
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
 
-    # Download all data in parallel
+    # Download data with bounded concurrency (sliding window + global semaphore, #7387)
     chunk_results = {}
 
-    # Determine which timestamps need individual downloads vs batch downloads
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
-    unique_batch_paths = set(ts_to_batch_path.values())
+    unique_batch_paths = list(set(ts_to_batch_path.values()))
 
-    # Submit individual chunk downloads via shared storage executor
-    individual_futures = {storage_executor.submit(download_single_chunk, ts): ts for ts in individual_timestamps}
+    # Build unified job list: ('individual', ts) or ('batch', path)
+    jobs = [('individual', ts) for ts in individual_timestamps] + [('batch', p) for p in unique_batch_paths]
 
-    # Submit batch blob downloads (once per unique path)
-    batch_futures = {storage_executor.submit(_download_and_decode_blob, path): path for path in unique_batch_paths}
+    def _submit_job(job):
+        kind, key = job
+        _STORAGE_CHUNK_SEM.acquire()
+        try:
+            if kind == 'individual':
+                f = storage_executor.submit(download_single_chunk, key)
+            else:
+                f = storage_executor.submit(_download_and_decode_blob, key)
+            f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
+            return (f, kind, key)
+        except Exception:
+            _STORAGE_CHUNK_SEM.release()
+            raise
 
-    # Collect individual results
-    for future in as_completed(individual_futures):
-        timestamp, pcm_data = future.result()
-        if pcm_data is not None:
-            chunk_results[timestamp] = pcm_data
+    # Sliding window: at most _CHUNK_WINDOW_SIZE in-flight per call
+    pending = {}
+    job_iter = iter(jobs)
+    for job in job_iter:
+        finfo = _submit_job(job)
+        pending[finfo[0]] = finfo
+        if len(pending) >= _CHUNK_WINDOW_SIZE:
+            break
 
-    # Collect batch results — assign full batch data at the batch's start timestamp
-    for future in as_completed(batch_futures):
-        path = batch_futures[future]
-        pcm_data = future.result()
-        if pcm_data is not None:
-            batch_info = batch_paths[path]
-            chunk_results[batch_info['timestamp']] = pcm_data
+    while pending:
+        done, _ = wait(pending.keys(), return_when=FIRST_COMPLETED)
+        for future in done:
+            _, kind, key = pending.pop(future)
+            try:
+                if kind == 'individual':
+                    timestamp, pcm_data = future.result()
+                    if pcm_data is not None:
+                        chunk_results[timestamp] = pcm_data
+                else:
+                    pcm_data = future.result()
+                    if pcm_data is not None:
+                        batch_info = batch_paths[key]
+                        chunk_results[batch_info['timestamp']] = pcm_data
+            except Exception as e:
+                logger.warning(f"Chunk download failed ({kind}={key}): {e}")
+
+        for job in job_iter:
+            finfo = _submit_job(job)
+            pending[finfo[0]] = finfo
+            if len(pending) >= _CHUNK_WINDOW_SIZE:
+                break
 
     # Merge chunks
     merged_data = bytearray()
@@ -994,7 +1028,16 @@ def precache_conversation_audio(
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
-        futures = [storage_executor.submit(_cache_single, af) for af in audio_files]
+        futures = []
+        for af in audio_files:
+            _PRECACHE_FILE_SEM.acquire()
+            try:
+                f = storage_executor.submit(_cache_single, af)
+                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                futures.append(f)
+            except Exception:
+                _PRECACHE_FILE_SEM.release()
+                raise
         for future in as_completed(futures):
             try:
                 future.result()
