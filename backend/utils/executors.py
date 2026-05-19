@@ -56,12 +56,12 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
 
 critical_executor = MonitoredThreadPoolExecutor(name="critical", max_workers=8, thread_name_prefix="critical")
-db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=16, thread_name_prefix="db")
-llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=4, thread_name_prefix="llm")
+db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
+llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
-sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=12, thread_name_prefix="sync")
-postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=8, thread_name_prefix="postproc")
-storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=32, thread_name_prefix="storage")
+sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=64, thread_name_prefix="storage")
 
 _ALL_EXECUTORS = [
     critical_executor,

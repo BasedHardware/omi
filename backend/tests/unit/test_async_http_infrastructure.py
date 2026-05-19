@@ -386,9 +386,9 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_16_workers(self):
-        """storage_executor sized for 16 workers to handle concurrent private cloud uploads."""
-        assert storage_executor._max_workers == 16
+    def test_storage_executor_has_64_workers(self):
+        """storage_executor sized for 64 workers to handle concurrent private cloud uploads (#7376)."""
+        assert storage_executor._max_workers == 64
 
 
 class TestNotificationWebhookWiring:

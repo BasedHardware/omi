@@ -152,12 +152,12 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - **Long-running pipelines must be async coordinators.** Each blocking step uses `await run_blocking(pool, fn)`, borrowing a thread only for that step. Never hold a thread pool slot across await points or for >60s.
   - **Pool assignment** (match work type to pool):
     - `critical_executor` (8w) — auth gates only: `_verify_ws_auth`, `validate_byok_websocket`, `check_rate_limit`, `is_hard_restricted`, session/code Redis ops in `auth.py`
-    - `db_executor` (16w) — Firestore/Redis CRUD, vector DB queries
-    - `llm_executor` (4w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation)
+    - `db_executor` (24w) — Firestore/Redis CRUD, vector DB queries
+    - `llm_executor` (6w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation)
     - `stripe_executor` (4w) — Stripe API calls
-    - `sync_executor` (12w) — sync endpoint pipeline work
-    - `postprocess_executor` (8w) — post-conversation processing, coordinator functions
-    - `storage_executor` (32w) — GCS uploads/downloads, audio chunk I/O
+    - `sync_executor` (16w) — sync endpoint pipeline work
+    - `postprocess_executor` (24w) — post-conversation processing, coordinator functions
+    - `storage_executor` (64w) — GCS uploads/downloads, audio chunk I/O
   - **Deadlock prevention — 4 rules:**
     1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
     2. **Orchestration stays in async code.** The async handler coordinates via `await run_blocking(pool, fn)` — sequentially or with `asyncio.gather`. The event loop never blocks, pools stay independent.
