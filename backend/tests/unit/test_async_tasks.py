@@ -1,6 +1,8 @@
 """Unit tests for utils/async_tasks.py — structured concurrency utilities."""
 
 import asyncio
+from pathlib import Path
+
 import pytest
 from unittest.mock import patch
 
@@ -540,10 +542,12 @@ class TestGatherWithLoggingEdgeCases:
 class TestStructuralUsage:
     """AST-level tests that routers actually use the async_tasks utilities."""
 
+    BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
     def test_pusher_imports_async_tasks(self):
         import ast
 
-        with open('routers/pusher.py') as f:
+        with open(self.BACKEND_DIR / 'routers/pusher.py') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -558,7 +562,7 @@ class TestStructuralUsage:
     def test_transcribe_imports_async_tasks(self):
         import ast
 
-        with open('routers/transcribe.py') as f:
+        with open(self.BACKEND_DIR / 'routers/transcribe.py') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -573,7 +577,7 @@ class TestStructuralUsage:
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(filename) as f:
+            with open(self.BACKEND_DIR / filename) as f:
                 source = f.read()
             assert (
                 'asyncio.gather(*tasks)' not in source
@@ -587,7 +591,7 @@ class TestStructuralUsage:
         import re
 
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(filename) as f:
+            with open(self.BACKEND_DIR / filename) as f:
                 source = f.read()
             for match in re.finditer(r'label=f"[^"]*\{uid\}', source):
                 pytest.fail(f"{filename}: dynamic uid in metric label: {match.group()}")
@@ -597,7 +601,7 @@ class TestStructuralUsage:
     def test_app_integrations_uses_gather_with_logging(self):
         import ast
 
-        with open('utils/app_integrations.py') as f:
+        with open(self.BACKEND_DIR / 'utils/app_integrations.py') as f:
             tree = ast.parse(f.read())
 
         imports = []
