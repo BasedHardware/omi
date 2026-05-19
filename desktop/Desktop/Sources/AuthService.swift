@@ -79,11 +79,19 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
-    // No hardcoded fallback — if the key isn't available, auth operations will fail
-    // with a clear error instead of silently using a potentially wrong key.
+    // Firebase Web API key. Clean web OAuth needs this before the user is
+    // authenticated, so prefer env and bundled Firebase options before any
+    // post-auth backend key fetch can run.
     private var firebaseApiKey: String {
         if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
+            return key
+        }
+        if let key = APIKeyService.shared.effectiveFirebaseApiKey, !key.isEmpty {
+            setenv("FIREBASE_API_KEY", key, 1)
+            return key
+        }
+        if let key = APIKeyService.bootstrapFirebaseApiKey {
+            setenv("FIREBASE_API_KEY", key, 1)
             return key
         }
         log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
@@ -532,7 +540,7 @@ class AuthService {
     /// Called by AppDelegate when the app receives an OAuth callback URL
     @MainActor
     func handleOAuthCallback(url: URL) {
-        NSLog("OMI AUTH: Received OAuth callback: %@", url.absoluteString)
+        NSLog("OMI AUTH: Received OAuth callback: %@", Self.sanitizedOAuthCallbackLogDetails(url: url))
 
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             NSLog("OMI AUTH: Failed to parse callback URL")
@@ -579,6 +587,17 @@ class AuthService {
         NSLog("OMI AUTH: Successfully extracted code and state from callback")
         oauthContinuation?.resume(returning: (code: code, state: state))
         oauthContinuation = nil
+    }
+
+    nonisolated static func sanitizedOAuthCallbackLogDetails(url: URL) -> String {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return "scheme=\(url.scheme ?? "nil") host=\(url.host ?? "nil") path=\(url.path) has_code=false has_state=false has_error=false"
+        }
+        let queryItems = components.queryItems ?? []
+        func hasParameter(_ name: String) -> Bool {
+            queryItems.contains { $0.name == name }
+        }
+        return "scheme=\(components.scheme ?? "nil") host=\(components.host ?? "nil") path=\(components.path) has_code=\(hasParameter("code")) has_state=\(hasParameter("state")) has_error=\(hasParameter("error"))"
     }
 
     /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean

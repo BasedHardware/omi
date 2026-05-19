@@ -131,7 +131,7 @@ final class AgentPillsManager: ObservableObject {
         request.httpMethod = "POST"
         request.timeoutInterval = 4
         do {
-            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
+            let headers = try await APIClient.shared.buildHeaders(requireAuth: true, includeBYOK: true)
             for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
         } catch {
             log("AgentPill: router skipped — auth header unavailable (\(error.localizedDescription))")
@@ -549,7 +549,7 @@ final class AgentPillsManager: ObservableObject {
         request.httpMethod = "POST"
         request.timeoutInterval = 8
         do {
-            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
+            let headers = try await APIClient.shared.buildHeaders(requireAuth: true, includeBYOK: true)
             for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
         } catch {
             log("AgentPill: title gen skipped — auth header unavailable (\(error.localizedDescription))")

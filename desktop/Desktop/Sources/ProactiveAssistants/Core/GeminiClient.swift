@@ -388,6 +388,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        APIKeyService.applyBYOKHeaders(to: &urlRequest, providers: [.gemini])
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -462,6 +463,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        APIKeyService.applyBYOKHeaders(to: &urlRequest, providers: [.gemini])
         urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -533,6 +535,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        APIKeyService.applyBYOKHeaders(to: &urlRequest, providers: [.gemini])
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -832,6 +835,7 @@ extension GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        APIKeyService.applyBYOKHeaders(to: &urlRequest, providers: [.gemini])
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 

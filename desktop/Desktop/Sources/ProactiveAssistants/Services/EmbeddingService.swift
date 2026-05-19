@@ -4,6 +4,7 @@ import Foundation
 /// Actor-based service for embeddings using Gemini (3072-dim)
 actor EmbeddingService {
   static let shared = EmbeddingService()
+  typealias AuthHeaderProvider = @Sendable () async throws -> String
 
   /// Gemini embedding-001 outputs 3072 dimensions by default
   static let embeddingDimension = 3072
@@ -15,6 +16,8 @@ actor EmbeddingService {
 
   /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
   private let maxIndexSize = 5000
+  private let urlSession: URLSession
+  private let authHeaderProvider: AuthHeaderProvider?
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
@@ -29,11 +32,28 @@ actor EmbeddingService {
 
   /// Get Firebase auth header for proxy requests
   private func authHeader() async throws -> String {
+    if let authHeaderProvider {
+      return try await authHeaderProvider()
+    }
     let authService = await MainActor.run { AuthService.shared }
     return try await authService.getAuthHeader()
   }
 
-  private init() {}
+  init(
+    urlSession: URLSession = .shared,
+    authHeaderProvider: AuthHeaderProvider? = nil
+  ) {
+    self.urlSession = urlSession
+    self.authHeaderProvider = authHeaderProvider
+  }
+
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    guard let httpResponse = response as? HTTPURLResponse else { return }
+    guard (200..<300).contains(httpResponse.statusCode) else {
+      let body = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+      throw EmbeddingError.serverError(statusCode: httpResponse.statusCode, body: body)
+    }
+  }
 
   // MARK: - Embedding API
 
@@ -64,17 +84,12 @@ actor EmbeddingService {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    APIKeyService.applyBYOKHeaders(to: &request, providers: [.gemini])
     request.timeoutInterval = 30
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
-
-    // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
-    // cause "data couldn't be read" errors that mask the real problem.
-    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-      let body = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
-      throw EmbeddingError.serverError(statusCode: httpResponse.statusCode, body: body)
-    }
+    let (data, response) = try await urlSession.data(for: request)
+    try checkHTTPStatus(response, data: data)
 
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let embedding = json["embedding"] as? [String: Any],
@@ -119,10 +134,12 @@ actor EmbeddingService {
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+    APIKeyService.applyBYOKHeaders(to: &request, providers: [.gemini])
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, _) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await urlSession.data(for: request)
+    try checkHTTPStatus(response, data: data)
 
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let embeddings = json["embeddings"] as? [[String: Any]]
@@ -324,7 +341,21 @@ actor EmbeddingService {
       switch self {
       case .missingAPIKey: return "AI features are not configured. Please update the app."
       case .invalidResponse: return "AI service returned an unexpected response. Please try again."
-      case .serverError(let statusCode, let body): return "Embedding API error (HTTP \(statusCode)): \(body)"
+      case .serverError(let statusCode, let body):
+        let detail = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = detail.isEmpty ? "" : ": \(detail)"
+        switch statusCode {
+        case 401:
+          return "Embedding proxy rejected the current sign-in. Please sign in again\(suffix)"
+        case 403:
+          return "Embedding proxy access is not allowed for this account\(suffix)"
+        case 429:
+          return "Embedding proxy rate limit exceeded. Please try again later\(suffix)"
+        case 500...599:
+          return "Embedding proxy is temporarily unavailable (HTTP \(statusCode))\(suffix)"
+        default:
+          return "Embedding proxy failed (HTTP \(statusCode))\(suffix)"
+        }
       }
     }
   }

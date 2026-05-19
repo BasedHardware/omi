@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Also hosts the Bring-Your-Own-Key (BYOK) free-plan flow: when the user supplies
 /// their own OpenAI, Anthropic, Gemini, and Deepgram keys, the app sends them along
-/// with every request and the backend skips subscription billing. Keys live in
+/// with provider-work requests and the backend skips subscription billing. Keys live in
 /// UserDefaults (reusing the existing dev-override AppStorage pattern); the backend
 /// only ever sees SHA-256 fingerprints for state tracking.
 ///
@@ -83,7 +83,7 @@ final class APIKeyService: ObservableObject {
     }
 
     var effectiveFirebaseApiKey: String? {
-        firebaseApiKey
+        firebaseApiKey ?? Self.bootstrapFirebaseApiKey
     }
 
     var effectiveGoogleCalendarApiKey: String? {
@@ -163,6 +163,43 @@ final class APIKeyService: ObservableObject {
         return s
     }
 
+    nonisolated static var bootstrapFirebaseApiKey: String? {
+        nonEmptyStatic(getenv("FIREBASE_API_KEY").flatMap { String(validatingUTF8: $0) })
+            ?? bundledFirebaseApiKey()
+    }
+
+    nonisolated static func bundledFirebaseApiKey(
+        bundle: Bundle = .main,
+        resourceName: String = "GoogleService-Info"
+    ) -> String? {
+        if let key = firebaseApiKeyFromBundle(bundle, resourceName: resourceName) {
+            return key
+        }
+        #if SWIFT_PACKAGE
+        return firebaseApiKeyFromBundle(.module, resourceName: resourceName)
+        #else
+        return nil
+        #endif
+    }
+
+    private nonisolated static func firebaseApiKeyFromBundle(
+        _ bundle: Bundle,
+        resourceName: String
+    ) -> String? {
+        guard let url = bundle.url(forResource: resourceName, withExtension: "plist"),
+              let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+              ) as? [String: Any],
+              let key = plist["API_KEY"] as? String
+        else {
+            return nil
+        }
+        return nonEmptyStatic(key)
+    }
+
     // MARK: - Thread-safe key access (for non-MainActor contexts)
     // These read from UserDefaults (thread-safe) and getenv() (set by applyToEnvironment).
     // Use these from actors, nonisolated inits, and background threads.
@@ -216,5 +253,23 @@ final class APIKeyService: ObservableObject {
             }
         }
         return out
+    }
+
+    nonisolated static func byokHeaders(providers: Set<BYOKProvider>? = nil) -> [String: String] {
+        byokSnapshot.reduce(into: [:]) { headers, element in
+            let (provider, entry) = element
+            if providers == nil || providers?.contains(provider) == true {
+                headers[provider.headerName] = entry.key
+            }
+        }
+    }
+
+    nonisolated static func applyBYOKHeaders(
+        to request: inout URLRequest,
+        providers: Set<BYOKProvider>? = nil
+    ) {
+        for (header, value) in byokHeaders(providers: providers) {
+            request.setValue(value, forHTTPHeaderField: header)
+        }
     }
 }

@@ -154,6 +154,26 @@ private func assertNoOmiHostedBackendRequests(
   )
 }
 
+private func assertNoBYOKHeaders(
+  _ request: CapturedRequest?,
+  file: StaticString = #filePath,
+  line: UInt = #line
+) {
+  guard let headers = request?.headers else {
+    XCTFail("expected captured request", file: file, line: line)
+    return
+  }
+  for provider in BYOKProvider.allCases {
+    XCTAssertNil(headers[provider.headerName], "unexpected \(provider.headerName)", file: file, line: line)
+  }
+}
+
+private func clearBYOKDefaults() {
+  for provider in BYOKProvider.allCases {
+    UserDefaults.standard.removeObject(forKey: provider.storageKey)
+  }
+}
+
 private func assertUnavailable(
   _ error: Error?,
   capability: DesktopBackendEnvironment.Capability,
@@ -402,6 +422,7 @@ final class APIClientRoutingTests: XCTestCase {
   override func setUp() {
     super.setUp()
     URLCapture.reset()
+    clearBYOKDefaults()
     setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
     setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
@@ -410,6 +431,7 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   override func tearDown() {
+    clearBYOKDefaults()
     unsetenv("OMI_PYTHON_API_URL")
     unsetenv("OMI_DESKTOP_API_URL")
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
@@ -417,6 +439,94 @@ final class APIClientRoutingTests: XCTestCase {
     unsetenv("OMI_REWIND_DATABASE_ROOT")
     URLCapture.reset()
     super.tearDown()
+  }
+
+  func testBundledFirebaseApiKeyBootstrapsWhenEnvIsMissing() {
+    unsetenv("FIREBASE_API_KEY")
+    let key = APIKeyService.bootstrapFirebaseApiKey
+    XCTAssertNotNil(key)
+    XCTAssertFalse(key?.isEmpty ?? true)
+  }
+
+  func testOAuthCallbackLogDetailsAreSanitized() {
+    let url = URL(string: "omi-computer://auth/callback?code=secret-code&state=secret-state&extra=visible")!
+    let details = AuthService.sanitizedOAuthCallbackLogDetails(url: url)
+    XCTAssertTrue(details.contains("scheme=omi-computer"))
+    XCTAssertTrue(details.contains("host=auth"))
+    XCTAssertTrue(details.contains("path=/callback"))
+    XCTAssertTrue(details.contains("has_code=true"))
+    XCTAssertTrue(details.contains("has_state=true"))
+    XCTAssertFalse(details.contains("secret-code"))
+    XCTAssertFalse(details.contains("secret-state"))
+    XCTAssertFalse(details.contains("extra=visible"))
+    XCTAssertFalse(details.contains(url.absoluteString))
+  }
+
+  func testOrdinaryRequestsDoNotAttachBYOKHeaders() async {
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("test-\(provider.rawValue)-key", forKey: provider.storageKey)
+    }
+    let client = await makeTestClient()
+
+    _ = try? await client.getAssistantSettings() as AssistantSettingsResponse
+    assertNoBYOKHeaders(URLCapture.capturedRequests.first)
+
+    URLCapture.reset()
+    _ = try? await client.getChatSessions() as [ChatSession]
+    assertNoBYOKHeaders(URLCapture.capturedRequests.first)
+
+    URLCapture.reset()
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    _ = try? await client.getSelectedBackendSettings()
+    assertNoBYOKHeaders(URLCapture.capturedRequests.first)
+  }
+
+  func testExplicitProviderRequestsAttachBYOKHeaders() async {
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("test-\(provider.rawValue)-key", forKey: provider.storageKey)
+    }
+    let client = await makeTestClient()
+
+    _ = try? await client.synthesizeSpeech(
+      request: APIClient.TtsSynthesizeRequest(
+        text: "Hello",
+        voiceId: "onyx",
+        instructions: nil
+      ))
+
+    let headers = URLCapture.capturedRequests.first?.headers ?? [:]
+    for provider in BYOKProvider.allCases {
+      XCTAssertEqual(headers[provider.headerName], "test-\(provider.rawValue)-key")
+    }
+  }
+
+  func testEmbeddingBatchHandlesNon2xxProxyResponses() async {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [URLCapture.self]
+    let session = URLSession(configuration: config)
+    let service = EmbeddingService(
+      urlSession: session,
+      authHeaderProvider: { "Bearer test-token" }
+    )
+
+    for status in [401, 403, 429, 503] {
+      URLCapture.reset()
+      URLCapture.setStatusCode(status)
+      do {
+        _ = try await service.embedBatch(texts: ["hello"])
+        XCTFail("expected serverError for HTTP \(status)")
+      } catch let error as EmbeddingService.EmbeddingError {
+        guard case .serverError(let statusCode, let body) = error else {
+          XCTFail("expected serverError, got \(error)")
+          continue
+        }
+        XCTAssertEqual(statusCode, status)
+        XCTAssertTrue(body.contains("detail"))
+      } catch {
+        XCTFail("expected EmbeddingError.serverError, got \(error)")
+      }
+    }
   }
 
   // -- Conversations (GET, DELETE → Python) --

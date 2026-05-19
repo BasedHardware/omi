@@ -83,7 +83,9 @@ actor APIClient {
 
   // MARK: - Request Building
 
-  func buildHeaders(requireAuth: Bool = true) async throws -> [String: String] {
+  func buildHeaders(requireAuth: Bool = true, includeBYOK: Bool = false) async throws
+    -> [String: String]
+  {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
@@ -100,10 +102,10 @@ actor APIClient {
       }
     }
 
-    // BYOK: attach user-provided keys so the backend uses them for LLM/STT
-    // calls this request triggers. Sent per-request; never stored server-side.
-    for (provider, entry) in APIKeyService.byokSnapshot {
-      headers[provider.headerName] = entry.key
+    // BYOK keys are raw provider credentials. Only attach them to explicit
+    // provider/STT work, never to ordinary account, settings, session, or support requests.
+    if includeBYOK {
+      headers.merge(APIKeyService.byokHeaders()) { _, new in new }
     }
 
     return headers
@@ -5790,7 +5792,7 @@ extension APIClient {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.timeoutInterval = 60
-    request.allHTTPHeaderFields = try await buildHeaders()
+    request.allHTTPHeaderFields = try await buildHeaders(includeBYOK: true)
     request.httpBody = try JSONEncoder().encode(body)
 
     let (data, response) = try await session.data(for: request)
