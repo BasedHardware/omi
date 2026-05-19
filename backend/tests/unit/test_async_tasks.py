@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 from utils.async_tasks import (
     GatherResult,
-    SupervisorExit,
+    SupervisorResult,
     supervise_tasks,
     drain_tasks,
-    gather_with_logging,
+    gather_safe,
     gather_chunked,
     create_named_task,
     wait_for_event,
@@ -253,7 +253,7 @@ class TestSuperviseTasks:
 
 
 # ---------------------------------------------------------------------------
-# Tests for gather_with_logging
+# Tests for gather_safe
 # ---------------------------------------------------------------------------
 
 
@@ -263,7 +263,7 @@ class TestGatherWithLogging:
             async def add(x):
                 return x + 1
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 add(1),
                 add(2),
                 add(3),
@@ -284,7 +284,7 @@ class TestGatherWithLogging:
             async def fail():
                 raise ValueError("bad")
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 ok(),
                 fail(),
                 ok(),
@@ -311,7 +311,7 @@ class TestGatherWithLogging:
                 await asyncio.sleep(0.02)
                 current -= 1
 
-            await gather_with_logging(
+            await gather_safe(
                 *[track() for _ in range(20)],
                 label="test",
                 max_concurrency=5,
@@ -322,7 +322,7 @@ class TestGatherWithLogging:
 
     def test_empty_coros(self):
         async def _run():
-            results = await gather_with_logging(label="test", max_concurrency=10)
+            results = await gather_safe(label="test", max_concurrency=10)
             assert results == []
 
         asyncio.run(_run())
@@ -336,7 +336,7 @@ class TestGatherWithLogging:
             async def fast():
                 return "fast"
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 slow(),
                 fast(),
                 label="test",
@@ -355,7 +355,7 @@ class TestGatherWithLogging:
                 await asyncio.sleep(delay)
                 return val
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 delayed("c", 0.06),
                 delayed("a", 0.02),
                 delayed("b", 0.04),
@@ -494,7 +494,7 @@ class TestDrainTasksEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# Tests for gather_with_logging edge cases
+# Tests for gather_safe edge cases
 # ---------------------------------------------------------------------------
 
 
@@ -504,7 +504,7 @@ class TestGatherWithLoggingEdgeCases:
             async def fail(msg):
                 raise RuntimeError(msg)
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 fail("a"),
                 fail("b"),
                 fail("c"),
@@ -523,7 +523,7 @@ class TestGatherWithLoggingEdgeCases:
             async def return_none():
                 return None
 
-            results = await gather_with_logging(
+            results = await gather_safe(
                 return_none(),
                 label="none_val",
                 max_concurrency=10,
@@ -598,7 +598,7 @@ class TestStructuralUsage:
             for match in re.finditer(r'label=f"[^"]*\{session_id\}', source):
                 pytest.fail(f"{filename}: dynamic session_id in metric label: {match.group()}")
 
-    def test_app_integrations_uses_gather_with_logging(self):
+    def test_app_integrations_uses_gather_safe(self):
         import ast
 
         with open(self.BACKEND_DIR / 'utils/app_integrations.py') as f:
@@ -609,7 +609,7 @@ class TestStructuralUsage:
             if isinstance(node, ast.ImportFrom) and node.module == 'utils.async_tasks':
                 imports.extend(alias.name for alias in node.names)
 
-        assert 'gather_with_logging' in imports
+        assert 'gather_safe' in imports
 
 
 # ---------------------------------------------------------------------------
@@ -750,7 +750,7 @@ class TestUtilityBoundaries:
                 current -= 1
                 return i
 
-            results = await gather_with_logging(*[track(i) for i in range(5)], label="test", max_concurrency=1)
+            results = await gather_safe(*[track(i) for i in range(5)], label="test", max_concurrency=1)
             assert max_concurrent == 1
             assert all(r.ok for r in results)
 
