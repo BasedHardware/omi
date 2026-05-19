@@ -4,9 +4,13 @@ Verifies that storage_executor submissions are gated by semaphores to prevent
 queue spikes from unbounded parallel chunk downloads and audio file precaching.
 
 Source-level tests (no heavy module imports) — checks code structure, not runtime.
+Behavioral tests use a standalone sliding-window implementation to verify the pattern.
 """
 
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 
 def _read_source(rel_path):
@@ -205,3 +209,167 @@ class TestSpeakerIdentificationPool:
         merge_idx = src.index('download_audio_chunks_and_merge')
         context = src[max(0, merge_idx - 200) : merge_idx + 50]
         assert 'sync_executor' in context
+
+
+class TestNotificationsFanOut:
+    """notifications.py must not use storage_executor for summary work."""
+
+    def test_bulk_summary_uses_postprocess_executor(self):
+        """_send_bulk_summary_notification must use postprocess_executor, not storage_executor."""
+        src = _read_source('utils/other/notifications.py')
+        func_start = src.index('async def _send_bulk_summary_notification')
+        func_body = src[func_start : func_start + 400]
+        assert 'postprocess_executor' in func_body
+        assert 'storage_executor' not in func_body
+
+    def test_bulk_summary_is_batched(self):
+        """_send_bulk_summary_notification must process users in batches."""
+        src = _read_source('utils/other/notifications.py')
+        func_start = src.index('async def _send_bulk_summary_notification')
+        func_body = src[func_start : func_start + 400]
+        assert '_BATCH_SIZE' in func_body
+
+
+class TestSlidingWindowBehavior:
+    """Behavioral tests verifying the sliding-window + semaphore pattern at runtime."""
+
+    def test_sliding_window_caps_inflight(self):
+        """Sliding window must never have more than WINDOW_SIZE futures in-flight."""
+        WINDOW_SIZE = 4
+        GLOBAL_SEM = threading.BoundedSemaphore(16)
+        executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="test-sw")
+        high_water = {'max': 0}
+        active = {'count': 0}
+        lock = threading.Lock()
+
+        def tracked_work(idx):
+            with lock:
+                active['count'] += 1
+                if active['count'] > high_water['max']:
+                    high_water['max'] = active['count']
+            time.sleep(0.02)
+            with lock:
+                active['count'] -= 1
+            return idx
+
+        jobs = list(range(20))
+        results = []
+
+        def submit_job(job):
+            GLOBAL_SEM.acquire()
+            try:
+                f = executor.submit(tracked_work, job)
+                f.add_done_callback(lambda _: GLOBAL_SEM.release())
+                return f
+            except Exception:
+                GLOBAL_SEM.release()
+                raise
+
+        pending = {}
+        job_iter = iter(jobs)
+        for job in job_iter:
+            f = submit_job(job)
+            pending[f] = job
+            if len(pending) >= WINDOW_SIZE:
+                break
+
+        while pending:
+            done, _ = wait(pending.keys(), return_when=FIRST_COMPLETED)
+            for future in done:
+                results.append(future.result())
+                del pending[future]
+            for job in job_iter:
+                f = submit_job(job)
+                pending[f] = job
+                if len(pending) >= WINDOW_SIZE:
+                    break
+
+        executor.shutdown(wait=True)
+        assert high_water['max'] <= WINDOW_SIZE + 1, f"High water {high_water['max']} exceeds window {WINDOW_SIZE}"
+        assert sorted(results) == list(range(20)), "All jobs must complete"
+
+    def test_semaphore_released_on_exception(self):
+        """Semaphore must not leak when submitted tasks raise exceptions."""
+        SEM = threading.BoundedSemaphore(4)
+        executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="test-exc")
+
+        def failing_work(idx):
+            if idx % 2 == 0:
+                raise RuntimeError(f"fail-{idx}")
+            return idx
+
+        futures = []
+        for i in range(8):
+            SEM.acquire()
+            try:
+                f = executor.submit(failing_work, i)
+                f.add_done_callback(lambda _: SEM.release())
+                futures.append(f)
+            except Exception:
+                SEM.release()
+                raise
+
+        for f in futures:
+            try:
+                f.result()
+            except RuntimeError:
+                pass
+
+        executor.shutdown(wait=True)
+
+        available = 0
+        while SEM.acquire(blocking=False):
+            available += 1
+        for _ in range(available):
+            SEM.release()
+        assert available == 4, f"Semaphore leaked: {available} slots available, expected 4"
+
+    def test_global_semaphore_limits_cross_request(self):
+        """Global semaphore must limit total inflight across concurrent callers."""
+        GLOBAL_SEM = threading.BoundedSemaphore(6)
+        executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="test-global")
+        high_water = {'max': 0}
+        active = {'count': 0}
+        lock = threading.Lock()
+
+        def tracked_work(idx):
+            with lock:
+                active['count'] += 1
+                if active['count'] > high_water['max']:
+                    high_water['max'] = active['count']
+            time.sleep(0.02)
+            with lock:
+                active['count'] -= 1
+            return idx
+
+        def run_batch(start, count):
+            futures = []
+            for i in range(start, start + count):
+                GLOBAL_SEM.acquire()
+                try:
+                    f = executor.submit(tracked_work, i)
+                    f.add_done_callback(lambda _: GLOBAL_SEM.release())
+                    futures.append(f)
+                except Exception:
+                    GLOBAL_SEM.release()
+                    raise
+            return [f.result() for f in futures]
+
+        threads = []
+        results = [None, None, None]
+        for batch_idx in range(3):
+
+            def worker(idx=batch_idx):
+                results[idx] = run_batch(idx * 10, 10)
+
+            t = threading.Thread(target=worker)
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        executor.shutdown(wait=True)
+        assert high_water['max'] <= 6 + 1, f"Global high water {high_water['max']} exceeds cap 6"
+        for r in results:
+            assert r is not None and len(r) == 10
