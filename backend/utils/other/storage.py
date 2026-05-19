@@ -7,7 +7,7 @@ import wave
 from typing import List
 from concurrent.futures import as_completed
 
-from utils.executors import storage_executor
+from utils.executors import postprocess_executor, storage_executor
 
 import opuslib
 from google.cloud import storage
@@ -1001,7 +1001,7 @@ def precache_conversation_audio(
             except Exception:
                 pass
 
-    storage_executor.submit(_precache_all)
+    postprocess_executor.submit(_precache_all)
 
 
 # **********************************

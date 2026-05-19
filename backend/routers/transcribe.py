@@ -36,7 +36,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
-from utils.byok import get_byok_keys
+from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import check_credits_invalidation
@@ -88,7 +88,11 @@ from utils.fair_use import (
     is_dg_budget_exhausted,
     record_dg_usage_ms,
 )
-from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
+from utils.subscription import (
+    has_transcription_credits,
+    get_remaining_transcription_seconds,
+    is_trial_paywalled,
+)
 from utils.translation import TranslationService
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
@@ -113,7 +117,9 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +146,9 @@ PUSHER_MAX_RECONNECT_ATTEMPTS = 6
 PUSHER_DEGRADED_COOLDOWN = 60.0  # seconds before probing from DEGRADED
 PUSHER_RECONNECT_BASE_DELAY = 1.0  # seconds
 PUSHER_RECONNECT_MAX_DELAY = 60.0  # seconds
+
+WS_RECEIVE_TIMEOUT = 300.0  # seconds — no-data timeout on client WebSocket receive
+BG_DRAIN_TIMEOUT = 30.0  # seconds — grace period for bg tasks to drain after disconnect
 
 
 # ---- Multi-channel support ----
@@ -231,7 +240,28 @@ async def _stream_handler(
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
-    BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
+
+    if not uid or len(uid) <= 0:
+        await websocket.close(code=1008, reason="Bad uid")
+        return
+
+    set_byok_keys(extract_byok_from_websocket(websocket))
+
+    if is_trial_paywalled(uid, source):
+        logger.info("trial paywall: closing desktop WS uid=%s session=%s reason=trial_expired", uid, session_id)
+        try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
+            await asyncio.sleep(0.5)
+            await websocket.close(code=1008, reason="trial_expired")
+        except Exception as e:
+            logger.error(f"Error closing paywalled WS: {e} {uid} {session_id}")
+        return
+
     logger.info(
         f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
@@ -269,11 +299,7 @@ async def _stream_handler(
     if onboarding_mode:
         include_speech_profile = False
 
-    if not uid or len(uid) <= 0:
-        await websocket.close(code=1008, reason="Bad uid")
-        return
-
-    user_has_credits = True if use_custom_stt else has_transcription_credits(uid)
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid, source=source)
     if not user_has_credits:
         try:
             await send_credit_limit_notification(uid)
@@ -329,6 +355,7 @@ async def _stream_handler(
             translation_language = language
 
     websocket_active = True
+    shutdown_event = asyncio.Event()
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
     # Buffer size limits to prevent memory leaks during outages/lag
@@ -410,6 +437,21 @@ async def _stream_handler(
 
     freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
 
+    # Push the freemium threshold event upfront for already-exhausted users so
+    # the desktop popup appears immediately on connect, instead of waiting for
+    # the periodic loop's first 60s tick (typical desktop session is shorter).
+    if not user_has_credits:
+        try:
+            await websocket.send_json(
+                FreemiumThresholdReachedEvent(
+                    remaining_seconds=0,
+                    action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                ).to_json()
+            )
+            freemium_threshold_sent = True
+        except Exception as e:
+            logger.error(f"Error sending freemium threshold event on connect: {e} {uid} {session_id}")
+
     # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
     CREDITS_REFRESH_SECONDS = 900  # 15 min
     remaining_seconds_cache: Optional[int] = None  # None = not yet fetched (distinct from unlimited)
@@ -448,8 +490,7 @@ async def _stream_handler(
         nonlocal dg_usage_ms_pending
 
         while websocket_active:
-            await asyncio.sleep(60)
-            if not websocket_active:
+            if await wait_for_event(shutdown_event, 60):
                 break
 
             # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
@@ -549,7 +590,7 @@ async def _stream_handler(
                 )
             )
             if needs_refresh:
-                remaining_seconds_cache = get_remaining_transcription_seconds(uid)
+                remaining_seconds_cache = get_remaining_transcription_seconds(uid, source=source)
                 remaining_seconds_cache_ts = now
                 remaining_seconds_cache_initialized = True
             elif remaining_seconds_cache is not None and transcription_seconds > 0:
@@ -659,7 +700,8 @@ async def _stream_handler(
                     break
 
                 # next
-                await asyncio.sleep(10)
+                if await wait_for_event(shutdown_event, 10):
+                    break
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected {uid} {session_id}")
         except Exception as e:
@@ -669,7 +711,7 @@ async def _stream_handler(
             websocket_active = False
 
     # Start heart beat
-    heartbeat_task = asyncio.create_task(send_heartbeat())
+    heartbeat_task = asyncio.create_task(send_heartbeat(), name=f"ws:{uid}:heartbeat")
 
     _send_message_event(
         MessageServiceStatusEvent(event_type="service_status", status="initiating", status_text="Service Starting")
@@ -1336,8 +1378,7 @@ async def _stream_handler(
                             f"Pusher reconnect attempt {reconnect_attempts + 1}/{PUSHER_MAX_RECONNECT_ATTEMPTS}, "
                             f"waiting {delay:.1f}s {uid} {session_id}"
                         )
-                        await asyncio.sleep(delay)
-                        if not websocket_active:
+                        if await wait_for_event(shutdown_event, delay):
                             break
 
                         try:
@@ -1366,7 +1407,8 @@ async def _stream_handler(
                         elapsed = time.monotonic() - degraded_since
                         remaining = PUSHER_DEGRADED_COOLDOWN - elapsed
                         if remaining > 0:
-                            await asyncio.sleep(min(remaining, 5.0))
+                            if await wait_for_event(shutdown_event, min(remaining, 5.0)):
+                                break
                             continue
                         # Cooldown elapsed — try a single probe
                         reconnect_state = PusherReconnectState.HALF_OPEN_PROBE
@@ -1506,7 +1548,8 @@ async def _stream_handler(
             """
             nonlocal pusher_ws, pusher_connected, websocket_active
             while websocket_active:
-                await asyncio.sleep(20)
+                if await wait_for_event(shutdown_event, 20):
+                    break
                 if pusher_connected and pusher_ws:
                     try:
                         await pusher_ws.send(struct.pack("I", 100))
@@ -1699,11 +1742,9 @@ async def _stream_handler(
                 )
                 # Drain any in-flight embedding match tasks before flushing
                 if speaker_match_tasks:
-                    pending = list(speaker_match_tasks)
-                    try:
-                        await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
-                    except asyncio.TimeoutError:
-                        logger.warning(f"Timeout draining speaker match tasks before rollover {uid} {session_id}")
+                    await drain_tasks(
+                        list(speaker_match_tasks), timeout=5.0, label="listen_speaker_rollover", cancel=False
+                    )
                 _flush_speaker_assignments(current_conversation_id)
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
@@ -1725,7 +1766,7 @@ async def _stream_handler(
         # extract from the WAV file and store it in Firestore for future sessions.
         if has_speech_profile:
             try:
-                embedding_list = await asyncio.to_thread(user_db.get_user_speaker_embedding, uid)
+                embedding_list = await run_blocking(db_executor, user_db.get_user_speaker_embedding, uid)
                 if embedding_list:
                     user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
                     person_embeddings_cache[USER_SELF_PERSON_ID] = {
@@ -1735,12 +1776,16 @@ async def _stream_handler(
                     logger.info(f"Speaker ID: loaded user speaker embedding from Firestore {uid} {session_id}")
                 else:
                     logger.info(f"Speaker ID: no stored embedding, extracting from speech profile {uid} {session_id}")
-                    file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
+                    file_path = await run_blocking(storage_executor, get_profile_audio_if_exists, uid)
                     if file_path:
-                        with open(file_path, 'rb') as f:
-                            profile_bytes = f.read()
-                        user_embedding = await asyncio.to_thread(
-                            extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
+
+                        def _read_file(p):
+                            with open(p, 'rb') as f:
+                                return f.read()
+
+                        profile_bytes = await run_blocking(storage_executor, _read_file, file_path)
+                        user_embedding = await run_blocking(
+                            sync_executor, extract_embedding_from_bytes, profile_bytes, "speech_profile.wav"
                         )
                         del profile_bytes
                         person_embeddings_cache[USER_SELF_PERSON_ID] = {
@@ -1748,8 +1793,11 @@ async def _stream_handler(
                             'name': 'User',
                         }
                         # Store in Firestore so future sessions load directly
-                        await asyncio.to_thread(
-                            user_db.set_user_speaker_embedding, uid, user_embedding.flatten().tolist()
+                        await run_blocking(
+                            db_executor,
+                            user_db.set_user_speaker_embedding,
+                            uid,
+                            user_embedding.flatten().tolist(),
                         )
                         logger.info(f"Speaker ID: extracted and stored user embedding {uid} {session_id}")
             except Exception as e:
@@ -1890,7 +1938,7 @@ async def _stream_handler(
             wav_bytes = output_buffer.getvalue()
 
             # Extract embedding (API call)
-            query_embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "query.wav")
+            query_embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "query.wav")
 
             # Find best match
             best_match = None
@@ -2109,7 +2157,10 @@ async def _stream_handler(
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
-                            uid, [s.dict() for s in transcript_segments], current_conversation_id
+                            uid,
+                            [s.dict() for s in transcript_segments],
+                            current_conversation_id,
+                            source=source,
                         )
                     except Exception as e:
                         logger.error(f"Error triggering realtime integrations: {e} {uid} {session_id}")
@@ -2212,11 +2263,7 @@ async def _stream_handler(
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for speaker ID task to finish {uid} {session_id}")
         if speaker_match_tasks:
-            pending = list(speaker_match_tasks)
-            try:
-                await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=10.0)
-            except asyncio.TimeoutError:
-                logger.warning(f"Timeout waiting for embedding tasks before final pass {uid} {session_id}")
+            await drain_tasks(list(speaker_match_tasks), timeout=10.0, label="listen_speaker_final", cancel=False)
 
         # Final pass: apply any pending speaker assignments so Firestore is correct
         # even if the embedding match completed on the last segment (no subsequent batch).
@@ -2341,9 +2388,9 @@ async def _stream_handler(
                 dg_socket = None  # Stop sending to dead connection
 
             if dg_socket is not None:
-                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083)
+                # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083).
                 if fair_use_dg_budget_exhausted:
-                    pass  # Audio not forwarded to DG — budget/credits exhausted
+                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
                 else:
                     dg_socket.send(chunk)
                     # Accumulate DG usage locally, flushed every 60s (#5854)
@@ -2353,7 +2400,11 @@ async def _stream_handler(
 
         try:
             while websocket_active:
-                message = await websocket.receive()
+                try:
+                    message = await asyncio.wait_for(websocket.receive(), timeout=WS_RECEIVE_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.warning(f"WS receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid} {session_id}")
+                    break
                 last_activity_time = time.time()
 
                 # Handle client disconnect
@@ -2565,7 +2616,9 @@ async def _stream_handler(
 
     # Start
     #
+    bg_main_tasks = []
     try:
+        BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.inc()
         # Init STT
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
         await _process_stt()
@@ -2606,22 +2659,21 @@ async def _stream_handler(
 
             # Pusher tasks (always started — they handle disconnected state gracefully)
             if transcript_consume is not None:
-                pusher_tasks.append(asyncio.create_task(transcript_consume()))
+                pusher_tasks.append(asyncio.create_task(transcript_consume(), name=f"ws:{uid}:pusher_transcript"))
             if audio_bytes_consume is not None:
-                pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+                pusher_tasks.append(asyncio.create_task(audio_bytes_consume(), name=f"ws:{uid}:pusher_audio"))
             if pusher_receive is not None:
-                pusher_tasks.append(asyncio.create_task(pusher_receive()))
-            pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
+                pusher_tasks.append(asyncio.create_task(pusher_receive(), name=f"ws:{uid}:pusher_receive"))
+            pusher_tasks.append(asyncio.create_task(pusher_heartbeat(), name=f"ws:{uid}:pusher_heartbeat"))
 
         # Tasks
-        data_process_task = asyncio.create_task(receive_data(deepgram_socket))
-        stream_transcript_task = asyncio.create_task(stream_transcript_process())
-        record_usage_task = asyncio.create_task(_record_usage_periodically())
+        data_process_task = asyncio.create_task(receive_data(deepgram_socket), name=f"ws:{uid}:receive")
+        stream_transcript_task = asyncio.create_task(stream_transcript_process(), name=f"ws:{uid}:stream_transcript")
+        record_usage_task = asyncio.create_task(_record_usage_periodically(), name=f"ws:{uid}:record_usage")
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
-        tasks = [
-            data_process_task,
+        bg_main_tasks = [
             stream_transcript_task,
             heartbeat_task,
             record_usage_task,
@@ -2633,16 +2685,49 @@ async def _stream_handler(
 
         if not is_multi_channel:
             # Single-channel: conversation lifecycle (timeout splitting), pending processing, speaker ID
-            lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
-            pending_conversations_task = asyncio.create_task(process_pending_conversations(timed_out_conversation_id))
-            speaker_id_task = asyncio.create_task(speaker_identification_task())
-            tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
+            lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager(), name=f"ws:{uid}:lifecycle")
+            pending_conversations_task = asyncio.create_task(
+                process_pending_conversations(timed_out_conversation_id), name=f"ws:{uid}:pending_convos"
+            )
+            speaker_id_task = asyncio.create_task(speaker_identification_task(), name=f"ws:{uid}:speaker_id")
+            bg_main_tasks.extend([lifecycle_manager_task, pending_conversations_task, speaker_id_task])
 
-        await asyncio.gather(*tasks)
+        # Finite tasks complete normally during active sessions (e.g. pending_conversations
+        # finishes after ~7s, speaker_id returns immediately when disabled). Their normal
+        # completion should NOT tear down the session. All other bg tasks are lifetime tasks —
+        # if they complete, it means the session is ending (e.g. heartbeat inactivity timeout).
+        finite_task_set = set()
+        if not is_multi_channel:
+            finite_task_set = {pending_conversations_task, speaker_id_task}
+
+        exit_result = await supervise_tasks(
+            receive_task=data_process_task,
+            bg_tasks=bg_main_tasks,
+            finite_tasks=finite_task_set,
+            label="listen",
+        )
+        logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid} {session_id}")
+
+        if data_process_task.done() and not data_process_task.cancelled():
+            exc = data_process_task.exception()
+            if exc is not None:
+                raise exc
+
+        if not data_process_task.done():
+            websocket_active = False
+            data_process_task.cancel()
+            try:
+                await data_process_task
+            except asyncio.CancelledError:
+                pass
+
+        shutdown_event.set()
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="listen_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e} {uid} {session_id}")
     finally:
+        shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
@@ -2723,13 +2808,8 @@ async def _stream_handler(
         if onboarding_handler:
             onboarding_handler.cleanup()
 
-        # Cancel all tracked background tasks to prevent memory leaks
-        # Snapshot to avoid mutation during iteration
-        tasks_to_cancel = list(bg_tasks)
-        for task in tasks_to_cancel:
-            task.cancel()
-        if tasks_to_cancel:
-            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        await drain_tasks(all_to_cancel, timeout=5.0, label="listen_cleanup", cancel=True)
         bg_tasks.clear()
 
         # Flush any remaining mixed audio to pusher

@@ -12891,6 +12891,18 @@ abstract class AppLocalizations {
   /// **'Your device is running low on battery. Time for a recharge! 🔋'**
   String get lowBatteryAlertBody;
 
+  /// No description provided for @batteryFullyChargedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is fully charged'**
+  String get batteryFullyChargedTitle;
+
+  /// No description provided for @batteryFullyChargedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi device is fully charged. Feel free to unplug!'**
+  String get batteryFullyChargedBody;
+
   /// Title for device disconnected notification
   ///
   /// In en, this message translates to:
@@ -17246,6 +17258,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not delete tasks. Please try again.'**
   String get bulkDeleteFailed;
+
+  /// Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete recap'**
+  String get deleteRecap;
+
+  /// Title of the confirm dialog when deleting a daily recap.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this recap?'**
+  String get deleteRecapConfirmTitle;
+
+  /// Body of the confirm dialog clarifying that conversations are not deleted with the recap.
+  ///
+  /// In en, this message translates to:
+  /// **'This recap will be permanently removed. The original conversations from that day are not affected.'**
+  String get deleteRecapConfirmBody;
+
+  /// Confirm action button on the delete-recap dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deleteRecapAction;
+
+  /// Snackbar shown after a recap was successfully deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Recap deleted'**
+  String get recapDeletedSnackbar;
+
+  /// Snackbar shown when the recap delete API fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete the recap. Try again later.'**
+  String get recapDeleteFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

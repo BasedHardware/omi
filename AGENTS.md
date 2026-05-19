@@ -30,6 +30,15 @@ Module hierarchy (lowest to highest):
 4. `main.py`
 
 - Memory management: free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+- Async I/O: never `requests.*` in async (use `httpx.AsyncClient` from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`).
+
+#### WebSocket Concurrency
+
+WebSocket handlers (`transcribe.py`, `pusher.py`) use `asyncio.wait(FIRST_COMPLETED)` supervisor loops — never `asyncio.gather()` on the receive task with background tasks. Key rules:
+- Receive timeouts: every `websocket.receive()` wrapped in `asyncio.wait_for(..., timeout=WS_RECEIVE_TIMEOUT)`
+- Gauge placement: `inc()` in `try` body, `dec()` in `finally` — always paired
+- Task naming: WebSocket lifetime tasks must include `name=f"ws:{uid}:{task_name}"`
+- Finite vs lifetime: tasks that complete normally during active sessions (e.g. `process_pending_conversations`) go in `finite_tasks` set; all others are lifetime tasks whose completion triggers teardown
 
 #### Backend Service Map
 

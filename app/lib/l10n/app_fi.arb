@@ -2184,6 +2184,8 @@
     "selectOption": "Valitse",
     "lowBatteryAlertTitle": "Alhaisen akun varoitus",
     "lowBatteryAlertBody": "Laitteesi akku on alhainen. Aika ladata! 🔋",
+    "batteryFullyChargedTitle": "Omi on ladattu täyteen",
+    "batteryFullyChargedBody": "Omi-laitteesi on ladattu täyteen. Voit irrottaa sen nyt!",
     "deviceDisconnectedNotificationTitle": "Omi-laitteesi yhteys katkesi",
     "deviceDisconnectedNotificationBody": "Yhdistä uudelleen jatkaaksesi Omin käyttöä.",
     "firmwareUpdateAvailable": "Laiteohjelmistopäivitys saatavilla",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Aloita puhelun nauhoitus",
     "startVoiceRecording": "Aloita ääninauhoitus",
     "bulkExportAlreadyExported": "Kaikki valitut tehtävät on jo viety",
-    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen."
+    "bulkDeleteFailed": "Tehtävien poistaminen epäonnistui. Yritä uudelleen.",
+    "deleteRecap": "Poista yhteenveto",
+    "deleteRecapConfirmTitle": "Poistetaanko tämä yhteenveto?",
+    "deleteRecapConfirmBody": "Yhteenveto poistetaan pysyvästi. Tuon päivän alkuperäiset keskustelut säilyvät.",
+    "deleteRecapAction": "Poista",
+    "recapDeletedSnackbar": "Yhteenveto poistettu",
+    "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen."
 }

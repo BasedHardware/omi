@@ -73,6 +73,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
+from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
 import logging
 
@@ -623,14 +624,16 @@ async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
-    memories = [m for m in get_memories(uid, limit=250) if not m.get('is_locked')]
-    user_name = get_user_name(uid)
+    all_memories = await run_blocking(db_executor, get_memories, uid, limit=250)
+    memories = [m for m in all_memories if not m.get('is_locked')]
+    user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations — exclude locked content
-    conversations = deserialize_conversations([c for c in get_conversations(uid, limit=10) if not c.get('is_locked')])
+    all_conversations = await run_blocking(db_executor, get_conversations, uid, limit=10)
+    conversations = deserialize_conversations([c for c in all_conversations if not c.get('is_locked')])
     conversation_history = conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
-        conversation_history = condense_conversations([conversation_history])
+        conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
@@ -641,7 +644,9 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     # Condense memories
     with track_usage(uid, Features.PERSONA):
-        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+        )
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -740,15 +745,16 @@ def update_personas_async(uid: str):
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest memories and conversations."""
     # Get latest memories and user info
-    memories = get_user_public_memories(persona['uid'], limit=250)
-    user_name = get_user_name(persona['uid'])
+    memories = await run_blocking(db_executor, get_user_public_memories, persona['uid'], limit=250)
+    user_name = await run_blocking(db_executor, get_user_name, persona['uid'])
 
     # Get and condense recent conversations
-    conversations = deserialize_conversations(get_conversations(persona['uid'], limit=10))
+    all_conversations = await run_blocking(db_executor, get_conversations, persona['uid'], limit=10)
+    conversations = deserialize_conversations(all_conversations)
     conversation_history = conversations_to_string(conversations)
     uid = persona['uid']
     with track_usage(uid, Features.PERSONA):
-        conversation_history = condense_conversations([conversation_history])
+        conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
 
     condensed_tweets = None
     # Condense tweets
@@ -757,11 +763,13 @@ async def update_persona_prompt(persona: dict):
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [tweet.text for tweet in timeline.timeline]
         with track_usage(uid, Features.PERSONA):
-            condensed_tweets = condense_tweets(tweets, persona['name'])
+            condensed_tweets = await run_blocking(llm_executor, condense_tweets, tweets, persona['name'])
 
     # Condense memories
     with track_usage(uid, Features.PERSONA):
-        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+        )
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -823,8 +831,8 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
 
-    update_persona_in_db(persona)
-    delete_app_cache_by_id(persona['id'])
+    await run_blocking(db_executor, update_persona_in_db, persona)
+    await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
 
 
 def increment_username(username: str):

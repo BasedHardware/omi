@@ -6879,6 +6879,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get lowBatteryAlertBody => 'మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi పూర్తిగా చార్జ్ అయింది';
+
+  @override
+  String get batteryFullyChargedBody => 'మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'మీ Omi పరికరం డిస్‌కనెక్ట్ చేయబడింది';
 
   @override
@@ -9290,4 +9296,22 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get deleteRecap => 'సారాంశాన్ని తొలగించండి';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ఈ సారాంశాన్ని తొలగించాలా?';
+
+  @override
+  String get deleteRecapConfirmBody => 'ఈ సారాంశం శాశ్వతంగా తొలగించబడుతుంది. ఆ రోజు అసలు సంభాషణలపై ప్రభావం ఉండదు.';
+
+  @override
+  String get deleteRecapAction => 'తొలగించు';
+
+  @override
+  String get recapDeletedSnackbar => 'సారాంశం తొలగించబడింది';
+
+  @override
+  String get recapDeleteFailed => 'సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.';
 }

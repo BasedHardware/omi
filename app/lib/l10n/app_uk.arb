@@ -2184,6 +2184,8 @@
     "selectOption": "Вибрати",
     "lowBatteryAlertTitle": "Попередження про низький заряд батареї",
     "lowBatteryAlertBody": "Батарея вашого пристрою розряджена. Час зарядити! 🔋",
+    "batteryFullyChargedTitle": "Omi повністю заряджений",
+    "batteryFullyChargedBody": "Ваш пристрій Omi повністю заряджений. Можна відключити від зарядки!",
     "deviceDisconnectedNotificationTitle": "Ваш пристрій Omi відключено",
     "deviceDisconnectedNotificationBody": "Будь ласка, підключіться знову, щоб продовжити використання Omi.",
     "firmwareUpdateAvailable": "Доступне оновлення прошивки",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Почати запис дзвінка",
     "startVoiceRecording": "Почати голосовий запис",
     "bulkExportAlreadyExported": "Усі вибрані завдання вже експортовано",
-    "bulkDeleteFailed": "Не вдалося видалити завдання. Спробуйте ще раз."
+    "bulkDeleteFailed": "Не вдалося видалити завдання. Спробуйте ще раз.",
+    "deleteRecap": "Видалити підсумок",
+    "deleteRecapConfirmTitle": "Видалити цей підсумок?",
+    "deleteRecapConfirmBody": "Цей підсумок буде видалено назавжди. Оригінальні розмови того дня не зазнають змін.",
+    "deleteRecapAction": "Видалити",
+    "recapDeletedSnackbar": "Підсумок видалено",
+    "recapDeleteFailed": "Не вдалося видалити підсумок. Спробуйте пізніше."
 }

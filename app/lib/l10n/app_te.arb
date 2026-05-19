@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋",
+    "batteryFullyChargedTitle": "Omi పూర్తిగా చార్జ్ అయింది",
+    "batteryFullyChargedBody": "మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },
@@ -10725,5 +10727,11 @@
     "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
     "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
     "bulkExportAlreadyExported": "ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి",
-    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి."
+    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "deleteRecap": "సారాంశాన్ని తొలగించండి",
+    "deleteRecapConfirmTitle": "ఈ సారాంశాన్ని తొలగించాలా?",
+    "deleteRecapConfirmBody": "ఈ సారాంశం శాశ్వతంగా తొలగించబడుతుంది. ఆ రోజు అసలు సంభాషణలపై ప్రభావం ఉండదు.",
+    "deleteRecapAction": "తొలగించు",
+    "recapDeletedSnackbar": "సారాంశం తొలగించబడింది",
+    "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి."
 }

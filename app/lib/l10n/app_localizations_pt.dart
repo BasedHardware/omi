@@ -6832,6 +6832,12 @@ class AppLocalizationsPt extends AppLocalizations {
   String get lowBatteryAlertBody => 'A bateria do seu dispositivo está fraca. Hora de recarregar! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi está totalmente carregado';
+
+  @override
+  String get batteryFullyChargedBody => 'Seu dispositivo Omi está totalmente carregado. Você pode desligá-lo!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Seu dispositivo Omi foi desconectado';
 
   @override
@@ -9244,4 +9250,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Não foi possível excluir as tarefas. Tente novamente.';
+
+  @override
+  String get deleteRecap => 'Excluir resumo';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Excluir este resumo?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Este resumo será removido permanentemente. As conversas originais daquele dia não são afetadas.';
+
+  @override
+  String get deleteRecapAction => 'Excluir';
+
+  @override
+  String get recapDeletedSnackbar => 'Resumo excluído';
+
+  @override
+  String get recapDeleteFailed => 'Não foi possível excluir o resumo. Tente novamente mais tarde.';
 }

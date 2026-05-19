@@ -6841,6 +6841,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get lowBatteryAlertBody => 'Laitteesi akku on alhainen. Aika ladata! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi on ladattu täyteen';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi-laitteesi on ladattu täyteen. Voit irrottaa sen nyt!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi-laitteesi yhteys katkesi';
 
   @override
@@ -9239,4 +9245,23 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tehtävien poistaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get deleteRecap => 'Poista yhteenveto';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Poistetaanko tämä yhteenveto?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Yhteenveto poistetaan pysyvästi. Tuon päivän alkuperäiset keskustelut säilyvät.';
+
+  @override
+  String get deleteRecapAction => 'Poista';
+
+  @override
+  String get recapDeletedSnackbar => 'Yhteenveto poistettu';
+
+  @override
+  String get recapDeleteFailed => 'Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.';
 }

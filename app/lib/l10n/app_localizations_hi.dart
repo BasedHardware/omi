@@ -6815,6 +6815,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get lowBatteryAlertBody => 'आपके डिवाइस की बैटरी कम है। रिचार्ज करने का समय! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi पूरी तरह चार्ज हो गया है';
+
+  @override
+  String get batteryFullyChargedBody => 'आपका Omi डिवाइस पूरी तरह चार्ज हो गया है। इसे अनप्लग कर सकते हैं!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'आपका Omi डिवाइस डिस्कनेक्ट हो गया';
 
   @override
@@ -9220,4 +9226,23 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'कार्य हटाए नहीं जा सके। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get deleteRecap => 'रीकैप हटाएँ';
+
+  @override
+  String get deleteRecapConfirmTitle => 'क्या यह रीकैप हटाना है?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'यह रीकैप स्थायी रूप से हटा दी जाएगी। उस दिन की मूल बातचीतें प्रभावित नहीं होंगी।';
+
+  @override
+  String get deleteRecapAction => 'हटाएँ';
+
+  @override
+  String get recapDeletedSnackbar => 'रीकैप हटा दी गई';
+
+  @override
+  String get recapDeleteFailed => 'रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।';
 }

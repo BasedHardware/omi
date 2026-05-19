@@ -6710,6 +6710,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi已充满电';
+
+  @override
+  String get batteryFullyChargedBody => '您的Omi设备已充满电，可以拔掉充电线了！';
+
+  @override
   String get deviceDisconnectedNotificationTitle => '您的 Omi 设备已断开连接';
 
   @override
@@ -9077,4 +9083,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '无法删除任务，请重试。';
+
+  @override
+  String get deleteRecap => '删除回顾';
+
+  @override
+  String get deleteRecapConfirmTitle => '删除该回顾?';
+
+  @override
+  String get deleteRecapConfirmBody => '此回顾将被永久删除。当天的原始对话不会受到影响。';
+
+  @override
+  String get deleteRecapAction => '删除';
+
+  @override
+  String get recapDeletedSnackbar => '回顾已删除';
+
+  @override
+  String get recapDeleteFailed => '无法删除回顾。请稍后重试。';
 }

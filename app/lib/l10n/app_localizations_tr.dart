@@ -6850,6 +6850,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi tamamen şarj oldu';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi Cihazınız Bağlantı Kesildi';
 
   @override
@@ -9253,4 +9259,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get deleteRecap => 'Özeti sil';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Bu özet silinsin mi?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.';
+
+  @override
+  String get deleteRecapAction => 'Sil';
+
+  @override
+  String get recapDeletedSnackbar => 'Özet silindi';
+
+  @override
+  String get recapDeleteFailed => 'Özet silinemedi. Daha sonra tekrar deneyin.';
 }

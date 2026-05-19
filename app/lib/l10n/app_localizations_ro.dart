@@ -6873,6 +6873,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lowBatteryAlertBody => 'Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi este complet încărcat';
+
+  @override
+  String get batteryFullyChargedBody => 'Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Dispozitivul Omi a fost deconectat';
 
   @override
@@ -9283,4 +9289,23 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
+
+  @override
+  String get deleteRecap => 'Șterge rezumatul';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Ștergi acest rezumat?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Acest rezumat va fi eliminat definitiv. Conversațiile originale din ziua respectivă nu sunt afectate.';
+
+  @override
+  String get deleteRecapAction => 'Șterge';
+
+  @override
+  String get recapDeletedSnackbar => 'Rezumat șters';
+
+  @override
+  String get recapDeleteFailed => 'Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.';
 }

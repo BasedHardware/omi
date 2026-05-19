@@ -461,7 +461,7 @@ async def download_beta_desktop_release(
 
 
 @router.post("/v2/desktop/clear-cache")
-async def clear_desktop_cache(secret_key: str = Header(...)):
+def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.

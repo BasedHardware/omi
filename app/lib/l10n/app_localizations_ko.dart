@@ -6721,6 +6721,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get lowBatteryAlertBody => '기기의 배터리가 부족합니다. 충전할 시간입니다! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi가 완전히 충전되었습니다';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi 기기가 완전히 충전되었습니다. 이제 플러그를 뽑으셔도 됩니다!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omi 기기가 연결 해제되었습니다';
 
   @override
@@ -9092,4 +9098,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '작업을 삭제할 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get deleteRecap => '요약 삭제';
+
+  @override
+  String get deleteRecapConfirmTitle => '이 요약을 삭제할까요?';
+
+  @override
+  String get deleteRecapConfirmBody => '이 요약은 영구적으로 삭제됩니다. 해당 날짜의 원본 대화는 영향을 받지 않습니다.';
+
+  @override
+  String get deleteRecapAction => '삭제';
+
+  @override
+  String get recapDeletedSnackbar => '요약을 삭제했습니다';
+
+  @override
+  String get recapDeleteFailed => '요약을 삭제할 수 없습니다. 나중에 다시 시도해 주세요.';
 }

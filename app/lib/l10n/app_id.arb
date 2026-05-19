@@ -2184,6 +2184,8 @@
     "selectOption": "Pilih",
     "lowBatteryAlertTitle": "Peringatan Baterai Lemah",
     "lowBatteryAlertBody": "Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋",
+    "batteryFullyChargedTitle": "Omi sudah terisi penuh",
+    "batteryFullyChargedBody": "Perangkat Omi Anda sudah terisi penuh. Silakan cabut kabelnya!",
     "deviceDisconnectedNotificationTitle": "Perangkat Omi Anda Terputus",
     "deviceDisconnectedNotificationBody": "Silakan sambungkan kembali untuk terus menggunakan Omi.",
     "firmwareUpdateAvailable": "Pembaruan Firmware Tersedia",
@@ -3059,5 +3061,11 @@
     "startCallRecording": "Mulai rekaman panggilan",
     "startVoiceRecording": "Mulai rekaman suara",
     "bulkExportAlreadyExported": "Semua tugas yang dipilih sudah diekspor",
-    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi."
+    "bulkDeleteFailed": "Tidak dapat menghapus tugas. Silakan coba lagi.",
+    "deleteRecap": "Hapus ringkasan",
+    "deleteRecapConfirmTitle": "Hapus ringkasan ini?",
+    "deleteRecapConfirmBody": "Ringkasan ini akan dihapus permanen. Percakapan asli dari hari itu tidak terpengaruh.",
+    "deleteRecapAction": "Hapus",
+    "recapDeletedSnackbar": "Ringkasan dihapus",
+    "recapDeleteFailed": "Tidak dapat menghapus ringkasan. Coba lagi nanti."
 }

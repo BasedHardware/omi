@@ -2184,6 +2184,8 @@
     "selectOption": "Seç",
     "lowBatteryAlertTitle": "Düşük Pil Uyarısı",
     "lowBatteryAlertBody": "Cihazınızın pili azaldı. Şarj etme zamanı! 🔋",
+    "batteryFullyChargedTitle": "Omi tamamen şarj oldu",
+    "batteryFullyChargedBody": "Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!",
     "deviceDisconnectedNotificationTitle": "Omi Cihazınız Bağlantı Kesildi",
     "deviceDisconnectedNotificationBody": "Omi'yi kullanmaya devam etmek için lütfen yeniden bağlanın.",
     "firmwareUpdateAvailable": "Yazılım Güncellemesi Mevcut",
@@ -3052,5 +3054,11 @@
     "startCallRecording": "Arama kaydını başlat",
     "startVoiceRecording": "Ses kaydını başlat",
     "bulkExportAlreadyExported": "Seçilen tüm görevler zaten dışa aktarıldı",
-    "bulkDeleteFailed": "Görevler silinemedi. Lütfen tekrar deneyin."
+    "bulkDeleteFailed": "Görevler silinemedi. Lütfen tekrar deneyin.",
+    "deleteRecap": "Özeti sil",
+    "deleteRecapConfirmTitle": "Bu özet silinsin mi?",
+    "deleteRecapConfirmBody": "Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.",
+    "deleteRecapAction": "Sil",
+    "recapDeletedSnackbar": "Özet silindi",
+    "recapDeleteFailed": "Özet silinemedi. Daha sonra tekrar deneyin."
 }

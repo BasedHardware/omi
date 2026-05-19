@@ -6850,6 +6850,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get lowBatteryAlertBody => 'آپ کا ڈیوائس بیٹری میں کم ہو رہا ہے۔ دوبارہ چارج کرنے کا وقت! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi مکمل طور پر چارج ہو گیا';
+
+  @override
+  String get batteryFullyChargedBody => 'آپ کا Omi ڈیوائس مکمل طور پر چارج ہو گئی ہے۔ اسے ان پلگ کر سکتے ہیں!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'آپ کا Omi ڈیوائس منقطع ہو گیا';
 
   @override
@@ -9257,4 +9263,23 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'کام حذف نہیں کیے جا سکے۔ براہ کرم دوبارہ کوشش کریں۔';
+
+  @override
+  String get deleteRecap => 'خلاصہ حذف کریں';
+
+  @override
+  String get deleteRecapConfirmTitle => 'یہ خلاصہ حذف کریں؟';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'یہ خلاصہ مستقل طور پر حذف کر دیا جائے گا۔ اس دن کی اصل گفتگوئیں متاثر نہیں ہوں گی۔';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'خلاصہ حذف ہو گیا';
+
+  @override
+  String get recapDeleteFailed => 'خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔';
 }

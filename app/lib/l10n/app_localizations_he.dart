@@ -6785,6 +6785,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get lowBatteryAlertBody => 'ההתקן שלך נמצא בסוללה נמוכה. הגיע הזמן לטעינה מחדש! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi טעון לגמרי';
+
+  @override
+  String get batteryFullyChargedBody => 'מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'התקן Omi שלך התנתק';
 
   @override
@@ -9168,4 +9174,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'לא ניתן למחוק את המשימות. אנא נסה שוב.';
+
+  @override
+  String get deleteRecap => 'מחק סיכום';
+
+  @override
+  String get deleteRecapConfirmTitle => 'למחוק את הסיכום הזה?';
+
+  @override
+  String get deleteRecapConfirmBody => 'הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.';
+
+  @override
+  String get deleteRecapAction => 'מחק';
+
+  @override
+  String get recapDeletedSnackbar => 'הסיכום נמחק';
+
+  @override
+  String get recapDeleteFailed => 'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
 }

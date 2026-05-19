@@ -6898,6 +6898,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get lowBatteryAlertBody => 'La batterie de votre appareil est faible. Il est temps de recharger ! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi est complètement chargé';
+
+  @override
+  String get batteryFullyChargedBody => 'Votre appareil Omi est complètement chargé. Vous pouvez le débrancher !';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Votre appareil Omi s\'est déconnecté';
 
   @override
@@ -9323,4 +9329,23 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Impossible de supprimer les tâches. Veuillez réessayer.';
+
+  @override
+  String get deleteRecap => 'Supprimer le résumé';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Supprimer ce résumé ?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ce résumé sera définitivement supprimé. Les conversations originales de ce jour ne sont pas affectées.';
+
+  @override
+  String get deleteRecapAction => 'Supprimer';
+
+  @override
+  String get recapDeletedSnackbar => 'Résumé supprimé';
+
+  @override
+  String get recapDeleteFailed => 'Impossible de supprimer le résumé. Réessayez plus tard.';
 }

@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "আপনার ডিভাইসের ব্যাটারি কম হয়ে যাচ্ছে। চার্জ করার সময় এসেছে! 🔋",
+    "batteryFullyChargedTitle": "Omi সম্পূর্ণ চার্জ হয়েছে",
+    "batteryFullyChargedBody": "আপনার Omi ডিভাইস সম্পূর্ণ চার্জ হয়েছে। আনপ্লাগ করতে পারেন!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },
@@ -10725,5 +10727,11 @@
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
     "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
-    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।",
+    "deleteRecap": "রিক্যাপ মুছুন",
+    "deleteRecapConfirmTitle": "এই রিক্যাপ মুছবেন?",
+    "deleteRecapConfirmBody": "এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।",
+    "deleteRecapAction": "মুছুন",
+    "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
+    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।"
 }

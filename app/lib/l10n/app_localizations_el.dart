@@ -6887,6 +6887,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get lowBatteryAlertBody => 'Η μπαταρία της συσκευής σας είναι χαμηλή. Ώρα για επαναφόρτιση! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Το Omi έχει φορτιστεί πλήρως';
+
+  @override
+  String get batteryFullyChargedBody => 'Η συσκευή Omi σου είναι πλήρως φορτισμένη. Μπορείς να την αποσυνδέσεις!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Η συσκευή Omi σας αποσυνδέθηκε';
 
   @override
@@ -9305,4 +9311,23 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.';
+
+  @override
+  String get deleteRecap => 'Διαγραφή σύνοψης';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Διαγραφή αυτής της σύνοψης;';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Αυτή η σύνοψη θα διαγραφεί οριστικά. Οι αρχικές συνομιλίες της ημέρας δεν επηρεάζονται.';
+
+  @override
+  String get deleteRecapAction => 'Διαγραφή';
+
+  @override
+  String get recapDeletedSnackbar => 'Η σύνοψη διαγράφηκε';
+
+  @override
+  String get recapDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.';
 }

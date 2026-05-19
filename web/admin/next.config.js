@@ -1,9 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Pin the file-tracing root to this app dir. Next 15+ otherwise infers the
+  // workspace root from sibling lockfiles (monorepo) and nests the standalone
+  // output under that path, which breaks the Dockerfile's
+  // `COPY .next/standalone ./` + `CMD ["node","server.js"]`.
+  outputFileTracingRoot: __dirname,
   images: { unoptimized: true },
   async redirects() {
     return [

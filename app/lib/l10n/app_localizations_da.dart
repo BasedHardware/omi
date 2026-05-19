@@ -6821,6 +6821,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lowBatteryAlertBody => 'Din enheds batteri er lavt. Det er tid til at genoplade! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi er fuldt opladet';
+
+  @override
+  String get batteryFullyChargedBody => 'Din Omi-enhed er fuldt opladet. Du kan frakoble den nu!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Din Omi-enhed er afbrudt';
 
   @override
@@ -9226,4 +9232,23 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
+
+  @override
+  String get deleteRecap => 'Slet opsummering';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Slet denne opsummering?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Opsummeringen fjernes permanent. De oprindelige samtaler fra den dag påvirkes ikke.';
+
+  @override
+  String get deleteRecapAction => 'Slet';
+
+  @override
+  String get recapDeletedSnackbar => 'Opsummering slettet';
+
+  @override
+  String get recapDeleteFailed => 'Kunne ikke slette opsummeringen. Prøv igen senere.';
 }

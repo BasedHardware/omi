@@ -6852,6 +6852,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lowBatteryAlertBody => 'Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi ir pilnībā uzlādēts';
+
+  @override
+  String get batteryFullyChargedBody => 'Jūsu Omi ierīce ir pilnībā uzlādēta. Varat to atvienot!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Jūsu Omi ierīce ir atvienota';
 
   @override
@@ -9258,4 +9264,23 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Neizdevās dzēst uzdevumus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get deleteRecap => 'Dzēst kopsavilkumu';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Dzēst šo kopsavilkumu?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Šis kopsavilkums tiks neatgriezeniski noņemts. Tās dienas oriģinālās sarunas netiks ietekmētas.';
+
+  @override
+  String get deleteRecapAction => 'Dzēst';
+
+  @override
+  String get recapDeletedSnackbar => 'Kopsavilkums dzēsts';
+
+  @override
+  String get recapDeleteFailed => 'Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.';
 }

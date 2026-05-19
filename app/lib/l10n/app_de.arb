@@ -2166,6 +2166,8 @@
     "selectOption": "Auswählen",
     "lowBatteryAlertTitle": "Warnung: Niedriger Akkustand",
     "lowBatteryAlertBody": "Der Akkustand Ihres Geräts ist niedrig. Zeit zum Aufladen! 🔋",
+    "batteryFullyChargedTitle": "Omi ist vollständig geladen",
+    "batteryFullyChargedBody": "Dein Omi-Gerät ist vollständig geladen. Du kannst es jetzt ausstecken!",
     "deviceDisconnectedNotificationTitle": "Ihr Omi-Gerät wurde getrennt",
     "deviceDisconnectedNotificationBody": "Bitte verbinden Sie sich erneut, um Ihr Omi weiter zu nutzen.",
     "firmwareUpdateAvailable": "Firmware-Update verfügbar",
@@ -2985,5 +2987,11 @@
     "startCallRecording": "Anrufaufnahme starten",
     "startVoiceRecording": "Sprachaufnahme starten",
     "bulkExportAlreadyExported": "Alle ausgewählten Aufgaben wurden bereits exportiert",
-    "bulkDeleteFailed": "Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen."
+    "bulkDeleteFailed": "Aufgaben konnten nicht gelöscht werden. Bitte erneut versuchen.",
+    "deleteRecap": "Zusammenfassung löschen",
+    "deleteRecapConfirmTitle": "Diese Zusammenfassung löschen?",
+    "deleteRecapConfirmBody": "Diese Zusammenfassung wird dauerhaft entfernt. Die ursprünglichen Gespräche dieses Tages bleiben erhalten.",
+    "deleteRecapAction": "Löschen",
+    "recapDeletedSnackbar": "Zusammenfassung gelöscht",
+    "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut."
 }

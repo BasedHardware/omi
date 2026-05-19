@@ -1,4 +1,3 @@
-import asyncio
 import os
 import threading
 
@@ -9,7 +8,7 @@ from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
-from utils.executors import critical_executor, storage_executor
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
 import logging
 
@@ -188,7 +187,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     """Async version of vad_is_empty using httpx.AsyncClient for hosted VAD."""
     caching_key = f'vad_is_empty:{file_path}'
     if cache:
-        if exists := redis_db.get_generic_cache(caching_key):
+        if exists := await run_blocking(db_executor, redis_db.get_generic_cache, caching_key):
             if return_segments:
                 return exists
             return len(exists) == 0
@@ -197,8 +196,7 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
     hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
-            loop = asyncio.get_running_loop()
-            file_data = await loop.run_in_executor(storage_executor, _read_file, file_path)
+            file_data = await run_blocking(storage_executor, _read_file, file_path)
             files = {'file': (file_path.split('/')[-1], file_data, 'audio/wav')}
             client = get_stt_client()
             response = await client.post(hosted_vad_url, files=files)
@@ -208,11 +206,10 @@ async def async_vad_is_empty(file_path, return_segments: bool = False, cache: bo
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:
-        loop = asyncio.get_running_loop()
-        segments = await loop.run_in_executor(critical_executor, _run_file_vad, file_path)
+        segments = await run_blocking(sync_executor, _run_file_vad, file_path)
 
     if cache:
-        redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
+        await run_blocking(db_executor, redis_db.set_generic_cache, caching_key, segments, ttl=60 * 60 * 24)
     if return_segments:
         return segments
     logger.info(f'async_vad_is_empty {len(segments) == 0}')

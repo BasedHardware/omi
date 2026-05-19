@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 
-from utils.executors import critical_executor
+from utils.executors import db_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
@@ -223,7 +223,7 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
-    critical_executor.submit(_run_auto_sync)
+    db_executor.submit(_run_auto_sync)
 
     return ActionItemResponse(**action_item)
 

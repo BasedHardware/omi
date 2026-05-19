@@ -23,15 +23,19 @@ impl FormatTime for BackendTimer {
 }
 
 mod auth;
+mod byok;
 mod config;
 mod encryption;
 mod llm;
 mod models;
+mod paywall;
 mod routes;
 mod services;
 mod vertex;
 
-use auth::{firebase_auth_extension, FirebaseAuth};
+use auth::{byok_cache_extension, firebase_auth_extension, paywall_checker_extension, FirebaseAuth};
+use byok::ByokStateCache;
+use paywall::PaywallChecker;
 use config::Config;
 use routes::{
     // Active (real traffic from current app)
@@ -119,7 +123,7 @@ async fn main() {
     let auth_project_id = config.firebase_auth_project_id.clone()
         .or_else(|| config.firebase_project_id.clone())
         .expect("FIREBASE_AUTH_PROJECT_ID or FIREBASE_PROJECT_ID must be set");
-    let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id));
+    let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id.clone()));
 
     // Refresh Firebase keys with retry (transient network failures at startup)
     {
@@ -230,6 +234,16 @@ async fn main() {
         });
     }
 
+    // BYOK state cache — caches Firestore BYOK state per-uid for 30s.
+    let byok_cache = Arc::new(ByokStateCache::new());
+
+    // Paywall checker — reads subscription/BYOK/account-age from Firestore + Firebase Auth.
+    let paywall_checker = Arc::new(PaywallChecker::new(
+        firestore.clone(),
+        auth_project_id.clone(),
+        byok_cache.clone(),
+    ));
+
     let state = AppState {
         firestore,
         integrations,
@@ -271,6 +285,8 @@ async fn main() {
     let app = main_router
         .merge(auth_router)
         .layer(firebase_auth_extension(firebase_auth))
+        .layer(paywall_checker_extension(paywall_checker))
+        .layer(byok_cache_extension(byok_cache))
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

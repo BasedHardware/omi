@@ -6860,6 +6860,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get lowBatteryAlertBody => 'Bateri peranti anda lemah. Masa untuk mengecas semula! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi telah dicas penuh';
+
+  @override
+  String get batteryFullyChargedBody => 'Peranti Omi anda telah dicas sepenuhnya. Anda boleh mencabutnya!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Peranti Omi Anda Terputus';
 
   @override
@@ -9264,4 +9270,23 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tidak dapat memadam tugasan. Sila cuba lagi.';
+
+  @override
+  String get deleteRecap => 'Padam ringkasan';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Padam ringkasan ini?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ringkasan ini akan dibuang secara kekal. Perbualan asal pada hari itu tidak terjejas.';
+
+  @override
+  String get deleteRecapAction => 'Padam';
+
+  @override
+  String get recapDeletedSnackbar => 'Ringkasan dipadam';
+
+  @override
+  String get recapDeleteFailed => 'Tidak dapat memadam ringkasan. Cuba lagi kemudian.';
 }

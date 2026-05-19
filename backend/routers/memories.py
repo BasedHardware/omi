@@ -1,8 +1,7 @@
-import asyncio
 import logging
 from typing import List, Optional
 
-from utils.executors import critical_executor
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
@@ -62,19 +61,20 @@ async def create_memory(
     payload = memory_db.dict()
 
     try:
-        await asyncio.to_thread(memories_db.create_memory, uid, payload)
+        await run_blocking(db_executor, memories_db.create_memory, uid, payload)
     except Exception:
         logger.exception("Firestore create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
-        await asyncio.to_thread(upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value)
+        await run_blocking(
+            postprocess_executor, upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
     if memory.visibility == 'public':
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     return memory_db
 
@@ -129,11 +129,10 @@ async def create_memories_batch(
             ],
         )
 
-    await asyncio.to_thread(_persist)
+    await run_blocking(db_executor, _persist)
 
     if has_public:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
@@ -216,5 +215,5 @@ def update_memory_visibility(
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    critical_executor.submit(update_personas_async, uid)
+    postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

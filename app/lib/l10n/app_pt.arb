@@ -2185,6 +2185,8 @@
     "selectOption": "Selecionar",
     "lowBatteryAlertTitle": "Alerta de bateria fraca",
     "lowBatteryAlertBody": "A bateria do seu dispositivo está fraca. Hora de recarregar! 🔋",
+    "batteryFullyChargedTitle": "Omi está totalmente carregado",
+    "batteryFullyChargedBody": "Seu dispositivo Omi está totalmente carregado. Você pode desligá-lo!",
     "deviceDisconnectedNotificationTitle": "Seu dispositivo Omi foi desconectado",
     "deviceDisconnectedNotificationBody": "Por favor, reconecte para continuar usando o Omi.",
     "firmwareUpdateAvailable": "Atualização de firmware disponível",
@@ -3053,5 +3055,11 @@
     "startCallRecording": "Iniciar gravação de chamada",
     "startVoiceRecording": "Iniciar gravação de voz",
     "bulkExportAlreadyExported": "Todas as tarefas selecionadas já foram exportadas",
-    "bulkDeleteFailed": "Não foi possível excluir as tarefas. Tente novamente."
+    "bulkDeleteFailed": "Não foi possível excluir as tarefas. Tente novamente.",
+    "deleteRecap": "Excluir resumo",
+    "deleteRecapConfirmTitle": "Excluir este resumo?",
+    "deleteRecapConfirmBody": "Este resumo será removido permanentemente. As conversas originais daquele dia não são afetadas.",
+    "deleteRecapAction": "Excluir",
+    "recapDeletedSnackbar": "Resumo excluído",
+    "recapDeleteFailed": "Não foi possível excluir o resumo. Tente novamente mais tarde."
 }

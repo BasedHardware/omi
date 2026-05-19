@@ -2184,6 +2184,8 @@
     "selectOption": "Välj",
     "lowBatteryAlertTitle": "Varning för lågt batteri",
     "lowBatteryAlertBody": "Enhetens batteri är lågt. Dags att ladda! 🔋",
+    "batteryFullyChargedTitle": "Omi är fulladdad",
+    "batteryFullyChargedBody": "Din Omi-enhet är fulladdad. Du kan koppla ur den nu!",
     "deviceDisconnectedNotificationTitle": "Din Omi-enhet har kopplats från",
     "deviceDisconnectedNotificationBody": "Anslut igen för att fortsätta använda Omi.",
     "firmwareUpdateAvailable": "Firmware-uppdatering tillgänglig",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Starta samtalsinspelning",
     "startVoiceRecording": "Starta röstinspelning",
     "bulkExportAlreadyExported": "Alla valda uppgifter är redan exporterade",
-    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen."
+    "bulkDeleteFailed": "Det gick inte att ta bort uppgifterna. Försök igen.",
+    "deleteRecap": "Radera sammanfattning",
+    "deleteRecapConfirmTitle": "Radera den här sammanfattningen?",
+    "deleteRecapConfirmBody": "Sammanfattningen tas bort permanent. De ursprungliga samtalen från den dagen påverkas inte.",
+    "deleteRecapAction": "Radera",
+    "recapDeletedSnackbar": "Sammanfattning raderad",
+    "recapDeleteFailed": "Det gick inte att radera sammanfattningen. Försök igen senare."
 }

@@ -6842,6 +6842,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get lowBatteryAlertBody => 'Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi yra visiškai įkrautas';
+
+  @override
+  String get batteryFullyChargedBody => 'Jūsų Omi įrenginys yra visiškai įkrautas. Galite jį atjungti!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Jūsų Omi įrenginys atsijungė';
 
   @override
@@ -9249,4 +9255,23 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
+
+  @override
+  String get deleteRecap => 'Ištrinti suvestinę';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Ištrinti šią suvestinę?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ši suvestinė bus visam laikui pašalinta. Tos dienos pradinės pokalbiai nebus paveikti.';
+
+  @override
+  String get deleteRecapAction => 'Ištrinti';
+
+  @override
+  String get recapDeletedSnackbar => 'Suvestinė ištrinta';
+
+  @override
+  String get recapDeleteFailed => 'Nepavyko ištrinti suvestinės. Bandykite vėliau.';
 }

@@ -2185,6 +2185,8 @@
     "selectOption": "选择",
     "lowBatteryAlertTitle": "电池电量低警告",
     "lowBatteryAlertBody": "您的设备电池电量低。是时候充电了！🔋",
+    "batteryFullyChargedTitle": "Omi已充满电",
+    "batteryFullyChargedBody": "您的Omi设备已充满电，可以拔掉充电线了！",
     "deviceDisconnectedNotificationTitle": "您的 Omi 设备已断开连接",
     "deviceDisconnectedNotificationBody": "请重新连接以继续使用 Omi。",
     "firmwareUpdateAvailable": "固件更新可用",
@@ -3039,5 +3041,11 @@
     "startCallRecording": "开始通话录音",
     "startVoiceRecording": "开始语音录音",
     "bulkExportAlreadyExported": "所选任务已全部导出",
-    "bulkDeleteFailed": "无法删除任务，请重试。"
+    "bulkDeleteFailed": "无法删除任务，请重试。",
+    "deleteRecap": "删除回顾",
+    "deleteRecapConfirmTitle": "删除该回顾?",
+    "deleteRecapConfirmBody": "此回顾将被永久删除。当天的原始对话不会受到影响。",
+    "deleteRecapAction": "删除",
+    "recapDeletedSnackbar": "回顾已删除",
+    "recapDeleteFailed": "无法删除回顾。请稍后重试。"
 }

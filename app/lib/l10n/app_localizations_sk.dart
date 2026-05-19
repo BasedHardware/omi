@@ -6837,6 +6837,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get lowBatteryAlertBody => 'Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi je plne nabitý';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaše zariadenie Omi je plne nabité. Môžete ho odpojiť!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Vaše zariadenie Omi bolo odpojené';
 
   @override
@@ -9228,4 +9234,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Úlohy sa nepodarilo odstrániť. Skúste to znova.';
+
+  @override
+  String get deleteRecap => 'Odstrániť zhrnutie';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Odstrániť toto zhrnutie?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Zhrnutie bude trvalo odstránené. Pôvodné konverzácie z toho dňa zostávajú nedotknuté.';
+
+  @override
+  String get deleteRecapAction => 'Odstrániť';
+
+  @override
+  String get recapDeletedSnackbar => 'Zhrnutie odstránené';
+
+  @override
+  String get recapDeleteFailed => 'Zhrnutie sa nepodarilo odstrániť. Skúste neskôr.';
 }

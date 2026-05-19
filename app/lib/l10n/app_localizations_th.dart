@@ -6806,6 +6806,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get lowBatteryAlertBody => 'แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi ชาร์จเต็มแล้ว';
+
+  @override
+  String get batteryFullyChargedBody => 'อุปกรณ์ Omi ของคุณชาร์จเต็มแล้ว รู้สึกอิสระที่จะถอดปลั๊กได้!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ';
 
   @override
@@ -9194,4 +9200,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'ลบงานไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String get deleteRecap => 'ลบสรุป';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ลบสรุปนี้หรือไม่?';
+
+  @override
+  String get deleteRecapConfirmBody => 'สรุปนี้จะถูกลบอย่างถาวร บทสนทนาต้นฉบับของวันนั้นจะไม่ได้รับผลกระทบ';
+
+  @override
+  String get deleteRecapAction => 'ลบ';
+
+  @override
+  String get recapDeletedSnackbar => 'ลบสรุปแล้ว';
+
+  @override
+  String get recapDeleteFailed => 'ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง';
 }

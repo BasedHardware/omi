@@ -6845,6 +6845,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get lowBatteryAlertBody => 'Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi đã sạc đầy';
+
+  @override
+  String get batteryFullyChargedBody => 'Thiết bị Omi của bạn đã sạc đầy. Bạn có thể rút cáp ra!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Thiết bị Omi của bạn đã ngắt kết nối';
 
   @override
@@ -9240,4 +9246,23 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Không thể xóa các tác vụ. Vui lòng thử lại.';
+
+  @override
+  String get deleteRecap => 'Xóa tóm tắt';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Xóa tóm tắt này?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Tóm tắt này sẽ bị xóa vĩnh viễn. Các cuộc trò chuyện gốc của ngày đó không bị ảnh hưởng.';
+
+  @override
+  String get deleteRecapAction => 'Xóa';
+
+  @override
+  String get recapDeletedSnackbar => 'Đã xóa tóm tắt';
+
+  @override
+  String get recapDeleteFailed => 'Không thể xóa tóm tắt. Vui lòng thử lại sau.';
 }

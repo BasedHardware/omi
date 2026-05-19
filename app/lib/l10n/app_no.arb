@@ -2184,6 +2184,8 @@
     "selectOption": "Velg",
     "lowBatteryAlertTitle": "Advarsel om lavt batteri",
     "lowBatteryAlertBody": "Enhetens batteri er lavt. På tide å lade! 🔋",
+    "batteryFullyChargedTitle": "Omi er fulladet",
+    "batteryFullyChargedBody": "Omi-enheten din er fulladet. Du kan koble den fra nå!",
     "deviceDisconnectedNotificationTitle": "Omi-enheten din ble frakoblet",
     "deviceDisconnectedNotificationBody": "Koble til igjen for å fortsette å bruke Omi.",
     "firmwareUpdateAvailable": "Fastvareoppdatering tilgjengelig",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Start samtaleopptak",
     "startVoiceRecording": "Start stemmeopptak",
     "bulkExportAlreadyExported": "Alle valgte oppgaver er allerede eksportert",
-    "bulkDeleteFailed": "Kunne ikke slette oppgavene. Prøv igjen."
+    "bulkDeleteFailed": "Kunne ikke slette oppgavene. Prøv igjen.",
+    "deleteRecap": "Slett oppsummering",
+    "deleteRecapConfirmTitle": "Slette denne oppsummeringen?",
+    "deleteRecapConfirmBody": "Oppsummeringen fjernes permanent. De opprinnelige samtalene fra den dagen påvirkes ikke.",
+    "deleteRecapAction": "Slett",
+    "recapDeletedSnackbar": "Oppsummering slettet",
+    "recapDeleteFailed": "Kunne ikke slette oppsummeringen. Prøv igjen senere."
 }

@@ -2165,6 +2165,8 @@
     "selectOption": "اختر",
     "lowBatteryAlertTitle": "تنبيه انخفاض البطارية",
     "lowBatteryAlertBody": "بطارية جهازك منخفضة. حان وقت إعادة الشحن! 🔋",
+    "batteryFullyChargedTitle": "أومي مشحون بالكامل",
+    "batteryFullyChargedBody": "جهاز Omi الخاص بك مشحون بالكامل. يمكنك فصله الآن!",
     "deviceDisconnectedNotificationTitle": "تم قطع اتصال جهاز Omi",
     "deviceDisconnectedNotificationBody": "يرجى إعادة الاتصال لمتابعة استخدام Omi.",
     "firmwareUpdateAvailable": "تحديث البرنامج الثابت متاح",
@@ -2984,5 +2986,11 @@
     "startCallRecording": "بدء تسجيل المكالمة",
     "startVoiceRecording": "بدء التسجيل الصوتي",
     "bulkExportAlreadyExported": "تم تصدير جميع المهام المحددة بالفعل",
-    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى."
+    "bulkDeleteFailed": "تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.",
+    "deleteRecap": "حذف الملخص",
+    "deleteRecapConfirmTitle": "حذف هذا الملخص؟",
+    "deleteRecapConfirmBody": "سيتم حذف هذا الملخص نهائيًا. لن تتأثر المحادثات الأصلية لذلك اليوم.",
+    "deleteRecapAction": "حذف",
+    "recapDeletedSnackbar": "تم حذف الملخص",
+    "recapDeleteFailed": "تعذر حذف الملخص. حاول مرة أخرى لاحقًا."
 }

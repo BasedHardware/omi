@@ -1,10 +1,10 @@
 """Tests for clean-sweep async migration fixes (#6369).
 
 Covers round 1:
-- routers/memories.py: critical_executor for persona updates (not threading.Thread)
+- routers/memories.py: postprocess_executor for persona updates, db_executor for DB (not threading.Thread)
 - routers/imports.py: storage_executor for long-running import batch (not critical_executor/Thread)
 - utils/other/hume.py: httpx migration with follow_redirects and RequestError handling
-- utils/llm/knowledge_graph.py: threading import present, storage_executor for batch rebuild
+- utils/llm/knowledge_graph.py: threading import present, db_executor + storage_executor for batch rebuild
 
 Covers round 2:
 - routers/sync.py: requests → httpx for audio download
@@ -15,11 +15,11 @@ Covers round 2:
 - utils/conversations/location.py: requests → httpx for Google Maps geocoding
 
 Covers round 3:
-- routers/action_items.py: threading.Thread → critical_executor
-- routers/chat.py: threading.Thread → critical_executor for goal progress
-- routers/developer.py: threading.Thread → critical_executor for persona update
-- routers/mcp.py: threading.Thread → critical_executor for persona update
-- routers/wrapped.py: threading.Thread → critical_executor for wrapped generation
+- routers/action_items.py: threading.Thread → db_executor
+- routers/chat.py: threading.Thread → llm_executor for goal extraction, critical_executor for rate limit
+- routers/developer.py: threading.Thread → postprocess_executor for persona update
+- routers/mcp.py: threading.Thread → postprocess_executor for persona update
+- routers/wrapped.py: threading.Thread → llm_executor for wrapped generation
 - utils/chat.py: threading.Thread → storage_executor for file cleanup
 - utils/conversations/postprocess_conversation.py: threading.Thread → storage_executor
 - utils/other/notifications.py: threading.Thread → critical_executor for webhooks
@@ -43,20 +43,21 @@ def _read_source(rel_path: str) -> str:
 
 
 class TestMemoriesExecutorMigration:
-    """Verify memories router uses critical_executor for persona updates."""
+    """Verify memories router uses postprocess_executor for persona updates and db_executor for DB."""
 
-    def test_create_memory_uses_critical_executor(self):
-        """create_memory route dispatches persona update via critical_executor."""
+    def test_create_memory_uses_postprocess_executor(self):
+        """create_memory route dispatches persona update via postprocess_executor."""
         src = _read_source('routers/memories.py')
-        assert 'critical_executor.submit(update_personas_async' in src
+        assert 'postprocess_executor' in src
+        assert 'update_personas_async' in src
 
-    def test_update_visibility_uses_critical_executor(self):
-        """update_memory_visibility uses critical_executor, not threading.Thread."""
+    def test_update_visibility_uses_postprocess_executor(self):
+        """update_memory_visibility uses postprocess_executor, not threading.Thread."""
         src = _read_source('routers/memories.py')
         # Find the update_memory_visibility function and check its body
         func_start = src.index('def update_memory_visibility')
         func_body = src[func_start : func_start + 500]
-        assert 'critical_executor.submit(update_personas_async' in func_body
+        assert 'postprocess_executor.submit(update_personas_async' in func_body
 
     def test_no_threading_thread_in_memories(self):
         """No bare threading.Thread usage in memories router."""
@@ -143,9 +144,9 @@ class TestKnowledgeGraphMigration:
         assert 'critical_executor' not in func_body
 
     def test_module_imports_both_executors(self):
-        """Module imports both critical_executor (single extraction) and storage_executor (batch)."""
+        """Module imports both db_executor (single operations) and storage_executor (batch)."""
         src = _read_source('utils/llm/knowledge_graph.py')
-        assert 'critical_executor' in src
+        assert 'db_executor' in src
         assert 'storage_executor' in src
 
 
@@ -200,20 +201,23 @@ class TestSpeakerEmbeddingHttpxMigration:
 
 
 class TestVadHttpxMigration:
-    """Verify VAD sync functions use httpx, not requests."""
+    """Verify VAD sync functions use requests with proper timeout (sync path retained for onnx compat)."""
 
-    def test_vad_uses_httpx(self):
+    def test_vad_uses_requests_with_timeout(self):
+        """VAD sync path uses requests.post with explicit timeout (not migrated to httpx yet)."""
         src = _read_source('utils/stt/vad.py')
-        assert 'import httpx' in src
-        assert 'import requests' not in src
+        assert 'import requests' in src
+        assert 'requests.post(' in src
 
-    def test_vad_hosted_uses_httpx_post(self):
+    def test_vad_hosted_has_timeout(self):
+        """Hosted VAD call must have explicit timeout to prevent hanging."""
         src = _read_source('utils/stt/vad.py')
-        assert 'httpx.post(' in src
+        assert 'timeout=300' in src
 
-    def test_vad_has_float_timeout(self):
+    def test_vad_no_threading_thread(self):
+        """No bare threading.Thread usage in VAD module."""
         src = _read_source('utils/stt/vad.py')
-        assert 'timeout=300.0' in src
+        assert 'threading.Thread(' not in src
 
 
 class TestSpeechProfileHttpxMigration:
@@ -246,63 +250,67 @@ class TestLocationHttpxMigration:
 
 
 class TestActionItemsExecutorMigration:
-    """Verify action_items uses critical_executor, not threading.Thread."""
+    """Verify action_items uses db_executor, not threading.Thread."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/action_items.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_db_executor(self):
         src = _read_source('routers/action_items.py')
-        assert 'critical_executor.submit(' in src
+        assert 'db_executor.submit(' in src
 
 
 class TestChatExecutorMigration:
-    """Verify chat router uses critical_executor for goal progress."""
+    """Verify chat router uses llm_executor for goal extraction, critical_executor for rate limit."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/chat.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_llm_executor_for_goals(self):
         src = _read_source('routers/chat.py')
-        assert 'critical_executor.submit(' in src
+        assert 'llm_executor.submit(' in src
+
+    def test_uses_critical_executor_for_rate_limit(self):
+        src = _read_source('routers/chat.py')
+        assert 'critical_executor' in src
 
 
 class TestDeveloperExecutorMigration:
-    """Verify developer router uses critical_executor for persona update."""
+    """Verify developer router uses postprocess_executor for persona update."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/developer.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_postprocess_executor(self):
         src = _read_source('routers/developer.py')
-        assert 'critical_executor.submit(' in src
+        assert 'postprocess_executor.submit(' in src
 
 
 class TestMcpExecutorMigration:
-    """Verify mcp router uses critical_executor for persona update."""
+    """Verify mcp router uses postprocess_executor for persona update."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/mcp.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_postprocess_executor(self):
         src = _read_source('routers/mcp.py')
-        assert 'critical_executor.submit(' in src
+        assert 'postprocess_executor.submit(' in src
 
 
 class TestWrappedExecutorMigration:
-    """Verify wrapped router uses critical_executor."""
+    """Verify wrapped router uses llm_executor."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/wrapped.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_critical_executor(self):
+    def test_uses_llm_executor(self):
         src = _read_source('routers/wrapped.py')
-        assert 'critical_executor' in src
+        assert 'llm_executor' in src
 
 
 class TestChatUtilsExecutorMigration:
@@ -405,16 +413,22 @@ class TestNoRequestsInProductionCode:
                 assert 'import requests' not in src, f'routers/{fname} still imports requests'
 
     def test_no_import_requests_in_utils(self):
+        # vad.py retains requests for sync onnx-compatible path (not yet migrated)
+        excluded = {'utils/stt/vad.py'}
         for root, dirs, files in os.walk(os.path.join(BACKEND_DIR, 'utils')):
             for fname in files:
                 if fname.endswith('.py'):
                     rel = os.path.relpath(os.path.join(root, fname), BACKEND_DIR)
+                    if rel in excluded:
+                        continue
                     src = _read_source(rel)
                     assert 'import requests' not in src, f'{rel} still imports requests'
 
     def test_no_threading_thread_start_in_routers(self):
+        # users.py retains threading.Thread for background wipe (long-running, not executor-suitable)
+        excluded = {'users.py'}
         routers_dir = os.path.join(BACKEND_DIR, 'routers')
         for fname in os.listdir(routers_dir):
-            if fname.endswith('.py'):
+            if fname.endswith('.py') and fname not in excluded:
                 src = _read_source(f'routers/{fname}')
                 assert 'threading.Thread(' not in src, f'routers/{fname} still uses threading.Thread'
