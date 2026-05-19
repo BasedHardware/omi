@@ -114,7 +114,7 @@ def get_app_usage_count_cache(app_id: str) -> int | None:
     count = r.get(f'apps:{app_id}:usage_count')
     if not count:
         return None
-    return eval(count)
+    return ast.literal_eval(count)
 
 
 def set_app_money_made_amount_cache(app_id: str, amount: float):
@@ -125,7 +125,7 @@ def get_app_money_made_amount_cache(app_id: str) -> float | None:
     amount = r.get(f'apps:{app_id}:money_made')
     if not amount:
         return None
-    return eval(amount)
+    return ast.literal_eval(amount)
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[dict]):
@@ -161,7 +161,7 @@ def set_app_review_cache(app_id: str, uid: str, data: dict):
     if not reviews:
         reviews = {}
     else:
-        reviews = eval(reviews)
+        reviews = ast.literal_eval(reviews)
     reviews[uid] = data
     r.set(f'plugins:{app_id}:reviews', str(reviews))
 
@@ -170,7 +170,7 @@ def get_specific_user_review(app_id: str, uid: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         return {}
-    reviews = eval(reviews)
+    reviews = ast.literal_eval(reviews)
     return reviews.get(uid, {})
 
 
@@ -221,7 +221,7 @@ def get_app_reviews(app_id: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
         return {}
-    return eval(reviews)
+    return ast.literal_eval(reviews)
 
 
 def get_apps_reviews(app_ids: list) -> dict:
@@ -232,7 +232,7 @@ def get_apps_reviews(app_ids: list) -> dict:
     reviews = r.mget(keys)
     if reviews is None:
         return {}
-    return {app_id: eval(review) if review else {} for app_id, review in zip(app_ids, reviews)}
+    return {app_id: ast.literal_eval(review) if review else {} for app_id, review in zip(app_ids, reviews)}
 
 
 def set_app_installs_count(app_id: str, count: int):
@@ -284,7 +284,7 @@ def get_cached_user_geolocation(uid: str):
     geolocation = r.get(f'users:{uid}:geolocation')
     if not geolocation:
         return None
-    return eval(geolocation)
+    return ast.literal_eval(geolocation)
 
 
 # VISIIBILTIY OF CONVERSATIONS

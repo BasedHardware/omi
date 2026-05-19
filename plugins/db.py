@@ -58,7 +58,7 @@ def append_segment_to_transcript(uid: str, session_id: str, new_segments: list[T
     if not segments:
         segments = []
     else:
-        segments = eval(segments)
+        segments = ast.literal_eval(segments)
 
     segments.extend([segment.dict() for segment in new_segments])
 
@@ -169,7 +169,7 @@ def get_upsert_segment_to_transcript_plugin(
     if not segments:
         segments = []
     else:
-        segments = eval(segments)
+        segments = ast.literal_eval(segments)
 
     segments.extend([segment.dict() for segment in new_segments])
 
