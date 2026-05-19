@@ -2926,6 +2926,10 @@ extension APIClient {
 
   /// Get all scores (daily, weekly, overall) with default tab selection
   func getScores(date: Date? = nil) async throws -> ScoreResponse {
+    if selectedBackendTarget.mode == .localDaemon {
+      return ScoreResponse.emptyLocal(date: date)
+    }
+
     var endpoint = "v1/scores"
     if let date = date {
       let formatter = DateFormatter()
@@ -3539,6 +3543,19 @@ struct ScoreResponse: Codable {
   enum CodingKeys: String, CodingKey {
     case daily, weekly, overall, date
     case defaultTab = "default_tab"
+  }
+
+  static func emptyLocal(date: Date? = nil) -> ScoreResponse {
+    let empty = ScoreData(score: 0, completedTasks: 0, totalTasks: 0)
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    return ScoreResponse(
+      daily: empty,
+      weekly: empty,
+      overall: empty,
+      defaultTab: "daily",
+      date: formatter.string(from: date ?? Date())
+    )
   }
 }
 

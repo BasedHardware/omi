@@ -28,6 +28,11 @@ actor ScreenActivitySyncService {
 
     /// Start the sync loop. Call after auth is established and database is ready.
     func start() {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            stop()
+            log("ScreenActivitySync: disabled in local daemon mode")
+            return
+        }
         guard !isRunning else {
             log("ScreenActivitySync: already running")
             return
@@ -149,6 +154,10 @@ actor ScreenActivitySyncService {
     // MARK: - HTTP push
 
     private func pushRows(_ rows: [[String: Any]]) async -> Bool {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("ScreenActivitySync: refusing backend push in local daemon mode")
+            return false
+        }
         let payload: [String: Any] = ["rows": rows]
 
         guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else {

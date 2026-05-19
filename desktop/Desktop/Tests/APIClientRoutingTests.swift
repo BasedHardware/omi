@@ -537,6 +537,7 @@ final class APIClientRoutingTests: XCTestCase {
     let client = await makeTestClient()
 
     _ = try? await client.getConversations()
+    _ = try? await client.getConversationsCount()
     _ = try? await client.getConversation(id: "local-123") as ServerConversation
     _ = try? await client.searchConversations(query: "offline")
     try? await client.updateConversationTitle(id: "local-123", title: "Offline")
@@ -545,9 +546,11 @@ final class APIClientRoutingTests: XCTestCase {
     try? await client.deleteConversation(id: "local-123")
 
     let requests = URLCapture.capturedRequests
-    XCTAssertEqual(requests.count, 7)
+    XCTAssertEqual(requests.count, 8)
     XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 9876 })
+    XCTAssertTrue(requests.allSatisfy { $0.url.scheme == "http" })
     XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+    XCTAssertTrue(requests.contains { $0.url.path == "/v1/conversations/count" })
     assertNoOmiHostedBackendRequests(requests)
   }
 
@@ -778,6 +781,26 @@ final class APIClientRoutingTests: XCTestCase {
 
     await APIKeyService.shared.fetchKeys()
 
+    XCTAssertTrue(APIKeyService.shared.isLoaded)
+    XCTAssertNil(APIKeyService.shared.loadError)
+    assertNoOmiHostedBackendRequests(URLCapture.capturedRequests)
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
+  func testLocalModeDashboardScoresReturnLocalDefaultBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    let scores = try? await client.getScores(date: Date(timeIntervalSince1970: 0))
+
+    XCTAssertEqual(scores?.daily.score, 0)
+    XCTAssertEqual(scores?.weekly.totalTasks, 0)
+    XCTAssertEqual(scores?.overall.completedTasks, 0)
+    XCTAssertEqual(scores?.defaultTab, "daily")
+    XCTAssertEqual(scores?.date, "1970-01-01")
     assertNoOmiHostedBackendRequests(URLCapture.capturedRequests)
     XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
   }

@@ -110,8 +110,13 @@ class ViewModelContainer: ObservableObject {
             // Wire task chat coordinator to view model for delete/purge operations
             tasksViewModel.chatCoordinator = taskChatCoordinator
 
-            // Start screen activity sync to backend (Firestore + Pinecone)
-            await ScreenActivitySyncService.shared.start()
+            // Start cloud screen activity sync only when cloud backends are selected.
+            if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+                await ScreenActivitySyncService.shared.stop()
+                log("DATA LOAD: Skipping ScreenActivitySyncService in local daemon mode")
+            } else {
+                await ScreenActivitySyncService.shared.start()
+            }
         }
 
         isLoading = false
