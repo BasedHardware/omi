@@ -110,9 +110,8 @@ def validate_app_endpoints_for_reenable(app_dict: dict, update_dict: dict, app_i
     chat_tools = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
     for tool in chat_tools:
         ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-        method = tool.get('method', 'POST') if isinstance(tool, dict) else getattr(tool, 'method', 'POST')
         if ep and ep not in seen_urls:
-            endpoints_to_check.append(('chat tool', ep, method.upper(), True))
+            endpoints_to_check.append(('chat tool', ep, 'HEAD', False))
             seen_urls.add(ep)
     if not endpoints_to_check:
         raise HTTPException(
