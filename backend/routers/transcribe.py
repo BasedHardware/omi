@@ -119,7 +119,7 @@ from utils.stt.speaker_embedding import (
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
-from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, sleep_until_shutdown
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +490,7 @@ async def _stream_handler(
         nonlocal dg_usage_ms_pending
 
         while websocket_active:
-            if await sleep_until_shutdown(shutdown_event, 60):
+            if await wait_for_event(shutdown_event, 60):
                 break
 
             # Flush batched DG usage to Redis (#5854 — was per-chunk, now every 60s)
@@ -700,7 +700,7 @@ async def _stream_handler(
                     break
 
                 # next
-                if await sleep_until_shutdown(shutdown_event, 10):
+                if await wait_for_event(shutdown_event, 10):
                     break
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected {uid} {session_id}")
@@ -1378,7 +1378,7 @@ async def _stream_handler(
                             f"Pusher reconnect attempt {reconnect_attempts + 1}/{PUSHER_MAX_RECONNECT_ATTEMPTS}, "
                             f"waiting {delay:.1f}s {uid} {session_id}"
                         )
-                        if await sleep_until_shutdown(shutdown_event, delay):
+                        if await wait_for_event(shutdown_event, delay):
                             break
 
                         try:
@@ -1407,7 +1407,7 @@ async def _stream_handler(
                         elapsed = time.monotonic() - degraded_since
                         remaining = PUSHER_DEGRADED_COOLDOWN - elapsed
                         if remaining > 0:
-                            if await sleep_until_shutdown(shutdown_event, min(remaining, 5.0)):
+                            if await wait_for_event(shutdown_event, min(remaining, 5.0)):
                                 break
                             continue
                         # Cooldown elapsed — try a single probe
@@ -1548,7 +1548,7 @@ async def _stream_handler(
             """
             nonlocal pusher_ws, pusher_connected, websocket_active
             while websocket_active:
-                if await sleep_until_shutdown(shutdown_event, 20):
+                if await wait_for_event(shutdown_event, 20):
                     break
                 if pusher_connected and pusher_ws:
                     try:
