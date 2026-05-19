@@ -50,7 +50,7 @@ pub fn start_mic_capture(
     );
 
     let err_fn = |err: cpal::StreamError| {
-        tracing::error!("Mic stream error: {err}");
+        tracing::error!("[MIC] Stream error: {err}");
     };
 
     let stream = match sample_format {
@@ -109,7 +109,8 @@ pub fn start_mic_capture(
     };
 
     stream.play().context("Failed to start mic stream")?;
-    tracing::info!("Mic capture started (resampling {}Hz → {}Hz mono)", device_rate, SAMPLE_RATE);
+    tracing::info!("[MIC] Capture started | device='{}' | native={}Hz {}ch {:?} → target={}Hz mono",
+        device_name, device_rate, device_channels, sample_format, SAMPLE_RATE);
 
     Ok(MicStream {
         _stream: Arc::new(stream),

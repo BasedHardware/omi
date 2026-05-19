@@ -219,6 +219,26 @@ pub fn SettingsPage() -> Element {
                         span { class: "toggle-slider" }
                     }
                 }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Speaker Diarization" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().diarize_speakers,
+                            onchange: move |e| {
+                                config.write().diarize_speakers = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "" }
+                    span { class: "settings-hint",
+                        "Enable only for multi-speaker conversations. Off = all speech treated as one speaker."
+                    }
+                }
             }
 
             // Screen capture section

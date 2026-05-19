@@ -128,4 +128,30 @@ impl Database {
             .join("\n");
         Ok(text)
     }
+
+    /// Update conversation summary and title after LLM processing.
+    pub fn update_summary(&self, id: &str, title: &str, summary: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE conversations SET title = ?1, summary = ?2, status = 'completed' WHERE id = ?3",
+            params![title, summary, id],
+        )?;
+        Ok(())
+    }
+
+    /// Get recent conversations (id, title, summary, ended_at) for chat context injection.
+    pub fn get_recent_context(&self, limit: usize) -> Result<Vec<(String, String, String)>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, COALESCE(title, 'Untitled'), COALESCE(summary, '') \
+             FROM conversations WHERE status = 'completed' \
+             ORDER BY ended_at DESC LIMIT ?1"
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+        let mut result = Vec::new();
+        for r in rows { result.push(r?); }
+        Ok(result)
+    }
 }

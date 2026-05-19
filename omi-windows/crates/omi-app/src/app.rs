@@ -7,6 +7,10 @@ use crate::pages;
 use crate::recording::{LiveTranscript, RecordingStatus};
 use crate::sidecar::BackendStatus;
 
+/// Wrapper so `omi_db::Database` can be provided as Dioxus context (needs Clone).
+#[derive(Clone)]
+pub struct Db(pub omi_db::Database);
+
 /// Top-level route enum — each variant maps to a sidebar nav item.
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -61,12 +65,27 @@ pub fn App() -> Element {
     let recording_status = use_signal(|| RecordingStatus::Idle);
     let live_transcript = use_signal(LiveTranscript::default);
 
+    // Open local SQLite DB (log error but don't crash the app)
+    let db = use_signal(|| {
+        match omi_db::Database::open() {
+            Ok(d) => {
+                tracing::info!("[DB] Opened successfully");
+                Some(Db(d))
+            }
+            Err(e) => {
+                tracing::error!("[DB] Failed to open: {e}");
+                None
+            }
+        }
+    });
+
     // Provide all as global context
     use_context_provider(|| config);
     use_context_provider(|| auth_status);
     use_context_provider(|| backend_status);
     use_context_provider(|| recording_status);
     use_context_provider(|| live_transcript);
+    use_context_provider(|| db);
 
     // Kick off the sidecar health poller once
     use_effect(move || {

@@ -60,6 +60,11 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub mic_enabled: bool,
 
+    /// Enable speaker diarization (multi-speaker). Off by default — single speaker
+    /// mode avoids Deepgram incorrectly splitting one voice into multiple speakers.
+    #[serde(default)]
+    pub diarize_speakers: bool,
+
     /// Firebase ID token (set after auth)
     #[serde(default)]
     pub firebase_id_token: String,
@@ -117,6 +122,7 @@ impl Default for AppConfig {
             ocr_enabled: true,
             system_audio_enabled: false,
             mic_enabled: true,
+            diarize_speakers: false,
             firebase_id_token: String::new(),
             firebase_refresh_token: String::new(),
             user_display_name: String::new(),

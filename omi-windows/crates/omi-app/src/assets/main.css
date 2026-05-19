@@ -322,13 +322,28 @@ body {
   border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.conversation-card:hover {
+  border-color: var(--accent);
+}
+
+.conversation-card.expanded {
+  border-color: var(--accent);
+}
+
+.conversation-card.live-card {
+  border-color: var(--error);
+  cursor: default;
 }
 
 .conversation-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  margin-bottom: 8px;
 }
 
 .conversation-header h3 {
@@ -336,17 +351,54 @@ body {
   font-weight: 600;
 }
 
+.conversation-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .conversation-meta {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.conversation-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 8px 0 12px 0;
+  line-height: 1.5;
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-badge.completed {
+  background: rgba(0, 184, 148, 0.15);
+  color: var(--success);
 }
 
 .conversation-transcript {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 500px;
+  max-height: 400px;
   overflow-y: auto;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.segment-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  min-width: 38px;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────── */
@@ -392,6 +444,12 @@ body {
 .settings-label {
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .settings-value {

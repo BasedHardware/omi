@@ -1,7 +1,9 @@
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::app::Db;
 use crate::config::AppConfig;
+use crate::llm::{LlmMessage, resolve_llm_endpoint};
 
 #[derive(Debug, Clone, PartialEq)]
 struct ChatMessage {
@@ -40,6 +42,7 @@ struct ChatResponseMsg {
 #[component]
 pub fn ChatPage() -> Element {
     let config: Signal<AppConfig> = use_context();
+    let db: Signal<Option<Db>> = use_context();
     let mut input = use_signal(String::new);
     let mut messages = use_signal(Vec::<ChatMessage>::new);
     let mut loading = use_signal(|| false);
@@ -61,41 +64,42 @@ pub fn ChatPage() -> Element {
         messages.set(msgs);
 
         let cfg = config.read().clone();
-        // Priority: env AZURE_* > Groq config > OpenAI config
-        let azure_key = std::env::var("AZURE_API_KEY").unwrap_or_default();
-        let azure_base = std::env::var("AZURE_BASE_URL").unwrap_or_default();
-        let azure_model = std::env::var("AZURE_MODEL").unwrap_or_default();
+        let (api_key, api_url, model) = resolve_llm_endpoint(&cfg);
 
-        let (api_key, api_url, model) = if !azure_key.is_empty() && !azure_base.is_empty() {
-            let base = azure_base.trim_end_matches('/').to_string();
-            let url = format!("{base}/chat/completions?api-version=2024-02-15-preview");
-            let mdl = if azure_model.is_empty() { "gpt-4o-mini".to_string() } else { azure_model };
-            (azure_key, url, mdl)
-        } else if !cfg.groq_api_key.is_empty() {
-            (
-                cfg.groq_api_key.clone(),
-                "https://api.groq.com/openai/v1/chat/completions".to_string(),
-                "llama-3.3-70b-versatile".to_string(),
-            )
-        } else if !cfg.openai_api_key.is_empty() {
-            let base = cfg.openai_base_url.trim_end_matches('/').to_string();
-            let is_azure = base.contains("azure.com");
-            let url = if is_azure {
-                format!("{base}/chat/completions?api-version=2024-02-15-preview")
-            } else {
-                format!("{base}/chat/completions")
-            };
-            (
-                cfg.openai_api_key.clone(),
-                url,
-                cfg.openai_model.clone(),
-            )
-        } else {
-            (String::new(), String::new(), String::new())
+        // Build system prompt from recent conversation context + memories
+        let system_prompt = {
+            let mut parts: Vec<String> = vec![
+                "You are Omi, a helpful AI assistant with access to the user's recent voice conversations and memories.".into(),
+                "Answer concisely and helpfully. Reference specific things from the context when relevant.".into(),
+            ];
+
+            if let Some(Db(ref d)) = *db.read() {
+                // Recent conversation summaries (last 5)
+                if let Ok(ctx) = d.get_recent_context(5) {
+                    if !ctx.is_empty() {
+                        parts.push("\n## Recent Conversations".into());
+                        for (_, title, summary) in &ctx {
+                            if !summary.is_empty() {
+                                parts.push(format!("**{title}**: {summary}"));
+                            }
+                        }
+                    }
+                }
+                // Memories (last 20)
+                if let Ok(mem_text) = d.get_memories_text(20) {
+                    if !mem_text.is_empty() {
+                        parts.push("\n## Remembered Facts".into());
+                        parts.push(mem_text);
+                    }
+                }
+            }
+
+            parts.join("\n")
         };
 
         spawn(async move {
             loading.set(true);
+            tracing::info!("[CHAT] Sending to: {api_url} (model: {model})");
 
             if api_key.is_empty() {
                 let mut msgs = messages.read().clone();
@@ -108,26 +112,34 @@ pub fn ChatPage() -> Element {
                 return;
             }
 
-            // Build request payload
-            let history: Vec<ChatRequestMsg> = messages
-                .read()
-                .iter()
-                .map(|m| ChatRequestMsg {
-                    role: m.role.clone(),
-                    content: m.content.clone(),
-                })
-                .collect();
+            // Build full message list: system + conversation history
+            let mut llm_msgs: Vec<LlmMessage> = vec![
+                LlmMessage { role: "system".into(), content: system_prompt },
+            ];
+            llm_msgs.extend(messages.read().iter().map(|m| LlmMessage {
+                role: m.role.clone(),
+                content: m.content.clone(),
+            }));
 
             let req = ChatRequest {
                 model,
-                messages: history,
+                messages: llm_msgs.iter().map(|m| ChatRequestMsg {
+                    role: m.role.clone(),
+                    content: m.content.clone(),
+                }).collect(),
                 stream: false,
             };
 
             let is_azure = api_url.contains("azure.com");
+            tracing::info!("Chat URL: {api_url}");
+            tracing::info!("Chat model: {}", req.model);
+            tracing::info!("Chat is_azure: {is_azure}");
+
             let mut request = reqwest::Client::new().post(&api_url);
             if is_azure {
-                request = request.header("api-key", &api_key);
+                request = request
+                    .header("api-key", &api_key)
+                    .header("Content-Type", "application/json");
             } else {
                 request = request.header("Authorization", format!("Bearer {api_key}"));
             }
@@ -135,29 +147,47 @@ pub fn ChatPage() -> Element {
 
             match result {
                 Ok(resp) => {
-                    if let Ok(body) = resp.json::<ChatResponse>().await {
-                        if let Some(choice) = body.choices.first() {
-                            let mut msgs = messages.read().clone();
-                            msgs.push(ChatMessage {
-                                role: "assistant".into(),
-                                content: choice.message.content.clone(),
-                            });
-                            messages.set(msgs);
-                        }
-                    } else {
+                    let status = resp.status();
+                    let body_text = resp.text().await.unwrap_or_default();
+                    tracing::info!("Chat API response [{}]: {}", status, &body_text[..body_text.len().min(500)]);
+
+                    if !status.is_success() {
                         let mut msgs = messages.read().clone();
                         msgs.push(ChatMessage {
                             role: "assistant".into(),
-                            content: "Error: Failed to parse response".into(),
+                            content: format!("API Error {status}: {body_text}"),
                         });
                         messages.set(msgs);
+                    } else {
+                        match serde_json::from_str::<ChatResponse>(&body_text) {
+                            Ok(body) => {
+                                if let Some(choice) = body.choices.first() {
+                                    let mut msgs = messages.read().clone();
+                                    msgs.push(ChatMessage {
+                                        role: "assistant".into(),
+                                        content: choice.message.content.clone(),
+                                    });
+                                    messages.set(msgs);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to parse chat response: {e}\nBody: {body_text}");
+                                let mut msgs = messages.read().clone();
+                                msgs.push(ChatMessage {
+                                    role: "assistant".into(),
+                                    content: format!("Parse error: {e}\nRaw: {}", &body_text[..body_text.len().min(200)]),
+                                });
+                                messages.set(msgs);
+                            }
+                        }
                     }
                 }
                 Err(e) => {
+                    tracing::error!("Chat request failed: {e}");
                     let mut msgs = messages.read().clone();
                     msgs.push(ChatMessage {
                         role: "assistant".into(),
-                        content: format!("Error: {e}"),
+                        content: format!("Request failed: {e}"),
                     });
                     messages.set(msgs);
                 }

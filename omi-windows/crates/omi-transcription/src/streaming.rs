@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio::sync::broadcast;
+use tokio::time::{timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::models::TranscriptSegment;
@@ -17,6 +18,9 @@ pub struct DeepgramConfig {
     pub sample_rate: u32,
     pub encoding: String,
     pub channels: u16,
+    /// Enable speaker diarization. Set true only for multi-speaker sessions.
+    /// Default false — single speaker mode avoids spurious speaker splits.
+    pub diarize: bool,
 }
 
 impl Default for DeepgramConfig {
@@ -28,6 +32,7 @@ impl Default for DeepgramConfig {
             sample_rate: 16_000,
             encoding: "linear16".into(),
             channels: 1,
+            diarize: false,
         }
     }
 }
@@ -79,18 +84,26 @@ pub async fn run_deepgram_stream(
     transcript_tx: broadcast::Sender<TranscriptSegment>,
 ) -> Result<()> {
     if config.api_key.is_empty() {
+        tracing::error!("[TRANSCRIPTION] Deepgram API key is empty — cannot start stream");
         anyhow::bail!("Deepgram API key is empty — set it in Settings");
     }
 
+    let key_preview = &config.api_key[..config.api_key.len().min(8)];
+    tracing::info!("[TRANSCRIPTION] Starting Deepgram stream | model={} lang={} rate={} enc={} ch={} key={}...",
+        config.model, config.language, config.sample_rate, config.encoding, config.channels, key_preview);
+
+    let diarize_param = if config.diarize { "&diarize=true" } else { "" };
     let url = format!(
-        "{}?language={}&model={}&sample_rate={}&encoding={}&channels={}&punctuate=true&interim_results=true&diarize=true&smart_format=true",
+        "{}?language={}&model={}&sample_rate={}&encoding={}&channels={}&punctuate=true&interim_results=true&smart_format=true{}",
         DEEPGRAM_WS_URL,
         config.language,
         config.model,
         config.sample_rate,
         config.encoding,
         config.channels,
+        diarize_param,
     );
+    tracing::info!("[TRANSCRIPTION] WS URL: {} (diarize={})", url, config.diarize);
 
     let request = tokio_tungstenite::tungstenite::http::Request::builder()
         .uri(&url)
@@ -103,11 +116,13 @@ pub async fn run_deepgram_stream(
         .body(())
         .context("Failed to build WS request")?;
 
-    let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
+    tracing::info!("[TRANSCRIPTION] Attempting WebSocket connection to Deepgram...");
+    let (ws_stream, response) = tokio_tungstenite::connect_async(request)
         .await
         .context("Failed to connect to Deepgram WebSocket")?;
 
-    tracing::info!("Connected to Deepgram (model={}, lang={})", config.model, config.language);
+    tracing::info!("[TRANSCRIPTION] Connected to Deepgram! HTTP status={} model={} lang={}",
+        response.status(), config.model, config.language);
 
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
 
@@ -116,9 +131,13 @@ pub async fn run_deepgram_stream(
 
     // Task: send audio data to Deepgram
     let send_task = tokio::spawn(async move {
+        let mut chunk_count: u64 = 0;
+        let mut total_bytes: u64 = 0;
+        tracing::info!("[TRANSCRIPTION] Audio send task started, waiting for audio chunks...");
         loop {
             match audio_rx.recv().await {
                 Ok(chunk) => {
+                    chunk_count += 1;
                     // Convert i16 samples to little-endian bytes
                     let bytes: Vec<u8> = chunk
                         .samples
@@ -126,29 +145,55 @@ pub async fn run_deepgram_stream(
                         .flat_map(|s| s.to_le_bytes())
                         .collect();
                     if let Err(e) = ws_tx.send(Message::Binary(bytes)).await {
-                        tracing::error!("WS send error: {e}");
+                        tracing::error!("[TRANSCRIPTION] WS send error after {} chunks: {e}", chunk_count);
                         break;
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("Audio receiver lagged by {n} messages");
+                    tracing::warn!("[TRANSCRIPTION] Audio receiver lagged by {n} messages");
                 }
                 Err(broadcast::error::RecvError::Closed) => {
-                    // Send close frame to Deepgram
+                    tracing::info!("[TRANSCRIPTION] Audio channel closed after {chunk_count} chunks, sending close frame");
                     let _ = ws_tx.send(Message::Binary(vec![])).await;
                     break;
                 }
             }
         }
+        tracing::info!("[TRANSCRIPTION] Audio send task finished. Total: {chunk_count} chunks, {total_bytes} bytes");
     });
+
+    let diarize_enabled = config.diarize;
 
     // Task: receive transcripts from Deepgram
     let recv_task = tokio::spawn(async move {
-        while let Some(msg) = ws_rx.next().await {
-            match msg {
+        let mut msg_count: u64 = 0;
+        let mut transcript_count: u64 = 0;
+        tracing::info!("[TRANSCRIPTION] Recv task started, listening for Deepgram messages...");
+        loop {
+            // Use a timeout so we can log if Deepgram goes silent
+            let next = timeout(Duration::from_secs(10), ws_rx.next()).await;
+            match next {
+                Err(_elapsed) => {
+                    tracing::warn!("[TRANSCRIPTION] No message from Deepgram for 10s (msg_count={msg_count}, segments={transcript_count}) — connection may be idle or speech not detected");
+                    continue;
+                }
+                Ok(None) => {
+                    tracing::warn!("[TRANSCRIPTION] Deepgram WS stream ended (None) after {msg_count} msgs");
+                    break;
+                }
+                Ok(Some(msg)) => match msg {
                 Ok(Message::Text(text)) => {
+                    msg_count += 1;
+                    // Log ALL messages at info so we can see what Deepgram is returning
+                    tracing::info!("[TRANSCRIPTION] DG raw #{msg_count}: {}", &text[..text.len().min(500)]);
                     match serde_json::from_str::<DgResponse>(&text) {
                         Ok(resp) => {
+                            // Log non-Results messages (errors, metadata, etc.)
+                            if let Some(ref t) = resp.msg_type {
+                                if t != "Results" {
+                                    tracing::warn!("[TRANSCRIPTION] DG non-result type={t}: {}", &text[..text.len().min(400)]);
+                                }
+                            }
                             if let Some(channel) = resp.channel {
                                 if let Some(alt) = channel.alternatives.first() {
                                     if !alt.transcript.is_empty() {
@@ -156,15 +201,20 @@ pub async fn run_deepgram_stream(
                                         let duration = resp.duration.unwrap_or(0.0);
                                         let is_final = resp.is_final.unwrap_or(false);
 
-                                        // Get speaker from first word if diarization is on
-                                        let speaker = alt
-                                            .words
-                                            .as_ref()
-                                            .and_then(|w| w.first())
-                                            .and_then(|w| w.speaker)
-                                            .unwrap_or(0);
+                                        // Only use diarization speaker IDs when diarize is enabled.
+                                        // When off, always speaker=0 to avoid spurious multi-speaker splits.
+                                        let speaker = if diarize_enabled {
+                                            alt.words
+                                                .as_ref()
+                                                .and_then(|w| w.first())
+                                                .and_then(|w| w.speaker)
+                                                .unwrap_or(0)
+                                        } else {
+                                            0
+                                        };
 
                                         segment_counter += 1;
+                                        transcript_count += 1;
                                         let segment = TranscriptSegment {
                                             id: Some(format!("dg-{segment_counter}")),
                                             speaker,
@@ -174,35 +224,53 @@ pub async fn run_deepgram_stream(
                                             is_final,
                                         };
 
+                                        tracing::info!(
+                                            "[TRANSCRIPTION] >>> Segment #{transcript_count} | final={is_final} | speaker={speaker} | {:.2}s-{:.2}s | \"{}\"",
+                                            start, start + duration, alt.transcript
+                                        );
+
                                         let _ = tx_clone.send(segment);
+                                    } else {
+                                        tracing::info!("[TRANSCRIPTION] Empty transcript (silence/no-speech) in msg #{msg_count} | is_final={:?}", resp.is_final);
                                     }
                                 }
                             }
                         }
                         Err(e) => {
-                            tracing::debug!("Failed to parse DG response: {e}");
+                            tracing::warn!("[TRANSCRIPTION] Failed to parse DG JSON: {e} | raw: {}", &text[..text.len().min(400)]);
                         }
                     }
                 }
-                Ok(Message::Close(_)) => {
-                    tracing::info!("Deepgram closed connection");
+                Ok(Message::Ping(_)) => {
+                    tracing::info!("[TRANSCRIPTION] DG sent Ping (msg_count={msg_count})");
+                }
+                Ok(Message::Pong(_)) => {
+                    tracing::info!("[TRANSCRIPTION] DG sent Pong (msg_count={msg_count})");
+                }
+                Ok(Message::Close(frame)) => {
+                    tracing::warn!("[TRANSCRIPTION] Deepgram closed connection after {msg_count} msgs | frame={:?}", frame);
                     break;
+                }
+                Ok(other) => {
+                    tracing::info!("[TRANSCRIPTION] DG other message type: {:?}", other);
                 }
                 Err(e) => {
-                    tracing::error!("WS recv error: {e}");
+                    tracing::error!("[TRANSCRIPTION] WS recv error after {msg_count} msgs: {e}");
                     break;
                 }
-                _ => {}
+            }
             }
         }
+        tracing::info!("[TRANSCRIPTION] Recv task done. msgs={msg_count} segments={transcript_count}");
     });
 
     // Wait for either task to finish
+    tracing::info!("[TRANSCRIPTION] Both tasks spawned, waiting for completion...");
     tokio::select! {
-        _ = send_task => {}
-        _ = recv_task => {}
+        _ = send_task => { tracing::info!("[TRANSCRIPTION] Send task finished first"); }
+        _ = recv_task => { tracing::info!("[TRANSCRIPTION] Recv task finished first"); }
     }
 
-    tracing::info!("Deepgram stream ended");
+    tracing::info!("[TRANSCRIPTION] Deepgram stream ended");
     Ok(())
 }

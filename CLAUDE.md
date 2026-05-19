@@ -222,3 +222,275 @@ See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 - Keep `AGENTS.md` synced with this file. Update both in the same commit.
 - For architecture/core flow/API changes — update Mintlify docs (`docs/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
+
+
+
+# Omi Windows — Dioxus Desktop App (Full Feature Parity, Self-Hosted)
+
+Build a fully self-hosted Windows clone of the macOS Omi desktop app using Dioxus for UI and the existing `Backend-Rust/` as a sidecar local server.
+
+---
+
+## What We Reuse from This Repo
+
+### Direct Reuse (~30%) — copy and run unchanged
+
+| What | Repo Path | Notes |
+|------|-----------|-------|
+| **Rust backend server** | `desktop/Backend-Rust/` | Sidecar process. Axum/Tokio, cross-platform. Auth, chat completions, Firestore, Redis, LLM proxy, TTS, updates. |
+| **Agent runtime** | `desktop/agent/` | TypeScript/Node.js. Multi-provider AI chat. Spawned as child process. |
+| **Full Python backend** | `backend/` | All 44 routers, database layer, LLM utils, prompts, transcription pipeline. Self-hosted via Docker. |
+| **Plugins ecosystem** | `plugins/` | 20+ integrations (Slack, GitHub, Notion, etc.). Works with Python backend unchanged. |
+| **SDKs** | `sdks/` | Python, Swift, React Native SDKs for external tools against your self-hosted instance. |
+| **Prompts** | `backend/utils/prompts.py` | Used internally by Python backend. No porting needed. |
+
+### Logic Port (~40%) — read the Swift, write equivalent Rust/Dioxus
+
+| What | macOS Source | What we port |
+|------|-------------|--------------|
+| **App state** | `Desktop/Sources/AppState.swift` (127KB) | State structure → Dioxus signals/context |
+| **Audio codec** | `Desktop/Sources/Audio/AudioCodecDecoder.swift` | Opus/μ-law decoding logic |
+| **Transcription** | `Desktop/Sources/TranscriptionService.swift` | Start/stop/segment lifecycle |
+| **VAD gate** | `Desktop/Sources/VADGateService.swift` | Voice activity detection thresholds |
+| **Audio mixing** | `Desktop/Sources/AudioMixer.swift` | Mic + system audio mix logic |
+| **Floating bar** | `Desktop/Sources/FloatingControlBar/` (18 files) | Overlay window behavior |
+| **Page layouts** | `Desktop/Sources/MainWindow/Pages/` (20 files) | UI structure → Dioxus RSX |
+| **Proactive assistants** | `Desktop/Sources/ProactiveAssistants/` (50 files) | Trigger rules + scheduling |
+| **Rewind timeline** | `Desktop/Sources/Rewind/UI/` (9 files) | Timeline scrubber + search UX |
+| **BLE protocol** | `Desktop/Sources/Bluetooth/DeviceUUIDs.swift` | UUID constants + codec IDs (~200 lines) |
+| **DB schema** | `Desktop/Sources/Rewind/Core/RewindModels.swift` | SQLite table definitions → rusqlite |
+
+### New Code (~30%) — no macOS equivalent
+
+| What | Why |
+|------|-----|
+| **DXGI screen capture** | macOS uses ScreenCaptureKit; Windows needs DXGI Desktop Duplication API |
+| **WASAPI audio capture** | macOS uses CoreAudio; Windows needs WASAPI loopback via `cpal` |
+| **Windows OCR** | macOS uses Vision framework; Windows uses `Windows.Media.Ocr` |
+| **System tray** | macOS uses NSStatusItem; Windows needs `tray-icon` crate |
+| **Global hotkeys** | macOS uses CGEvent tap; Windows needs `global-hotkey` crate |
+| **Windows installer** | macOS uses DMG; Windows needs MSI/NSIS |
+| **Docker Compose** | Self-hosted Python backend + Redis + Firestore emulator |
+
+---
+
+## Architecture
+
+```
+omi-windows/
+├── crates/
+│   ├── omi-app/              # Dioxus desktop app (main binary)
+│   │   ├── src/
+│   │   │   ├── main.rs        # Launch Dioxus + spawn backend sidecar
+│   │   │   ├── app.rs         # Root component, routing, app state
+│   │   │   ├── pages/         # UI pages (see Pages section)
+│   │   │   ├── components/    # Shared UI components
+│   │   │   ├── hooks/         # Custom Dioxus hooks (auth, audio, etc.)
+│   │   │   └── assets/        # CSS (Tailwind via dioxus CLI), icons
+│   │   └── Cargo.toml
+│   │
+│   ├── omi-capture/           # Screen capture + OCR (Windows-specific)
+│   │   ├── src/
+│   │   │   ├── dxgi.rs        # DXGI Desktop Duplication API
+│   │   │   ├── ocr.rs         # Windows.Media.Ocr via windows crate
+│   │   │   ├── video_chunk.rs # Frame → H.264 chunk encoder
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   │
+│   ├── omi-audio/             # Mic + system audio capture
+│   │   ├── src/
+│   │   │   ├── mic.rs         # Mic input via cpal
+│   │   │   ├── loopback.rs    # System audio via WASAPI loopback (cpal)
+│   │   │   ├── mixer.rs       # Mix mic + system audio
+│   │   │   ├── vad.rs         # Voice activity detection gate
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   │
+│   ├── omi-ble/               # BLE wearable support
+│   │   ├── src/
+│   │   │   ├── scanner.rs     # btleplug device discovery
+│   │   │   ├── protocol.rs    # Omi BLE protocol (UUIDs, codec IDs)
+│   │   │   ├── connection.rs  # Connect/reconnect/stream audio
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   │
+│   ├── omi-db/                # Local SQLite storage (mirrors RewindDatabase.swift)
+│   │   ├── src/
+│   │   │   ├── schema.rs      # Tables: screenshots, transcriptions, memories, action_items, goals
+│   │   │   ├── screenshots.rs
+│   │   │   ├── transcriptions.rs
+│   │   │   ├── memories.rs
+│   │   │   ├── action_items.rs
+│   │   │   ├── migrations.rs
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   │
+│   └── omi-transcription/     # Deepgram WebSocket client
+│       ├── src/
+│       │   ├── streaming.rs   # Real-time WebSocket transcription
+│       │   ├── models.rs      # Transcript segments, speaker labels
+│       │   └── lib.rs
+│       └── Cargo.toml
+│
+├── backend/                   # Copy of desktop/Backend-Rust/ (sidecar)
+├── agent/                     # Copy of desktop/agent/ (TypeScript, runs as child process)
+├── Cargo.toml                 # Workspace root
+└── README.md
+```
+
+## Key Rust Crates
+
+| Crate | Purpose |
+|-------|---------|
+| `dioxus` (v0.6+) | UI framework (desktop target via webview) |
+| `cpal` | Cross-platform audio I/O (mic + WASAPI loopback) |
+| `windows` | Win32/WinRT APIs for DXGI capture + OCR |
+| `btleplug` | BLE (Omi wearable) |
+| `rusqlite` | Local SQLite DB |
+| `tokio-tungstenite` | WebSocket client for Deepgram streaming |
+| `reqwest` | HTTP client for Backend-Rust sidecar + Python backend |
+| `serde` / `serde_json` | Serialization |
+| `global-hotkey` | Global keyboard shortcuts (floating bar trigger) |
+| `tray-icon` + `muda` | System tray icon + menu |
+
+---
+
+## Pages to Build (mapped from macOS SwiftUI)
+
+| macOS Source | Dioxus Page | Features |
+|-------------|-------------|----------|
+| `DashboardPage.swift` | `pages/dashboard.rs` | Overview, recent conversations, stats |
+| `ChatPage.swift` (64KB) | `pages/chat.rs` | AI chat with memory context, streaming responses |
+| `ConversationsPage.swift` | `pages/conversations.rs` | List + detail view of past conversations |
+| `MemoriesPage.swift` (81KB) | `pages/memories.rs` | Memory browser, search, edit |
+| `TasksPage.swift` (222KB) | `pages/tasks.rs` | Action items, task detail, integrations |
+| `RewindPage.swift` (74KB) | `pages/rewind.rs` | Screenshot timeline, search, playback |
+| `SettingsPage.swift` (281KB) | `pages/settings.rs` | All settings (audio, capture, BLE, backend, auth) |
+| `AppsPage.swift` (130KB) | `pages/apps.rs` | Plugin marketplace |
+| `FocusPage.swift` | `pages/focus.rs` | Focus sessions |
+| `PersonaPage.swift` | `pages/persona.rs` | AI persona config |
+| `FloatingControlBarView.swift` | `components/floating_bar.rs` | Overlay bar (push-to-talk, quick AI, agent pills) |
+
+---
+
+## Implementation Milestones
+
+### M1 — Project Scaffold + Backend Sidecar
+- Create Cargo workspace with all crates (empty stubs)
+- Dioxus desktop app launches, shows a window with system tray
+- On startup, spawn `Backend-Rust` as a child process on `localhost:10201`
+- Health check loop: poll `/health` until backend is ready
+- Basic routing: sidebar nav between empty pages
+- **Deliverable:** Window opens, backend runs, pages navigate
+
+### M2 — Auth + Settings
+- Firebase auth via system browser OAuth flow (port `AuthService.swift` logic)
+- Store auth token, refresh automatically
+- Settings page: backend URL (default `localhost`), Python backend URL, API keys
+- Persist settings in local config file (`%APPDATA%/omi/config.json`)
+- **Deliverable:** User can sign in, token stored, settings persist
+
+### M3 — Audio Capture + Live Transcription
+- `omi-audio`: mic capture via `cpal`, WASAPI loopback for system audio
+- `omi-transcription`: Deepgram WebSocket streaming
+- Mix mic + system audio, stream to Deepgram
+- VAD gate: only send audio when speech detected (port `VADGateService.swift`)
+- Live transcript UI in chat/dashboard
+- **Deliverable:** Speak into mic → see real-time transcript
+
+### M4 — Local Database + Conversations
+- `omi-db`: SQLite schema matching `RewindDatabase.swift` tables
+- Conversation lifecycle: start → accumulate transcript → end → summarize via LLM
+- Store conversations, transcriptions locally
+- Conversations page: list, search, detail view
+- Sync to self-hosted Python backend via REST API
+- **Deliverable:** Conversations captured, stored, browsable
+
+### M5 — Screen Capture + OCR + Rewind
+- `omi-capture`: DXGI Desktop Duplication for periodic screenshots (every 2-5 sec)
+- OCR via `windows::Media::Ocr` (built into Windows 10+)
+- Video chunk encoding (H.264 via `openh264` or frame-only JPEG storage)
+- Store screenshots + OCR text in SQLite
+- Rewind page: timeline scrubber, search by OCR text, app filter
+- **Deliverable:** Screen history captured, searchable, browsable
+
+### M6 — Chat + Memories + Action Items
+- Chat page: streaming AI responses via Backend-Rust `/v2/chat/completions`
+- Memory browser: view, search, edit extracted memories
+- Action items: extract from conversations, display, manage
+- Goals page
+- **Deliverable:** Full AI chat with memory context
+
+### M7 — Floating Control Bar + Shortcuts
+- Transparent always-on-top Dioxus window (overlay)
+- Global hotkey via `global-hotkey` crate (Cmd→Ctrl mapping)
+- Push-to-talk: hold key → capture audio → transcribe → AI response
+- Agent pills (proactive suggestions)
+- **Deliverable:** Floating bar works like macOS version
+
+### M8 — BLE Wearable Support
+- `omi-ble`: scan, connect, pair Omi wearable via `btleplug`
+- Port BLE protocol from `Bluetooth/DeviceUUIDs.swift` (service/char UUIDs)
+- Audio codec decoding (port `AudioCodecDecoder.swift` — Opus/μ-law)
+- Stream wearable audio → same transcription pipeline
+- Device settings page
+- **Deliverable:** Omi wearable pairs and streams on Windows
+
+### M9 — Agent Runtime + Proactive Assistants
+- Spawn `agent/` TypeScript runtime as child process (Node.js)
+- IPC between Dioxus app and agent via stdio/WebSocket
+- Proactive assistants: port trigger logic from `ProactiveAssistantsPlugin.swift`
+- App/plugin marketplace integration
+- **Deliverable:** Agents run, proactive suggestions appear
+
+### M10 — Self-Hosted Python Backend
+- Docker Compose file for the full Python backend stack:
+  - `backend/main.py` (FastAPI)
+  - `backend/pusher/` (WebSocket relay)
+  - Firestore emulator or Postgres adapter
+  - Redis
+  - Deepgram (self-hosted or cloud key)
+- One-command local setup: `docker compose up`
+- Windows app defaults to `localhost` backend URLs
+- **Deliverable:** Entire stack runs locally, no cloud dependency
+
+---
+
+## macOS → Windows API Mapping
+
+| Feature | macOS API | Windows Equivalent (Rust crate) |
+|---------|-----------|--------------------------------|
+| Screen capture | ScreenCaptureKit | DXGI Desktop Duplication (`windows` crate) |
+| System audio | CoreAudio tap | WASAPI loopback (`cpal`) |
+| Microphone | AVAudioEngine | WASAPI (`cpal`) |
+| OCR | Vision framework | `Windows.Media.Ocr` (`windows` crate) |
+| BLE | CoreBluetooth | `btleplug` |
+| Global hotkeys | CGEvent tap | `global-hotkey` crate |
+| System tray | NSStatusItem | `tray-icon` + `muda` crates |
+| Notifications | UNUserNotificationCenter | `winrt-notification` crate |
+| Keychain | macOS Keychain | Windows Credential Manager (`keyring` crate) |
+| Launch at login | SMAppService | Registry `HKCU\...\Run` |
+| Local DB | GRDB (SQLite) | `rusqlite` |
+
+---
+
+## File Counts (effort estimate)
+
+The macOS app has **~280 Swift source files** totaling ~3.5MB of code. Key large files:
+- `SettingsPage.swift` — 281KB (will split into sub-components)
+- `TasksPage.swift` — 222KB (will split into sub-components)
+- `APIClient.swift` — 159KB (mostly HTTP calls → reuse Backend-Rust)
+- `RewindDatabase.swift` — 139KB (port schema to rusqlite)
+- `AppState.swift` — 127KB (port to Dioxus signals/context)
+
+Estimated Rust LOC for full parity: **~40-50K lines** across all crates.
+
+---
+
+## What NOT to Port
+
+- Apple Sign-In (use Google OAuth only on Windows)
+- Apple Notes reader (`AppleNotesReaderService.swift`)
+- macOS-specific permission dialogs (replace with Windows equivalents)
+- `codemagic.yaml` CI (use GitHub Actions for Windows builds)
+- DMG packaging (use MSI/NSIS installer instead)

@@ -1,0 +1,10 @@
+﻿cargo :     Finished `dev` profile [unoptimized + 
+debuginfo] target(s) in 1.17s
+At line:1 char:36
++ $ErrorActionPreference='Continue'; cargo check 2>&1 | 
+ForEach-Object  ...
++                                    ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished 
+    `d...get(s) in 1.17s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
