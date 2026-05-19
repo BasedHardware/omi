@@ -24,13 +24,13 @@ class AutoSyncPage extends StatefulWidget {
 }
 
 class _AutoSyncPageState extends State<AutoSyncPage> {
-  WalDisplayFilter _filter = WalDisplayFilter.all;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyncProvider>().refreshWals();
+      // Live-resolve any uploaded recordings while this screen is open.
+      SyncReconciler.instance.poke();
     });
   }
 
@@ -84,10 +84,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               _buildStorageSettings(userProvider),
               if (syncProvider.displaySortedWals.isNotEmpty) ...[
                 const SizedBox(height: 32),
-                _buildListStatusHeader(syncProvider),
-                const SizedBox(height: 14),
-                _buildSegmentedFilter(syncProvider),
-                const SizedBox(height: 14),
+                _buildRecordingsHeader(syncProvider),
+                const SizedBox(height: 12),
                 _buildUnifiedWalList(syncProvider),
               ],
               const SizedBox(height: 48),
@@ -530,170 +528,36 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  void _setFilter(WalDisplayFilter f) => setState(() => _filter = f);
-
-  /// One plain-language line summarizing the whole list, always visible.
-  /// When everything is backed up this stays on screen as persistent
-  /// completion feedback (Google Photos pattern) — success is no longer
-  /// hidden behind a tab the user has to discover.
-  Widget _buildListStatusHeader(SyncProvider p) {
-    final syncing = p.syncingWalsCount;
-    final attention = p.needsAttentionWalsCount;
-    final waiting = p.waitingWalsCount; // equals pure waiting when syncing == 0
-
-    Color color;
-    IconData icon = Icons.cloud_done_rounded;
-    String text;
-    bool spinner = false;
-
-    if (syncing > 0) {
-      color = Colors.deepPurpleAccent;
-      text = context.l10n.backingUpRecordingsCount(syncing);
-      spinner = true;
-    } else if (attention > 0) {
-      color = Colors.orangeAccent;
-      icon = Icons.error_outline_rounded;
-      text = context.l10n.recordingsNeedAttentionCount(attention);
-    } else if (waiting > 0) {
-      color = const Color(0xFF8E8E93);
-      icon = Icons.cloud_upload_outlined;
-      text = context.l10n.recordingsWaitingCount(waiting);
-    } else {
-      color = Colors.green;
-      text = context.l10n.allRecordingsBackedUp;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
-      ),
+  /// Quiet section label for the single, unified recordings list. The status
+  /// banner and the All/Pending/Synced/Issues filter chips were removed — every
+  /// row now states its own status explicitly, so the extra chrome was noise.
+  Widget _buildRecordingsHeader(SyncProvider p) {
+    final total = p.displaySortedWals.length;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 2),
       child: Row(
         children: [
-          if (spinner)
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(color)),
-            )
-          else
-            Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(text, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
-                // Keep failures visible even while an active sync is the headline.
-                if (syncing > 0 && attention > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Text(
-                      context.l10n.recordingsNeedAttentionCount(attention),
-                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
-                    ),
-                  ),
-              ],
-            ),
+          Text(
+            context.l10n.recordings,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
           ),
+          const SizedBox(width: 8),
+          Text('$total', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
         ],
       ),
     );
   }
 
-  Widget _buildSegmentedFilter(SyncProvider p) {
-    final all = p.displaySortedWals.length;
-    final synced = p.syncedWalsCount;
-    final pending = all - synced;
-    final issues = p.needsAttentionWalsCount + p.retryingWalsCount;
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _chipButton(context.l10n.filterAll, _filter == WalDisplayFilter.all, () => _setFilter(WalDisplayFilter.all),
-            count: all),
-        _chipButton(
-            context.l10n.pending, _filter == WalDisplayFilter.pending, () => _setFilter(WalDisplayFilter.pending),
-            count: pending),
-        _chipButton(context.l10n.synced, _filter == WalDisplayFilter.synced, () => _setFilter(WalDisplayFilter.synced),
-            count: synced),
-        if (issues > 0)
-          _chipButton(
-              context.l10n.filterIssues, _filter == WalDisplayFilter.issues, () => _setFilter(WalDisplayFilter.issues),
-              count: issues),
-      ],
-    );
-  }
-
-  Widget _chipButton(String label, bool selected, VoidCallback onTap, {int? count}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white.withValues(alpha: 0.12) : const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(100),
-          border: selected ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade400,
-                fontSize: 14,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            if (count != null) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.grey.shade500,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildUnifiedWalList(SyncProvider syncProvider) {
-    final wals = syncProvider.walsForDisplayFilter(_filter);
+    final wals = syncProvider.displaySortedWals;
 
     if (wals.isEmpty) {
-      final String emptyText;
-      switch (_filter) {
-        case WalDisplayFilter.synced:
-          emptyText = context.l10n.noSyncedRecordings;
-          break;
-        case WalDisplayFilter.pending:
-          emptyText = context.l10n.noPendingRecordings;
-          break;
-        case WalDisplayFilter.issues:
-        case WalDisplayFilter.all:
-          emptyText = context.l10n.noRecordingsYet;
-          break;
-      }
       return Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-        child: Center(child: Text(emptyText, style: TextStyle(color: Colors.grey.shade500, fontSize: 14))),
+        child: Center(
+          child: Text(context.l10n.noRecordingsYet, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+        ),
       );
     }
 
