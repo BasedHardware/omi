@@ -28,6 +28,7 @@ from database.webhook_health import (
 from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
+from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
 import logging
 
@@ -194,7 +195,7 @@ def create_app_tool(
         async def mcp_tool_function(**kwargs) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
-            if is_app_webhook_disabled(app_id):
+            if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
                 return f"The {app_tool.name} tool is temporarily disabled due to sustained failures."
             cb = get_webhook_circuit_breaker(_mcp_url)
             if not cb.allow_request():
@@ -203,16 +204,16 @@ def create_app_tool(
                 result = await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
-                    action = record_app_webhook_failure(app_id, 0, result[:200])
-                    _handle_app_webhook_disable(app_id, action, result[:200])
+                    action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, result[:200])
+                    await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, result[:200])
                 else:
                     cb.record_success()
-                    record_app_webhook_success(app_id)
+                    await run_blocking(db_executor, record_app_webhook_success, app_id)
                 return result
             except Exception as e:
                 cb.record_failure()
-                action = record_app_webhook_failure(app_id, 0, type(e).__name__)
-                _handle_app_webhook_disable(app_id, action, type(e).__name__)
+                action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__)
+                await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
                 return f"Error calling MCP tool {app_tool.name}: {e}"
 
         return StructuredTool(
@@ -294,7 +295,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
         # In the future, you might want to store app-specific tokens
         pass
 
-    if is_app_webhook_disabled(app_id):
+    if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
 
     cb = get_webhook_circuit_breaker(app_tool.endpoint)
@@ -317,7 +318,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
-                record_app_webhook_success(app_id)
+                await run_blocking(db_executor, record_app_webhook_success, app_id)
                 try:
                     result = response.json()
                     if isinstance(result, dict) and 'result' in result:
@@ -332,8 +333,16 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                     return response.text
             else:
                 cb.record_failure()
-                action = record_app_webhook_failure(app_id, response.status_code, f'HTTP {response.status_code}')
-                _handle_app_webhook_disable(app_id, action, f'HTTP {response.status_code}')
+                action = await run_blocking(
+                    db_executor,
+                    record_app_webhook_failure,
+                    app_id,
+                    response.status_code,
+                    f'HTTP {response.status_code}',
+                )
+                await run_blocking(
+                    db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {response.status_code}'
+                )
 
                 if response.status_code in (401, 403):
                     return (
@@ -353,18 +362,18 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
     except httpx.TimeoutException:
         cb.record_failure()
-        action = record_app_webhook_failure(app_id, 0, 'TimeoutException')
-        _handle_app_webhook_disable(app_id, action, 'TimeoutException')
+        action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, 'TimeoutException')
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, 'TimeoutException')
         return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 120 seconds."
     except httpx.ConnectError:
         cb.record_failure()
-        action = record_app_webhook_failure(app_id, 0, 'ConnectError')
-        _handle_app_webhook_disable(app_id, action, 'ConnectError')
+        action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, 'ConnectError')
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, 'ConnectError')
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
         cb.record_failure()
-        action = record_app_webhook_failure(app_id, 0, type(e).__name__)
-        _handle_app_webhook_disable(app_id, action, type(e).__name__)
+        action = await run_blocking(db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__)
+        await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
         return f"Error calling {app_tool.name}: {str(e)}"
 
 
