@@ -2086,12 +2086,12 @@ class TestBulkheadExecutors:
     def test_executor_worker_counts(self):
         source = self._read_executors_source()
         assert 'sync_executor = MonitoredThreadPoolExecutor(' in source
-        assert 'max_workers=12' in source
+        assert 'max_workers=16' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
-        assert 'max_workers=8' in source
+        assert 'max_workers=24' in source
         from utils.executors import storage_executor
 
-        assert storage_executor._max_workers == 32, "storage_executor must have 32 workers (#7372)"
+        assert storage_executor._max_workers == 64, "storage_executor must have 64 workers (#7376)"
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()
