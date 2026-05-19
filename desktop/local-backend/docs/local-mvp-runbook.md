@@ -133,6 +133,11 @@ Direct live STT parity is not part of the current MVP unless a future direct
 provider path is added. For local MVP testing, import or append transcript text
 and then finalize processing.
 
+The desktop app refuses hosted live capture before opening a WebSocket when
+`OMI_DESKTOP_BACKEND_MODE=local`. Stopping a capture session in local mode does
+not call Python force-process; any locally stored session data is left for the
+local retry/import/finalize path with a log entry.
+
 Create a plain text fixture:
 
 ```bash
@@ -165,7 +170,8 @@ For retry tests, pass a stable `--conversation-id` and run the same command
 again. The helper reuses the existing conversation, exact duplicate transcript
 segments return the existing row, and finalize returns an already active or
 current completed processing job instead of piling up duplicate queued work. A
-different segment body at an existing `segment_index` returns HTTP 409.
+different conversation payload for an existing `id`, or a different segment body
+at an existing `segment_index`, returns HTTP 409.
 
 JSON fixtures are also supported. The file may be a list of segment strings, a
 list of segment objects, or an object with conversation fields plus `segments`
@@ -226,8 +232,10 @@ curl -X PUT http://127.0.0.1:8765/v1/settings \
   -d '{"ai_provider": null, "provider": null}'
 ```
 
-To test a direct OpenAI-compatible provider without editing source code, store
-the provider configuration in the local daemon settings:
+To test a direct OpenAI-compatible provider without editing source code, point
+the provider configuration at a local stub or a user-managed endpoint. For local
+MVP validation, prefer a loopback stub so the test cannot reach hosted Omi or
+OpenAI services by accident:
 
 ```bash
 curl -X PUT http://127.0.0.1:8765/v1/settings \
@@ -235,9 +243,9 @@ curl -X PUT http://127.0.0.1:8765/v1/settings \
   -d '{
     "ai_provider": {
       "kind": "openai_compatible",
-      "base_url": "https://api.openai.com/v1",
-      "model": "gpt-4o-mini",
-      "api_key": "'"$OPENAI_API_KEY"'"
+      "base_url": "http://127.0.0.1:43210/v1",
+      "model": "local-stub",
+      "api_key": "local-test-key"
     }
   }'
 ```

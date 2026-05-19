@@ -320,6 +320,148 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn create_routes_are_idempotent_for_client_supplied_ids() -> Result<()> {
+        let app = test_app()?;
+
+        let conversation_body = json!({
+            "id": "conv-idempotent",
+            "session_id": "session-idempotent",
+            "title": "Replay safe",
+            "overview": "Same client payload",
+            "metadata": {"source": "test"}
+        });
+        let first_conversation = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(conversation_body.clone()),
+        )
+        .await?;
+        let second_conversation = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(conversation_body),
+        )
+        .await?;
+        assert_eq!(
+            first_conversation["conversation"]["id"],
+            second_conversation["conversation"]["id"]
+        );
+        assert_eq!(
+            first_conversation["conversation"]["created_at"],
+            second_conversation["conversation"]["created_at"]
+        );
+
+        let memory_body = json!({
+            "id": "mem-idempotent",
+            "content": "User prefers local retries.",
+            "category": "preference",
+            "conversation_id": "conv-idempotent",
+            "metadata": {"source": "test"}
+        });
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/memories",
+            Some(memory_body.clone()),
+        )
+        .await?;
+        let replayed_memory =
+            request_json(app.clone(), Method::POST, "/v1/memories", Some(memory_body)).await?;
+        assert_eq!(replayed_memory["memory"]["id"], "mem-idempotent");
+
+        let action_item_body = json!({
+            "id": "act-idempotent",
+            "conversation_id": "conv-idempotent",
+            "title": "Check retry path",
+            "description": "Replay the create call",
+            "status": "open",
+            "metadata": {"source": "test"}
+        });
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/action-items",
+            Some(action_item_body.clone()),
+        )
+        .await?;
+        let replayed_action_item = request_json(
+            app,
+            Method::POST,
+            "/v1/action-items",
+            Some(action_item_body),
+        )
+        .await?;
+        assert_eq!(replayed_action_item["action_item"]["id"], "act-idempotent");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_routes_return_conflict_for_same_id_different_payload() -> Result<()> {
+        let app = test_app()?;
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "id": "conv-conflict",
+                "session_id": "session-conflict",
+                "title": "Original"
+            })),
+        )
+        .await?;
+        request_status(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "id": "conv-conflict",
+                "session_id": "session-conflict",
+                "title": "Changed"
+            })),
+            StatusCode::CONFLICT,
+        )
+        .await?;
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/memories",
+            Some(json!({"id": "mem-conflict", "content": "Original"})),
+        )
+        .await?;
+        request_status(
+            app.clone(),
+            Method::POST,
+            "/v1/memories",
+            Some(json!({"id": "mem-conflict", "content": "Changed"})),
+            StatusCode::CONFLICT,
+        )
+        .await?;
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/action-items",
+            Some(json!({"id": "act-conflict", "title": "Original"})),
+        )
+        .await?;
+        request_status(
+            app,
+            Method::POST,
+            "/v1/action-items",
+            Some(json!({"id": "act-conflict", "title": "Changed"})),
+            StatusCode::CONFLICT,
+        )
+        .await?;
+
+        Ok(())
+    }
+
     fn test_app() -> Result<Router> {
         let config = Config {
             bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
@@ -353,6 +495,35 @@ mod tests {
         let bytes = to_bytes(response.into_body(), 1024 * 1024).await?;
         assert!(
             status == StatusCode::OK || status == StatusCode::CREATED,
+            "unexpected status {status}: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    async fn request_status(
+        app: Router,
+        method: Method,
+        uri: &str,
+        body: Option<Value>,
+        expected_status: StatusCode,
+    ) -> Result<Value> {
+        let request_body = match body {
+            Some(value) => Body::from(serde_json::to_vec(&value)?),
+            None => Body::empty(),
+        };
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(request_body)?;
+
+        let response = app.oneshot(request).await?;
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), 1024 * 1024).await?;
+        assert_eq!(
+            status,
+            expected_status,
             "unexpected status {status}: {}",
             String::from_utf8_lossy(&bytes)
         );

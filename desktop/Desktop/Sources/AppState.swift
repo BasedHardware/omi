@@ -1653,6 +1653,13 @@ class AppState: ObservableObject {
         return
       }
 
+      if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+        log(
+          "Transcription: Local daemon mode stopped capture; leaving session \(capturedSessionId.map(String.init) ?? "nil") for local transcript retry/finalize"
+        )
+        return
+      }
+
       do {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
           // Validate the returned conversation matches the session we just stopped

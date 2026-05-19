@@ -146,6 +146,9 @@ pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{routing::post, Json, Router};
+    use serde_json::{json, Map};
+    use tokio::net::TcpListener;
 
     #[test]
     fn openai_compatible_request_uses_configured_endpoint_model_and_key() {
@@ -167,5 +170,65 @@ mod tests {
         assert_eq!(request.body["temperature"], 0);
         assert_eq!(request.body["messages"][0]["role"], "system");
         assert_eq!(request.body["messages"][1]["content"], "Summarize.");
+    }
+
+    #[test]
+    fn load_openai_config_reads_structured_local_setting() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let mut settings = Map::new();
+        settings.insert(
+            "ai_provider".to_string(),
+            json!({
+                "kind": "openai_compatible",
+                "base_url": "http://127.0.0.1:43210/v1",
+                "model": "stub-model",
+                "api_key": "local-test-key"
+            }),
+        );
+        store.settings().upsert_many(settings)?;
+
+        let config = load_openai_config(&store)?.expect("provider should be configured");
+        assert_eq!(config.base_url, "http://127.0.0.1:43210/v1");
+        assert_eq!(config.model, "stub-model");
+        assert_eq!(config.api_key, "local-test-key");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn openai_compatible_provider_uses_local_stub_endpoint() -> Result<()> {
+        let app = Router::new().route(
+            "/v1/chat/completions",
+            post(|| async {
+                Json(json!({
+                    "choices": [{
+                        "message": {
+                            "content": "{\"title\":\"Stub title\",\"overview\":\"Stub overview\",\"action_items\":[],\"memories\":[]}"
+                        }
+                    }]
+                }))
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("stub server failed");
+        });
+
+        let provider = OpenAiCompatibleProvider::new(OpenAiCompatibleConfig {
+            base_url: format!("http://{addr}/v1"),
+            model: "stub-model".to_string(),
+            api_key: "local-test-key".to_string(),
+        });
+
+        let response = provider
+            .complete_json(vec![ChatMessage::user("Summarize locally.")])
+            .await?;
+        assert_eq!(response["title"], "Stub title");
+        assert_eq!(response["overview"], "Stub overview");
+
+        Ok(())
     }
 }

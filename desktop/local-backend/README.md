@@ -109,7 +109,9 @@ loopback daemon URL and do not require Firebase auth.
 Hosted transcription endpoints are intentionally unavailable in local daemon
 mode. Direct live STT parity is not part of this MVP unless a future direct
 provider path is added. For user testing, import transcript text or JSON
-fixtures through the supported helper:
+fixtures through the supported helper. Desktop local mode blocks hosted live
+capture before network and leaves stopped local sessions for the retry/import
+finalize path instead of calling Python force-process.
 
 ```bash
 desktop/local-backend/tools/import_transcript.py /path/to/transcript.txt
@@ -117,11 +119,13 @@ desktop/local-backend/tools/import_transcript.py /path/to/transcript.txt
 
 The helper creates a conversation, appends transcript segments, finalizes
 ingestion, waits for local processing, verifies search, and prints read/search
-commands for the imported conversation.
+commands for the imported conversation. Stable client conversation, memory, and
+action-item IDs are idempotent: exact replay returns the existing row, while a
+conflicting replay returns HTTP 409.
 
 Local processing uses deterministic fallback unless an OpenAI-compatible
-provider is configured through `PUT /v1/settings`; see the runbook for set and
-clear commands.
+provider is configured through structured `PUT /v1/settings` JSON; see the
+runbook for local-stub set and clear commands.
 
 ## Architecture And E2E Validation
 

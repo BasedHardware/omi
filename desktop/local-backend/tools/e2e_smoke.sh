@@ -40,6 +40,24 @@ print(value)
 PY
 }
 
+json_embedded_value() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json
+import sys
+
+path = sys.argv[1].split(".")
+with open(sys.argv[2], "r", encoding="utf-8") as handle:
+    value = json.load(handle)
+for part in path[:-1]:
+    if part.isdigit():
+        value = value[int(part)]
+    else:
+        value = value[part]
+embedded = json.loads(value[path[-1]])
+print(embedded[sys.argv[3]])
+PY
+}
+
 request() {
   local method="$1"
   local path="$2"
@@ -165,6 +183,12 @@ job_file="$(request POST /v1/conversations/conv-e2e-smoke/finalize-transcript)"
 job_id="$(json_value "processing_job.id" "${job_file}")"
 completed_job_file="$(wait_for_completed_job "${job_id}")"
 assert_json_value "${completed_job_file}" "processing_job.status" "completed"
+fallback_provider="$(json_embedded_value "processing_job.result_json" "${completed_job_file}" provider)"
+if [[ "${fallback_provider}" != "fallback" ]]; then
+  echo "Expected fallback processing provider, got ${fallback_provider}" >&2
+  echo "Response file: ${completed_job_file}" >&2
+  exit 1
+fi
 
 status_file="$(request GET /v1/processing-jobs/status)"
 assert_json_value "${status_file}" "failed" "0"
@@ -175,9 +199,15 @@ assert_json_value "${processed_file}" "conversation.title" "Plan the backend fre
 
 settings_file="$(request PUT /v1/settings '{
   "local_first": true,
-  "provider.kind": "fallback"
+  "ai_provider": {
+    "kind": "openai_compatible",
+    "base_url": "http://127.0.0.1:43210/v1",
+    "model": "local-stub",
+    "api_key": "local-test-key"
+  }
 }')"
-assert_json_value "${settings_file}" "settings.0.key" "local_first"
+assert_json_value "${settings_file}" "settings.0.key" "ai_provider"
+assert_json_value "${settings_file}" "settings.1.key" "local_first"
 
 stop_daemon
 start_daemon

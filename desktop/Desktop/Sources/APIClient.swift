@@ -219,6 +219,13 @@ actor APIClient {
   func updateSelectedBackendSettings(_ values: [String: String]) async throws
     -> [LocalDaemonSetting]
   {
+    try await updateSelectedBackendSettings(
+      values.mapValues { LocalDaemonSettingUpdateValue.string($0) })
+  }
+
+  func updateSelectedBackendSettings(_ values: [String: LocalDaemonSettingUpdateValue]) async throws
+    -> [LocalDaemonSetting]
+  {
     let target = selectedBackendTarget
     guard target.mode == .localDaemon else {
       return []
@@ -357,6 +364,54 @@ struct LocalDaemonSetting: Decodable, Equatable {
     case key
     case valueJson = "value_json"
     case updatedAt = "updated_at"
+  }
+}
+
+enum LocalDaemonSettingUpdateValue: Encodable, Equatable, ExpressibleByStringLiteral,
+  ExpressibleByBooleanLiteral, ExpressibleByIntegerLiteral, ExpressibleByFloatLiteral
+{
+  case string(String)
+  case bool(Bool)
+  case int(Int)
+  case double(Double)
+  case object([String: LocalDaemonSettingUpdateValue])
+  case array([LocalDaemonSettingUpdateValue])
+  case null
+
+  init(stringLiteral value: String) {
+    self = .string(value)
+  }
+
+  init(booleanLiteral value: Bool) {
+    self = .bool(value)
+  }
+
+  init(integerLiteral value: Int) {
+    self = .int(value)
+  }
+
+  init(floatLiteral value: Double) {
+    self = .double(value)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .string(let value):
+      try container.encode(value)
+    case .bool(let value):
+      try container.encode(value)
+    case .int(let value):
+      try container.encode(value)
+    case .double(let value):
+      try container.encode(value)
+    case .object(let value):
+      try container.encode(value)
+    case .array(let value):
+      try container.encode(value)
+    case .null:
+      try container.encodeNil()
+    }
   }
 }
 
@@ -1740,6 +1795,17 @@ extension APIClient {
   /// Returns the processed conversation on success, nil on 404 (already processed).
   /// Throws on other errors.
   func forceProcessConversation() async throws -> ServerConversation? {
+    let target = selectedBackendTarget
+    guard target.mode != .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "force_process_conversation",
+        reason: DesktopBackendEnvironment.unavailableReason(
+          for: .hostedTranscription,
+          in: target.mode
+        ) ?? "Force-processing is only available for hosted transcription sessions."
+      )
+    }
+
     struct EmptyBody: Encodable {}
 
     do {

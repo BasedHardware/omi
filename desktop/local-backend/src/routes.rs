@@ -197,17 +197,31 @@ async fn create_conversation(
     let id = request
         .id
         .unwrap_or_else(|| deterministic_id("conv", &[&session_id]));
+    let new_conversation = NewConversation {
+        id: id.clone(),
+        session_id,
+        title: request.title.unwrap_or_default(),
+        overview: request.overview.unwrap_or_default(),
+        started_at: request.started_at,
+        metadata: request.metadata,
+    };
+    if let Some(existing) = state
+        .store
+        .conversations()
+        .get(&id)
+        .map_err(ApiError::internal)?
+    {
+        if conversation_matches_new(&existing, &new_conversation).map_err(ApiError::internal)? {
+            return Ok(Json(json!({ "conversation": existing })));
+        }
+        return Err(ApiError::conflict(
+            "conversation already exists with different content",
+        ));
+    }
     let conversation = state
         .store
         .conversations()
-        .create(NewConversation {
-            id,
-            session_id,
-            title: request.title.unwrap_or_default(),
-            overview: request.overview.unwrap_or_default(),
-            started_at: request.started_at,
-            metadata: request.metadata,
-        })
+        .create(new_conversation)
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "conversation": conversation })))
 }
@@ -424,16 +438,31 @@ async fn create_memory(
     State(state): State<AppState>,
     Json(request): Json<CreateMemoryRequest>,
 ) -> ApiResult<Value> {
+    let id = request.id.unwrap_or_else(|| local_id("mem"));
+    let new_memory = NewMemory {
+        id: id.clone(),
+        content: request.content,
+        category: request.category,
+        conversation_id: request.conversation_id,
+        metadata: request.metadata,
+    };
+    if let Some(existing) = state
+        .store
+        .memories()
+        .get(&id)
+        .map_err(ApiError::internal)?
+    {
+        if memory_matches_new(&existing, &new_memory).map_err(ApiError::internal)? {
+            return Ok(Json(json!({ "memory": existing })));
+        }
+        return Err(ApiError::conflict(
+            "memory already exists with different content",
+        ));
+    }
     let memory = state
         .store
         .memories()
-        .create(NewMemory {
-            id: request.id.unwrap_or_else(|| local_id("mem")),
-            content: request.content,
-            category: request.category,
-            conversation_id: request.conversation_id,
-            metadata: request.metadata,
-        })
+        .create(new_memory)
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "memory": memory })))
 }
@@ -518,18 +547,33 @@ async fn create_action_item(
     State(state): State<AppState>,
     Json(request): Json<CreateActionItemRequest>,
 ) -> ApiResult<Value> {
+    let id = request.id.unwrap_or_else(|| local_id("act"));
+    let new_action_item = NewActionItem {
+        id: id.clone(),
+        conversation_id: request.conversation_id,
+        title: request.title,
+        description: request.description,
+        status: request.status,
+        due_at: request.due_at,
+        metadata: request.metadata,
+    };
+    if let Some(existing) = state
+        .store
+        .action_items()
+        .get(&id)
+        .map_err(ApiError::internal)?
+    {
+        if action_item_matches_new(&existing, &new_action_item).map_err(ApiError::internal)? {
+            return Ok(Json(json!({ "action_item": existing })));
+        }
+        return Err(ApiError::conflict(
+            "action item already exists with different content",
+        ));
+    }
     let action_item = state
         .store
         .action_items()
-        .create(NewActionItem {
-            id: request.id.unwrap_or_else(|| local_id("act")),
-            conversation_id: request.conversation_id,
-            title: request.title,
-            description: request.description,
-            status: request.status,
-            due_at: request.due_at,
-            metadata: request.metadata,
-        })
+        .create(new_action_item)
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "action_item": action_item })))
 }
@@ -712,4 +756,46 @@ fn local_id(prefix: &str) -> String {
         .timestamp_nanos_opt()
         .unwrap_or_else(|| Utc::now().timestamp_micros() * 1000);
     deterministic_id(prefix, &[&now.to_string()])
+}
+
+fn conversation_matches_new(
+    existing: &crate::storage::Conversation,
+    new: &NewConversation,
+) -> anyhow::Result<bool> {
+    let mutable_fields_match = existing.status != "open"
+        || (existing.title == new.title && existing.overview == new.overview);
+    Ok(existing.id == new.id
+        && existing.session_id == new.session_id
+        && mutable_fields_match
+        && new
+            .started_at
+            .map(|started_at| existing.started_at == started_at)
+            .unwrap_or(true)
+        && json_matches_optional(&existing.metadata_json, &new.metadata)?)
+}
+
+fn memory_matches_new(existing: &crate::storage::Memory, new: &NewMemory) -> anyhow::Result<bool> {
+    Ok(existing.id == new.id
+        && existing.content == new.content
+        && existing.category == new.category
+        && existing.conversation_id == new.conversation_id
+        && json_matches_optional(&existing.metadata_json, &new.metadata)?)
+}
+
+fn action_item_matches_new(
+    existing: &crate::storage::ActionItem,
+    new: &NewActionItem,
+) -> anyhow::Result<bool> {
+    Ok(existing.id == new.id
+        && existing.conversation_id == new.conversation_id
+        && existing.title == new.title
+        && existing.description == new.description.clone().unwrap_or_default()
+        && existing.status == new.status.clone().unwrap_or_else(|| "open".to_string())
+        && existing.due_at == new.due_at
+        && json_matches_optional(&existing.metadata_json, &new.metadata)?)
+}
+
+fn json_matches_optional(existing_json: &str, new: &Option<Value>) -> anyhow::Result<bool> {
+    let existing: Value = serde_json::from_str(existing_json)?;
+    Ok(existing == new.clone().unwrap_or_else(|| json!({})))
 }

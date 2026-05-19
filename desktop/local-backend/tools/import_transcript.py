@@ -176,18 +176,7 @@ def main() -> int:
             conversation[key] = value
 
     request_json("GET", args.base_url, "/health")
-    if "id" in conversation:
-        existing = request_json(
-            "GET",
-            args.base_url,
-            f"/v1/conversations/{urllib.parse.quote(conversation['id'])}",
-            ok_statuses={200, 404},
-        )
-        created = existing.get("conversation")
-    else:
-        created = None
-    if created is None:
-        created = request_json("POST", args.base_url, "/v1/conversations", conversation)["conversation"]
+    created = request_json("POST", args.base_url, "/v1/conversations", conversation)["conversation"]
     conversation_id = created["id"]
 
     for index, segment in enumerate(segments):

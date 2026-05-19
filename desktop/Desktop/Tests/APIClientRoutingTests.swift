@@ -495,6 +495,38 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
   }
 
+  func testLocalModeStructuredProviderSettingsRouteToLocalDaemon() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+    _ = try? await client.updateSelectedBackendSettings([
+      "ai_provider": .object([
+        "kind": "openai_compatible",
+        "base_url": "http://127.0.0.1:43210/v1",
+        "model": "stub-model",
+        "api_key": "local-test-key",
+      ]),
+      "local_first": true,
+    ])
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8765,
+      pathContains: "v1/settings", method: "PUT",
+      label: "local structured provider settings")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+    }
+    let provider = body?["ai_provider"] as? [String: Any]
+    XCTAssertEqual(provider?["kind"] as? String, "openai_compatible")
+    XCTAssertEqual(provider?["base_url"] as? String, "http://127.0.0.1:43210/v1")
+    XCTAssertEqual(provider?["model"] as? String, "stub-model")
+    XCTAssertEqual(provider?["api_key"] as? String, "local-test-key")
+    XCTAssertEqual(body?["local_first"] as? Bool, true)
+  }
+
   func testLocalModeMVPConversationFlowsIgnoreInvalidCloudURLs() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_PYTHON_API_URL", "http://omi-cloud-invalid:9001", 1)
@@ -700,6 +732,25 @@ final class APIClientRoutingTests: XCTestCase {
       XCTFail("expected cloud sync to be unavailable")
     } catch {
       assertUnavailable(error, capability: .cloudSync)
+    }
+
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
+  func testLocalModeForceProcessConversationFailsBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    do {
+      _ = try await client.forceProcessConversation()
+      XCTFail("expected force-process to be unavailable")
+    } catch {
+      guard case APIError.featureUnavailable(let feature, _) = error else {
+        XCTFail("expected featureUnavailable for force-process, got \(error)")
+        return
+      }
+      XCTAssertEqual(feature, "force_process_conversation")
     }
 
     XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
