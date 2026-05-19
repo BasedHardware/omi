@@ -10,6 +10,10 @@ class SettingsSyncManager {
     /// Pull settings from server and apply non-nil values to local singletons.
     func syncFromServer() async {
         guard AuthService.shared.isSignedIn else { return }
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("SettingsSyncManager: skipped server sync in local daemon mode")
+            return
+        }
         do {
             let remote = try await APIClient.shared.getAssistantSettings()
             applyRemoteSettings(remote)
@@ -21,6 +25,10 @@ class SettingsSyncManager {
 
     /// Push all current local settings to the server.
     func syncToServer() async {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("SettingsSyncManager: skipped server push in local daemon mode")
+            return
+        }
         let settings = buildFromLocal()
         do {
             let _ = try await APIClient.shared.updateAssistantSettings(settings)
@@ -32,6 +40,10 @@ class SettingsSyncManager {
 
     /// Fire-and-forget partial update to server.
     func pushPartialUpdate(_ settings: AssistantSettingsResponse) {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("SettingsSyncManager: skipped partial server push in local daemon mode")
+            return
+        }
         Task {
             do {
                 let _ = try await APIClient.shared.updateAssistantSettings(settings)

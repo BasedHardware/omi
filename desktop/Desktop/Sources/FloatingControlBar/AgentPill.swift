@@ -115,6 +115,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func runRouterCall(for query: String) async -> RouterDecision? {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("AgentPill: router skipped in local daemon mode")
+            return nil
+        }
         let baseURL = await APIClient.shared.rustBackendURL
         guard !baseURL.isEmpty else {
             log("AgentPill: router skipped — rustBackendURL empty, defaulting to chat")
@@ -522,6 +526,10 @@ final class AgentPillsManager: ObservableObject {
     }
 
     fileprivate static func generateTitleAndAck(for query: String) async -> (title: String, ack: String)? {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("AgentPill: title gen skipped in local daemon mode")
+            return nil
+        }
         // Route through the desktop-backend's OpenAI-compatible proxy at
         // /v2/chat/completions instead of hitting api.anthropic.com directly.
         // This way we don't need a BYOK key (no partial-BYOK 403 risk), and

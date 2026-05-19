@@ -737,6 +737,49 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
   }
 
+  func testLocalModeUserSettingsReturnLocalDefaultsBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.getDailySummarySettings()
+    _ = try? await client.updateDailySummarySettings(enabled: false, hour: 8)
+    _ = try? await client.getNotificationSettings()
+    _ = try? await client.updateNotificationSettings(enabled: false, frequency: 1)
+    _ = try? await client.getUserLanguage()
+    _ = try? await client.updateUserLanguage("en")
+    _ = try? await client.getRecordingPermission()
+    try? await client.setRecordingPermission(enabled: true)
+    _ = try? await client.getTranscriptionPreferences()
+    _ = try? await client.updateTranscriptionPreferences(
+      singleLanguageMode: true,
+      vocabulary: ["omi", "local"]
+    )
+    _ = try? await client.getAssistantSettings()
+    _ = try? await client.updateAssistantSettings(AssistantSettingsResponse())
+
+    let cloudSync = try? await client.getPrivateCloudSync()
+    XCTAssertEqual(cloudSync?.enabled, false)
+
+    assertNoOmiHostedBackendRequests(URLCapture.capturedRequests)
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
+  @MainActor
+  func testLocalModeAPIKeyServiceSkipsBackendFetch() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+
+    await APIKeyService.shared.fetchKeys()
+
+    assertNoOmiHostedBackendRequests(URLCapture.capturedRequests)
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
   func testLocalModeForceProcessConversationFailsBeforeNetworkRequests() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)

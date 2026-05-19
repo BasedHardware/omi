@@ -106,6 +106,14 @@ Unavailable capabilities fail before building a request to Omi-hosted services.
 Local conversation CRUD/search/settings flows continue to use the configured
 loopback daemon URL and do not require Firebase auth.
 
+Signed-in local daemon mode keeps the signed-in identity for UI/account context,
+but it does not run cloud startup sync. App launch, activation, Settings load,
+profile-name edits, assistant settings sync, backend API-key fetch, subscription
+refresh, quota refresh, managed agent VM setup, and Crisp support polling are
+skipped, answered from local defaults, or fail before network. Assistant/chat
+features that depend on the Omi Gemini/Anthropic/provider proxy remain
+unavailable until direct local provider support is added for that surface.
+
 Hosted transcription endpoints are intentionally unavailable in local daemon
 mode. Direct live STT parity is not part of this MVP unless a future direct
 provider path is added. For user testing, import transcript text or JSON

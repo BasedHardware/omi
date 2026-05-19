@@ -159,6 +159,11 @@ actor AgentBridge {
     // SECURITY: if we can't get a Firebase token, refuse to start. The bridge
     // must NEVER fall back to ANTHROPIC_API_KEY as the Omi backend credential.
     if harnessMode == "piMono" {
+      guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+        log("AgentBridge: pi-mono disabled in local daemon mode")
+        throw BridgeError.authMissing
+      }
+
       let authService = await MainActor.run { AuthService.shared }
       let token: String
       do {

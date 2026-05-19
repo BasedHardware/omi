@@ -268,6 +268,10 @@ directly to the configured provider, not to Omi-hosted backend services.
 - Local full-text search over conversation and transcript text.
 - Local memories, action items, profile, and settings endpoints.
 - Desktop routing for local MVP flows without Firebase auth.
+- Signed-in local daemon sessions keep account UI state without cloud startup
+  sync: launch/activation do not fetch cloud conversations, assistant settings,
+  backend API keys, subscription state, quotas, profile data, managed agent VM
+  state, or Crisp support messages.
 
 ## What Still Needs Provider Keys Or Cloud Mode
 
@@ -275,6 +279,9 @@ directly to the configured provider, not to Omi-hosted backend services.
   cloud mode today.
 - Omi backend provider proxies, quota checks, subscriptions, payments, public
   sharing, Crisp support, managed agent VMs, and cloud sync require cloud mode.
+- Proactive assistant and chat paths that currently depend on Omi-hosted
+  Gemini/Anthropic/provider proxy endpoints are disabled in local daemon mode
+  unless the path has direct local provider configuration.
 - Remote AI provider calls from the local daemon require explicit local provider
   settings/API keys. Without them, processing uses deterministic fallback output.
 - Fully offline local LLM/STT support is outside the current MVP.

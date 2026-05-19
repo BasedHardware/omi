@@ -388,6 +388,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
+      let isLocalDaemonMode =
+        DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
       AnalyticsManager.shared.identify()
       // Set Sentry user context (now enabled for dev builds too)
       if let email = AuthState.shared.userEmail {
@@ -397,18 +399,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
         SentrySDK.setUser(sentryUser)
       }
-      // Fetch conversations on startup
-      AuthService.shared.fetchConversations()
+      if isLocalDaemonMode {
+        log("AppDelegate: signed-in local daemon launch skips cloud startup fetches")
+      } else {
+        // Fetch conversations on startup
+        AuthService.shared.fetchConversations()
 
-      // Fetch API keys from backend (keys are not bundled in the app)
-      APIKeyService.shared.startFetchingKeys()
+        // Fetch API keys from backend (keys are not bundled in the app)
+        APIKeyService.shared.startFetchingKeys()
 
-      // Fetch subscription plan for floating bar usage limits
-      Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+        // Fetch subscription plan for floating bar usage limits
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
-      // Check tier eligibility (at most once per day)
-      Task {
-        await TierManager.shared.checkTierIfNeeded()
+        // Check tier eligibility (at most once per day)
+        Task {
+          await TierManager.shared.checkTierIfNeeded()
+        }
       }
 
       // Report comprehensive settings state (at most once per day)
@@ -1253,6 +1259,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func applicationDidBecomeActive(_ notification: Notification) {
     AnalyticsManager.shared.appBecameActive()
     // Sync remote assistant settings so server-side changes take effect promptly
+    guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+      log("AppDelegate: skipped activation settings sync in local daemon mode")
+      return
+    }
     Task { await SettingsSyncManager.shared.syncFromServer() }
   }
 

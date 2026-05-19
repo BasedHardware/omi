@@ -47,6 +47,9 @@ class AuthService {
     private var apiBaseURL: String {
         DesktopBackendEnvironment.pythonBaseURL()
     }
+    private var isLocalDaemonMode: Bool {
+        DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+    }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }
@@ -209,10 +212,15 @@ class AuthService {
                     if let uid = user?.uid {
                         Task { await RewindDatabase.shared.configure(userId: uid) }
                     }
-                    // Load name from backend profile (Firestore), then Firebase Auth as fallback
-                    self?.loadNameFromBackendIfNeeded()
-                    // Sync assistant settings from backend (fire-and-forget)
-                    Task { await SettingsSyncManager.shared.syncFromServer() }
+                    if self?.isLocalDaemonMode == true {
+                        log("AUTH_LISTENER: local daemon mode skips backend profile and settings sync")
+                        self?.loadNameFromFirebaseIfNeeded()
+                    } else {
+                        // Load name from backend profile (Firestore), then Firebase Auth as fallback
+                        self?.loadNameFromBackendIfNeeded()
+                        // Sync assistant settings from backend (fire-and-forget)
+                        Task { await SettingsSyncManager.shared.syncFromServer() }
+                    }
                 } else {
                     // Firebase has no user - check if we have a saved session (for dev builds where Keychain doesn't persist)
                     let savedSignedIn = UserDefaults.standard.bool(forKey: self?.kAuthIsSignedIn ?? "")
@@ -325,13 +333,19 @@ class AuthService {
         saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
         Task { await RewindDatabase.shared.configure(userId: userId) }
 
-        if givenName.isEmpty {
+        if givenName.isEmpty && !isLocalDaemonMode {
             loadNameFromBackendIfNeeded()
+        } else if givenName.isEmpty {
+            loadNameFromFirebaseIfNeeded()
         }
 
         AnalyticsManager.shared.identify()
         AnalyticsManager.shared.signInCompleted(provider: "apple")
-        APIKeyService.shared.startFetchingKeys()
+        if isLocalDaemonMode {
+            log("OMI AUTH: Local daemon mode skips backend API key fetch after Apple sign-in")
+        } else {
+            APIKeyService.shared.startFetchingKeys()
+        }
 
         if !AnalyticsManager.isDevBuild {
             let sentryUser = User(userId: userId)
@@ -341,7 +355,11 @@ class AuthService {
         }
 
         NSLog("OMI AUTH: Apple Sign in complete!")
-        fetchConversations()
+        if isLocalDaemonMode {
+            log("OMI AUTH: Local daemon mode skips cloud conversation fetch after Apple sign-in")
+        } else {
+            fetchConversations()
+        }
     }
 
     // MARK: - Sign in with Google (Web OAuth Flow)
@@ -439,15 +457,21 @@ class AuthService {
             await RewindDatabase.shared.configure(userId: userId)
 
             // Try to load name from backend profile (Firestore), then Firebase Auth as fallback
-            if givenName.isEmpty {
+            if givenName.isEmpty && !isLocalDaemonMode {
                 loadNameFromBackendIfNeeded()
+            } else if givenName.isEmpty {
+                loadNameFromFirebaseIfNeeded()
             }
 
             // Identify user first, then track sign-in completed
             // (identify must happen before events for PostHog person profiles to work)
             AnalyticsManager.shared.identify()
             AnalyticsManager.shared.signInCompleted(provider: provider)
-            APIKeyService.shared.startFetchingKeys()
+            if isLocalDaemonMode {
+                log("OMI AUTH: Local daemon mode skips backend API key fetch after sign-in")
+            } else {
+                APIKeyService.shared.startFetchingKeys()
+            }
 
             // Set Sentry user context for error tracking (skip in dev builds)
             if !AnalyticsManager.isDevBuild {
@@ -460,7 +484,11 @@ class AuthService {
             NSLog("OMI AUTH: Sign in complete!")
 
             // Fetch conversations after successful sign-in
-            fetchConversations()
+            if isLocalDaemonMode {
+                log("OMI AUTH: Local daemon mode skips cloud conversation fetch after sign-in")
+            } else {
+                fetchConversations()
+            }
 
         } catch AuthError.cancelled {
             // User-initiated cancel: clear any stale error and stay silent.
@@ -705,7 +733,7 @@ class AuthService {
         let isImpersonating = UserDefaults.standard.bool(forKey: "auth_isImpersonating")
         if isImpersonating {
             NSLog("OMI AUTH: Skipping Firebase displayName update (impersonation mode)")
-        } else if let user = Auth.auth().currentUser {
+        } else if !isLocalDaemonMode, let user = Auth.auth().currentUser {
             do {
                 let changeRequest = user.createProfileChangeRequest()
                 changeRequest.displayName = trimmedName
@@ -717,13 +745,15 @@ class AuthService {
         }
 
         // Also save to backend profile (Firestore) so it persists across sign-in methods
-        if !isImpersonating {
+        if !isImpersonating && !isLocalDaemonMode {
             do {
                 try await APIClient.shared.updateUserProfile(name: trimmedName)
                 NSLog("OMI AUTH: Updated backend profile name to: %@", trimmedName)
             } catch {
                 NSLog("OMI AUTH: Failed to update backend profile name (non-fatal): %@", error.localizedDescription)
             }
+        } else if isLocalDaemonMode {
+            NSLog("OMI AUTH: Local daemon mode persisted name locally only")
         }
     }
 
@@ -750,6 +780,10 @@ class AuthService {
     /// but the user already has a name stored in Firestore from a previous sign-up.
     func loadNameFromBackendIfNeeded() {
         guard givenName.isEmpty else { return }
+        guard !isLocalDaemonMode else {
+            loadNameFromFirebaseIfNeeded()
+            return
+        }
         Task {
             do {
                 let profile = try await APIClient.shared.getUserProfile()

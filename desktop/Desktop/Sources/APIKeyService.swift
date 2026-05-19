@@ -94,6 +94,13 @@ final class APIKeyService: ObservableObject {
     func fetchKeys() async {
         loadError = nil
 
+        if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+            isLoaded = true
+            applyToEnvironment()
+            log("APIKeyService: Local daemon mode skips backend API key fetch")
+            return
+        }
+
         // Retry up to 3 times with backoff
         for attempt in 1...3 {
             do {
@@ -168,7 +175,10 @@ final class APIKeyService: ObservableObject {
     /// True when the app has enough configuration to start transcription and screen analysis.
     /// In proxy mode (OMI_DESKTOP_API_URL set), no client-side Deepgram/Gemini keys are needed.
     nonisolated static var keysAvailable: Bool {
-        getenv("GEMINI_API_KEY") != nil || getenv("OMI_DESKTOP_API_URL") != nil
+        if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+            return currentGeminiKey != nil || byokKey(.deepgram) != nil
+        }
+        return getenv("GEMINI_API_KEY") != nil || getenv("OMI_DESKTOP_API_URL") != nil
     }
 
     private nonisolated static func nonEmptyStatic(_ s: String?) -> String? {

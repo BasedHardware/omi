@@ -4016,6 +4016,10 @@ extension APIClient {
 
   /// Fetches daily summary settings
   func getDailySummarySettings() async throws -> DailySummarySettings {
+    if isUsingLocalDaemon {
+      return DailySummarySettings.localDefault
+    }
+
     return try await get("v1/users/daily-summary-settings")
   }
 
@@ -4023,6 +4027,18 @@ extension APIClient {
   func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) async throws
     -> DailySummarySettings
   {
+    if isUsingLocalDaemon {
+      var settings = DailySummarySettings.localDefault
+      if let enabled {
+        settings.enabled = enabled
+      }
+      if let hour {
+        settings.hour = hour
+      }
+      settings.saveLocalDefault()
+      return settings
+    }
+
     struct UpdateRequest: Encodable {
       let enabled: Bool?
       let hour: Int?
@@ -4033,6 +4049,10 @@ extension APIClient {
 
   /// Fetches transcription preferences
   func getTranscriptionPreferences() async throws -> TranscriptionPreferences {
+    if isUsingLocalDaemon {
+      return TranscriptionPreferences.localDefault
+    }
+
     return try await get("v1/users/transcription-preferences")
   }
 
@@ -4040,6 +4060,18 @@ extension APIClient {
   func updateTranscriptionPreferences(singleLanguageMode: Bool? = nil, vocabulary: [String]? = nil)
     async throws -> TranscriptionPreferences
   {
+    if isUsingLocalDaemon {
+      var preferences = TranscriptionPreferences.localDefault
+      if let singleLanguageMode {
+        preferences.singleLanguageMode = singleLanguageMode
+      }
+      if let vocabulary {
+        preferences.vocabulary = vocabulary
+      }
+      preferences.saveLocalDefault()
+      return preferences
+    }
+
     struct UpdateRequest: Encodable {
       let singleLanguageMode: Bool?
       let vocabulary: [String]?
@@ -4055,11 +4087,22 @@ extension APIClient {
 
   /// Fetches user language preference
   func getUserLanguage() async throws -> UserLanguageResponse {
+    if isUsingLocalDaemon {
+      return UserLanguageResponse(
+        language: UserDefaults.standard.string(forKey: "transcriptionLanguage") ?? "en"
+      )
+    }
+
     return try await get("v1/users/language")
   }
 
   /// Updates user language preference
   func updateUserLanguage(_ language: String) async throws -> UserLanguageResponse {
+    if isUsingLocalDaemon {
+      UserDefaults.standard.set(language, forKey: "transcriptionLanguage")
+      return UserLanguageResponse(language: language)
+    }
+
     struct UpdateRequest: Encodable {
       let language: String
     }
@@ -4069,11 +4112,20 @@ extension APIClient {
 
   /// Fetches recording permission status
   func getRecordingPermission() async throws -> RecordingPermissionResponse {
+    if isUsingLocalDaemon {
+      return RecordingPermissionResponse.localDefault
+    }
+
     return try await get("v1/users/store-recording-permission")
   }
 
   /// Sets recording permission
   func setRecordingPermission(enabled: Bool) async throws {
+    if isUsingLocalDaemon {
+      UserDefaults.standard.set(enabled, forKey: RecordingPermissionResponse.localDefaultsKey)
+      return
+    }
+
     let url = URL(string: baseURL + "v1/users/store-recording-permission?value=\(enabled)")!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -4089,6 +4141,10 @@ extension APIClient {
 
   /// Fetches private cloud sync setting
   func getPrivateCloudSync() async throws -> PrivateCloudSyncResponse {
+    if isUsingLocalDaemon {
+      return PrivateCloudSyncResponse(enabled: false)
+    }
+
     try requireCapability(.cloudSync)
 
     return try await get("v1/users/private-cloud-sync")
@@ -4113,6 +4169,10 @@ extension APIClient {
 
   /// Fetches notification settings
   func getNotificationSettings() async throws -> NotificationSettingsResponse {
+    if isUsingLocalDaemon {
+      return NotificationSettingsResponse.localDefault
+    }
+
     return try await get("v1/users/notification-settings")
   }
 
@@ -4120,6 +4180,18 @@ extension APIClient {
   func updateNotificationSettings(enabled: Bool? = nil, frequency: Int? = nil) async throws
     -> NotificationSettingsResponse
   {
+    if isUsingLocalDaemon {
+      var settings = NotificationSettingsResponse.localDefault
+      if let enabled {
+        settings.enabled = enabled
+      }
+      if let frequency {
+        settings.frequency = frequency
+      }
+      settings.saveLocalDefault()
+      return settings
+    }
+
     struct UpdateRequest: Encodable {
       let enabled: Bool?
       let frequency: Int?
@@ -4130,6 +4202,13 @@ extension APIClient {
 
   /// Fetches user profile
   func getUserProfile() async throws -> UserProfileResponse {
+    if isUsingLocalDaemon {
+      throw APIError.featureUnavailable(
+        feature: "user_profile",
+        reason: "Cloud profile sync is disabled in local daemon mode."
+      )
+    }
+
     return try await get("v1/users/profile")
   }
 
@@ -4138,6 +4217,10 @@ extension APIClient {
     name: String? = nil, motivation: String? = nil, useCase: String? = nil, job: String? = nil,
     company: String? = nil
   ) async throws {
+    if isUsingLocalDaemon {
+      return
+    }
+
     struct UpdateRequest: Encodable {
       let name: String?
       let motivation: String?
@@ -4159,6 +4242,10 @@ extension APIClient {
 
   /// Fetches assistant settings from the backend
   func getAssistantSettings() async throws -> AssistantSettingsResponse {
+    if isUsingLocalDaemon {
+      return AssistantSettingsResponse()
+    }
+
     return try await get("v1/users/assistant-settings")
   }
 
@@ -4166,6 +4253,10 @@ extension APIClient {
   func updateAssistantSettings(_ settings: AssistantSettingsResponse) async throws
     -> AssistantSettingsResponse
   {
+    if isUsingLocalDaemon {
+      return settings
+    }
+
     return try await patch("v1/users/assistant-settings", body: settings)
   }
 
@@ -4313,18 +4404,38 @@ struct RebuildGraphResponse: Codable {
 
 /// Daily summary notification settings
 struct DailySummarySettings: Codable {
-  let enabled: Bool
-  let hour: Int
+  var enabled: Bool
+  var hour: Int
+
+  static let enabledDefaultsKey = "local_daily_summary_enabled"
+  static let hourDefaultsKey = "local_daily_summary_hour"
+
+  static var localDefault: DailySummarySettings {
+    DailySummarySettings(
+      enabled: UserDefaults.standard.object(forKey: enabledDefaultsKey) as? Bool ?? true,
+      hour: UserDefaults.standard.object(forKey: hourDefaultsKey) as? Int ?? 22
+    )
+  }
+
+  func saveLocalDefault() {
+    UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey)
+    UserDefaults.standard.set(hour, forKey: Self.hourDefaultsKey)
+  }
 }
 
 /// Transcription preferences
 struct TranscriptionPreferences: Codable {
-  let singleLanguageMode: Bool
-  let vocabulary: [String]
+  var singleLanguageMode: Bool
+  var vocabulary: [String]
 
   enum CodingKeys: String, CodingKey {
     case singleLanguageMode = "single_language_mode"
     case vocabulary
+  }
+
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
   }
 
   init(from decoder: Decoder) throws {
@@ -4332,6 +4443,20 @@ struct TranscriptionPreferences: Codable {
     singleLanguageMode =
       try container.decodeIfPresent(Bool.self, forKey: .singleLanguageMode) ?? false
     vocabulary = try container.decodeIfPresent([String].self, forKey: .vocabulary) ?? []
+  }
+
+  static var localDefault: TranscriptionPreferences {
+    let autoDetect =
+      UserDefaults.standard.object(forKey: "transcriptionAutoDetect") as? Bool ?? true
+    return TranscriptionPreferences(
+      singleLanguageMode: !autoDetect,
+      vocabulary: UserDefaults.standard.stringArray(forKey: "transcriptionVocabulary") ?? []
+    )
+  }
+
+  func saveLocalDefault() {
+    UserDefaults.standard.set(!singleLanguageMode, forKey: "transcriptionAutoDetect")
+    UserDefaults.standard.set(vocabulary, forKey: "transcriptionVocabulary")
   }
 }
 
@@ -4342,7 +4467,14 @@ struct UserLanguageResponse: Codable {
 
 /// Recording permission response
 struct RecordingPermissionResponse: Codable {
-  let enabled: Bool
+  var enabled: Bool
+  static let localDefaultsKey = "local_store_recording_permission"
+
+  static var localDefault: RecordingPermissionResponse {
+    RecordingPermissionResponse(
+      enabled: UserDefaults.standard.object(forKey: localDefaultsKey) as? Bool ?? false
+    )
+  }
 
   enum CodingKeys: String, CodingKey {
     case enabled = "store_recording_permission"
@@ -4360,8 +4492,23 @@ struct PrivateCloudSyncResponse: Codable {
 
 /// Notification settings response
 struct NotificationSettingsResponse: Codable {
-  let enabled: Bool
-  let frequency: Int
+  var enabled: Bool
+  var frequency: Int
+
+  static let enabledDefaultsKey = "local_notifications_enabled"
+  static let frequencyDefaultsKey = "notification_frequency"
+
+  static var localDefault: NotificationSettingsResponse {
+    NotificationSettingsResponse(
+      enabled: UserDefaults.standard.object(forKey: enabledDefaultsKey) as? Bool ?? true,
+      frequency: UserDefaults.standard.object(forKey: frequencyDefaultsKey) as? Int ?? 3
+    )
+  }
+
+  func saveLocalDefault() {
+    UserDefaults.standard.set(enabled, forKey: Self.enabledDefaultsKey)
+    UserDefaults.standard.set(frequency, forKey: Self.frequencyDefaultsKey)
+  }
 
   /// Frequency level description
   var frequencyDescription: String {
@@ -4703,13 +4850,13 @@ struct FloatingBarSettingsResponse: Codable {
 }
 
 struct AssistantSettingsResponse: Codable {
-  var shared: SharedAssistantSettingsResponse?
-  var focus: FocusSettingsResponse?
-  var task: TaskSettingsResponse?
-  var insight: InsightSettingsResponse?
-  var memory: MemorySettingsResponse?
-  var floatingBar: FloatingBarSettingsResponse?
-  var updateChannel: String?
+  var shared: SharedAssistantSettingsResponse? = nil
+  var focus: FocusSettingsResponse? = nil
+  var task: TaskSettingsResponse? = nil
+  var insight: InsightSettingsResponse? = nil
+  var memory: MemorySettingsResponse? = nil
+  var floatingBar: FloatingBarSettingsResponse? = nil
+  var updateChannel: String? = nil
 
   enum CodingKeys: String, CodingKey {
     case shared, focus, task
