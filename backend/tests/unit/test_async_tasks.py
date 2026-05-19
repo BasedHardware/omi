@@ -14,7 +14,7 @@ from utils.async_tasks import (
     gather_with_logging,
     gather_chunked,
     create_named_task,
-    sleep_until_shutdown,
+    wait_for_event,
 )
 
 # ---------------------------------------------------------------------------
@@ -613,7 +613,7 @@ class TestStructuralUsage:
 
 
 # ---------------------------------------------------------------------------
-# Tests for sleep_until_shutdown
+# Tests for wait_for_event
 # ---------------------------------------------------------------------------
 
 
@@ -621,7 +621,7 @@ class TestSleepUntilShutdown:
     def test_returns_false_on_normal_sleep(self):
         async def _run():
             event = asyncio.Event()
-            result = await sleep_until_shutdown(event, 0.05)
+            result = await wait_for_event(event, 0.05)
             assert result is False
 
         asyncio.run(_run())
@@ -630,7 +630,7 @@ class TestSleepUntilShutdown:
         async def _run():
             event = asyncio.Event()
             event.set()
-            result = await sleep_until_shutdown(event, 10.0)
+            result = await wait_for_event(event, 10.0)
             assert result is True
 
         asyncio.run(_run())
@@ -645,7 +645,7 @@ class TestSleepUntilShutdown:
 
             asyncio.create_task(_set_after())
             t0 = asyncio.get_event_loop().time()
-            result = await sleep_until_shutdown(event, 10.0)
+            result = await wait_for_event(event, 10.0)
             elapsed = asyncio.get_event_loop().time() - t0
             assert result is True
             assert elapsed < 1.0
@@ -661,7 +661,7 @@ class TestSleepUntilShutdown:
                 nonlocal iterations
                 while True:
                     iterations += 1
-                    if await sleep_until_shutdown(event, 0.02):
+                    if await wait_for_event(event, 0.02):
                         break
 
             async def _shutdown():
@@ -678,7 +678,7 @@ class TestSleepUntilShutdown:
         async def _run():
             event = asyncio.Event()
             event.set()
-            result = await sleep_until_shutdown(event, 0)
+            result = await wait_for_event(event, 0)
             assert result is True
 
         asyncio.run(_run())
@@ -686,7 +686,7 @@ class TestSleepUntilShutdown:
     def test_zero_timeout_without_event_returns_false(self):
         async def _run():
             event = asyncio.Event()
-            result = await sleep_until_shutdown(event, 0)
+            result = await wait_for_event(event, 0)
             assert result is False
 
         asyncio.run(_run())
@@ -694,7 +694,7 @@ class TestSleepUntilShutdown:
     def test_negative_timeout_returns_false(self):
         async def _run():
             event = asyncio.Event()
-            result = await sleep_until_shutdown(event, -1.0)
+            result = await wait_for_event(event, -1.0)
             assert result is False
 
         asyncio.run(_run())
@@ -703,7 +703,7 @@ class TestSleepUntilShutdown:
         async def _run():
             event = asyncio.Event()
             event.set()
-            result = await sleep_until_shutdown(event, -1.0)
+            result = await wait_for_event(event, -1.0)
             assert result is True
 
         asyncio.run(_run())
