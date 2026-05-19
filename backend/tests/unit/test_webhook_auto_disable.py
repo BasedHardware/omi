@@ -290,7 +290,7 @@ class TestDevWebhookHealthTracking:
             result = record_dev_webhook_failure("uid-1", "memory_created", 500, "error")
         assert result is False
 
-    def test_success_resets_failure_count(self):
+    def test_success_resets_failure_count_and_disabled(self):
         from database.webhook_health import record_dev_webhook_success
 
         mock_r = MagicMock()
@@ -301,6 +301,7 @@ class TestDevWebhookHealthTracking:
         call_kwargs = mock_r.hset.call_args
         mapping = call_kwargs.kwargs.get('mapping') or call_kwargs[1].get('mapping')
         assert mapping['failure_count'] == '0'
+        assert mapping['disabled'] == '0'
 
 
 class TestDevWebhookAutoDisable:
