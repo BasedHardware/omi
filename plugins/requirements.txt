@@ -1,8 +1,10 @@
 # Resolved dependency set for plugins (uv pip compile, py3.11).
-# Vulnerable pins bumped to patched for #7327; every package floored at
-# >= its original (no regressions). openai/langchain-openai kept at
-# original — their only fix needs a breaking openai 1.x->2.x major
-# (documented LOW residual, consistent with the backend PRs).
+# Vulnerable pkgs floored to patched for #7327; the jupyter + langchain
+# CVE-fix closure floats as required. Unrelated heavy deps pinned to
+# their original versions to avoid unnecessary major churn (redis,
+# websockets, starlette, protobuf, psutil, posthog, fastapi, uvicorn).
+# openai/langchain-openai kept at original — documented LOW residual
+# (fix needs the breaking openai 1.x->2.x major; tracked separately).
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
 aiosignal==1.4.0
@@ -38,7 +40,7 @@ dnspython==2.8.0
 email-validator==2.3.0
 exceptiongroup==1.3.1
 executing==2.2.1
-fastapi==0.136.1
+fastapi==0.121.0
 fastapi-cli==0.0.24
 fastjsonschema==2.21.2
 fqdn==1.5.1
@@ -46,7 +48,7 @@ frozenlist==1.8.0
 greenlet==3.5.0
 groq==0.37.1
 grpcio==1.80.0
-grpcio-tools==1.80.0
+grpcio-tools==1.71.2
 grpclib==0.4.9
 h11==0.16.0
 h2==4.3.0
@@ -58,7 +60,7 @@ httpx-sse==0.4.3
 hyperframe==6.1.0
 idna==3.15
 ipykernel==7.2.0
-ipython==9.13.0
+ipython==9.10.1
 ipython-pygments-lexers==1.1.1
 ipywidgets==8.1.8
 isoduration==20.11.0
@@ -125,12 +127,12 @@ parso==0.8.7
 pexpect==4.9.0
 platformdirs==4.9.6
 portalocker==3.2.0
-posthog==7.14.2
+posthog==3.5.2
 prometheus-client==0.25.0
 prompt-toolkit==3.0.52
 propcache==0.5.2
-protobuf==6.33.6
-psutil==7.2.2
+protobuf==5.29.6
+psutil==5.9.8
 ptyprocess==0.7.0
 pure-eval==0.2.3
 pycparser==3.0
@@ -147,7 +149,7 @@ pyzmq==27.1.0
 qdrant-client==1.18.0
 qtconsole==5.7.2
 qtpy==2.4.3
-redis==7.4.0
+redis==5.0.8
 referencing==0.37.0
 regex==2026.5.9
 requests==2.34.2
@@ -167,7 +169,7 @@ sniffio==1.3.1
 soupsieve==2.8.3
 sqlalchemy==2.0.49
 stack-data==0.6.3
-starlette==1.0.0
+starlette==0.49.1
 synchronicity==0.12.2
 tenacity==9.1.4
 termcolor==3.3.0
@@ -190,14 +192,14 @@ tzdata==2026.2
 uri-template==1.3.0
 urllib3==2.7.0
 uuid-utils==0.16.0
-uvicorn==0.47.0
+uvicorn==0.30.5
 uvloop==0.22.1
 watchfiles==1.2.0
 wcwidth==0.7.0
 webcolors==25.10.0
 webencodings==0.5.1
 websocket-client==1.9.0
-websockets==16.0
+websockets==12.0
 widgetsnbextension==4.0.15
 xxhash==3.7.0
 yarl==1.23.0
