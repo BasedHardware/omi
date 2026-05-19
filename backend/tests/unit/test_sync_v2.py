@@ -2091,7 +2091,7 @@ class TestBulkheadExecutors:
         assert 'max_workers=24' in source
         from utils.executors import storage_executor
 
-        assert storage_executor._max_workers == 64, "storage_executor must have 64 workers (#7376)"
+        assert storage_executor._max_workers == 96, "storage_executor must have 96 workers (#7376)"
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()
