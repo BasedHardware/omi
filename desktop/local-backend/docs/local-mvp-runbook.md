@@ -16,6 +16,21 @@ conversation storage, transcript ingestion, processing fallback, and search.
 No Firebase, Omi Python backend, Rust cloud backend, Redis, Firestore, GCS,
 pusher, or agent-proxy credentials are required for the local daemon path.
 
+## Automated Local-Only Self-Test
+
+Run the unattended MVP check from the repo root:
+
+```bash
+desktop/local-backend/tools/local_only_self_test.sh
+```
+
+The self-test creates an isolated temp data directory, starts the local daemon
+on a free loopback port, verifies health/profile/settings, conversation
+create/read/update/delete, transcript append/finalize, search, processing
+status, restart persistence, and then runs `APIClientRoutingTests` to assert
+local-mode desktop actions stay on the local daemon without Firebase auth or
+Omi-hosted backend requests. It prints a concise pass/fail summary at the end.
+
 ## Primary Desktop Launch
 
 For user-test runs, use one command from the repo root. This launches the

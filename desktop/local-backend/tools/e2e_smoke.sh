@@ -189,5 +189,28 @@ assert_json_value "${persisted_file}" "transcript_segments.0.text" "Plan the bac
 persisted_search_file="$(request GET '/v1/search/conversations?q=backend')"
 assert_json_value "${persisted_search_file}" "results.0.conversation_id" "conv-e2e-smoke"
 
-echo "Local backend E2E smoke passed."
-echo "OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_URL=${BASE_URL}"
+request DELETE /v1/conversations/conv-e2e-smoke >/dev/null
+
+deleted_list_file="$(request GET /v1/conversations)"
+deleted_count="$(python3 - "${deleted_list_file}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+print(len(data["conversations"]))
+PY
+)"
+if [[ "${deleted_count}" != "0" ]]; then
+  echo "Expected deleted conversation to be hidden from list, got ${deleted_count} conversations" >&2
+  echo "Response file: ${deleted_list_file}" >&2
+  exit 1
+fi
+
+cat <<EOF
+PASS local backend E2E smoke
+- daemon: ${BASE_URL}
+- data_dir: ${DATA_DIR}
+- verified: health, profile, settings, conversation CRUD, transcript append/finalize, search, processing status, restart persistence
+- desktop_env: OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_URL=${BASE_URL}
+EOF

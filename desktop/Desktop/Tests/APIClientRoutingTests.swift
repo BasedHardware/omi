@@ -128,6 +128,32 @@ private func assertRoutes(
   XCTAssertEqual(req.method, method, "\(label): wrong HTTP method", file: file, line: line)
 }
 
+private func assertNoOmiHostedBackendRequests(
+  _ reqs: [CapturedRequest],
+  file: StaticString = #filePath,
+  line: UInt = #line
+) {
+  let forbiddenHosts: Set<String> = [
+    "api.omi.me",
+    "api.omiapi.com",
+    "desktop-backend-hhibjajaja-uc.a.run.app",
+    "desktop-backend-dt5lrfkkoa-uc.a.run.app",
+    "omi-cloud-invalid",
+    "omi-rust-invalid",
+  ]
+
+  XCTAssertFalse(
+    reqs.contains { request in
+      guard let host = request.url.host else { return false }
+      return forbiddenHosts.contains(host) || host.contains("firebase")
+        || host.hasSuffix(".firebaseio.com") || host.hasSuffix(".googleapis.com")
+    },
+    "local-mode routing should not call Omi-hosted backend or Firebase endpoints",
+    file: file,
+    line: line
+  )
+}
+
 private func assertUnavailable(
   _ error: Error?,
   capability: DesktopBackendEnvironment.Capability,
@@ -482,13 +508,48 @@ final class APIClientRoutingTests: XCTestCase {
     try? await client.updateConversationTitle(id: "local-123", title: "Offline")
     try? await client.setConversationStarred(id: "local-123", starred: true)
     _ = try? await client.updateSelectedBackendSettings(["profile_name": "Offline"])
+    try? await client.deleteConversation(id: "local-123")
 
     let requests = URLCapture.capturedRequests
-    XCTAssertEqual(requests.count, 6)
+    XCTAssertEqual(requests.count, 7)
     XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 9876 })
     XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
-    XCTAssertFalse(
-      requests.contains { $0.url.host == "omi-cloud-invalid" || $0.url.host == "omi-rust-invalid" })
+    assertNoOmiHostedBackendRequests(requests)
+  }
+
+  func testLocalModeTranscriptImportRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:9876", 1)
+    let client = await makeTestClient()
+    let segment = TranscriptionSegmentRecord(
+      sessionId: 42,
+      speaker: 0,
+      text: "Local transcript import should stay on loopback.",
+      startTime: 0,
+      endTime: 2.5,
+      segmentOrder: 0,
+      segmentId: "seg-local-0",
+      speakerLabel: "Speaker 1"
+    )
+
+    try? await client.appendLocalDaemonTranscriptSegment(
+      conversationId: "local-123",
+      segment: segment
+    )
+    try? await client.finalizeLocalDaemonTranscript(conversationId: "local-123")
+
+    let requests = URLCapture.capturedRequests
+    XCTAssertEqual(requests.count, 2)
+    XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 9876 })
+    XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+    XCTAssertEqual(requests.map(\.method), ["POST", "POST"])
+    XCTAssertTrue(
+      requests[0].url.path.contains("/v1/conversations/local-123/transcript-segments"))
+    XCTAssertTrue(
+      requests[1].url.path.contains("/v1/conversations/local-123/finalize-transcript"))
+    assertNoOmiHostedBackendRequests(requests)
   }
 
   func testLocalModeSetConversationStarredRoutesToLocalDaemonWithoutAuth() async {
