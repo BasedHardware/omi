@@ -2239,6 +2239,11 @@ struct ActionItemsListResponse: Decodable {
     case hasMore = "has_more"
   }
 
+  init(items: [TaskActionItem], hasMore: Bool = false) {
+    self.items = items
+    self.hasMore = hasMore
+  }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems)
@@ -2667,17 +2672,64 @@ extension APIClient {
       relevanceScore: relevanceScore
     )
 
+    if selectedBackendTarget.mode == .localDaemon {
+      let tagsJson: String?
+      if let tags = metadata?["tags"] as? [String],
+        let data = try? JSONEncoder().encode(tags),
+        let json = String(data: data, encoding: .utf8)
+      {
+        tagsJson = json
+      } else {
+        tagsJson = nil
+      }
+      let record = StagedTaskRecord(
+        backendId: "local_staged_\(UUID().uuidString)",
+        backendSynced: false,
+        description: description,
+        source: source,
+        priority: priority,
+        category: category,
+        tagsJson: tagsJson,
+        dueAt: dueAt,
+        confidence: metadata?["confidence"] as? Double,
+        sourceApp: metadata?["source_app"] as? String,
+        windowTitle: metadata?["window_title"] as? String,
+        contextSummary: metadata?["context_summary"] as? String,
+        currentActivity: metadata?["current_activity"] as? String,
+        metadataJson: metadataString,
+        relevanceScore: relevanceScore,
+        scoredAt: relevanceScore == nil ? nil : Date()
+      )
+      let inserted: StagedTaskRecord
+      if relevanceScore != nil {
+        inserted = try await StagedTaskStorage.shared.insertWithScoreShift(record)
+      } else {
+        inserted = try await StagedTaskStorage.shared.insertLocalStagedTask(record)
+      }
+      return inserted.toTaskActionItem()
+    }
+
     return try await post("v1/staged-tasks", body: request)
   }
 
   /// Fetches staged tasks ordered by relevance score
   func getStagedTasks(limit: Int = 100, offset: Int = 0) async throws -> ActionItemsListResponse {
+    if selectedBackendTarget.mode == .localDaemon {
+      let items = try await StagedTaskStorage.shared.getScoredStagedTasks(limit: limit, offset: offset)
+      return ActionItemsListResponse(items: items, hasMore: items.count == limit)
+    }
+
     let params = "limit=\(limit)&offset=\(offset)"
     return try await get("v1/staged-tasks?\(params)")
   }
 
   /// Hard-deletes a staged task
   func deleteStagedTask(id: String) async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      try await StagedTaskStorage.shared.deleteByTaskId(id)
+      return
+    }
+
     try await delete("v1/staged-tasks/\(id)")
   }
 
@@ -2695,22 +2747,62 @@ extension APIClient {
     }
     let request = BatchRequest(
       scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
+    if selectedBackendTarget.mode == .localDaemon {
+      try await StagedTaskStorage.shared.updateScores(scores)
+      return
+    }
+
     let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
   }
 
   /// Promotes the top-ranked staged task to action_items
   func promoteTopStagedTask() async throws -> PromoteResponse {
+    if selectedBackendTarget.mode == .localDaemon {
+      guard let staged = try await StagedTaskStorage.shared.promoteTopLocalStagedTask() else {
+        return PromoteResponse(promoted: false, reason: "no staged tasks", promotedTask: nil)
+      }
+      let promoted = TaskActionItem(
+        id: "local_action_\(UUID().uuidString)",
+        description: staged.description,
+        completed: false,
+        createdAt: staged.createdAt,
+        updatedAt: Date(),
+        dueAt: staged.dueAt,
+        conversationId: staged.conversationId,
+        source: staged.source,
+        priority: staged.priority,
+        metadata: staged.metadata,
+        category: staged.category,
+        deleted: false,
+        fromStaged: true,
+        relevanceScore: staged.relevanceScore,
+        contextSummary: staged.contextSummary,
+        currentActivity: staged.currentActivity
+      )
+      return PromoteResponse(promoted: true, reason: nil, promotedTask: promoted)
+    }
+
     return try await post("v1/staged-tasks/promote")
   }
 
   /// One-time migration of existing AI tasks to staged_tasks
   func migrateStagedTasks() async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      log("APIClient: staged-task backend migration skipped in local daemon mode")
+      return
+    }
+
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await post("v1/staged-tasks/migrate")
   }
 
   /// Migrate conversation-extracted action items (no source field) to staged_tasks
   func migrateConversationItemsToStaged() async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      log("APIClient: conversation-to-staged backend migration skipped in local daemon mode")
+      return
+    }
+
     struct MigrateResponse: Decodable {
       let status: String
       let migrated: Int
@@ -4062,11 +4154,25 @@ extension APIClient {
 
   /// Fetches user's persona (if exists)
   func getPersona() async throws -> Persona? {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     return try await get("v1/personas")
   }
 
   /// Creates a new persona
   func createPersona(name: String, username: String? = nil) async throws -> Persona {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     struct CreateRequest: Encodable {
       let name: String
       let username: String?
@@ -4082,6 +4188,13 @@ extension APIClient {
     personaPrompt: String? = nil,
     image: String? = nil
   ) async throws -> Persona {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     struct UpdateRequest: Encodable {
       let name: String?
       let description: String?
@@ -4100,17 +4213,38 @@ extension APIClient {
 
   /// Deletes user's persona
   func deletePersona() async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     try await delete("v1/personas")
   }
 
   /// Regenerates persona prompt from current public memories
   func regeneratePersonaPrompt() async throws -> GeneratePromptResponse {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     struct EmptyRequest: Encodable {}
     return try await post("v1/personas/generate-prompt", body: EmptyRequest())
   }
 
   /// Checks if a username is available
   func checkPersonaUsername(_ username: String) async throws -> UsernameAvailableResponse {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "persona",
+        reason: "AI Persona is an Omi cloud account feature and is disabled in local daemon mode."
+      )
+    }
+
     return try await get("v1/personas/check-username?username=\(username)")
   }
 }
@@ -5479,6 +5613,13 @@ extension APIClient {
   /// Sync AI-generated user profile to backend
   func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws
   {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: DesktopBackendEnvironment.Capability.cloudSync.rawValue,
+        reason: "AI user profile cloud sync is disabled in local daemon mode."
+      )
+    }
+
     struct SyncRequest: Encodable {
       let profile_text: String
       let generated_at: String

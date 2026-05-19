@@ -485,6 +485,11 @@ actor TaskAssistant: ProactiveAssistant {
 
     /// Sync task to backend API, returns backend ID if successful
     private func syncTaskToBackend(task: ExtractedTask, taskResult: TaskExtractionResult, windowTitle: String? = nil) async -> String? {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon else {
+            log("Task: Skipped staged task backend sync in local daemon mode")
+            return nil
+        }
+
         do {
             var metadata: [String: Any] = [
                 "source_app": task.sourceApp,

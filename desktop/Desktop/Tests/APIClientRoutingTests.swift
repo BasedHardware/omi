@@ -1227,6 +1227,29 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getPersona")
   }
 
+  func testLocalModePersonaAPIsFailBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    var errors: [Error] = []
+    do { _ = try await client.getPersona() as Persona? } catch { errors.append(error) }
+    do { _ = try await client.createPersona(name: "Local") } catch { errors.append(error) }
+    do { _ = try await client.updatePersona(name: "Updated") } catch { errors.append(error) }
+    do { try await client.deletePersona() } catch { errors.append(error) }
+    do { _ = try await client.regeneratePersonaPrompt() } catch { errors.append(error) }
+    do { _ = try await client.checkPersonaUsername("local") } catch { errors.append(error) }
+
+    XCTAssertEqual(errors.count, 6)
+    XCTAssertTrue(errors.allSatisfy {
+      guard case APIError.featureUnavailable(let feature, _) = $0 else { return false }
+      return feature == "persona"
+    })
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
   // -- User settings (GET → Python) --
 
   func testGetDailySummarySettingsRoutesToPython() async {
@@ -1326,6 +1349,79 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/staged-tasks/st-1", method: "DELETE",
       label: "deleteStagedTask")
+  }
+
+  func testLocalModeStagedTaskAPIsUseLocalStorageBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let testUserId = "api-client-routing-staged-\(UUID().uuidString)"
+    let testRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+      .appendingPathComponent("omi-rewind-routing-\(UUID().uuidString)", isDirectory: true)
+    setenv("OMI_REWIND_DATABASE_ROOT", testRoot.path, 1)
+    await RewindDatabase.shared.close()
+    await RewindDatabase.shared.configure(userId: testUserId)
+    await StagedTaskStorage.shared.invalidateCache()
+    await ActionItemStorage.shared.invalidateCache()
+    let client = await makeTestClient()
+
+    let first = try? await client.createStagedTask(
+      description: "local staged one",
+      source: "screenshot",
+      priority: "high",
+      category: "work",
+      metadata: ["source_app": "XCTest", "tags": ["work"]],
+      relevanceScore: 2
+    )
+    let second = try? await client.createStagedTask(
+      description: "local staged two",
+      source: "screenshot",
+      relevanceScore: 1
+    )
+    let listed = try? await client.getStagedTasks(limit: 10)
+    try? await client.batchUpdateStagedScores(
+      [first, second].compactMap { item in item.map { (id: $0.id, score: 5) } }
+    )
+    if let first {
+      try? await client.deleteStagedTask(id: first.id)
+    }
+    let promoted = try? await client.promoteTopStagedTask()
+    try? await client.migrateStagedTasks()
+    try? await client.migrateConversationItemsToStaged()
+
+    XCTAssertEqual(listed?.items.count, 2)
+    XCTAssertEqual(listed?.items.first?.description, "local staged two")
+    XCTAssertEqual(promoted?.promoted, true)
+    XCTAssertEqual(promoted?.promotedTask?.description, "local staged two")
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+
+    await RewindDatabase.shared.close()
+    await StagedTaskStorage.shared.invalidateCache()
+    await ActionItemStorage.shared.invalidateCache()
+    try? FileManager.default.removeItem(at: testRoot)
+    unsetenv("OMI_REWIND_DATABASE_ROOT")
+  }
+
+  func testLocalModeAIUserProfileSyncFailsBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    do {
+      try await client.syncAIUserProfile(profileText: "local profile", generatedAt: Date(), dataSourcesUsed: 1)
+      XCTFail("expected AI profile cloud sync to be unavailable")
+    } catch {
+      guard case APIError.featureUnavailable(let feature, _) = error else {
+        XCTFail("expected featureUnavailable for AI profile sync, got \(error)")
+        return
+      }
+      XCTAssertEqual(feature, DesktopBackendEnvironment.Capability.cloudSync.rawValue)
+    }
+
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
   }
 
   // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --

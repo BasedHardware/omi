@@ -36,6 +36,10 @@ struct PersonaPage: View {
         }
     }
 
+    private var isLocalDaemonMode: Bool {
+        DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Sheet header with close button
@@ -520,6 +524,13 @@ struct PersonaPage: View {
     // MARK: - API Calls
 
     private func loadPersona() async {
+        guard !isLocalDaemonMode else {
+            persona = nil
+            errorMessage = "AI Persona is unavailable in local daemon mode."
+            isLoading = false
+            return
+        }
+
         isLoading = true
         errorMessage = nil
 
@@ -533,6 +544,11 @@ struct PersonaPage: View {
     }
 
     private func createPersona() async {
+        guard !isLocalDaemonMode else {
+            errorMessage = "AI Persona is unavailable in local daemon mode."
+            return
+        }
+
         isCreating = true
 
         do {
@@ -550,6 +566,11 @@ struct PersonaPage: View {
     }
 
     private func deletePersona() async {
+        guard !isLocalDaemonMode else {
+            errorMessage = "AI Persona is unavailable in local daemon mode."
+            return
+        }
+
         do {
             try await APIClient.shared.deletePersona()
             persona = nil
@@ -560,6 +581,10 @@ struct PersonaPage: View {
 
     private func saveEdits() async {
         guard let currentPersona = persona else { return }
+        guard !isLocalDaemonMode else {
+            errorMessage = "AI Persona is unavailable in local daemon mode."
+            return
+        }
 
         do {
             let updated = try await APIClient.shared.updatePersona(
@@ -574,6 +599,11 @@ struct PersonaPage: View {
     }
 
     private func regeneratePrompt() async {
+        guard !isLocalDaemonMode else {
+            errorMessage = "AI Persona is unavailable in local daemon mode."
+            return
+        }
+
         isRegenerating = true
 
         do {
@@ -589,6 +619,11 @@ struct PersonaPage: View {
     }
 
     private func checkUsername() async {
+        guard !isLocalDaemonMode else {
+            usernameAvailable = nil
+            return
+        }
+
         guard newPersonaUsername.count >= 3 else {
             usernameAvailable = nil
             return

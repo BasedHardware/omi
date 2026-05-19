@@ -109,28 +109,32 @@ actor AIUserProfileService {
                     arguments: [newText, id]
                 )
             }
-            // Sync updated profile to backend (fire-and-forget)
-            let text = newText
-            Task {
-                do {
-                    // Fetch the record to get generatedAt and dataSourcesUsed
-                    let record = try? await db.read { database in
-                        try AIUserProfileRecord.fetchOne(database, key: id)
-                    }
-                    try await APIClient.shared.syncAIUserProfile(
-                        profileText: text,
-                        generatedAt: record?.generatedAt ?? Date(),
-                        dataSourcesUsed: record?.dataSourcesUsed ?? 0
-                    )
-                    _ = try? await db.write { database in
-                        try database.execute(
-                            sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-                            arguments: [id]
+            if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+                log("AIUserProfileService: skipped backend profile sync in local daemon mode")
+            } else {
+                // Sync updated profile to backend (fire-and-forget)
+                let text = newText
+                Task {
+                    do {
+                        // Fetch the record to get generatedAt and dataSourcesUsed
+                        let record = try? await db.read { database in
+                            try AIUserProfileRecord.fetchOne(database, key: id)
+                        }
+                        try await APIClient.shared.syncAIUserProfile(
+                            profileText: text,
+                            generatedAt: record?.generatedAt ?? Date(),
+                            dataSourcesUsed: record?.dataSourcesUsed ?? 0
                         )
+                        _ = try? await db.write { database in
+                            try database.execute(
+                                sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
+                                arguments: [id]
+                            )
+                        }
+                        log("AIUserProfileService: Synced updated profile to backend")
+                    } catch {
+                        log("AIUserProfileService: Failed to sync updated profile to backend: \(error.localizedDescription)")
                     }
-                    log("AIUserProfileService: Synced updated profile to backend")
-                } catch {
-                    log("AIUserProfileService: Failed to sync updated profile to backend: \(error.localizedDescription)")
                 }
             }
             return true
@@ -161,27 +165,31 @@ actor AIUserProfileService {
             }
             log("AIUserProfileService: Saved exploration as new profile (\(record.profileText.count) chars)")
 
-            // Sync to backend (fire-and-forget)
-            let profileText = record.profileText
-            let recordId = insertedId
-            Task {
-                do {
-                    try await APIClient.shared.syncAIUserProfile(
-                        profileText: profileText,
-                        generatedAt: generatedAt,
-                        dataSourcesUsed: 1
-                    )
-                    if let id = recordId, let db = try? await self.ensureDB() {
-                        _ = try? await db.write { database in
-                            try database.execute(
-                                sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-                                arguments: [id]
-                            )
+            if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+                log("AIUserProfileService: skipped backend profile sync in local daemon mode")
+            } else {
+                // Sync to backend (fire-and-forget)
+                let profileText = record.profileText
+                let recordId = insertedId
+                Task {
+                    do {
+                        try await APIClient.shared.syncAIUserProfile(
+                            profileText: profileText,
+                            generatedAt: generatedAt,
+                            dataSourcesUsed: 1
+                        )
+                        if let id = recordId, let db = try? await self.ensureDB() {
+                            _ = try? await db.write { database in
+                                try database.execute(
+                                    sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
+                                    arguments: [id]
+                                )
+                            }
                         }
+                        log("AIUserProfileService: Synced exploration profile to backend")
+                    } catch {
+                        log("AIUserProfileService: Failed to sync exploration profile to backend: \(error.localizedDescription)")
                     }
-                    log("AIUserProfileService: Synced exploration profile to backend")
-                } catch {
-                    log("AIUserProfileService: Failed to sync exploration profile to backend: \(error.localizedDescription)")
                 }
             }
             return true
@@ -334,26 +342,30 @@ actor AIUserProfileService {
         }
 
         // 7. Sync to backend (fire-and-forget)
-        let recordId = record.id
-        Task {
-            do {
-                try await APIClient.shared.syncAIUserProfile(
-                    profileText: truncated,
-                    generatedAt: generatedAt,
-                    dataSourcesUsed: dataSourcesUsed
-                )
-                // Mark as synced
-                if let id = recordId, let db = try? await self.ensureDB() {
-                    _ = try? await db.write { database in
-                        try database.execute(
-                            sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
-                            arguments: [id]
-                        )
+        if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+            log("AIUserProfileService: skipped backend profile sync in local daemon mode")
+        } else {
+            let recordId = record.id
+            Task {
+                do {
+                    try await APIClient.shared.syncAIUserProfile(
+                        profileText: truncated,
+                        generatedAt: generatedAt,
+                        dataSourcesUsed: dataSourcesUsed
+                    )
+                    // Mark as synced
+                    if let id = recordId, let db = try? await self.ensureDB() {
+                        _ = try? await db.write { database in
+                            try database.execute(
+                                sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
+                                arguments: [id]
+                            )
+                        }
                     }
+                    log("AIUserProfileService: Synced profile to backend")
+                } catch {
+                    log("AIUserProfileService: Failed to sync profile to backend: \(error.localizedDescription)")
                 }
-                log("AIUserProfileService: Synced profile to backend")
-            } catch {
-                log("AIUserProfileService: Failed to sync profile to backend: \(error.localizedDescription)")
             }
         }
 

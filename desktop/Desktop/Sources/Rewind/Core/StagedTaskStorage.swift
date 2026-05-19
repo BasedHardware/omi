@@ -131,7 +131,7 @@ actor StagedTaskStorage {
     }
 
     /// Get staged tasks ordered by relevance score (best first)
-    func getScoredStagedTasks(limit: Int = 100) async throws -> [TaskActionItem] {
+    func getScoredStagedTasks(limit: Int = 100, offset: Int = 0) async throws -> [TaskActionItem] {
         let db = try await ensureInitialized()
 
         return try await db.read { database in
@@ -139,7 +139,7 @@ actor StagedTaskStorage {
                 .filter(Column("deleted") == false)
                 .filter(Column("completed") == false)
                 .order(sql: "COALESCE(relevanceScore, 999999) ASC")
-                .limit(limit)
+                .limit(limit, offset: offset)
                 .fetchAll(database)
 
             return records.map { $0.toTaskActionItem() }
@@ -191,6 +191,66 @@ actor StagedTaskStorage {
         }
 
         log("StagedTaskStorage: Hard-deleted staged task with id \(id)")
+    }
+
+    /// Hard-delete a staged task by API-facing ID. Accepts backend IDs and
+    /// local fallback IDs in the form "staged_<rowid>".
+    func deleteByTaskId(_ taskId: String) async throws {
+        if taskId.hasPrefix("staged_"),
+           let localId = Int64(taskId.dropFirst("staged_".count)) {
+            try await deleteById(localId)
+            return
+        }
+
+        try await deleteByBackendId(taskId)
+    }
+
+    /// Update local relevance scores by API-facing ID.
+    func updateScores(_ scores: [(id: String, score: Int)]) async throws {
+        guard !scores.isEmpty else { return }
+        let db = try await ensureInitialized()
+        let now = Date()
+
+        try await db.write { database in
+            for score in scores {
+                if score.id.hasPrefix("staged_"),
+                   let localId = Int64(score.id.dropFirst("staged_".count)) {
+                    try database.execute(
+                        sql: "UPDATE staged_tasks SET relevanceScore = ?, scoredAt = ?, updatedAt = ? WHERE id = ?",
+                        arguments: [score.score, now, now, localId]
+                    )
+                } else {
+                    try database.execute(
+                        sql: "UPDATE staged_tasks SET relevanceScore = ?, scoredAt = ?, updatedAt = ? WHERE backendId = ?",
+                        arguments: [score.score, now, now, score.id]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Remove and return the current top local staged task for promotion.
+    func promoteTopLocalStagedTask() async throws -> TaskActionItem? {
+        let db = try await ensureInitialized()
+
+        return try await db.write { database in
+            guard let record = try StagedTaskRecord
+                .filter(Column("deleted") == false)
+                .filter(Column("completed") == false)
+                .order(sql: "COALESCE(relevanceScore, 999999) ASC, createdAt ASC")
+                .fetchOne(database) else {
+                return nil
+            }
+
+            if let id = record.id {
+                try database.execute(
+                    sql: "DELETE FROM staged_tasks WHERE id = ?",
+                    arguments: [id]
+                )
+            }
+
+            return record.toTaskActionItem()
+        }
     }
 
     // MARK: - Re-ranking
