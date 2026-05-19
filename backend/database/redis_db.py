@@ -217,6 +217,31 @@ def get_enabled_apps(uid: str):
     return [x.decode() for x in val]
 
 
+def remove_app_from_all_enabled_sets(app_id: str) -> list[str]:
+    """Remove an app from every user's enabled_plugins set via SCAN.
+
+    Returns the list of affected user IDs (for notification).
+    Fail-open: errors are logged but never raised.
+    """
+    affected_uids = []
+    try:
+        cursor = 0
+        while True:
+            cursor, keys = r.scan(cursor, match='users:*:enabled_plugins', count=500)
+            for key in keys:
+                key_str = key.decode() if isinstance(key, bytes) else key
+                if r.sismember(key_str, app_id):
+                    r.srem(key_str, app_id)
+                    parts = key_str.split(':')
+                    if len(parts) >= 2:
+                        affected_uids.append(parts[1])
+            if cursor == 0:
+                break
+    except Exception as e:
+        logging.getLogger(__name__).warning(f'remove_app_from_all_enabled_sets error for {app_id}: {e}')
+    return affected_uids
+
+
 def get_app_reviews(app_id: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
@@ -636,8 +661,7 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script(
-    """
+_RATE_LIMIT_LUA = r.register_script("""
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -650,8 +674,7 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-"""
-)
+""")
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -680,8 +703,7 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script(
-    """
+_TTS_RATE_LIMIT_LUA = r.register_script("""
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -709,8 +731,7 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-"""
-)
+""")
 
 
 def _seconds_until_midnight_utc() -> int:
