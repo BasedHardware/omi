@@ -217,31 +217,6 @@ def get_enabled_apps(uid: str):
     return [x.decode() for x in val]
 
 
-def remove_app_from_all_enabled_sets(app_id: str) -> list[str]:
-    """Remove an app from every user's enabled_plugins set via SCAN.
-
-    Returns the list of affected user IDs (for notification).
-    Fail-open: errors are logged but never raised.
-    """
-    affected_uids = []
-    try:
-        cursor = 0
-        while True:
-            cursor, keys = r.scan(cursor, match='users:*:enabled_plugins', count=500)
-            for key in keys:
-                key_str = key.decode() if isinstance(key, bytes) else key
-                if r.sismember(key_str, app_id):
-                    r.srem(key_str, app_id)
-                    parts = key_str.split(':')
-                    if len(parts) >= 2:
-                        affected_uids.append(parts[1])
-            if cursor == 0:
-                break
-    except Exception as e:
-        logging.getLogger(__name__).warning(f'remove_app_from_all_enabled_sets error for {app_id}: {e}')
-    return affected_uids
-
-
 def get_app_reviews(app_id: str) -> dict:
     reviews = r.get(f'plugins:{app_id}:reviews')
     if not reviews:
