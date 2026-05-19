@@ -4743,7 +4743,10 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription и е $triggerDescription.';
   }
 
@@ -9314,4 +9317,67 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Прегледот не може да се избрише. Обидете се повторно подоцна.';
+
+  @override
+  String get allRecordingsBackedUp => 'All recordings backed up';
+
+  @override
+  String backingUpRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'Backing up $count recording$_temp0…';
+  }
+
+  @override
+  String recordingsWaitingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return '$count recording$_temp0 waiting to back up';
+  }
+
+  @override
+  String recordingsNeedAttentionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return '$count recording$_temp0 need attention';
+  }
+
+  @override
+  String get syncStatusBackedUp => 'Backed up';
+
+  @override
+  String get syncStatusBackingUp => 'Backing up…';
+
+  @override
+  String get syncStatusWaiting => 'Waiting to back up';
+
+  @override
+  String get syncStatusRetrying => 'Couldn’t process — retrying';
+
+  @override
+  String get syncStatusFailed => 'Failed — tap Retry';
+
+  @override
+  String get syncStatusFileUnavailable => 'File unavailable';
+
+  @override
+  String get filterIssues => 'Issues';
+
+  @override
+  String get noRecordingsYet => 'No recordings yet';
+
+  @override
+  String get syncInProgress => 'Sync in progress';
 }

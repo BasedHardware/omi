@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -8977,7 +8977,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -17294,6 +17297,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete the recap. Try again later.'**
   String get recapDeleteFailed;
+
+  /// No description provided for @allRecordingsBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings backed up'**
+  String get allRecordingsBackedUp;
+
+  /// Sync list header while uploads are in progress
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up {count} recording{count, plural, =1{} other{s}}…'**
+  String backingUpRecordingsCount(int count);
+
+  /// Sync list header when recordings are queued
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recording{count, plural, =1{} other{s}} waiting to back up'**
+  String recordingsWaitingCount(int count);
+
+  /// Sync list header when some recordings failed
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recording{count, plural, =1{} other{s}} need attention'**
+  String recordingsNeedAttentionCount(int count);
+
+  /// No description provided for @syncStatusBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed up'**
+  String get syncStatusBackedUp;
+
+  /// No description provided for @syncStatusBackingUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up…'**
+  String get syncStatusBackingUp;
+
+  /// No description provided for @syncStatusWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to back up'**
+  String get syncStatusWaiting;
+
+  /// No description provided for @syncStatusRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t process — retrying'**
+  String get syncStatusRetrying;
+
+  /// No description provided for @syncStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed — tap Retry'**
+  String get syncStatusFailed;
+
+  /// No description provided for @syncStatusFileUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File unavailable'**
+  String get syncStatusFileUnavailable;
+
+  /// No description provided for @filterIssues.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues'**
+  String get filterIssues;
+
+  /// No description provided for @noRecordingsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings yet'**
+  String get noRecordingsYet;
+
+  /// No description provided for @syncInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync in progress'**
+  String get syncInProgress;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17354,7 +17435,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh'
+        'zh',
       ].contains(locale.languageCode);
 
   @override
@@ -17464,8 +17545,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }
