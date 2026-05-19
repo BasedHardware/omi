@@ -704,7 +704,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         children: [
           for (int i = 0; i < wals.length; i++) ...[
             Dismissible(
-              key: Key(wals[i].id),
+              // id alone is not unique in the unified list: a recording can
+              // exist as more than one Wal sharing `device_timerStart` (e.g.
+              // an SD-card copy and its on-phone copy). Index-suffix keeps the
+              // Column keys unique; the list fully rebuilds from the provider
+              // on any change so transient Dismissible state is not a concern.
+              key: ValueKey('${wals[i].id}#$i'),
               direction: wals[i].isSyncing ? DismissDirection.none : DismissDirection.endToStart,
               confirmDismiss: (direction) {
                 return OmiConfirmDialog.show(
