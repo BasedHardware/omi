@@ -188,7 +188,10 @@ async def _send_bulk_summary_notification(users: list):
     for i in range(0, len(users), _BATCH_SIZE):
         batch = users[i : i + _BATCH_SIZE]
         tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for j, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
 
 
 async def send_daily_notification():
