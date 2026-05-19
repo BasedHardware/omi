@@ -102,8 +102,8 @@ cargo test
 Run focused desktop routing checks:
 
 ```bash
-cd desktop/Desktop
-swift test --filter APIClientRoutingTests
+cd desktop
+xcrun swift test --package-path Desktop --filter APIClientRoutingTests
 ```
 
 Manual desktop local mode check:
