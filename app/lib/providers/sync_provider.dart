@@ -15,6 +15,9 @@ import 'package:omi/utils/waveform_utils.dart';
 
 enum WalStatusFilter { pending, synced }
 
+/// Segmented filter for the redesigned auto-sync page's unified list.
+enum WalDisplayFilter { all, pending, synced, issues }
+
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
@@ -48,6 +51,54 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       return pendingWals;
     }
     return syncedWals;
+  }
+
+  // ─────────────────────────────────────────
+  // Redesigned auto-sync page: unified self-describing list
+  // (additive — does not touch the legacy SyncPage API above)
+  // ─────────────────────────────────────────
+
+  /// All recordings, newest first. The redesigned list shows synced and
+  /// unsynced recordings together so backed-up work is never hidden behind a
+  /// tab the user has to discover.
+  List<Wal> get displaySortedWals {
+    final list = List<Wal>.from(_allWals);
+    list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    return list;
+  }
+
+  int _countWhere(bool Function(WalSyncDisplayState) test) => _allWals.where((w) => test(w.syncDisplayState)).length;
+
+  int get syncingWalsCount => _countWhere((s) => s == WalSyncDisplayState.syncing);
+  int get syncedWalsCount => _countWhere((s) => s == WalSyncDisplayState.synced);
+  int get waitingWalsCount => _countWhere((s) => s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.syncing);
+
+  /// Recordings that need the user's attention: a sync failed (auto-retries
+  /// exhausted) or the file is unreadable. Surfaced explicitly so a failure is
+  /// never mistaken for a recording that simply hasn't synced yet.
+  int get needsAttentionWalsCount =>
+      _countWhere((s) => s == WalSyncDisplayState.failed || s == WalSyncDisplayState.corrupted);
+
+  int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
+
+  /// Filtered + sorted list for the redesigned page's segmented filter.
+  List<Wal> walsForDisplayFilter(WalDisplayFilter filter) {
+    bool keep(Wal w) {
+      switch (filter) {
+        case WalDisplayFilter.all:
+          return true;
+        case WalDisplayFilter.pending:
+          return w.syncDisplayState != WalSyncDisplayState.synced;
+        case WalDisplayFilter.synced:
+          return w.syncDisplayState == WalSyncDisplayState.synced;
+        case WalDisplayFilter.issues:
+          return w.syncDisplayState == WalSyncDisplayState.failed ||
+              w.syncDisplayState == WalSyncDisplayState.corrupted ||
+              w.syncDisplayState == WalSyncDisplayState.retrying;
+      }
+    }
+
+    return displaySortedWals.where(keep).toList();
   }
 
   List<Wal> get filteredWals {
