@@ -55,6 +55,9 @@ Optional daemon environment:
   `OMI_LOCAL_DAEMON_URL` in sync with it.
 - `OMI_LOCAL_DAEMON_LOG=/tmp/omi-local-backend-dev.log` changes the supervised
   daemon log path.
+- `OMI_CLEAN_STALE_CLONES=1` enables the broad home-directory cleanup for stale
+  `Omi Dev.app` clones. Local daemon mode skips that scan by default so the
+  primary launch command reaches the daemon preflight quickly.
 
 Do not use this launcher to manage `/Applications/omi.app`.
 
