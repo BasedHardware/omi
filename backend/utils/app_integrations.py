@@ -191,7 +191,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         if not app.external_integration.webhook_url:
             return
 
-        if is_app_webhook_disabled(app.id):
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
         conversation_dict = conversation_to_dict(conversation)
@@ -222,15 +222,17 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
-                action = record_app_webhook_failure(app.id, response.status_code, error_str)
-                _handle_webhook_health_action(app.id, action, error_str)
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 return
 
             cb.record_success()
-            record_app_webhook_success(app.id)
+            await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if app.uid is not None:
                 if app.uid != uid:
@@ -253,8 +255,8 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__
-            action = record_app_webhook_failure(app.id, 0, error_str)
-            _handle_webhook_health_action(app.id, action, error_str)
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"Plugin integration error: {e}")
             return
 
@@ -591,7 +593,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         if not app.external_integration.webhook_url:
             return
 
-        if is_app_webhook_disabled(app.id):
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
         url = app.external_integration.webhook_url
@@ -611,18 +613,20 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                 )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
-                record_app_webhook_success(app.id)
+                await run_blocking(db_executor, record_app_webhook_success, app.id)
             else:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
-                action = record_app_webhook_failure(app.id, response.status_code, error_str)
-                _handle_webhook_health_action(app.id, action, error_str)
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__
-            action = record_app_webhook_failure(app.id, 0, error_str)
-            _handle_webhook_health_action(app.id, action, error_str)
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"Plugin integration error: {e}")
 
     chunk_size = 8
@@ -673,7 +677,7 @@ async def _async_trigger_realtime_integrations(
         if not app.external_integration.webhook_url:
             return
 
-        if is_app_webhook_disabled(app.id):
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
         url = app.external_integration.webhook_url
@@ -694,15 +698,17 @@ async def _async_trigger_realtime_integrations(
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
-                action = record_app_webhook_failure(app.id, response.status_code, error_str)
-                _handle_webhook_health_action(app.id, action, error_str)
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
                 logger.info(
                     f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {sanitize(response.text[:100])}'
                 )
                 return
 
             cb.record_success()
-            record_app_webhook_success(app.id)
+            await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
                 record_app_usage(
@@ -736,8 +742,8 @@ async def _async_trigger_realtime_integrations(
         except Exception as e:
             cb.record_failure()
             error_str = type(e).__name__
-            action = record_app_webhook_failure(app.id, 0, error_str)
-            _handle_webhook_health_action(app.id, action, error_str)
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"App integration error: {e}")
             return
 
