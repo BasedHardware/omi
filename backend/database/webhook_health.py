@@ -238,6 +238,7 @@ def record_dev_webhook_success(uid: str, wtype: str):
                 'last_success_at': str(now_ts),
                 'last_status': '200',
                 'last_error': '',
+                'disabled': '0',
             },
         )
         r.expire(key, _HEALTH_TTL)
