@@ -448,6 +448,8 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
 
         apps = []
         for app in all_apps:
+            if app.get('disabled'):
+                continue
             app_dict = app
             app_dict['installs'] = apps_installs.get(app['id'], 0)
             if include_reviews:
