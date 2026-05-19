@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::{
-    processing,
+    processing, providers,
     storage::{
         deterministic_id, AppendTranscriptResult, NewActionItem, NewConversation, NewMemory,
         NewProcessingJob, NewTranscriptSegment, UpdateActionItem, UpdateConversation, UpdateMemory,
@@ -689,6 +689,12 @@ async fn update_settings(
     State(state): State<AppState>,
     Json(values): Json<Map<String, Value>>,
 ) -> ApiResult<Value> {
+    for key in ["ai_provider", "provider"] {
+        if let Some(value) = values.get(key) {
+            providers::validate_provider_setting(value)
+                .map_err(|error| ApiError::bad_request(error.to_string()))?;
+        }
+    }
     let settings = state
         .store
         .settings()
@@ -767,11 +773,10 @@ fn conversation_matches_new(
     existing: &crate::storage::Conversation,
     new: &NewConversation,
 ) -> anyhow::Result<bool> {
-    let mutable_fields_match = existing.status != "open"
-        || (existing.title == new.title && existing.overview == new.overview);
     Ok(existing.id == new.id
         && existing.session_id == new.session_id
-        && mutable_fields_match
+        && existing.title == new.title
+        && existing.overview == new.overview
         && new
             .started_at
             .map(|started_at| existing.started_at == started_at)

@@ -64,8 +64,8 @@ pub async fn process_next_job(store: &Store) -> Result<Option<ProcessingJob>> {
             let message = error.to_string();
             store
                 .processing_jobs()
-                .fail(&job.id, &message)
-                .with_context(|| format!("failed to fail job {}", job.id))
+                .fail_or_requeue(&job.id, &message)
+                .with_context(|| format!("failed to fail or requeue job {}", job.id))
         }
     }
 }
@@ -95,20 +95,12 @@ async fn process_conversation_job(store: &Store, job: &ProcessingJob) -> Result<
         .collect::<Vec<_>>()
         .join(" ");
     let output = if let Some(provider) = configured_openai_provider(store)? {
-        match provider
+        let mut output = provider
             .complete_json(processing_prompt(&transcript))
             .await
-            .and_then(parse_provider_output)
-        {
-            Ok(mut output) => {
-                output.provider = "openai_compatible".to_string();
-                output
-            }
-            Err(error) => {
-                tracing::warn!(error = %error, "provider processing failed; using deterministic fallback");
-                fallback_output(&transcript)
-            }
-        }
+            .and_then(parse_provider_output)?;
+        output.provider = "openai_compatible".to_string();
+        output
     } else {
         fallback_output(&transcript)
     };
@@ -301,6 +293,8 @@ mod tests {
     use crate::storage::{NewConversation, NewProcessingJob, NewTranscriptSegment};
 
     use super::*;
+    use serde_json::Map;
+    use std::net::TcpListener;
 
     #[test]
     fn fallback_processing_is_deterministic_and_empty_for_items_and_memories() {
@@ -378,6 +372,83 @@ mod tests {
 
         let result: Value = serde_json::from_str(&job.result_json)?;
         assert_eq!(result["provider"], "fallback");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_failures_requeue_until_retry_limit() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-provider-failure"]);
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let unused_addr = listener.local_addr()?;
+        drop(listener);
+
+        let mut settings = Map::new();
+        settings.insert(
+            "ai_provider".to_string(),
+            json!({
+                "kind": "openai_compatible",
+                "base_url": format!("http://{unused_addr}/v1"),
+                "model": "offline-model",
+                "api_key": "local-test-key"
+            }),
+        );
+        store.settings().upsert_many(settings)?;
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-provider-failure".to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store.transcripts().append(NewTranscriptSegment {
+            id: deterministic_id("seg", &[&conversation_id, "0"]),
+            conversation_id: conversation_id.clone(),
+            session_id: "session-provider-failure".to_string(),
+            speaker_id: None,
+            speaker_label: None,
+            text: "Provider failures should retry instead of falling back.".to_string(),
+            start_ms: 0,
+            end_ms: 1000,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+        let enqueued = store.processing_jobs().enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["provider-failure", &conversation_id]),
+            kind: "finalize_transcript".to_string(),
+            target_conversation_id: Some(conversation_id.clone()),
+            max_retries: Some(2),
+            payload: Some(json!({"conversation_id": conversation_id})),
+        })?;
+
+        let first = process_next_job(&store)
+            .await?
+            .expect("failed job should be returned");
+        assert_eq!(first.id, enqueued.id);
+        assert_eq!(first.status, ProcessingJobStatus::Queued);
+        assert_eq!(first.retry_count, 1);
+        assert!(first.last_error.as_deref().unwrap_or("").contains("failed"));
+
+        let second = process_next_job(&store)
+            .await?
+            .expect("exhausted job should be returned");
+        assert_eq!(second.id, enqueued.id);
+        assert_eq!(second.status, ProcessingJobStatus::Failed);
+        assert_eq!(second.retry_count, 2);
+        assert!(second
+            .last_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("failed"));
+
+        let conversation = store
+            .conversations()
+            .get(second.target_conversation_id.as_ref().unwrap())?
+            .expect("conversation should exist");
+        assert_eq!(conversation.status, "open");
 
         Ok(())
     }

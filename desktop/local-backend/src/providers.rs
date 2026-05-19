@@ -122,6 +122,7 @@ pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig
             .as_str()
             .unwrap_or("https://api.openai.com/v1")
             .to_string();
+        validate_provider_base_url(&base_url)?;
         let model = value["model"].as_str().unwrap_or("gpt-4o-mini").to_string();
         let api_key = value["api_key"]
             .as_str()
@@ -141,6 +142,60 @@ pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig
     }
 
     Ok(None)
+}
+
+pub fn validate_provider_setting(value: &Value) -> Result<()> {
+    let kind = value["kind"].as_str().unwrap_or_default();
+    if kind != "openai" && kind != "openai_compatible" {
+        return Ok(());
+    }
+
+    let base_url = value["base_url"]
+        .as_str()
+        .unwrap_or("https://api.openai.com/v1");
+    validate_provider_base_url(base_url)
+}
+
+fn validate_provider_base_url(base_url: &str) -> Result<()> {
+    let url = reqwest::Url::parse(base_url)
+        .with_context(|| format!("provider base_url is not a valid URL: {base_url}"))?;
+    match url.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(anyhow!("provider base_url scheme is not allowed: {scheme}")),
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| anyhow!("provider base_url must include a host"))?
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if is_denied_provider_host(&host) {
+        return Err(anyhow!(
+            "provider base_url host is not allowed in local daemon mode: {host}"
+        ));
+    }
+    Ok(())
+}
+
+fn is_denied_provider_host(host: &str) -> bool {
+    matches!(host, "api.omi.me" | "api.omiapi.com")
+        || (host.starts_with("desktop-backend-") && host.ends_with(".a.run.app"))
+        || host == "firebase.google.com"
+        || host.ends_with(".firebase.google.com")
+        || host.ends_with(".firebaseio.com")
+        || host.ends_with(".firebaseapp.com")
+        || host.ends_with(".firebasestorage.app")
+        || matches!(
+            host,
+            "googleapis.com"
+                | "identitytoolkit.googleapis.com"
+                | "securetoken.googleapis.com"
+                | "firestore.googleapis.com"
+                | "firebasestorage.googleapis.com"
+                | "firebase.googleapis.com"
+                | "www.googleapis.com"
+                | "oauth2.googleapis.com"
+        )
 }
 
 #[cfg(test)]
@@ -192,6 +247,47 @@ mod tests {
         assert_eq!(config.model, "stub-model");
         assert_eq!(config.api_key, "local-test-key");
 
+        Ok(())
+    }
+
+    #[test]
+    fn provider_validation_denies_omi_firebase_and_google_hosts() {
+        for base_url in [
+            "https://api.omi.me/v1",
+            "https://api.omiapi.com/v1",
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v1",
+            "https://identitytoolkit.googleapis.com/v1",
+            "https://based-hardware.firebaseio.com",
+            "https://based-hardware.firebaseapp.com",
+            "https://based-hardware.firebasestorage.app",
+        ] {
+            assert!(
+                validate_provider_setting(&json!({
+                    "kind": "openai_compatible",
+                    "base_url": base_url,
+                    "api_key": "key"
+                }))
+                .is_err(),
+                "{base_url} should be denied"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_validation_allows_direct_provider_and_loopback_hosts() -> Result<()> {
+        for base_url in [
+            "https://api.openai.com/v1",
+            "https://api.anthropic.com/v1",
+            "https://generativelanguage.googleapis.com/v1beta",
+            "http://127.0.0.1:11434/v1",
+            "http://localhost:43210/v1",
+        ] {
+            validate_provider_setting(&json!({
+                "kind": "openai_compatible",
+                "base_url": base_url,
+                "api_key": "key"
+            }))?;
+        }
         Ok(())
     }
 

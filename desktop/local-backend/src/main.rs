@@ -523,6 +523,112 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn processed_conversation_replay_conflicts_when_create_payload_changes() -> Result<()> {
+        let app = test_app()?;
+        let body = json!({
+            "id": "conv-processed-conflict",
+            "session_id": "session-processed-conflict",
+            "title": "Original title",
+            "overview": "Original overview",
+            "metadata": {"source": "test"}
+        });
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(body.clone()),
+        )
+        .await?;
+        request_json(
+            app.clone(),
+            Method::PATCH,
+            "/v1/conversations/conv-processed-conflict",
+            Some(json!({"status": "processed"})),
+        )
+        .await?;
+
+        let replayed =
+            request_json(app.clone(), Method::POST, "/v1/conversations", Some(body)).await?;
+        assert_eq!(replayed["conversation"]["id"], "conv-processed-conflict");
+
+        request_status(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "id": "conv-processed-conflict",
+                "session_id": "session-processed-conflict",
+                "title": "Changed title",
+                "overview": "Original overview",
+                "metadata": {"source": "test"}
+            })),
+            StatusCode::CONFLICT,
+        )
+        .await?;
+        request_status(
+            app,
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "id": "conv-processed-conflict",
+                "session_id": "session-processed-conflict",
+                "title": "Original title",
+                "overview": "Original overview",
+                "metadata": {"source": "changed"}
+            })),
+            StatusCode::CONFLICT,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn settings_reject_omi_firebase_and_google_provider_hosts() -> Result<()> {
+        let app = test_app()?;
+
+        for base_url in [
+            "https://api.omi.me/v1",
+            "https://api.omiapi.com/v1",
+            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/v1",
+            "https://identitytoolkit.googleapis.com/v1",
+            "https://based-hardware.firebaseapp.com/v1",
+        ] {
+            request_status(
+                app.clone(),
+                Method::PUT,
+                "/v1/settings",
+                Some(json!({
+                    "ai_provider": {
+                        "kind": "openai_compatible",
+                        "base_url": base_url,
+                        "api_key": "blocked"
+                    }
+                })),
+                StatusCode::BAD_REQUEST,
+            )
+            .await?;
+        }
+
+        let allowed = request_json(
+            app,
+            Method::PUT,
+            "/v1/settings",
+            Some(json!({
+                "ai_provider": {
+                    "kind": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "api_key": "local"
+                }
+            })),
+        )
+        .await?;
+        assert_eq!(allowed["settings"][0]["key"], "ai_provider");
+
+        Ok(())
+    }
+
     fn test_app() -> Result<Router> {
         let config = Config {
             bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),

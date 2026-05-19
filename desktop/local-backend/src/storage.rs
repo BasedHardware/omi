@@ -881,11 +881,24 @@ impl ProcessingJobRepository {
                         julianday(completed_at)
                       )
                     )
+                    OR (
+                      status = 'failed'
+                      AND retry_count >= max_retries
+                      AND julianday(failed_at) >= COALESCE(
+                        (
+                          SELECT MAX(julianday(updated_at))
+                          FROM transcript_segments
+                          WHERE conversation_id = ?2 AND deleted_at IS NULL
+                        ),
+                        julianday(failed_at)
+                      )
+                    )
                   )
                 ORDER BY
                   CASE status
                     WHEN 'running' THEN 0
                     WHEN 'queued' THEN 1
+                    WHEN 'failed' THEN 2
                     ELSE 2
                   END,
                   updated_at DESC
@@ -969,20 +982,38 @@ impl ProcessingJobRepository {
         }
     }
 
-    pub fn fail(&self, id: &str, error: &str) -> Result<Option<ProcessingJob>> {
+    pub fn fail_or_requeue(&self, id: &str, error: &str) -> Result<Option<ProcessingJob>> {
         let now = Utc::now();
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         let changed = conn
             .execute(
                 r#"
                 UPDATE processing_jobs
-                SET status = 'failed', last_error = ?2, failed_at = ?3, updated_at = ?3,
-                    retry_count = retry_count + 1, sync_version = sync_version + 1
+                SET status = CASE
+                        WHEN retry_count + 1 < max_retries THEN 'queued'
+                        ELSE 'failed'
+                    END,
+                    last_error = ?2,
+                    failed_at = CASE
+                        WHEN retry_count + 1 < max_retries THEN NULL
+                        ELSE ?3
+                    END,
+                    queued_at = CASE
+                        WHEN retry_count + 1 < max_retries THEN ?3
+                        ELSE queued_at
+                    END,
+                    started_at = CASE
+                        WHEN retry_count + 1 < max_retries THEN NULL
+                        ELSE started_at
+                    END,
+                    updated_at = ?3,
+                    retry_count = retry_count + 1,
+                    sync_version = sync_version + 1
                 WHERE id = ?1 AND deleted_at IS NULL
                 "#,
                 params![id, error, now],
             )
-            .context("failed to mark processing job failed")?;
+            .context("failed to fail or requeue processing job")?;
         drop(conn);
 
         if changed == 0 {
@@ -2179,6 +2210,106 @@ mod tests {
         assert_eq!(job.retry_count, 0);
         assert_eq!(job.max_retries, 5);
         assert!(job.last_error.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn processing_job_failure_requeues_until_max_retries() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        store.conversations().create(NewConversation {
+            id: "conversation-1".to_string(),
+            session_id: "session-retry".to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        let repository = store.processing_jobs();
+        let enqueued = repository.enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["retry", "conversation-1"]),
+            kind: "finalize_transcript".to_string(),
+            target_conversation_id: Some("conversation-1".to_string()),
+            max_retries: Some(2),
+            payload: Some(serde_json::json!({"conversation_id": "conversation-1"})),
+        })?;
+
+        let claimed = repository
+            .claim_next_queued()?
+            .expect("queued job should be claimed");
+        assert_eq!(claimed.id, enqueued.id);
+        assert_eq!(claimed.status, ProcessingJobStatus::Running);
+
+        let retryable = repository
+            .fail_or_requeue(&claimed.id, "provider timeout")?
+            .expect("job should still exist");
+        assert_eq!(retryable.status, ProcessingJobStatus::Queued);
+        assert_eq!(retryable.retry_count, 1);
+        assert_eq!(retryable.last_error.as_deref(), Some("provider timeout"));
+        assert!(retryable.failed_at.is_none());
+        assert!(retryable.started_at.is_none());
+
+        let reclaimed = repository
+            .claim_next_queued()?
+            .expect("retryable job should be claimable again");
+        assert_eq!(reclaimed.id, enqueued.id);
+        assert_eq!(reclaimed.status, ProcessingJobStatus::Running);
+        assert_eq!(reclaimed.retry_count, 1);
+        assert!(reclaimed.last_error.is_none());
+
+        let exhausted = repository
+            .fail_or_requeue(&reclaimed.id, "provider still unavailable")?
+            .expect("job should still exist");
+        assert_eq!(exhausted.status, ProcessingJobStatus::Failed);
+        assert_eq!(exhausted.retry_count, 2);
+        assert_eq!(
+            exhausted.last_error.as_deref(),
+            Some("provider still unavailable")
+        );
+        assert!(exhausted.failed_at.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn exhausted_failed_finalize_job_is_reusable_for_duplicate_finalize() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-failed-finalize"]);
+        store.conversations().create(NewConversation {
+            id: conversation_id.clone(),
+            session_id: "session-failed-finalize".to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store.processing_jobs().enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["failed-finalize", &conversation_id]),
+            kind: "finalize_transcript".to_string(),
+            target_conversation_id: Some(conversation_id.clone()),
+            max_retries: Some(1),
+            payload: Some(serde_json::json!({"conversation_id": conversation_id})),
+        })?;
+
+        let claimed = store
+            .processing_jobs()
+            .claim_next_queued()?
+            .expect("queued job should be claimed");
+        let failed = store
+            .processing_jobs()
+            .fail_or_requeue(&claimed.id, "exhausted")?
+            .expect("job should still exist");
+        assert_eq!(failed.status, ProcessingJobStatus::Failed);
+
+        let reusable = store
+            .processing_jobs()
+            .reusable_for_conversation(
+                "finalize_transcript",
+                failed.target_conversation_id.as_ref().unwrap(),
+            )?
+            .expect("failed exhausted job should be reusable");
+        assert_eq!(reusable.id, failed.id);
+        assert_eq!(reusable.status, ProcessingJobStatus::Failed);
 
         Ok(())
     }

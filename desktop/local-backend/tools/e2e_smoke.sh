@@ -17,6 +17,13 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print(s.getsockname()[1])
 PY
 )}"
+UNUSED_PROVIDER_PORT="${OMI_LOCAL_UNUSED_PROVIDER_PORT:-$(python3 - <<'PY'
+import socket
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])
+PY
+)}"
 BASE_URL="http://127.0.0.1:${PORT}"
 LOG_FILE="${DATA_DIR}/daemon.log"
 PROVIDER_LOG_FILE="${DATA_DIR}/provider-requests.jsonl"
@@ -86,6 +93,25 @@ request() {
     curl -fsS -X "${method}" "${BASE_URL}${path}" -o "${output}"
   fi
   printf '%s\n' "${output}"
+}
+
+request_status() {
+  local method="$1"
+  local path="$2"
+  local expected_status="$3"
+  local body="${4:-}"
+  local status
+  if [[ -n "${body}" ]]; then
+    status="$(curl -sS -o /dev/null -w "%{http_code}" -X "${method}" "${BASE_URL}${path}" \
+      -H "Content-Type: application/json" \
+      --data "${body}")"
+  else
+    status="$(curl -sS -o /dev/null -w "%{http_code}" -X "${method}" "${BASE_URL}${path}")"
+  fi
+  if [[ "${status}" != "${expected_status}" ]]; then
+    echo "Expected ${method} ${path} to return HTTP ${expected_status}, got ${status}" >&2
+    exit 1
+  fi
 }
 
 assert_json_value() {
@@ -214,6 +240,22 @@ wait_for_completed_job() {
   exit 1
 }
 
+wait_for_failed_job() {
+  local job_id="$1"
+  local job_file
+  for _ in $(seq 1 40); do
+    job_file="$(request GET "/v1/processing-jobs/${job_id}")"
+    if [[ "$(json_value "processing_job.status" "${job_file}")" == "failed" ]]; then
+      printf '%s\n' "${job_file}"
+      return
+    fi
+    request POST "/v1/processing-jobs/process-next" >/dev/null || true
+    sleep 0.25
+  done
+  echo "Processing job ${job_id} did not fail after retry exhaustion" >&2
+  exit 1
+}
+
 echo "Starting local daemon smoke on ${BASE_URL}"
 echo "Data dir: ${DATA_DIR}"
 
@@ -274,6 +316,22 @@ assert_json_value "${status_file}" "failed" "0"
 processed_file="$(request GET /v1/conversations/conv-e2e-smoke)"
 assert_json_value "${processed_file}" "conversation.status" "processed"
 assert_json_value "${processed_file}" "conversation.title" "Plan the backend free desktop MVP and verify"
+
+request_status POST /v1/conversations 409 '{
+  "id": "conv-e2e-smoke",
+  "session_id": "session-e2e-smoke",
+  "title": "Changed replay title",
+  "overview": "Created by local smoke"
+}'
+
+request_status PUT /v1/settings 400 '{
+  "ai_provider": {
+    "kind": "openai_compatible",
+    "base_url": "https://api.omi.me/v1",
+    "model": "blocked",
+    "api_key": "blocked"
+  }
+}'
 
 settings_file="$(request PUT /v1/settings '{
   "local_first": true,
@@ -337,6 +395,44 @@ if [[ "${provider_request_auth}" != "Bearer local-test-key" ]]; then
   exit 1
 fi
 
+retry_settings_file="$(request PUT /v1/settings '{
+  "ai_provider": {
+    "kind": "openai_compatible",
+    "base_url": "http://127.0.0.1:'"${UNUSED_PROVIDER_PORT}"'/v1",
+    "model": "offline-stub",
+    "api_key": "local-test-key"
+  }
+}')"
+assert_json_value "${retry_settings_file}" "settings.0.key" "ai_provider"
+
+retry_conversation_file="$(request POST /v1/conversations '{
+  "id": "conv-provider-retry-smoke",
+  "session_id": "session-provider-retry-smoke",
+  "title": "",
+  "overview": ""
+}')"
+assert_json_value "${retry_conversation_file}" "conversation.id" "conv-provider-retry-smoke"
+
+retry_segment_file="$(request POST /v1/conversations/conv-provider-retry-smoke/transcript-segments '{
+  "id": "seg-provider-retry-smoke-0",
+  "text": "A transient provider failure should retry and eventually fail usefully.",
+  "start_ms": 0,
+  "end_ms": 1600,
+  "segment_index": 0,
+  "source": "smoke"
+}')"
+assert_json_value "${retry_segment_file}" "transcript_segment.id" "seg-provider-retry-smoke-0"
+
+retry_job_file="$(request POST /v1/conversations/conv-provider-retry-smoke/finalize-transcript)"
+retry_job_id="$(json_value "processing_job.id" "${retry_job_file}")"
+failed_retry_job_file="$(wait_for_failed_job "${retry_job_id}")"
+assert_json_value "${failed_retry_job_file}" "processing_job.status" "failed"
+assert_json_value "${failed_retry_job_file}" "processing_job.retry_count" "3"
+
+duplicate_failed_job_file="$(request POST /v1/conversations/conv-provider-retry-smoke/finalize-transcript)"
+assert_json_value "${duplicate_failed_job_file}" "processing_job.id" "${retry_job_id}"
+assert_json_value "${duplicate_failed_job_file}" "processing_job.status" "failed"
+
 stop_daemon
 start_daemon
 
@@ -349,6 +445,7 @@ assert_json_value "${persisted_search_file}" "results.0.conversation_id" "conv-e
 
 request DELETE /v1/conversations/conv-e2e-smoke >/dev/null
 request DELETE /v1/conversations/conv-provider-smoke >/dev/null
+request DELETE /v1/conversations/conv-provider-retry-smoke >/dev/null
 
 deleted_list_file="$(request GET /v1/conversations)"
 deleted_count="$(python3 - "${deleted_list_file}" <<'PY'
@@ -370,6 +467,6 @@ cat <<EOF
 PASS local backend E2E smoke
 - daemon: ${BASE_URL}
 - data_dir: ${DATA_DIR}
-- verified: health, profile, settings, conversation CRUD, transcript append/finalize, search, fallback processing, loopback provider processing, processing status, restart persistence
+- verified: health, profile, settings, conversation CRUD, transcript append/finalize, search, fallback processing, loopback provider processing, provider denylist, retry exhaustion, duplicate finalize safety, processing status, restart persistence
 - desktop_env: OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_URL=${BASE_URL}
 EOF
