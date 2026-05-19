@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -801,6 +802,108 @@ class LocalWalSyncImpl implements LocalWalSync {
     listener.onWalUpdated();
 
     progress?.onWalSyncedProgress(1.0);
+    return resp;
+  }
+
+  Future<bool> _localFileExists(Wal wal) async {
+    if (wal.filePath == null) return false;
+    final p = await Wal.getFilePath(wal.filePath);
+    if (p == null) return false;
+    return File(p).existsSync();
+  }
+
+  /// Resolve WALs sitting in [WalStatus.uploaded] by polling their server job
+  /// — out of the upload critical path. Returns the new/updated conversation
+  /// ids from jobs that reached a terminal state this pass so the caller can
+  /// surface them to the UI.
+  ///
+  /// Idempotent and safe to run repeatedly and concurrently with an upload:
+  /// it only touches `uploaded` WALs, and the upload loop only ever touches
+  /// `miss` WALs, so the two never contend for the same recording. WALs are
+  /// grouped by their shared `jobId` (batched upload → one job : N WALs).
+  Future<SyncLocalFilesResponse> reconcileUploadedWals() async {
+    final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    final byJob = <String, List<Wal>>{};
+    for (final w in _wals) {
+      if (w.status == WalStatus.uploaded && w.jobId != null && w.jobId!.isNotEmpty) {
+        byJob.putIfAbsent(w.jobId!, () => []).add(w);
+      }
+    }
+    if (byJob.isEmpty) return resp;
+
+    bool changed = false;
+    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    const maxConcurrent = 3;
+    final entries = byJob.entries.toList();
+
+    for (var i = 0; i < entries.length; i += maxConcurrent) {
+      final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
+      final fetched = await Future.wait(
+        slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))),
+      );
+
+      for (final (members, fetch) in fetched) {
+        switch (fetch.outcome) {
+          case SyncJobFetchOutcome.transient:
+            // Network/5xx — leave as `uploaded`, retry on the next pass.
+            break;
+          case SyncJobFetchOutcome.notFound:
+            // Job expired or unknown. Recover from the retained local file.
+            for (final w in members) {
+              changed = true;
+              w.jobId = null;
+              if (await _localFileExists(w)) {
+                w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
+                w.retryCount += 1;
+                w.lastRetryAt = nowSecs;
+              } else {
+                w.status = WalStatus.corrupted; // nothing left to recover
+              }
+            }
+            break;
+          case SyncJobFetchOutcome.ok:
+            final s = fetch.status!;
+            if (!s.isTerminal) break; // still queued/processing — check later
+            if (s.result != null) {
+              resp.newConversationIds.addAll(
+                s.result!.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+              );
+              resp.updatedConversationIds.addAll(
+                s.result!.updatedConversationIds.where(
+                  (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+                ),
+              );
+            }
+            if (s.status == 'completed') {
+              for (final w in members) {
+                changed = true;
+                w.status = WalStatus.synced;
+                w.jobId = null;
+                listener.onWalSynced(w);
+              }
+            } else {
+              // 'partial_failure' / 'failed'. Batched mapping means we can't
+              // attribute a failed segment to a specific member, so revert all
+              // members for re-upload — the server dedups segments that already
+              // succeeded, so completed work is not duplicated.
+              for (final w in members) {
+                changed = true;
+                w.status = WalStatus.miss;
+                w.jobId = null;
+                w.retryCount += 1;
+                w.lastRetryAt = nowSecs;
+              }
+            }
+            break;
+        }
+      }
+    }
+
+    if (changed) {
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+    }
     return resp;
   }
 }
