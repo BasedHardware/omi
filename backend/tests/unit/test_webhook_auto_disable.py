@@ -35,7 +35,6 @@ _db_redis.enable_user_webhook_db = MagicMock()
 _db_redis.set_user_webhook_db = MagicMock()
 _db_redis.get_cached_user_geolocation = MagicMock(return_value=None)
 _db_redis.get_enabled_apps = MagicMock(return_value=[])
-_db_redis.remove_app_from_all_enabled_sets = MagicMock(return_value=[])
 _db_redis.r = MagicMock()
 
 _backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
@@ -939,158 +938,38 @@ class TestLuaTimeProgression:
         assert '86400' in _RECORD_FAILURE_LUA  # 24h in seconds
 
 
-class TestDisableUserNotification:
-    """Test that auto-disable notifies affected users and removes from enabled sets."""
+class TestDisableAction:
+    """Test that auto-disable calls Firestore disable and notifies app owner."""
 
-    def test_disable_action_removes_from_all_users(self):
-        """action=3 should call remove_app_from_all_enabled_sets."""
+    def test_disable_action_disables_and_notifies_owner(self):
+        """action=3 should disable in Firestore, clear cache, notify owner."""
         _app_tools = _load_app_tools_module()
 
         with (
             patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
-            patch.object(_app_tools, 'delete_app_cache_by_id'),
-            patch.object(
-                _app_tools, 'remove_app_from_all_enabled_sets', return_value=['uid-1', 'uid-2']
-            ) as mock_remove,
-            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'Test App', 'uid': 'owner-1'}),
-            patch.object(_app_tools, '_notify_app_owner'),
-            patch.object(_app_tools, 'send_notification') as mock_notify,
+            patch.object(_app_tools, 'delete_app_cache_by_id') as mock_cache,
+            patch.object(_app_tools, '_notify_app_owner') as mock_notify,
         ):
             _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 500')
-            mock_disable.assert_called_once()
-            mock_remove.assert_called_once_with('app-1')
-            assert mock_notify.call_count == 2
-            notified_uids = [call[0][0] for call in mock_notify.call_args_list]
-            assert 'uid-1' in notified_uids
-            assert 'uid-2' in notified_uids
+            mock_disable.assert_called_once_with('app-1', 'HTTP 500', 72)
+            mock_cache.assert_called_once_with('app-1')
+            mock_notify.assert_called_once()
+            assert 'Auto-Disabled' in mock_notify.call_args[0][1]
 
-    def test_disable_action_notifies_with_app_name(self):
-        """User notifications should include the app name."""
+    def test_disable_preserves_user_enabled_sets(self):
+        """action=3 should NOT remove app from users' enabled_plugins."""
         _app_tools = _load_app_tools_module()
 
         with (
             patch.object(_app_tools, 'disable_app_in_firestore'),
             patch.object(_app_tools, 'delete_app_cache_by_id'),
-            patch.object(_app_tools, 'remove_app_from_all_enabled_sets', return_value=['uid-1']),
-            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'My Awesome App', 'uid': 'owner-1'}),
             patch.object(_app_tools, '_notify_app_owner'),
-            patch.object(_app_tools, 'send_notification') as mock_notify,
-        ):
-            _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 404')
-            title = mock_notify.call_args[0][1]
-            body = mock_notify.call_args[0][2]
-            assert 'My Awesome App' in title
-            assert 'My Awesome App' in body
-            assert 'connectivity issues' in body
-
-    def test_no_affected_users_still_disables(self):
-        """Disable should proceed even with no affected users."""
-        _app_tools = _load_app_tools_module()
-
-        with (
-            patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
-            patch.object(_app_tools, 'delete_app_cache_by_id'),
-            patch.object(_app_tools, 'remove_app_from_all_enabled_sets', return_value=[]),
-            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'Test', 'uid': 'owner-1'}),
-            patch.object(_app_tools, '_notify_app_owner'),
-            patch.object(_app_tools, 'send_notification') as mock_notify,
         ):
             _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 500')
-            mock_disable.assert_called_once()
-            mock_notify.assert_not_called()
-
-
-def _load_remove_app_func():
-    """Load remove_app_from_all_enabled_sets from source, mocking redis.Redis to avoid connection."""
-    _key = "_real_redis_db"
-    if _key in sys.modules:
-        return sys.modules[_key].remove_app_from_all_enabled_sets, sys.modules[_key]
-    saved_redis = sys.modules.get('redis')
-    mock_redis_mod = MagicMock()
-    mock_redis_mod.Redis.return_value = MagicMock()
-    sys.modules['redis'] = mock_redis_mod
-    spec = importlib.util.spec_from_file_location(
-        _key,
-        os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'redis_db.py'),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[_key] = mod
-    spec.loader.exec_module(mod)
-    if saved_redis:
-        sys.modules['redis'] = saved_redis
-    return mod.remove_app_from_all_enabled_sets, mod
-
-
-class TestRemoveAppFromAllEnabledSets:
-    """Direct tests for remove_app_from_all_enabled_sets production code."""
-
-    @pytest.fixture(autouse=True)
-    def _load(self):
-        self._func, self._mod = _load_remove_app_func()
-
-    def test_removes_app_from_matching_users(self):
-        """SCAN finds users with app in set, removes it, returns UIDs."""
-        mock_r = MagicMock()
-        mock_r.scan.return_value = (
-            0,
-            [b'users:uid-1:enabled_plugins', b'users:uid-2:enabled_plugins', b'users:uid-3:enabled_plugins'],
-        )
-        mock_r.sismember.side_effect = lambda key, app_id: key in (
-            'users:uid-1:enabled_plugins',
-            'users:uid-3:enabled_plugins',
-        )
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert sorted(result) == ['uid-1', 'uid-3']
-        assert mock_r.srem.call_count == 2
-
-    def test_pagination_follows_cursor(self):
-        """SCAN with multiple pages should follow cursor until 0."""
-        mock_r = MagicMock()
-        mock_r.scan.side_effect = [
-            (42, [b'users:uid-a:enabled_plugins']),
-            (0, [b'users:uid-b:enabled_plugins']),
-        ]
-        mock_r.sismember.return_value = True
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert sorted(result) == ['uid-a', 'uid-b']
-        assert mock_r.scan.call_count == 2
-
-    def test_no_matching_users_returns_empty(self):
-        """If no users have the app enabled, return empty list."""
-        mock_r = MagicMock()
-        mock_r.scan.return_value = (0, [b'users:uid-1:enabled_plugins'])
-        mock_r.sismember.return_value = False
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert result == []
-        mock_r.srem.assert_not_called()
-
-    def test_no_keys_returns_empty(self):
-        """If SCAN returns no keys, return empty list."""
-        mock_r = MagicMock()
-        mock_r.scan.return_value = (0, [])
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert result == []
-
-    def test_redis_error_fails_open(self):
-        """Redis errors should return partial results, not raise."""
-        mock_r = MagicMock()
-        mock_r.scan.side_effect = Exception("Redis down")
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert result == []
-
-    def test_string_keys_handled(self):
-        """Keys returned as strings (not bytes) should still work."""
-        mock_r = MagicMock()
-        mock_r.scan.return_value = (0, ['users:uid-1:enabled_plugins'])
-        mock_r.sismember.return_value = True
-        with patch.object(self._mod, 'r', mock_r):
-            result = self._func('app-x')
-        assert result == ['uid-1']
+            assert (
+                not hasattr(_app_tools, 'remove_app_from_all_enabled_sets')
+                or not getattr(_app_tools, 'remove_app_from_all_enabled_sets', MagicMock()).called
+            )
 
 
 class TestLuaSourceVerification:
