@@ -1114,3 +1114,182 @@ class TestMarketplaceIntegrationHealthPaths:
         mock_fail.assert_called_once()
         assert mock_fail.call_args[0][0] == 'app-1'
         assert mock_fail.call_args[0][2] == 'ConnectError'
+
+
+class TestDevWebhookEdgeCases:
+    """Test dev webhook Lua script edge behavior via mock return values."""
+
+    def test_below_threshold_99_no_disable(self):
+        """99 failures should not trigger disable (returns 0)."""
+        from database.webhook_health import record_dev_webhook_failure
+
+        mock_script = MagicMock(return_value=0)
+        with patch("database.webhook_health._get_dev_failure_script", return_value=mock_script):
+            result = record_dev_webhook_failure("uid-1", "memory_created", 500, "error")
+        assert result is False
+
+    def test_at_threshold_100_triggers_disable(self):
+        """100th failure should trigger disable (returns 1)."""
+        from database.webhook_health import record_dev_webhook_failure
+
+        mock_script = MagicMock(return_value=1)
+        with patch("database.webhook_health._get_dev_failure_script", return_value=mock_script):
+            result = record_dev_webhook_failure("uid-1", "memory_created", 500, "error")
+        assert result is True
+
+    def test_already_disabled_returns_no_action(self):
+        """When disabled=1 is already set, Lua returns 0 (no duplicate action)."""
+        from database.webhook_health import record_dev_webhook_failure
+
+        mock_script = MagicMock(return_value=0)
+        with patch("database.webhook_health._get_dev_failure_script", return_value=mock_script):
+            result = record_dev_webhook_failure("uid-1", "memory_created", 500, "error")
+        assert result is False
+
+    def test_dev_success_clears_disabled_flag(self):
+        """record_dev_webhook_success must set disabled='0' to allow re-triggering."""
+        from database.webhook_health import record_dev_webhook_success
+
+        mock_r = MagicMock()
+        with patch("database.webhook_health.r", mock_r):
+            record_dev_webhook_success("uid-1", "audio_bytes")
+
+        mapping = mock_r.hset.call_args.kwargs.get('mapping') or mock_r.hset.call_args[1].get('mapping')
+        assert mapping['disabled'] == '0'
+        assert mapping['failure_count'] == '0'
+
+
+class TestMCPToolHealthTracking:
+    """Test MCP tool disabled gate and health tracking in create_app_tool."""
+
+    @pytest.fixture(autouse=True)
+    def _load_module(self):
+        self._app_tools = _load_app_tools_module()
+
+    @pytest.mark.asyncio
+    async def test_mcp_disabled_app_returns_early(self):
+        """MCP tool call should return early if app is auto-disabled."""
+        from models.app import ChatTool
+
+        tool = ChatTool(name="mcp_test", description="test MCP", endpoint="", is_mcp=True, transport="sse")
+        mod = self._app_tools
+        structured_tool = mod.create_app_tool(tool, "app-mcp-1", "TestMCPApp", mcp_server_url="https://mcp.example.com")
+        with patch.object(mod, "is_app_webhook_disabled", return_value=True):
+            result = await structured_tool.coroutine()
+        assert "temporarily disabled" in result
+
+    @pytest.mark.asyncio
+    async def test_mcp_circuit_breaker_open_returns_early(self):
+        """MCP tool call should return early if circuit breaker is open."""
+        from models.app import ChatTool
+
+        tool = ChatTool(name="mcp_test", description="test MCP", endpoint="", is_mcp=True, transport="sse")
+        mod = self._app_tools
+        structured_tool = mod.create_app_tool(tool, "app-mcp-1", "TestMCPApp", mcp_server_url="https://mcp.example.com")
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = False
+        with (
+            patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+        ):
+            result = await structured_tool.coroutine()
+        assert "temporarily unavailable" in result
+
+    @pytest.mark.asyncio
+    async def test_mcp_success_records_health(self):
+        """Successful MCP tool call should record success."""
+        from models.app import ChatTool
+
+        tool = ChatTool(name="mcp_test", description="test MCP", endpoint="", is_mcp=True, transport="sse")
+        mod = self._app_tools
+        structured_tool = mod.create_app_tool(tool, "app-mcp-1", "TestMCPApp", mcp_server_url="https://mcp.example.com")
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        with (
+            patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "call_mcp_tool", new_callable=AsyncMock, return_value="result ok"),
+            patch.object(mod, "record_app_webhook_success") as mock_success,
+        ):
+            result = await structured_tool.coroutine()
+        assert result == "result ok"
+        mock_success.assert_called_once_with("app-mcp-1")
+
+    @pytest.mark.asyncio
+    async def test_mcp_failure_records_health(self):
+        """Failed MCP tool call should record failure."""
+        from models.app import ChatTool
+
+        tool = ChatTool(name="mcp_test", description="test MCP", endpoint="", is_mcp=True, transport="sse")
+        mod = self._app_tools
+        structured_tool = mod.create_app_tool(tool, "app-mcp-1", "TestMCPApp", mcp_server_url="https://mcp.example.com")
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        with (
+            patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
+            patch.object(mod, "call_mcp_tool", new_callable=AsyncMock, return_value="Error: connection refused"),
+            patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
+        ):
+            result = await structured_tool.coroutine()
+        mock_fail.assert_called_once()
+        assert mock_fail.call_args[0][0] == "app-mcp-1"
+
+
+class TestLoadAppToolsSkipsDisabled:
+    """Test that load_app_tools skips disabled apps."""
+
+    def test_disabled_app_skipped(self):
+        """load_app_tools should skip apps with disabled=True."""
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, "get_enabled_apps", return_value=["app-disabled"]),
+            patch.object(_app_tools, "get_app_by_id_db", return_value={"id": "app-disabled", "disabled": True}),
+        ):
+            tools = _app_tools.load_app_tools("uid-1")
+        assert len(tools) == 0
+
+    def test_non_disabled_app_loaded(self):
+        """load_app_tools should load tools from non-disabled apps."""
+        _app_tools = _load_app_tools_module()
+
+        app_data = {
+            "id": "app-1",
+            "name": "Test App",
+            "author": "test-author",
+            "description": "A test app",
+            "image": "https://example.com/icon.png",
+            "capabilities": ["chat"],
+            "disabled": False,
+            "uid": "owner-1",
+            "category": "other",
+            "chat_tools": [
+                {"name": "test_tool", "description": "test", "endpoint": "https://example.com/tool", "method": "POST"}
+            ],
+            "external_integration": None,
+        }
+        with (
+            patch.object(_app_tools, "get_enabled_apps", return_value=["app-1"]),
+            patch.object(_app_tools, "get_app_by_id_db", return_value=app_data),
+        ):
+            tools = _app_tools.load_app_tools("uid-1")
+        assert len(tools) == 1
+
+
+class TestDevWebhookManualReEnable:
+    """Test that manual dev webhook re-enable clears health state."""
+
+    def test_success_on_enable_clears_state(self):
+        """record_dev_webhook_success called on manual enable should reset all fields."""
+        from database.webhook_health import record_dev_webhook_success
+
+        mock_r = MagicMock()
+        with patch("database.webhook_health.r", mock_r):
+            record_dev_webhook_success("uid-1", "realtime_transcript")
+
+        mapping = mock_r.hset.call_args.kwargs.get('mapping') or mock_r.hset.call_args[1].get('mapping')
+        assert mapping['failure_count'] == '0'
+        assert mapping['disabled'] == '0'
+        assert mapping['last_error'] == ''
+        mock_r.expire.assert_called_once()
