@@ -1653,7 +1653,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get finalTouches => 'Utolsó simítások';
 
   @override
-  String get processing => 'Feldolgozás...';
+  String get processing => 'Feldolgozás';
 
   @override
   String get features => 'Funkciók';
@@ -4742,10 +4742,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription és $triggerDescription.';
   }
 
@@ -9309,65 +9306,36 @@ class AppLocalizationsHu extends AppLocalizations {
   String get recapDeleteFailed => 'Nem sikerült törölni az összefoglalót. Próbáld újra később.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Mentve';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Biztonsági mentés…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Mentésre vár';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'A feldolgozás sikertelen — újrapróbálkozás';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Sikertelen — koppintson az Újra gombra';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'A fájl nem érhető el';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Még nincs felvétel';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Szinkronizálás folyamatban';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Feltöltve · feldolgozás az Omin';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Még feldolgozás alatt';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?';
 }

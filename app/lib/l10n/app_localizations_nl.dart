@@ -1646,7 +1646,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finalTouches => 'Laatste aanpassingen';
 
   @override
-  String get processing => 'Verwerken...';
+  String get processing => 'Verwerken';
 
   @override
   String get features => 'Functies';
@@ -4733,10 +4733,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription en is $triggerDescription.';
   }
 
@@ -9298,65 +9295,36 @@ class AppLocalizationsNl extends AppLocalizations {
   String get recapDeleteFailed => 'Kan de samenvatting niet verwijderen. Probeer het later opnieuw.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Geback-upt';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Back-up maken…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Wacht op back-up';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Verwerken mislukt — opnieuw proberen';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Mislukt — tik op Opnieuw';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Bestand niet beschikbaar';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Nog geen opnames';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Synchronisatie bezig';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Geüpload · wordt verwerkt op Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Nog bezig met verwerken';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?';
 }

@@ -1654,7 +1654,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get finalTouches => 'Τελικές πινελιές';
 
   @override
-  String get processing => 'Επεξεργασία...';
+  String get processing => 'Επεξεργασία';
 
   @override
   String get features => 'Χαρακτηριστικά';
@@ -4757,10 +4757,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription και είναι $triggerDescription.';
   }
 
@@ -9335,65 +9332,36 @@ class AppLocalizationsEl extends AppLocalizations {
   String get recapDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Δημιουργήθηκε αντίγραφο';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Δημιουργία αντιγράφου…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Αναμονή για αντίγραφο';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Αποτυχία επεξεργασίας — νέα προσπάθεια';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Απέτυχε — πατήστε Επανάληψη';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Το αρχείο δεν είναι διαθέσιμο';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Δεν υπάρχουν ακόμη ηχογραφήσεις';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Συγχρονισμός σε εξέλιξη';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Μεταφορτώθηκε · επεξεργασία στο Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Συνεχίζεται η επεξεργασία';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Αυτή η ηχογράφηση μεταφορτώθηκε, αλλά το Omi δημιουργεί ακόμη τη συνομιλία. Αν τη διαγράψετε τώρα και η επεξεργασία αποτύχει, δεν θα μπορεί να ανακτηθεί. Διαγραφή ούτως ή άλλως;';
 }

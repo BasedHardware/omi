@@ -1648,7 +1648,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finalTouches => 'Завершающие штрихи';
 
   @override
-  String get processing => 'Обработка...';
+  String get processing => 'Обработка';
 
   @override
   String get features => 'Возможности';
@@ -4731,10 +4731,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription и $triggerDescription.';
   }
 
@@ -9299,65 +9296,36 @@ class AppLocalizationsRu extends AppLocalizations {
   String get recapDeleteFailed => 'Не удалось удалить сводку. Повторите попытку позже.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Сохранено в облаке';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Резервное копирование…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Ожидает резервного копирования';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Не удалось обработать — повтор';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Ошибка — нажмите «Повторить»';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Файл недоступен';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Записей пока нет';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Идёт синхронизация';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Загружено · обработка в Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Ещё обрабатывается';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?';
 }

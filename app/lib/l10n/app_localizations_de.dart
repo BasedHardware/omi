@@ -1655,7 +1655,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get finalTouches => 'Letzte Schliffe';
 
   @override
-  String get processing => 'Verarbeitung...';
+  String get processing => 'Wird verarbeitet';
 
   @override
   String get features => 'Funktionen';
@@ -4757,10 +4757,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription und wird $triggerDescription.';
   }
 
@@ -9347,65 +9344,36 @@ class AppLocalizationsDe extends AppLocalizations {
   String get recapDeleteFailed => 'Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Gesichert';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Wird gesichert…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Wartet auf Sicherung';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Verarbeitung fehlgeschlagen — wird wiederholt';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Fehlgeschlagen — auf Wiederholen tippen';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Datei nicht verfügbar';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Noch keine Aufnahmen';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Synchronisierung läuft';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Hochgeladen · wird auf Omi verarbeitet';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Wird noch verarbeitet';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Diese Aufnahme wurde hochgeladen, aber Omi erstellt die Konversation noch. Wenn du sie jetzt löschst und die Verarbeitung fehlschlägt, kann sie nicht wiederhergestellt werden. Trotzdem löschen?';
 }

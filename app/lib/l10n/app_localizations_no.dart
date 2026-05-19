@@ -1642,7 +1642,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get finalTouches => 'Siste finpuss';
 
   @override
-  String get processing => 'Behandler...';
+  String get processing => 'Behandler';
 
   @override
   String get features => 'Funksjoner';
@@ -4721,10 +4721,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription og er $triggerDescription.';
   }
 
@@ -9266,65 +9263,36 @@ class AppLocalizationsNo extends AppLocalizations {
   String get recapDeleteFailed => 'Kunne ikke slette oppsummeringen. Prøv igjen senere.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Sikkerhetskopiert';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Sikkerhetskopierer…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Venter på sikkerhetskopiering';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Kunne ikke behandles — prøver igjen';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Mislyktes — trykk på Prøv igjen';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Filen er utilgjengelig';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Ingen opptak ennå';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Synkronisering pågår';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Lastet opp · behandles på Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Behandles fortsatt';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Dette opptaket er lastet opp, men Omi lager fortsatt samtalen. Hvis du sletter det nå og behandlingen mislykkes, kan det ikke gjenopprettes. Slette likevel?';
 }

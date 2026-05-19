@@ -1648,7 +1648,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get finalTouches => 'Sentuhan akhir';
 
   @override
-  String get processing => 'Memproses...';
+  String get processing => 'Memproses';
 
   @override
   String get features => 'Ciri-ciri';
@@ -4736,10 +4736,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription dan $triggerDescription.';
   }
 
@@ -9294,65 +9291,36 @@ class AppLocalizationsMs extends AppLocalizations {
   String get recapDeleteFailed => 'Tidak dapat memadam ringkasan. Cuba lagi kemudian.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Telah disandarkan';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Menyandarkan…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Menunggu sandaran';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Gagal diproses — mencuba semula';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Gagal — ketik Cuba Lagi';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Fail tidak tersedia';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Belum ada rakaman';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Penyegerakan sedang berjalan';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Dimuat naik · diproses di Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Masih diproses';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?';
 }

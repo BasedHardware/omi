@@ -1646,7 +1646,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get finalTouches => 'Záverečné úpravy';
 
   @override
-  String get processing => 'Spracováva sa...';
+  String get processing => 'Spracúva sa';
 
   @override
   String get features => 'Funkcie';
@@ -4716,10 +4716,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription a je $triggerDescription.';
   }
 
@@ -9258,65 +9255,36 @@ class AppLocalizationsSk extends AppLocalizations {
   String get recapDeleteFailed => 'Zhrnutie sa nepodarilo odstrániť. Skúste neskôr.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Zálohované';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Zálohovanie…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Čaká na zálohovanie';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Spracovanie zlyhalo — opakuje sa';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Zlyhalo — ťuknite na Skúsiť znova';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Súbor nie je dostupný';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Zatiaľ žiadne nahrávky';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Prebieha synchronizácia';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Nahraté · spracúva sa v Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Stále sa spracúva';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Táto nahrávka je nahraná, ale Omi ešte vytvára konverzáciu. Ak ju teraz odstránite a spracovanie zlyhá, nebude sa dať obnoviť. Napriek tomu odstrániť?';
 }

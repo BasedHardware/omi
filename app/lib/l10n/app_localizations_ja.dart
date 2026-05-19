@@ -1621,7 +1621,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finalTouches => '最終調整';
 
   @override
-  String get processing => '処理中...';
+  String get processing => '処理中';
 
   @override
   String get features => '機能';
@@ -4633,10 +4633,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription、$triggerDescription。';
   }
 
@@ -9120,65 +9117,35 @@ class AppLocalizationsJa extends AppLocalizations {
   String get recapDeleteFailed => 'リキャップを削除できませんでした。後でもう一度お試しください。';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'バックアップ済み';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'バックアップ中…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'バックアップ待ち';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => '処理できませんでした — 再試行中';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => '失敗 — 「再試行」をタップ';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'ファイルを利用できません';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'まだ録音がありません';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => '同期中';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'アップロード済み · Omi で処理中';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'まだ処理中です';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
 }

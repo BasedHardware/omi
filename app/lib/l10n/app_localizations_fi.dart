@@ -1641,7 +1641,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finalTouches => 'Viimeiset viimeistelyt';
 
   @override
-  String get processing => 'Käsitellään...';
+  String get processing => 'Käsitellään';
 
   @override
   String get features => 'Ominaisuudet';
@@ -4719,10 +4719,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ja on $triggerDescription.';
   }
 
@@ -9269,65 +9266,36 @@ class AppLocalizationsFi extends AppLocalizations {
   String get recapDeleteFailed => 'Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Varmuuskopioitu';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Varmuuskopioidaan…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Odottaa varmuuskopiointia';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Käsittely epäonnistui — yritetään uudelleen';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Epäonnistui — napauta Yritä uudelleen';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Tiedosto ei ole käytettävissä';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Ei vielä tallenteita';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Synkronointi käynnissä';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Ladattu · käsitellään Omissa';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Käsitellään yhä';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?';
 }

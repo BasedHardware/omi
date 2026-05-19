@@ -1643,7 +1643,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finalTouches => 'لمسات نهایی';
 
   @override
-  String get processing => 'در حال پردازش...';
+  String get processing => 'در حال پردازش';
 
   @override
   String get features => 'ویژگی‌ها';
@@ -4723,10 +4723,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription و $triggerDescription.';
   }
 
@@ -9273,65 +9270,36 @@ class AppLocalizationsFa extends AppLocalizations {
   String get recapDeleteFailed => 'حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'پشتیبان‌گیری شد';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'در حال پشتیبان‌گیری…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'در انتظار پشتیبان‌گیری';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'پردازش ناموفق — تلاش مجدد';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'ناموفق — روی تلاش مجدد بزنید';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'فایل در دسترس نیست';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'هنوز ضبطی وجود ندارد';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'همگام‌سازی در حال انجام است';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'بارگذاری شد · در حال پردازش در Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'هنوز در حال پردازش';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
 }

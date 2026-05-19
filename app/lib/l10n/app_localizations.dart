@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -3228,7 +3228,7 @@ abstract class AppLocalizations {
   /// No description provided for @processing.
   ///
   /// In en, this message translates to:
-  /// **'Processing...'**
+  /// **'Processing'**
   String get processing;
 
   /// No description provided for @features.
@@ -8977,10 +8977,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  );
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -17298,30 +17295,6 @@ abstract class AppLocalizations {
   /// **'Couldn\'t delete the recap. Try again later.'**
   String get recapDeleteFailed;
 
-  /// No description provided for @allRecordingsBackedUp.
-  ///
-  /// In en, this message translates to:
-  /// **'All recordings backed up'**
-  String get allRecordingsBackedUp;
-
-  /// Sync list header while uploads are in progress
-  ///
-  /// In en, this message translates to:
-  /// **'Backing up {count} recording{count, plural, =1{} other{s}}…'**
-  String backingUpRecordingsCount(int count);
-
-  /// Sync list header when recordings are queued
-  ///
-  /// In en, this message translates to:
-  /// **'{count} recording{count, plural, =1{} other{s}} waiting to back up'**
-  String recordingsWaitingCount(int count);
-
-  /// Sync list header when some recordings failed
-  ///
-  /// In en, this message translates to:
-  /// **'{count} recording{count, plural, =1{} other{s}} need attention'**
-  String recordingsNeedAttentionCount(int count);
-
   /// No description provided for @syncStatusBackedUp.
   ///
   /// In en, this message translates to:
@@ -17358,12 +17331,6 @@ abstract class AppLocalizations {
   /// **'File unavailable'**
   String get syncStatusFileUnavailable;
 
-  /// No description provided for @filterIssues.
-  ///
-  /// In en, this message translates to:
-  /// **'Issues'**
-  String get filterIssues;
-
   /// No description provided for @noRecordingsYet.
   ///
   /// In en, this message translates to:
@@ -17375,6 +17342,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync in progress'**
   String get syncInProgress;
+
+  /// No description provided for @syncStatusUploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploaded · processing on Omi'**
+  String get syncStatusUploaded;
+
+  /// No description provided for @deleteWhileProcessingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing'**
+  String get deleteWhileProcessingTitle;
+
+  /// No description provided for @deleteWhileProcessingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  String get deleteWhileProcessingMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17435,7 +17420,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh',
+        'zh'
       ].contains(locale.languageCode);
 
   @override
@@ -17545,10 +17530,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

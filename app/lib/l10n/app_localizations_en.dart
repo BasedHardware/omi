@@ -1639,7 +1639,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get finalTouches => 'Final touches';
 
   @override
-  String get processing => 'Processing...';
+  String get processing => 'Processing';
 
   @override
   String get features => 'Features';
@@ -4722,10 +4722,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription and is $triggerDescription.';
   }
 
@@ -9267,42 +9264,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recapDeleteFailed => 'Couldn\'t delete the recap. Try again later.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
-
-  @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
-
-  @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
-
-  @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
-
-  @override
   String get syncStatusBackedUp => 'Backed up';
 
   @override
@@ -9321,11 +9282,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncStatusFileUnavailable => 'File unavailable';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
   String get noRecordingsYet => 'No recordings yet';
 
   @override
   String get syncInProgress => 'Sync in progress';
+
+  @override
+  String get syncStatusUploaded => 'Uploaded · processing on Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Still processing';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
 }

@@ -1652,7 +1652,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get finalTouches => 'Tocs finals';
 
   @override
-  String get processing => 'Processant...';
+  String get processing => 'Processant';
 
   @override
   String get features => 'Funcionalitats';
@@ -4747,10 +4747,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription i és $triggerDescription.';
   }
 
@@ -9324,65 +9321,36 @@ class AppLocalizationsCa extends AppLocalizations {
   String get recapDeleteFailed => 'No s\'ha pogut esborrar el resum. Torna-ho a provar més tard.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Còpia feta';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Fent còpia…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Esperant la còpia';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'No s\'ha pogut processar — reintentant';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Ha fallat — toca Reintenta';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Fitxer no disponible';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Encara no hi ha enregistraments';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Sincronització en curs';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Pujat · processant-se a Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Encara s\'està processant';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Aquest enregistrament s\'ha pujat però Omi encara està creant la conversa. Si l\'elimines ara i el processament falla, no es podrà recuperar. Vols eliminar-lo igualment?';
 }

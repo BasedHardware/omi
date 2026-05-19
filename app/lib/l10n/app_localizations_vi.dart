@@ -1647,7 +1647,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get finalTouches => 'Hoàn thiện cuối cùng';
 
   @override
-  String get processing => 'Đang xử lý...';
+  String get processing => 'Đang xử lý';
 
   @override
   String get features => 'Tính năng';
@@ -4727,10 +4727,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription và $triggerDescription.';
   }
 
@@ -9270,65 +9267,36 @@ class AppLocalizationsVi extends AppLocalizations {
   String get recapDeleteFailed => 'Không thể xóa tóm tắt. Vui lòng thử lại sau.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Đã sao lưu';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Đang sao lưu…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Đang chờ sao lưu';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Không xử lý được — đang thử lại';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Thất bại — nhấn Thử lại';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Tệp không khả dụng';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Chưa có bản ghi nào';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Đang đồng bộ';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Đã tải lên · đang xử lý trên Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Vẫn đang xử lý';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Bản ghi này đã được tải lên nhưng Omi vẫn đang tạo cuộc trò chuyện. Nếu bạn xóa ngay bây giờ và quá trình xử lý thất bại, sẽ không thể khôi phục. Vẫn xóa?';
 }

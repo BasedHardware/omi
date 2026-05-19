@@ -1641,7 +1641,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finalTouches => 'Viimased lihvid';
 
   @override
-  String get processing => 'Töötlemine...';
+  String get processing => 'Töötlemine';
 
   @override
   String get features => 'Funktsioonid';
@@ -4718,10 +4718,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ja on $triggerDescription.';
   }
 
@@ -9267,65 +9264,36 @@ class AppLocalizationsEt extends AppLocalizations {
   String get recapDeleteFailed => 'Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Varundatud';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Varundamine…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Ootab varundamist';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Töötlemine ebaõnnestus — proovin uuesti';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Ebaõnnestus — puuduta Proovi uuesti';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Fail pole saadaval';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Salvestisi veel pole';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Sünkroonimine käib';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Üles laaditud · töödeldakse Omis';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Töötlemine veel käib';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?';
 }

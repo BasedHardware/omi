@@ -1640,7 +1640,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finalTouches => 'Paskutiniai patobulinimai';
 
   @override
-  String get processing => 'Apdorojama...';
+  String get processing => 'Apdorojama';
 
   @override
   String get features => 'Funkcijos';
@@ -4719,10 +4719,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ir yra $triggerDescription.';
   }
 
@@ -9279,65 +9276,36 @@ class AppLocalizationsLt extends AppLocalizations {
   String get recapDeleteFailed => 'Nepavyko ištrinti suvestinės. Bandykite vėliau.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Sukurta atsarginė kopija';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Kuriama atsarginė kopija…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Laukiama kopijavimo';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Nepavyko apdoroti — bandoma dar kartą';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Nepavyko — palieskite Bandyti dar kartą';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Failas nepasiekiamas';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Įrašų dar nėra';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Vyksta sinchronizavimas';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Įkelta · apdorojama Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Vis dar apdorojama';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Šis įrašas įkeltas, bet Omi vis dar kuria pokalbį. Jei ištrinsite dabar ir apdorojimas nepavyks, jo nebus galima atkurti. Vis tiek ištrinti?';
 }

@@ -1651,7 +1651,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finalTouches => 'Retușuri finale';
 
   @override
-  String get processing => 'Se procesează...';
+  String get processing => 'Se procesează';
 
   @override
   String get features => 'Funcționalități';
@@ -4743,10 +4743,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription și este $triggerDescription.';
   }
 
@@ -9313,65 +9310,36 @@ class AppLocalizationsRo extends AppLocalizations {
   String get recapDeleteFailed => 'Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Copiat de rezervă';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Se face copia de rezervă…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Așteaptă copierea de rezervă';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Procesarea a eșuat — se reîncearcă';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'A eșuat — atinge Reîncearcă';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Fișierul nu este disponibil';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Încă nu există înregistrări';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Sincronizare în curs';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Încărcat · se procesează pe Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Încă se procesează';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?';
 }

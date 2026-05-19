@@ -1642,7 +1642,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get finalTouches => 'Končni dotiki';
 
   @override
-  String get processing => 'Obdelava...';
+  String get processing => 'Obdelava';
 
   @override
   String get features => 'Lastnosti';
@@ -4727,10 +4727,7 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription in je $triggerDescription.';
   }
 
@@ -9294,65 +9291,36 @@ class AppLocalizationsSl extends AppLocalizations {
   String get recapDeleteFailed => 'Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Varnostno kopirano';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Ustvarjanje kopije…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Čaka na varnostno kopiranje';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Obdelava ni uspela — vnovični poskus';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Ni uspelo — tapnite Poskusi znova';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Datoteka ni na voljo';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Še ni posnetkov';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Sinhronizacija poteka';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Naloženo · obdelava v Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Še poteka obdelava';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Ta posnetek je naložen, vendar Omi še ustvarja pogovor. Če ga zdaj izbrišete in obdelava ne uspe, ga ne bo mogoče obnoviti. Vseeno izbrišem?';
 }

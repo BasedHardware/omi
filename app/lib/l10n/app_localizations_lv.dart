@@ -1645,7 +1645,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get finalTouches => 'Pēdējie pieskārieni';
 
   @override
-  String get processing => 'Apstrādā...';
+  String get processing => 'Apstrāde';
 
   @override
   String get features => 'Funkcijas';
@@ -4727,10 +4727,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription un ir $triggerDescription.';
   }
 
@@ -9288,65 +9285,36 @@ class AppLocalizationsLv extends AppLocalizations {
   String get recapDeleteFailed => 'Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Dublēts';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Notiek dublēšana…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Gaida dublēšanu';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Neizdevās apstrādāt — mēģina vēlreiz';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Neizdevās — pieskarieties Mēģināt vēlreiz';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Fails nav pieejams';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Vēl nav ierakstu';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Notiek sinhronizācija';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Augšupielādēts · tiek apstrādāts Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Vēl tiek apstrādāts';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
 }

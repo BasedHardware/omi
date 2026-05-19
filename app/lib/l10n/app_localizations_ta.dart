@@ -1651,7 +1651,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finalTouches => 'চূড়ান்த தொடர்பு';
 
   @override
-  String get processing => 'செயல்பாட்டு மாற்றம்...';
+  String get processing => 'செயலாக்கப்படுகிறது';
 
   @override
   String get features => 'பண்புகள்';
@@ -4752,10 +4752,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription மற்றும் $triggerDescription।';
   }
 
@@ -9339,65 +9336,36 @@ class AppLocalizationsTa extends AppLocalizations {
   String get recapDeleteFailed => 'சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'காப்புப் பிரதி எடுக்கப்பட்டது';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'காப்புப் பிரதி எடுக்கப்படுகிறது…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'காப்புப் பிரதிக்காகக் காத்திருக்கிறது';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'தோல்வி — Retry-ஐ அழுத்தவும்';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'கோப்பு கிடைக்கவில்லை';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'இன்னும் பதிவுகள் இல்லை';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'ஒத்திசைவு நடைபெறுகிறது';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'இன்னும் செயலாக்கப்படுகிறது';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?';
 }

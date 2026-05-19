@@ -1644,7 +1644,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get finalTouches => 'Sista finishen';
 
   @override
-  String get processing => 'Bearbetar...';
+  String get processing => 'Bearbetar';
 
   @override
   String get features => 'Funktioner';
@@ -4721,10 +4721,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription och är $triggerDescription.';
   }
 
@@ -9274,65 +9271,36 @@ class AppLocalizationsSv extends AppLocalizations {
   String get recapDeleteFailed => 'Det gick inte att radera sammanfattningen. Försök igen senare.';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => 'Säkerhetskopierad';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => 'Säkerhetskopierar…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => 'Väntar på säkerhetskopiering';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => 'Kunde inte bearbetas — försöker igen';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => 'Misslyckades — tryck på Försök igen';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => 'Filen är inte tillgänglig';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => 'Inga inspelningar än';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => 'Synkronisering pågår';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => 'Uppladdad · bearbetas på Omi';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => 'Bearbetas fortfarande';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage =>
+      'Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?';
 }

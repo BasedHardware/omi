@@ -1619,7 +1619,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finalTouches => '最后修饰';
 
   @override
-  String get processing => '处理中...';
+  String get processing => '处理中';
 
   @override
   String get features => '功能';
@@ -4626,10 +4626,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -9106,65 +9103,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recapDeleteFailed => '无法删除回顾。请稍后重试。';
 
   @override
-  String get allRecordingsBackedUp => 'All recordings backed up';
+  String get syncStatusBackedUp => '已备份';
 
   @override
-  String backingUpRecordingsCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return 'Backing up $count recording$_temp0…';
-  }
+  String get syncStatusBackingUp => '正在备份…';
 
   @override
-  String recordingsWaitingCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 waiting to back up';
-  }
+  String get syncStatusWaiting => '等待备份';
 
   @override
-  String recordingsNeedAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
-    return '$count recording$_temp0 need attention';
-  }
+  String get syncStatusRetrying => '无法处理 — 正在重试';
 
   @override
-  String get syncStatusBackedUp => 'Backed up';
+  String get syncStatusFailed => '失败 — 点按“重试”';
 
   @override
-  String get syncStatusBackingUp => 'Backing up…';
+  String get syncStatusFileUnavailable => '文件不可用';
 
   @override
-  String get syncStatusWaiting => 'Waiting to back up';
+  String get noRecordingsYet => '暂无录音';
 
   @override
-  String get syncStatusRetrying => 'Couldn’t process — retrying';
+  String get syncInProgress => '正在同步';
 
   @override
-  String get syncStatusFailed => 'Failed — tap Retry';
+  String get syncStatusUploaded => '已上传 · 正在 Omi 上处理';
 
   @override
-  String get syncStatusFileUnavailable => 'File unavailable';
+  String get deleteWhileProcessingTitle => '仍在处理';
 
   @override
-  String get filterIssues => 'Issues';
-
-  @override
-  String get noRecordingsYet => 'No recordings yet';
-
-  @override
-  String get syncInProgress => 'Sync in progress';
+  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
 }
