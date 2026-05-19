@@ -17,8 +17,10 @@ import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -172,6 +174,30 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
+  // The capturing page only renders transcript/photos that are already
+  // streaming in — it does not start the mic itself. So opening it without
+  // first kicking off phone-mic recording leaves the user stuck on the
+  // "waiting for transcript or photos" placeholder forever. Mirror the
+  // proven start path (battery_info_widget._startRecording).
+  Future<void> _startPhoneRecording(BuildContext context) async {
+    // No haptic here — the option() wrapper already fires lightImpact() on tap;
+    // a mediumImpact() on top of it double-vibrates on a single tap.
+    final captureProvider = context.read<CaptureProvider>();
+    if (captureProvider.recordingState == RecordingState.initialising) return;
+    if (captureProvider.recordingState != RecordingState.record) {
+      await captureProvider.streamRecording();
+      PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    }
+    if (!context.mounted) return;
+    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+        ? captureProvider.conversationProvider!.conversations.first.id
+        : null;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+    );
+  }
+
   Widget _buildGetStartedOptions(BuildContext context) {
     Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
       return GestureDetector(
@@ -221,9 +247,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final phoneOption = option(
       icon: Icons.mic_rounded,
       label: 'Record with Phone',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ConversationCapturingPage()));
-      },
+      onTap: () => _startPhoneRecording(context),
     );
     final callOption = option(
       icon: Icons.phone_in_talk_rounded,
@@ -337,14 +361,24 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final hasMap = summary.locations.isNotEmpty;
 
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
-        Navigator.push(
+        // Detail page pops with ``{deleted: true, summaryId}`` when the user
+        // deletes from there — drop the card so the home recap row doesn't
+        // linger until the next pull-to-refresh.
+        final result = await Navigator.push<dynamic>(
           context,
           MaterialPageRoute(
             builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
           ),
         );
+        if (!mounted) return;
+        if (result is Map && result['deleted'] == true) {
+          final deletedId = result['summaryId'] as String?;
+          if (deletedId != null) {
+            setState(() => _recentSummaries.removeWhere((s) => s.id == deletedId));
+          }
+        }
       },
       child: Container(
         width: _cardWidth,

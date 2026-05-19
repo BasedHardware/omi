@@ -39,6 +39,33 @@ Future<List<ServerConversation>> getConversations({
   String? folderId,
   bool? starred,
 }) async {
+  final result = await getConversationsResult(
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
+  return result.items;
+}
+
+// Same as [getConversations] but reports whether the request actually
+// succeeded. An empty `items` with `ok == false` means the fetch failed
+// (no response / non-200, e.g. auth token not ready right after a cold
+// start) — which callers must NOT treat as "the user has no conversations".
+Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) async {
   String url =
       '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
 
@@ -57,18 +84,17 @@ Future<List<ServerConversation>> getConversations({
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: <ServerConversation>[], ok: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return memories;
-  } else {
-    Logger.debug('getConversations error ${response.statusCode}');
+    return (items: memories, ok: true);
   }
-  return [];
+  Logger.debug('getConversations error ${response.statusCode}');
+  return (items: <ServerConversation>[], ok: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {

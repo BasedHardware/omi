@@ -339,6 +339,20 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
         upstream_model: "claude-sonnet-4-6",
         provider: Provider::Anthropic,
     },
+    // Haiku 4.5 — used by the AgentPill router classifier and ModelQoS
+    // synthesis paths. Without these entries every call 400s and the
+    // floating-bar router silently falls back to chat, so agent pills never
+    // spawn from natural-language prompts.
+    ModelRoute {
+        public_model: "claude-haiku-4-5-20251001",
+        upstream_model: "claude-haiku-4-5",
+        provider: Provider::Anthropic,
+    },
+    ModelRoute {
+        public_model: "claude-haiku-4-5",
+        upstream_model: "claude-haiku-4-5",
+        provider: Provider::Anthropic,
+    },
 ];
 
 pub fn resolve_model(model: &str) -> Option<&'static ModelRoute> {

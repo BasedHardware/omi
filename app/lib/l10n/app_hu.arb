@@ -2184,6 +2184,8 @@
     "selectOption": "Kiválasztás",
     "lowBatteryAlertTitle": "Alacsony akkumulátor figyelmeztetés",
     "lowBatteryAlertBody": "Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋",
+    "batteryFullyChargedTitle": "Az Omi teljesen feltöltődött",
+    "batteryFullyChargedBody": "Az Omi eszköz teljesen feltöltődött. Leválaszthatod!",
     "deviceDisconnectedNotificationTitle": "Az Omi eszköz lecsatlakozott",
     "deviceDisconnectedNotificationBody": "Kérjük, csatlakozzon újra az Omi használatának folytatásához.",
     "firmwareUpdateAvailable": "Firmware frissítés elérhető",
@@ -3113,5 +3115,11 @@
     "startCallRecording": "Hívásfelvétel indítása",
     "startVoiceRecording": "Hangfelvétel indítása",
     "bulkExportAlreadyExported": "Az összes kiválasztott feladat már exportálva van",
-    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra."
+    "bulkDeleteFailed": "A feladatokat nem sikerült törölni. Kérjük, próbáld újra.",
+    "deleteRecap": "Összefoglaló törlése",
+    "deleteRecapConfirmTitle": "Törlöd ezt az összefoglalót?",
+    "deleteRecapConfirmBody": "Az összefoglaló véglegesen eltávolításra kerül. Az adott nap eredeti beszélgetései érintetlenek maradnak.",
+    "deleteRecapAction": "Törlés",
+    "recapDeletedSnackbar": "Összefoglaló törölve",
+    "recapDeleteFailed": "Nem sikerült törölni az összefoglalót. Próbáld újra később."
 }

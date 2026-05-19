@@ -2184,6 +2184,8 @@
     "selectOption": "Seleziona",
     "lowBatteryAlertTitle": "Avviso batteria scarica",
     "lowBatteryAlertBody": "La batteria del dispositivo è scarica. È ora di ricaricare! 🔋",
+    "batteryFullyChargedTitle": "Omi è completamente carico",
+    "batteryFullyChargedBody": "Il tuo dispositivo Omi è completamente carico. Puoi scollegarlo!",
     "deviceDisconnectedNotificationTitle": "Il tuo dispositivo Omi si è disconnesso",
     "deviceDisconnectedNotificationBody": "Riconnettiti per continuare a usare Omi.",
     "firmwareUpdateAvailable": "Aggiornamento firmware disponibile",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Avvia registrazione chiamata",
     "startVoiceRecording": "Avvia registrazione vocale",
     "bulkExportAlreadyExported": "Tutte le attività selezionate sono già state esportate",
-    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova."
+    "bulkDeleteFailed": "Impossibile eliminare le attività. Riprova.",
+    "deleteRecap": "Elimina riepilogo",
+    "deleteRecapConfirmTitle": "Eliminare questo riepilogo?",
+    "deleteRecapConfirmBody": "Questo riepilogo verrà rimosso in modo permanente. Le conversazioni originali di quel giorno non verranno modificate.",
+    "deleteRecapAction": "Elimina",
+    "recapDeletedSnackbar": "Riepilogo eliminato",
+    "recapDeleteFailed": "Impossibile eliminare il riepilogo. Riprova più tardi."
 }

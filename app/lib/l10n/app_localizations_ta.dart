@@ -6888,6 +6888,12 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi முழுமையாக சார்ஜ் ஆகியது';
+
+  @override
+  String get batteryFullyChargedBody => 'உங்கள் Omi சாதனம் முழுமையாக சார்ஜ் ஆகியது. அனப்ளக் செய்யலாம்!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'உங்கள் Omi சாதனம் துண்டிக்கப்பட்டது';
 
   @override
@@ -9309,4 +9315,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get deleteRecap => 'சுருக்கத்தை நீக்கு';
+
+  @override
+  String get deleteRecapConfirmTitle => 'இந்தச் சுருக்கத்தை நீக்கவா?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'இந்தச் சுருக்கம் நிரந்தரமாக அகற்றப்படும். அந்த நாளின் அசல் உரையாடல்கள் பாதிக்கப்படவில்லை.';
+
+  @override
+  String get deleteRecapAction => 'நீக்கு';
+
+  @override
+  String get recapDeletedSnackbar => 'சுருக்கம் நீக்கப்பட்டது';
+
+  @override
+  String get recapDeleteFailed => 'சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
 }

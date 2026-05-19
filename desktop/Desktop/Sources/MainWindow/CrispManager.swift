@@ -146,7 +146,8 @@ class CrispManager: ObservableObject {
                     NotificationService.shared.sendNotification(
                         title: "Help from Founder",
                         message: preview,
-                        assistantId: "crisp"
+                        assistantId: "crisp",
+                        respectFrequency: false
                     )
                 }
 

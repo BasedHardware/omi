@@ -6719,6 +6719,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omiは満充電です';
+
+  @override
+  String get batteryFullyChargedBody => 'Omiデバイスが満充電になりました。充電ケーブルを外してください！';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Omiデバイスが切断されました';
 
   @override
@@ -9091,4 +9097,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get deleteRecap => 'リキャップを削除';
+
+  @override
+  String get deleteRecapConfirmTitle => 'このリキャップを削除しますか?';
+
+  @override
+  String get deleteRecapConfirmBody => 'このリキャップは完全に削除されます。その日の元の会話には影響しません。';
+
+  @override
+  String get deleteRecapAction => '削除';
+
+  @override
+  String get recapDeletedSnackbar => 'リキャップを削除しました';
+
+  @override
+  String get recapDeleteFailed => 'リキャップを削除できませんでした。後でもう一度お試しください。';
 }

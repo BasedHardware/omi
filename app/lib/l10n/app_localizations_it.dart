@@ -6880,6 +6880,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get lowBatteryAlertBody => 'La batteria del dispositivo è scarica. È ora di ricaricare! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi è completamente carico';
+
+  @override
+  String get batteryFullyChargedBody => 'Il tuo dispositivo Omi è completamente carico. Puoi scollegarlo!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Il tuo dispositivo Omi si è disconnesso';
 
   @override
@@ -9295,4 +9301,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Impossibile eliminare le attività. Riprova.';
+
+  @override
+  String get deleteRecap => 'Elimina riepilogo';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Eliminare questo riepilogo?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Questo riepilogo verrà rimosso in modo permanente. Le conversazioni originali di quel giorno non verranno modificate.';
+
+  @override
+  String get deleteRecapAction => 'Elimina';
+
+  @override
+  String get recapDeletedSnackbar => 'Riepilogo eliminato';
+
+  @override
+  String get recapDeleteFailed => 'Impossibile eliminare il riepilogo. Riprova più tardi.';
 }

@@ -6852,6 +6852,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get lowBatteryAlertBody => 'Vaša naprava ima nizko baterijo. Čas je za polnjenje! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi je popolnoma napolnjen';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaša naprava Omi je popolnoma napolnjena. Lahko jo odklopite!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Vaša Naprava Omi je Odklopljena';
 
   @override
@@ -9264,4 +9270,23 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nalog ni bilo mogoče izbrisati. Poskusite znova.';
+
+  @override
+  String get deleteRecap => 'Izbriši povzetek';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Izbrišem ta povzetek?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ta povzetek bo trajno odstranjen. Izvirni pogovori tega dne ostanejo nespremenjeni.';
+
+  @override
+  String get deleteRecapAction => 'Izbriši';
+
+  @override
+  String get recapDeletedSnackbar => 'Povzetek izbrisan';
+
+  @override
+  String get recapDeleteFailed => 'Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje.';
 }

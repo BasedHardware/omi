@@ -65,6 +65,7 @@ from models.users import (
     PlanType,
     PricingOption,
     PhoneCallQuota,
+    TrialMetadata,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -75,11 +76,14 @@ from utils.subscription import (
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
+    is_trial_paywalled,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     legacy_plan_features,
+    clear_trial_paywall_cache,
+    get_trial_metadata,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -800,6 +804,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             )
     users_db.set_byok_active(uid, data.fingerprints)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": True}
 
 
@@ -808,6 +813,7 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": False}
 
 
@@ -1012,7 +1018,7 @@ def get_user_subscription_endpoint(
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
 
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot = get_chat_quota_snapshot(uid)
+    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1040,7 +1046,10 @@ def get_user_subscription_endpoint(
 
 
 @router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
-def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_chat_usage_quota(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """Current-month chat usage for the user, plus their plan's cap.
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
@@ -1060,7 +1069,7 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid)
+    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:
@@ -1078,6 +1087,46 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
     )
+
+
+class PaywallStatusResponse(BaseModel):
+    paywalled: bool
+
+
+@router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
+def get_user_paywall_status(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    platform: Optional[str] = Query(None),
+):
+    """Trial-paywall status for the calling user on the given platform.
+
+    Used by the Rust desktop-backend middleware to decide whether to proxy
+    paid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of
+    `is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth
+    account >3d old + platform in {macos, desktop}. Mobile platforms always
+    return `paywalled=false`.
+
+    Platform comes from `X-App-Platform` header (preferred) or `platform`
+    query param (fallback). Unknown / missing platforms are never paywalled.
+    """
+    resolved_platform = x_app_platform or platform
+    return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
+
+
+@router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
+def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Structured trial metadata for the calling user.
+
+    Returns trial timing info (start, end, remaining seconds, expired flag)
+    plus the list of features available during trial and the plan the user
+    falls to after trial expiry. Used by desktop clients to render countdown
+    banners and pre-expiry upgrade nudges.
+
+    Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
+    (trial is irrelevant to them — they have full access).
+    """
+    return get_trial_metadata(uid)
 
 
 # **************************************
@@ -1431,7 +1480,7 @@ def _json_default(obj):
 
 
 @router.get('/v1/users/export', tags=['v1'])
-async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
 
     def generate():

@@ -5,7 +5,7 @@ import logging
 import json
 from concurrent.futures import as_completed
 
-from utils.executors import critical_executor, storage_executor
+from utils.executors import db_executor, storage_executor
 
 logger = logging.getLogger(__name__)
 

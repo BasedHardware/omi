@@ -2184,6 +2184,8 @@
     "selectOption": "Selectează",
     "lowBatteryAlertTitle": "Alertă baterie descărcată",
     "lowBatteryAlertBody": "Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋",
+    "batteryFullyChargedTitle": "Omi este complet încărcat",
+    "batteryFullyChargedBody": "Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!",
     "deviceDisconnectedNotificationTitle": "Dispozitivul Omi a fost deconectat",
     "deviceDisconnectedNotificationBody": "Vă rugăm să vă reconectați pentru a continua să utilizați Omi.",
     "firmwareUpdateAvailable": "Actualizare firmware disponibilă",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Porniți înregistrarea apelului",
     "startVoiceRecording": "Porniți înregistrarea vocală",
     "bulkExportAlreadyExported": "Toate sarcinile selectate sunt deja exportate",
-    "bulkDeleteFailed": "Nu am putut șterge sarcinile. Vă rugăm să încercați din nou."
+    "bulkDeleteFailed": "Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.",
+    "deleteRecap": "Șterge rezumatul",
+    "deleteRecapConfirmTitle": "Ștergi acest rezumat?",
+    "deleteRecapConfirmBody": "Acest rezumat va fi eliminat definitiv. Conversațiile originale din ziua respectivă nu sunt afectate.",
+    "deleteRecapAction": "Șterge",
+    "recapDeletedSnackbar": "Rezumat șters",
+    "recapDeleteFailed": "Rezumatul nu a putut fi șters. Încearcă din nou mai târziu."
 }

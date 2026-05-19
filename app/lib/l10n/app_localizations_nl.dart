@@ -6860,6 +6860,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get lowBatteryAlertBody => 'De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi is volledig opgeladen';
+
+  @override
+  String get batteryFullyChargedBody => 'Uw Omi-apparaat is volledig opgeladen. U kunt het loskoppelen!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Uw Omi-apparaat is losgekoppeld';
 
   @override
@@ -9268,4 +9274,23 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Taken konden niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get deleteRecap => 'Samenvatting verwijderen';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Deze samenvatting verwijderen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Deze samenvatting wordt permanent verwijderd. De oorspronkelijke gesprekken van die dag blijven behouden.';
+
+  @override
+  String get deleteRecapAction => 'Verwijderen';
+
+  @override
+  String get recapDeletedSnackbar => 'Samenvatting verwijderd';
+
+  @override
+  String get recapDeleteFailed => 'Kan de samenvatting niet verwijderen. Probeer het later opnieuw.';
 }

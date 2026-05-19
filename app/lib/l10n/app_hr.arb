@@ -8398,6 +8398,8 @@
         "description": "Title for low battery notification"
     },
     "lowBatteryAlertBody": "Vaš uređaj ima nisku bateriju. Vrijeme je za puniranje! 🔋",
+    "batteryFullyChargedTitle": "Omi je potpuno napunjen",
+    "batteryFullyChargedBody": "Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!",
     "@lowBatteryAlertBody": {
         "description": "Body text for low battery notification"
     },
@@ -10725,5 +10727,11 @@
     "startCallRecording": "Pokreni snimanje poziva",
     "startVoiceRecording": "Pokreni glasovno snimanje",
     "bulkExportAlreadyExported": "Svi odabrani zadaci već su izvezeni",
-    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno."
+    "bulkDeleteFailed": "Zadatke nije bilo moguće izbrisati. Pokušajte ponovno.",
+    "deleteRecap": "Izbriši pregled",
+    "deleteRecapConfirmTitle": "Izbrisati ovaj pregled?",
+    "deleteRecapConfirmBody": "Ovaj pregled bit će trajno uklonjen. Izvorni razgovori toga dana nisu pogođeni.",
+    "deleteRecapAction": "Izbriši",
+    "recapDeletedSnackbar": "Pregled izbrisan",
+    "recapDeleteFailed": "Pregled nije moguće izbrisati. Pokušajte ponovno kasnije."
 }

@@ -2184,6 +2184,8 @@
     "selectOption": "Επιλογή",
     "lowBatteryAlertTitle": "Ειδοποίηση χαμηλής μπαταρίας",
     "lowBatteryAlertBody": "Η μπαταρία της συσκευής σας είναι χαμηλή. Ώρα για επαναφόρτιση! 🔋",
+    "batteryFullyChargedTitle": "Το Omi έχει φορτιστεί πλήρως",
+    "batteryFullyChargedBody": "Η συσκευή Omi σου είναι πλήρως φορτισμένη. Μπορείς να την αποσυνδέσεις!",
     "deviceDisconnectedNotificationTitle": "Η συσκευή Omi σας αποσυνδέθηκε",
     "deviceDisconnectedNotificationBody": "Παρακαλώ επανασυνδεθείτε για να συνεχίσετε να χρησιμοποιείτε το Omi.",
     "firmwareUpdateAvailable": "Διαθέσιμη ενημέρωση υλικολογισμικού",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "Έναρξη εγγραφής κλήσης",
     "startVoiceRecording": "Έναρξη ηχογράφησης",
     "bulkExportAlreadyExported": "Όλες οι επιλεγμένες εργασίες έχουν ήδη εξαχθεί",
-    "bulkDeleteFailed": "Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά."
+    "bulkDeleteFailed": "Δεν ήταν δυνατή η διαγραφή των εργασιών. Δοκιμάστε ξανά.",
+    "deleteRecap": "Διαγραφή σύνοψης",
+    "deleteRecapConfirmTitle": "Διαγραφή αυτής της σύνοψης;",
+    "deleteRecapConfirmBody": "Αυτή η σύνοψη θα διαγραφεί οριστικά. Οι αρχικές συνομιλίες της ημέρας δεν επηρεάζονται.",
+    "deleteRecapAction": "Διαγραφή",
+    "recapDeletedSnackbar": "Η σύνοψη διαγράφηκε",
+    "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα."
 }

@@ -17,9 +17,9 @@ import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppsByCategory } from '@/src/lib/api/apps';
 
 interface CategoryPageProps {
-  params: {
+  params: Promise<{
     category: string;
-  };
+  }>;
 }
 
 async function getCategoryData(category: string) {
@@ -38,7 +38,8 @@ async function getCategoryData(category: string) {
   return { categoryPlugins, stats };
 }
 
-export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata(props: CategoryPageProps): Promise<Metadata> {
+  const params = await props.params;
   const { category } = params;
   const { categoryPlugins } = await getCategoryData(category);
   const metadata = getCategoryMetadata(category);
@@ -100,7 +101,8 @@ function getNewOrRecentApps(plugins: Plugin[]): Plugin[] {
   }
 }
 
-export default async function CategoryPage({ params }: CategoryPageProps) {
+export default async function CategoryPage(props: CategoryPageProps) {
+  const params = await props.params;
   const { categoryPlugins, stats } = await getCategoryData(params.category);
   const newOrRecentApps = getNewOrRecentApps(categoryPlugins);
   const mostPopular =

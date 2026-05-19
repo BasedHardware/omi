@@ -24,7 +24,7 @@ function getAppStoreLink(userAgent: string): string {
 }
 
 export default async function WrappedPage() {
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const isMobile = isMobileDevice(userAgent);
   const appStoreLink = getAppStoreLink(userAgent);
 

@@ -1,4 +1,3 @@
-import asyncio
 import io
 import re
 import wave
@@ -9,6 +8,7 @@ import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -255,18 +255,18 @@ async def extract_speaker_samples(
     try:
         # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
-        person = users_db.get_person(uid, person_id)
+        person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
         if person:
             person = await maybe_migrate_person_samples(uid, person)
 
         # Check sample count after migration
-        sample_count = users_db.get_person_speech_samples_count(uid, person_id)
+        sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
         if sample_count >= 1:
             logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
             return
 
         # Fetch conversation to get started_at and segment details
-        conversation = conversations_db.get_conversation(uid, conversation_id)
+        conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
@@ -386,7 +386,8 @@ async def extract_speaker_samples(
                 continue
 
             # Download, merge, and extract
-            merged = await asyncio.to_thread(
+            merged = await run_blocking(
+                storage_executor,
                 download_audio_chunks_and_merge,
                 uid,
                 conversation_id,
@@ -424,11 +425,13 @@ async def extract_speaker_samples(
                 continue  # Try next segment
 
             # Upload and store
-            path = await asyncio.to_thread(
-                upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
+            path = await run_blocking(
+                storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
+            success = await run_blocking(
+                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
+            )
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
@@ -438,10 +441,12 @@ async def extract_speaker_samples(
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
                 try:
-                    embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "sample.wav")
+                    embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
-                    users_db.set_person_speaker_embedding(uid, person_id, embedding_list)
+                    await run_blocking(
+                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
+                    )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )

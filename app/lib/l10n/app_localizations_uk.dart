@@ -6849,6 +6849,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get lowBatteryAlertBody => 'Батарея вашого пристрою розряджена. Час зарядити! 🔋';
 
   @override
+  String get batteryFullyChargedTitle => 'Omi повністю заряджений';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваш пристрій Omi повністю заряджений. Можна відключити від зарядки!';
+
+  @override
   String get deviceDisconnectedNotificationTitle => 'Ваш пристрій Omi відключено';
 
   @override
@@ -9254,4 +9260,23 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не вдалося видалити завдання. Спробуйте ще раз.';
+
+  @override
+  String get deleteRecap => 'Видалити підсумок';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Видалити цей підсумок?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Цей підсумок буде видалено назавжди. Оригінальні розмови того дня не зазнають змін.';
+
+  @override
+  String get deleteRecapAction => 'Видалити';
+
+  @override
+  String get recapDeletedSnackbar => 'Підсумок видалено';
+
+  @override
+  String get recapDeleteFailed => 'Не вдалося видалити підсумок. Спробуйте пізніше.';
 }

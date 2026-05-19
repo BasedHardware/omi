@@ -2144,6 +2144,8 @@
     "selectOption": "Vybrat",
     "lowBatteryAlertTitle": "Upozornění na vybitou baterii",
     "lowBatteryAlertBody": "Baterie vašeho zařízení je vybitá. Je čas ji dobít! 🔋",
+    "batteryFullyChargedTitle": "Omi je plně nabitý",
+    "batteryFullyChargedBody": "Vaše zařízení Omi je plně nabité. Můžete jej odpojit!",
     "deviceDisconnectedNotificationTitle": "Vaše zařízení Omi bylo odpojeno",
     "deviceDisconnectedNotificationBody": "Prosím, znovu se připojte, abyste mohli pokračovat v používání Omi.",
     "firmwareUpdateAvailable": "K dispozici je aktualizace firmwaru",
@@ -2986,5 +2988,11 @@
     "startCallRecording": "Zahájit nahrávání hovoru",
     "startVoiceRecording": "Zahájit hlasový záznam",
     "bulkExportAlreadyExported": "Všechny vybrané úkoly už byly exportovány",
-    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu."
+    "bulkDeleteFailed": "Úkoly se nepodařilo smazat. Zkuste to prosím znovu.",
+    "deleteRecap": "Smazat shrnutí",
+    "deleteRecapConfirmTitle": "Smazat toto shrnutí?",
+    "deleteRecapConfirmBody": "Shrnutí bude trvale odstraněno. Původní konverzace z toho dne nebudou ovlivněny.",
+    "deleteRecapAction": "Smazat",
+    "recapDeletedSnackbar": "Shrnutí smazáno",
+    "recapDeleteFailed": "Shrnutí se nepodařilo smazat. Zkuste to znovu později."
 }

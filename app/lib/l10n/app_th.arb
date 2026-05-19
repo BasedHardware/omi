@@ -2184,6 +2184,8 @@
     "selectOption": "เลือก",
     "lowBatteryAlertTitle": "การแจ้งเตือนแบตเตอรี่ต่ำ",
     "lowBatteryAlertBody": "แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋",
+    "batteryFullyChargedTitle": "Omi ชาร์จเต็มแล้ว",
+    "batteryFullyChargedBody": "อุปกรณ์ Omi ของคุณชาร์จเต็มแล้ว รู้สึกอิสระที่จะถอดปลั๊กได้!",
     "deviceDisconnectedNotificationTitle": "อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ",
     "deviceDisconnectedNotificationBody": "กรุณาเชื่อมต่อใหม่เพื่อใช้งาน Omi ต่อไป",
     "firmwareUpdateAvailable": "มีการอัปเดตเฟิร์มแวร์",
@@ -3017,5 +3019,11 @@
     "startCallRecording": "เริ่มบันทึกการโทร",
     "startVoiceRecording": "เริ่มบันทึกเสียง",
     "bulkExportAlreadyExported": "งานที่เลือกทั้งหมดถูกส่งออกแล้ว",
-    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง"
+    "bulkDeleteFailed": "ลบงานไม่สำเร็จ โปรดลองอีกครั้ง",
+    "deleteRecap": "ลบสรุป",
+    "deleteRecapConfirmTitle": "ลบสรุปนี้หรือไม่?",
+    "deleteRecapConfirmBody": "สรุปนี้จะถูกลบอย่างถาวร บทสนทนาต้นฉบับของวันนั้นจะไม่ได้รับผลกระทบ",
+    "deleteRecapAction": "ลบ",
+    "recapDeletedSnackbar": "ลบสรุปแล้ว",
+    "recapDeleteFailed": "ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง"
 }
