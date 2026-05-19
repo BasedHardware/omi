@@ -14,7 +14,7 @@ from utils.http_client import (
     latest_wins_check,
 )
 from utils.executors import db_executor, run_blocking
-from utils.async_tasks import gather_with_logging
+from utils.async_tasks import gather_safe
 
 import database.notifications as notification_db
 from database import mem_db
@@ -181,9 +181,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             logger.error(f"Plugin integration error: {e}")
             return
 
-    await gather_with_logging(
-        *[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10
-    )
+    await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
 
     messages = []
     for key, message in results.items():
@@ -540,7 +538,7 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
     chunk_size = 8
     for i in range(0, len(filtered_apps), chunk_size):
         chunk = filtered_apps[i : i + chunk_size]
-        await gather_with_logging(*[_single(app) for app in chunk], label="realtime_audio_bytes", max_concurrency=8)
+        await gather_safe(*[_single(app) for app in chunk], label="realtime_audio_bytes", max_concurrency=8)
         if not latest_wins_check(uid, version):
             break
     return {}
@@ -640,9 +638,7 @@ async def _async_trigger_realtime_integrations(
             logger.error(f"App integration error: {e}")
             return
 
-    await gather_with_logging(
-        *[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10
-    )
+    await gather_safe(*[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10)
 
     # Merge mentor results with app results
     all_results = {**mentor_results, **results}
