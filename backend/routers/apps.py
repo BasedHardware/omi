@@ -52,7 +52,7 @@ from database.apps import (
     set_app_popular_db,
     search_apps_db,
 )
-from database.webhook_health import record_app_webhook_success
+from database.webhook_health import clear_app_webhook_health
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -753,7 +753,11 @@ def update_app(
 
     if update_dict.get('disabled') is False and app.get('disabled'):
         validate_app_endpoints_for_reenable(app, update_dict, app_id)
-        record_app_webhook_success(app_id)
+        clear_app_webhook_health(app_id)
+        update_dict.setdefault('disabled_reason', '')
+        update_dict.setdefault('disabled_error', '')
+        update_dict.setdefault('disabled_at', '')
+        update_dict.setdefault('disabled_failure_duration_hours', 0)
 
     update_app_in_db(update_dict)
 
