@@ -221,3 +221,7 @@ app/macos/Runner/LocalDev.entitlements
 # Generated browser snapshots (contain PII)
 builds-snapshot.md
 *-snapshot.md
+
+# Cursor / agent local artifacts
+.cursor/plans/
+desktop/Desktop/.build-*/
