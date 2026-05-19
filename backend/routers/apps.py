@@ -1744,6 +1744,11 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if app.disabled:
+        raise HTTPException(
+            status_code=400,
+            detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
+        )
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
