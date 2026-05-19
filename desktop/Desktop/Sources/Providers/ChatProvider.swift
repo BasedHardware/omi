@@ -2460,10 +2460,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             usageLimiter.recordQuery()
         }
 
-        // Ensure bridge is running
-        guard await ensureBridgeStarted() else {
-            errorMessage = "AI not available"
-            return
+        let localDaemon = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+        let mayUseHybridDirectChat = localDaemon && HybridChatClient.isEnabled()
+
+        // Ensure Claude / ACP bridge when not using hybrid direct chat. Hybrid path may
+        // skip the bridge until multimodal attachments require ACP.
+        if !mayUseHybridDirectChat {
+            guard await ensureBridgeStarted() else {
+                errorMessage = "AI not available"
+                return
+            }
         }
 
         // Show upgrade prompt if over threshold but don't block the message
@@ -2602,8 +2608,16 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         var toolStartTimes: [String: Date] = [:]
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
+        var hybridResolvedModel: String?
 
         do {
+            if mayUseHybridDirectChat {
+                await preparePromptContextIfNeeded()
+                if !isOnboarding {
+                    cachedMainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+                }
+            }
+
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
             // Passing it here ensures it is applied if the session was invalidated
@@ -2645,109 +2659,161 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 }
             }
 
-            // Query the active bridge with streaming
-            // Callbacks for agent bridge
-            let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
-                Task { @MainActor [weak self] in
-                    self?.appendToMessage(id: aiMessageId, text: delta)
-                }
-            }
-            let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
-                let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                let result = await ChatToolExecutor.execute(toolCall)
-                log("OMI tool \(name) executed for callId=\(callId)")
-                // Track SQL query stats for metadata
-                if name == "execute_sql" {
-                    sqlQueryCount += 1
-                    // Parse row count from result (format: "\nN row(s)" at end)
-                    if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
-                        let numStr = result[match].components(separatedBy: " ").first ?? "0"
-                        sqlRowsReturned += Int(numStr) ?? 0
+            let useHybridNow =
+                mayUseHybridDirectChat && effectiveImageData == nil
+                && !attachmentsForMessage.contains(where: { $0.isImage })
+
+            let queryResult: AgentBridge.QueryResult
+
+            if useHybridNow {
+                let historyPairs: [(role: String, text: String)] =
+                    messages
+                    .dropLast(2)
+                    .filter { !$0.isStreaming && !$0.text.isEmpty }
+                    .map { msg in
+                        (
+                            role: msg.sender == .user ? "user" : "assistant",
+                            text: msg.text
+                        )
+                    }
+                let hybrid = try await HybridChatClient.completeFromDaemonSettings(
+                    systemPrompt: systemPrompt,
+                    conversationMessages: historyPairs,
+                    userMessage: trimmedText
+                )
+                hybridResolvedModel = hybrid.model
+                let normalized = normalizeAssistantSentenceSpacing(hybrid.text)
+                queryResult = AgentBridge.QueryResult(
+                    text: normalized,
+                    costUsd: 0,
+                    sessionId: "",
+                    inputTokens: hybrid.inputTokens,
+                    outputTokens: hybrid.outputTokens,
+                    cacheReadTokens: 0,
+                    cacheWriteTokens: 0
+                )
+            } else {
+                if mayUseHybridDirectChat && !useHybridNow {
+                    guard await ensureBridgeStarted() else {
+                        throw BridgeError.notRunning
                     }
                 }
-                return result
-            }
-            let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
-                Task { @MainActor [weak self] in
-                    self?.addToolActivity(
-                        messageId: aiMessageId,
-                        toolName: name,
-                        status: status == "started" ? .running : .completed,
-                        toolUseId: toolUseId,
-                        input: input
-                    )
-                    if status == "started" {
-                        toolNames.append(name)
-                        toolStartTimes[name] = Date()
-                        if (name.contains("browser") || name.contains("playwright")) {
-                            let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-                            if token.isEmpty {
-                                log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
-                                self?.needsBrowserExtensionSetup = true
-                                self?.stopAgent()
-                                // Keep floating-bar sessions non-intrusive: do not foreground
-                                // the main window when the query originated from the floating bar.
-                                if sessionKey != "floating" {
-                                    // Bring the app to the foreground so the setup sheet is visible
-                                    // (the failed browser attempt may have opened Chrome, stealing focus)
-                                    NSApp.activate()
-                                    for window in NSApp.windows where window.title.hasPrefix("Omi") {
-                                        window.makeKeyAndOrderFront(nil)
+
+                // Query the active bridge with streaming
+                // Callbacks for agent bridge
+                let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                    Task { @MainActor [weak self] in
+                        self?.appendToMessage(id: aiMessageId, text: delta)
+                    }
+                }
+                let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
+                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                    let result = await ChatToolExecutor.execute(toolCall)
+                    log("OMI tool \(name) executed for callId=\(callId)")
+                    // Track SQL query stats for metadata
+                    if name == "execute_sql" {
+                        sqlQueryCount += 1
+                        // Parse row count from result (format: "\nN row(s)" at end)
+                        if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+                            let numStr = result[match].components(separatedBy: " ").first ?? "0"
+                            sqlRowsReturned += Int(numStr) ?? 0
+                        }
+                    }
+                    return result
+                }
+                let toolActivityHandler: AgentBridge.ToolActivityHandler = {
+                    [weak self] name, status, toolUseId, input in
+                    Task { @MainActor [weak self] in
+                        self?.addToolActivity(
+                            messageId: aiMessageId,
+                            toolName: name,
+                            status: status == "started" ? .running : .completed,
+                            toolUseId: toolUseId,
+                            input: input
+                        )
+                        if status == "started" {
+                            toolNames.append(name)
+                            toolStartTimes[name] = Date()
+                            if (name.contains("browser") || name.contains("playwright")) {
+                                let token =
+                                    UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                                if token.isEmpty {
+                                    log(
+                                        "ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup"
+                                    )
+                                    self?.needsBrowserExtensionSetup = true
+                                    self?.stopAgent()
+                                    // Keep floating-bar sessions non-intrusive: do not foreground
+                                    // the main window when the query originated from the floating bar.
+                                    if sessionKey != "floating" {
+                                        // Bring the app to the foreground so the setup sheet is visible
+                                        // (the failed browser attempt may have opened Chrome, stealing focus)
+                                        NSApp.activate()
+                                        for window in NSApp.windows where window.title.hasPrefix("Omi") {
+                                            window.makeKeyAndOrderFront(nil)
+                                        }
                                     }
                                 }
+                                // Show the floating bar so the user has an always-on-top UI
+                                // when Chrome takes focus (important on small screens)
+                                if !FloatingControlBarManager.shared.isVisible {
+                                    log(
+                                        "ChatProvider: Browser tool active — showing floating bar so it stays above Chrome"
+                                    )
+                                    FloatingControlBarManager.shared.showTemporarily()
+                                }
                             }
-                            // Show the floating bar so the user has an always-on-top UI
-                            // when Chrome takes focus (important on small screens)
-                            if !FloatingControlBarManager.shared.isVisible {
-                                log("ChatProvider: Browser tool active — showing floating bar so it stays above Chrome")
-                                FloatingControlBarManager.shared.showTemporarily()
-                            }
+                        } else if status == "completed",
+                            let startTime = toolStartTimes.removeValue(forKey: name)
+                        {
+                            let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                            AnalyticsManager.shared.chatToolCallCompleted(
+                                toolName: name, durationMs: durationMs)
                         }
-                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                     }
                 }
-            }
-            let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
-                Task { @MainActor [weak self] in
-                    self?.appendThinking(messageId: aiMessageId, text: text)
+                let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
+                    Task { @MainActor [weak self] in
+                        self?.appendThinking(messageId: aiMessageId, text: text)
+                    }
                 }
-            }
-            let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
-                Task { @MainActor [weak self] in
-                    self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = {
+                    [weak self] toolUseId, name, output in
+                    Task { @MainActor [weak self] in
+                        self?.addToolResult(
+                            messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    }
                 }
-            }
 
-            let queryResult = try await agentBridge.query(
-                prompt: trimmedText,
-                systemPrompt: systemPrompt,
-                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
-                cwd: workingDirectory,
-                mode: chatMode.rawValue,
-                model: model ?? modelOverride,
-                resume: resume,
-                imageData: effectiveImageData,
-                onTextDelta: textDeltaHandler,
-                onToolCall: toolCallHandler,
-                onToolActivity: toolActivityHandler,
-                onThinkingDelta: thinkingDeltaHandler,
-                onToolResultDisplay: toolResultDisplayHandler,
-                onAuthRequired: { [weak self] methods, authUrl in
-                    Task { @MainActor [weak self] in
-                        self?.claudeAuthMethods = methods
-                        self?.claudeAuthUrl = authUrl
-                        self?.isClaudeAuthRequired = true
+                queryResult = try await agentBridge.query(
+                    prompt: trimmedText,
+                    systemPrompt: systemPrompt,
+                    sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
+                    cwd: workingDirectory,
+                    mode: chatMode.rawValue,
+                    model: model ?? modelOverride,
+                    resume: resume,
+                    imageData: effectiveImageData,
+                    onTextDelta: textDeltaHandler,
+                    onToolCall: toolCallHandler,
+                    onToolActivity: toolActivityHandler,
+                    onThinkingDelta: thinkingDeltaHandler,
+                    onToolResultDisplay: toolResultDisplayHandler,
+                    onAuthRequired: { [weak self] methods, authUrl in
+                        Task { @MainActor [weak self] in
+                            self?.claudeAuthMethods = methods
+                            self?.claudeAuthUrl = authUrl
+                            self?.isClaudeAuthRequired = true
+                        }
+                    },
+                    onAuthSuccess: { [weak self] in
+                        Task { @MainActor [weak self] in
+                            self?.isClaudeAuthRequired = false
+                            self?.checkClaudeConnectionStatus()
+                        }
                     }
-                },
-                onAuthSuccess: { [weak self] in
-                    Task { @MainActor [weak self] in
-                        self?.isClaudeAuthRequired = false
-                        self?.checkClaudeConnectionStatus()
-                    }
-                }
-            )
+                )
+            }
 
             // Flush any remaining buffered streaming text before finalizing
             streamingFlushWorkItem?.cancel()
@@ -2762,7 +2828,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 messages[index].metadata = MessageMetadata(
-                    model: model ?? modelOverride,
+                    model: hybridResolvedModel ?? model ?? modelOverride,
                     inputTokens: queryResult.inputTokens,
                     outputTokens: queryResult.outputTokens,
                     cacheReadTokens: queryResult.cacheReadTokens,

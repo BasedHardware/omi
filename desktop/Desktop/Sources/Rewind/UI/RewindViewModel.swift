@@ -226,7 +226,7 @@ class RewindViewModel: ObservableObject {
 
         searchTask = Task {
             do {
-                // Run FTS and vector search in parallel
+                // Keyword search uses local GRDB FTS only (screenshots_fts); hybrid daemon does not route this.
                 async let ftsResults = RewindDatabase.shared.search(
                     query: trimmedQuery,
                     appFilter: selectedApp,

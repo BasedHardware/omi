@@ -24,6 +24,9 @@ Options (via environment variables):
   OMI_DESKTOP_BACKEND_MODE=local  Route MVP data flows to the local daemon
   OMI_LOCAL_DAEMON_SUPERVISE=1    In local mode, start desktop/local-backend if /health is unreachable
   OMI_LOCAL_DAEMON_URL="..."      Local daemon URL (default: http://127.0.0.1:8765)
+  OMI_HYBRID_DIRECT_STT_ENABLED   Hybrid Apple Speech live transcription in local daemon (default 1 in configure_local_daemon_mode when unset)
+  OMI_HYBRID_DIRECT_CHAT_ENABLED   Hybrid OpenAI-compatible chat + daemon-backed sessions/messages (default 1 in configure_local_daemon_mode when unset)
+  OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED  Hybrid direct embeddings for Rewind/proactive features (default 1 in local bundle; requires embedding_provider)
 
 Required files for cloud backend mode:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -188,6 +191,18 @@ PY
         export OMI_LOCAL_BACKEND_PORT
     fi
     export OMI_LOCAL_BACKEND_HOST="${OMI_LOCAL_BACKEND_HOST:-127.0.0.1}"
+    # Default hybrid on-device STT for local daemon dev (Apple Speech). Set OMI_HYBRID_DIRECT_STT_ENABLED=0 to disable.
+    if [ -z "${OMI_HYBRID_DIRECT_STT_ENABLED+x}" ]; then
+        export OMI_HYBRID_DIRECT_STT_ENABLED=1
+    fi
+    # Hybrid direct chat capability for GUI launches (requires chat_provider in daemon settings).
+    if [ -z "${OMI_HYBRID_DIRECT_CHAT_ENABLED+x}" ]; then
+        export OMI_HYBRID_DIRECT_CHAT_ENABLED=1
+    fi
+    # Optional direct embeddings for Rewind OCR vectors etc.: requires embedding_provider in daemon settings.
+    if [ -z "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED+x}" ]; then
+        export OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1
+    fi
 }
 
 local_daemon_health_ok() {
@@ -425,6 +440,14 @@ if is_local_daemon_mode; then
         echo "  OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_SUPERVISE=1 ./run.sh"
         exit 1
     fi
+
+    if local_daemon_health_ok; then
+        SEED_SCRIPT="$(cd "$(dirname "$0")/local-backend/tools" && pwd)/seed_hybrid_defaults.sh"
+        if [ -x "$SEED_SCRIPT" ]; then
+            substep "Seeding hybrid provider defaults (if unset)"
+            "$SEED_SCRIPT" || substep "Warning: hybrid provider seed failed (non-fatal)"
+        fi
+    fi
 fi
 
 # ─── Start Rust backend ───────────────────────────────────────────────
@@ -485,6 +508,13 @@ fi
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
     bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"
+fi
+
+if ! pkg-config --exists libwebp 2>/dev/null; then
+    echo "ERROR: libwebp headers not found (required by CWebP for screen capture)."
+    echo "  brew install webp"
+    echo "  Then re-run ./run.sh"
+    exit 1
 fi
 
 step "Building Swift app (swift build -c debug)..."
@@ -619,8 +649,15 @@ substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
 if is_local_daemon_mode; then
     set_bundle_env "OMI_DESKTOP_BACKEND_MODE" "local"
     set_bundle_env "OMI_LOCAL_DAEMON_URL" "$OMI_LOCAL_DAEMON_URL"
+    # GUI launches via `open` do not inherit shell exports — AppState.loadEnvironment() reads bundled .env.
+    set_bundle_env "OMI_HYBRID_DIRECT_STT_ENABLED" "${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"
+    set_bundle_env "OMI_HYBRID_DIRECT_CHAT_ENABLED" "${OMI_HYBRID_DIRECT_CHAT_ENABLED:-1}"
+    set_bundle_env "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED" "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-1}"
     substep "OMI_DESKTOP_BACKEND_MODE=local"
     substep "OMI_LOCAL_DAEMON_URL=$OMI_LOCAL_DAEMON_URL"
+    substep "OMI_HYBRID_DIRECT_STT_ENABLED=${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"
+    substep "OMI_HYBRID_DIRECT_CHAT_ENABLED=${OMI_HYBRID_DIRECT_CHAT_ENABLED:-1}"
+    substep "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-1}"
 fi
 # Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
 if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then

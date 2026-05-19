@@ -37,6 +37,27 @@ actor OCREmbeddingService {
 
     private init() {}
 
+    /// Hybrid local daemon: skip OCR embedding API work when direct embeddings are off or `embedding_provider` is missing.
+    private func hybridDaemonOCREmbeddingUnavailable() async -> Bool {
+        guard DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon else {
+            return false
+        }
+        if !HybridEmbeddingClient.isEnabled() {
+            return true
+        }
+        let settings = (try? await APIClient.shared.getSelectedBackendSettings()) ?? []
+        return HybridEmbeddingClient.loadProviderConfig(from: settings) == nil
+    }
+
+    private enum HybridOCREmbedLog {
+        nonisolated(unsafe) static var didLogSkip = false
+        static func logSkipOnce(_ message: @autoclosure () -> String) {
+            guard !didLogSkip else { return }
+            didLogSkip = true
+            log(message())
+        }
+    }
+
     // MARK: - Text Formatting
 
     /// Format screenshot text for embedding: prepend app context for better retrieval
@@ -98,6 +119,14 @@ actor OCREmbeddingService {
         flushTask = nil
 
         guard !pendingItems.isEmpty else { return }
+
+        if await hybridDaemonOCREmbeddingUnavailable() {
+            HybridOCREmbedLog.logSkipOnce(
+                "OCREmbeddingService: Skipping OCR embedding work in hybrid mode until OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED is on and embedding_provider is configured."
+            )
+            startFlushTimerIfNeeded()
+            return
+        }
 
         // Take the current batch and clear the buffer
         let batch = pendingItems
@@ -164,6 +193,13 @@ actor OCREmbeddingService {
     /// Capped at 5000 items per launch to prevent cost spikes.
     func backfillIfNeeded() async {
         do {
+            if await hybridDaemonOCREmbeddingUnavailable() {
+                HybridOCREmbedLog.logSkipOnce(
+                    "OCREmbeddingService: Skipping OCR embedding work in hybrid mode until OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED is on and embedding_provider is configured."
+                )
+                return
+            }
+
             let status = try await RewindDatabase.shared.getScreenshotEmbeddingBackfillStatus()
             if status.completed {
                 log("OCREmbeddingService: Backfill already complete, skipping")
@@ -242,6 +278,10 @@ actor OCREmbeddingService {
     ) async throws -> [(screenshotId: Int64, similarity: Float)] {
         // Flush any pending embeddings before searching so recent screenshots are findable
         await flushPendingEmbeddings()
+
+        if await hybridDaemonOCREmbeddingUnavailable() {
+            return []
+        }
 
         // Embed the query with RETRIEVAL_QUERY task type for asymmetric search
         let queryEmbedding = try await EmbeddingService.shared.embed(text: query, taskType: "RETRIEVAL_QUERY")

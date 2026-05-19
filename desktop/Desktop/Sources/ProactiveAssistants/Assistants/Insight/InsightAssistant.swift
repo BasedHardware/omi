@@ -496,8 +496,7 @@ actor InsightAssistant: ProactiveAssistant {
     /// Two-phase insight extraction:
     /// Phase 1 (text-only): Activity summary + SQL investigation loop. Model investigates via
     ///   execute_sql, then calls `request_screenshot` with an ID and its findings so far.
-    /// Phase 2 (single vision call): Load the chosen screenshot + Phase 1 findings → single
-    ///   Gemini call with image → provide_advice or no_advice.
+    /// Phase 2: screenshot pixels when vision_provider is configured in hybrid (otherwise OCR-only text).
     /// Returns (result, sqlQueryCount).
     private func runAdviceExtraction(
         jpegData: Data?,
@@ -508,6 +507,11 @@ actor InsightAssistant: ProactiveAssistant {
         trackSqlCount: Bool
     ) async throws -> (InsightExtractionResult?, Int) {
         var sqlCount = 0
+
+        let hybridLocalDaemon = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+        let daemonSettings = (try? await APIClient.shared.getSelectedBackendSettings()) ?? []
+        let insightUsesScreenshotImage =
+            !hybridLocalDaemon || HybridVisionProvider.isConfigured(settings: daemonSettings)
 
         // Build prompt with current context
         let timeFormatter = DateFormatter()
@@ -672,62 +676,128 @@ actor InsightAssistant: ProactiveAssistant {
         }
 
         // =============================================
-        // PHASE 2: Single vision call with chosen screenshot
+        // PHASE 2: Vision (cloud / hybrid + vision_provider) or OCR-only (hybrid without vision_provider)
         // =============================================
 
-        log("Insight: Phase 2 — loading screenshot \(screenshotId)")
+        let phase2Tools = buildPhase2Tools()
+        let phase2InitialContents: [GeminiImageToolRequest.Content]
 
-        // Load the screenshot image
-        let imageData: Data
-        do {
-            guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
-                log("Insight: P2 screenshot not in DB: \(screenshotId)")
+        if insightUsesScreenshotImage {
+            log("Insight: Phase 2 — loading screenshot \(screenshotId)")
+
+            let imageData: Data
+            do {
+                guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
+                    log("Insight: P2 screenshot not in DB: \(screenshotId)")
+                    return (nil, sqlCount)
+                }
+                if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath {
+                    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+                    if chunk == activeChunk {
+                        log("Insight: P2 screenshot is in active chunk, skipping")
+                        return (nil, sqlCount)
+                    }
+                }
+                let rawData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+                imageData = Self.compressForGemini(rawData) ?? rawData
+                log("Insight: P2 loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
+            } catch {
+                log("Insight: P2 screenshot load failed: \(error.localizedDescription)")
                 return (nil, sqlCount)
             }
-            // Check active chunk
+
+            let phase2Prompt = """
+                INVESTIGATION FINDINGS:
+                \(findings)
+
+                The screenshot below is from the app/window identified during investigation.
+
+                Before giving insight, CROSS-REFERENCE your findings:
+                - Use execute_sql to check if this issue was resolved in later screenshots
+                - Check if the user moved on to something else (the issue may be stale)
+                - Verify the context is still relevant by looking at nearby timestamps
+
+                Then call provide_advice if the insight is still valid, or no_advice if it was resolved or is no longer relevant.
+                """
+
+            let base64 = imageData.base64EncodedString()
+            phase2InitialContents = [
+                GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [
+                        GeminiImageToolRequest.Part(text: phase2Prompt),
+                        GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64),
+                    ]
+                ),
+            ]
+        } else {
+            log("Insight: Phase 2 (hybrid OCR-only) — screenshot \(screenshotId)")
+
+            guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
+                log("Insight: P2 OCR path: screenshot not in DB: \(screenshotId)")
+                return (nil, sqlCount)
+            }
             if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath {
                 let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
                 if chunk == activeChunk {
-                    log("Insight: P2 screenshot is in active chunk, skipping")
+                    log("Insight: P2 OCR path: screenshot is in active chunk, skipping")
                     return (nil, sqlCount)
                 }
             }
-            let rawData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
-            imageData = Self.compressForGemini(rawData) ?? rawData
-            log("Insight: P2 loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
-        } catch {
-            log("Insight: P2 screenshot load failed: \(error.localizedDescription)")
-            return (nil, sqlCount)
+
+            let ocrBody = screenshot.ocrText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !ocrBody.isEmpty else {
+                log("Insight: P2 OCR path: no OCR text for screenshot \(screenshotId)")
+                return (nil, sqlCount)
+            }
+
+            let phase2Prompt = """
+                INVESTIGATION FINDINGS:
+                \(findings)
+
+                Hybrid local mode without vision_provider: no screenshot image is available. Use only the OCR text below plus execute_sql cross-checks.
+
+                Screenshot id \(screenshotId), app: \(screenshot.appName), window: \(screenshot.windowTitle ?? "(none)").
+
+                OCR TEXT:
+                \(ocrBody)
+
+                Before giving insight, CROSS-REFERENCE your findings:
+                - Use execute_sql to check if this issue was resolved in later screenshots
+                - Check if the user moved on to something else (the issue may be stale)
+                - Verify the context is still relevant by looking at nearby timestamps
+
+                Then call provide_advice if the insight is still valid, or no_advice if it was resolved or is no longer relevant.
+                """
+
+            phase2InitialContents = [
+                GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(text: phase2Prompt)]
+                ),
+            ]
         }
 
-        // Build Phase 2 prompt — compact findings + image + cross-reference instruction
-        let phase2Prompt = """
-            INVESTIGATION FINDINGS:
-            \(findings)
+        return try await runInsightPhase2ToolLoop(
+            client: client,
+            phase2Contents: phase2InitialContents,
+            currentSystemPrompt: currentSystemPrompt,
+            phase2Tools: phase2Tools,
+            sqlCount: sqlCount
+        )
+    }
 
-            The screenshot below is from the app/window identified during investigation.
+    /// Phase 2 tool loop shared by vision (image + tools) and hybrid OCR-only paths.
+    private func runInsightPhase2ToolLoop(
+        client: GeminiClient,
+        phase2Contents initialContents: [GeminiImageToolRequest.Content],
+        currentSystemPrompt: String,
+        phase2Tools: GeminiTool,
+        sqlCount initialSqlCount: Int
+    ) async throws -> (InsightExtractionResult?, Int) {
+        var phase2Contents = initialContents
+        var sqlCount = initialSqlCount
 
-            Before giving insight, CROSS-REFERENCE your findings:
-            - Use execute_sql to check if this issue was resolved in later screenshots
-            - Check if the user moved on to something else (the issue may be stale)
-            - Verify the context is still relevant by looking at nearby timestamps
-
-            Then call provide_advice if the insight is still valid, or no_advice if it was resolved or is no longer relevant.
-            """
-
-        let phase2Tools = buildPhase2Tools()
-        let base64 = imageData.base64EncodedString()
-        var phase2Contents: [GeminiImageToolRequest.Content] = [
-            GeminiImageToolRequest.Content(
-                role: "user",
-                parts: [
-                    GeminiImageToolRequest.Part(text: phase2Prompt),
-                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64),
-                ]
-            )
-        ]
-
-        // Phase 2 loop — model can cross-reference via SQL before deciding
         for p2Iteration in 0..<5 {
             let p2Contents = phase2Contents
             let p2SystemPrompt = currentSystemPrompt
@@ -799,7 +869,7 @@ actor InsightAssistant: ProactiveAssistant {
                 log("Insight: P2 unexpected tool: \(toolCall.name)")
                 break
             }
-            break // Break on unexpected tool
+            break
         }
         return (nil, sqlCount)
     }

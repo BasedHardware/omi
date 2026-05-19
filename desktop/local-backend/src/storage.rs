@@ -229,6 +229,78 @@ const MIGRATIONS: &[Migration] = &[
         CREATE INDEX idx_conversations_starred ON conversations(starred, updated_at);
     "#,
     },
+    Migration {
+        version: 3,
+        name: "conversation_folders",
+        sql: r#"
+        CREATE TABLE folders (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            description TEXT,
+            color TEXT NOT NULL DEFAULT '#6B7280',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            deleted_at TEXT
+        );
+
+        CREATE INDEX idx_folders_updated ON folders(updated_at);
+
+        ALTER TABLE conversations ADD COLUMN folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL;
+        CREATE INDEX idx_conversations_folder_id ON conversations(folder_id);
+    "#,
+    },
+    Migration {
+        version: 4,
+        name: "folder_metadata_columns",
+        sql: r#"
+        ALTER TABLE folders ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE folders ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE folders ADD COLUMN category_mapping TEXT;
+    "#,
+    },
+    Migration {
+        version: 5,
+        name: "hybrid_chat_sessions",
+        sql: r#"
+        CREATE TABLE chat_sessions (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL DEFAULT 'New Chat',
+            preview TEXT,
+            app_id TEXT,
+            starred INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_chat_sessions_updated ON chat_sessions(updated_at DESC);
+
+        CREATE TABLE chat_messages (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+            text TEXT NOT NULL DEFAULT '',
+            sender TEXT NOT NULL DEFAULT 'human',
+            app_id TEXT,
+            metadata TEXT,
+            created_at TEXT NOT NULL,
+            rating INTEGER,
+            reported INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX idx_chat_messages_session_created ON chat_messages(session_id, created_at);
+
+        INSERT INTO chat_sessions (id, title, preview, app_id, starred, created_at, updated_at)
+        VALUES (
+            '00000000-0000-4000-8000-000000000001',
+            'Default Chat',
+            NULL,
+            NULL,
+            0,
+            '2020-01-01T00:00:00Z',
+            '2020-01-01T00:00:00Z'
+        );
+    "#,
+    },
 ];
 
 #[derive(Clone)]
@@ -259,6 +331,50 @@ pub struct Conversation {
     pub sync_state: String,
     pub metadata_json: String,
     pub starred: bool,
+    pub folder_id: Option<String>,
+}
+
+/// Serialized folder shape consumed by desktop clients (Swift `Folder`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConversationFolder {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub color: String,
+    #[serde(rename = "created_at")]
+    pub created_at: DateTime<Utc>,
+    #[serde(rename = "updated_at")]
+    pub updated_at: DateTime<Utc>,
+    #[serde(rename = "order")]
+    pub sort_order: i64,
+    #[serde(rename = "is_default")]
+    pub is_default: bool,
+    #[serde(rename = "is_system")]
+    pub is_system: bool,
+    #[serde(
+        rename = "category_mapping",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub category_mapping: Option<String>,
+    #[serde(rename = "conversation_count")]
+    pub conversation_count: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewFolder {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UpdateFolder {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub color: Option<String>,
+    pub sort_order: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -451,6 +567,443 @@ impl Store {
             conn: Arc::clone(&self.conn),
         }
     }
+
+    pub fn folders(&self) -> FolderRepository {
+        FolderRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    pub fn chat_sessions(&self) -> ChatSessionsRepository {
+        ChatSessionsRepository {
+            conn: Arc::clone(&self.conn),
+        }
+    }
+
+    /// Merge [`source_ids.len()`] ≥ 2 conversations into one new conversation.
+    pub fn merge_conversations(&self, source_ids: &[String], _reprocess: bool) -> Result<Conversation> {
+        if source_ids.len() < 2 {
+            anyhow::bail!("at least two conversation_ids required");
+        }
+        let mut sorted: Vec<String> = source_ids.to_vec();
+        sorted.sort();
+        let merge_key = sorted.join("|");
+        let new_id = deterministic_id("merge", &[&merge_key]);
+
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let tx = conn
+            .unchecked_transaction()
+            .context("failed to start merge transaction")?;
+
+        let mut conversations: Vec<Conversation> = Vec::new();
+        for id in &sorted {
+            let row = tx
+                .query_row(
+                    r#"
+                    SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
+                           updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred,
+                           folder_id
+                    FROM conversations
+                    WHERE id = ?1 AND deleted_at IS NULL
+                    "#,
+                    params![id],
+                    map_conversation,
+                )
+                .optional()
+                .context("merge: load conversation")?;
+            let c = row.ok_or_else(|| anyhow::anyhow!("conversation not found: {id}"))?;
+            conversations.push(c);
+        }
+
+        conversations.sort_by_key(|c| c.started_at);
+        let primary = &conversations[0];
+        let title = format!("{} (merged)", primary.title);
+
+        let new_row = Conversation {
+            id: new_id.clone(),
+            session_id: primary.session_id.clone(),
+            title,
+            overview: primary.overview.clone(),
+            status: "open".to_string(),
+            started_at: primary.started_at,
+            ended_at: None,
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+            cloud_id: None,
+            sync_version: 0,
+            sync_state: "local".to_string(),
+            metadata_json: primary.metadata_json.clone(),
+            starred: false,
+            folder_id: primary.folder_id.clone(),
+        };
+
+        let dupe_exists: Option<i32> = tx
+            .query_row(
+                "SELECT 1 FROM conversations WHERE id = ?1 AND deleted_at IS NULL",
+                params![&new_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("merge: check duplicate merged id")?;
+        if dupe_exists.is_some() {
+            anyhow::bail!(
+                "merged conversation already exists for this set; delete it before merging again"
+            );
+        }
+
+        tx.execute(
+            r#"
+            INSERT INTO conversations (
+                id, session_id, title, overview, status, started_at, ended_at, created_at,
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred,
+                folder_id
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            "#,
+            params![
+                new_row.id,
+                new_row.session_id,
+                new_row.title,
+                new_row.overview,
+                new_row.status,
+                new_row.started_at,
+                new_row.ended_at,
+                new_row.created_at,
+                new_row.updated_at,
+                new_row.deleted_at,
+                new_row.cloud_id,
+                new_row.sync_version,
+                new_row.sync_state,
+                new_row.metadata_json,
+                new_row.starred,
+                new_row.folder_id,
+            ],
+        )
+        .context("merge: insert merged conversation")?;
+
+        #[derive(Clone)]
+        #[allow(dead_code)]
+        struct SegmentRow {
+            id: String,
+            session_id: String,
+            speaker_id: Option<String>,
+            speaker_label: Option<String>,
+            text: String,
+            start_ms: i64,
+            end_ms: i64,
+            started_at: DateTime<Utc>,
+            segment_index: i64,
+            source: String,
+            metadata_json: String,
+        }
+
+        let mut ordered: Vec<SegmentRow> = Vec::new();
+        for conv in &conversations {
+            let mut stmt = tx
+                .prepare(
+                    r#"
+                SELECT id, session_id, speaker_id, speaker_label, text, start_ms, end_ms, segment_index,
+                       source, metadata_json
+                FROM transcript_segments
+                WHERE conversation_id = ?1 AND deleted_at IS NULL
+                ORDER BY segment_index ASC
+                "#,
+                )
+                .context("merge: prepare list segments")?;
+            let rows = stmt.query_map(params![conv.id], |row| {
+                Ok(SegmentRow {
+                    id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    speaker_id: row.get(2)?,
+                    speaker_label: row.get(3)?,
+                    text: row.get(4)?,
+                    start_ms: row.get(5)?,
+                    end_ms: row.get(6)?,
+                    segment_index: row.get(7)?,
+                    source: row.get(8)?,
+                    started_at: conv.started_at,
+                    metadata_json: row.get(9)?,
+                })
+            })?;
+            for r in rows {
+                ordered.push(r.context("merge: read segment")?);
+            }
+        }
+        ordered.sort_by(|a, b| {
+            a.started_at
+                .cmp(&b.started_at)
+                .then(a.segment_index.cmp(&b.segment_index))
+        });
+
+        for (idx, seg) in ordered.iter().enumerate() {
+            let idx_i = idx as i64;
+            tx.execute(
+                r#"
+                UPDATE transcript_segments
+                SET conversation_id = ?1, session_id = ?2, segment_index = ?3, updated_at = ?4,
+                    sync_version = sync_version + 1
+                WHERE id = ?5 AND deleted_at IS NULL
+                "#,
+                params![
+                    new_id,
+                    seg.session_id,
+                    idx_i,
+                    now,
+                    seg.id,
+                ],
+            )
+            .context("merge: reattach transcript segment")?;
+        }
+
+        for sid in &sorted {
+            tx.execute(
+                "UPDATE memories SET conversation_id = ?1, updated_at = ?2, sync_version = sync_version + 1 WHERE conversation_id = ?3 AND deleted_at IS NULL",
+                params![&new_id, now, sid],
+            )
+            .context("merge: repoint memories")?;
+            tx.execute(
+                "UPDATE action_items SET conversation_id = ?1, updated_at = ?2, sync_version = sync_version + 1 WHERE conversation_id = ?3 AND deleted_at IS NULL",
+                params![&new_id, now, sid],
+            )
+            .context("merge: repoint action items")?;
+            tx.execute(
+                "UPDATE local_files SET conversation_id = ?1, updated_at = ?2, sync_version = sync_version + 1 WHERE conversation_id = ?3 AND deleted_at IS NULL",
+                params![&new_id, now, sid],
+            )
+            .context("merge: repoint local files")?;
+        }
+
+        for sid in &sorted {
+            tx.execute(
+                "UPDATE conversations SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+                params![now, sid],
+            )
+            .context("merge: soft-delete source")?;
+        }
+
+        tx.commit().context("merge: commit")?;
+
+        drop(conn);
+        self.conversations()
+            .get(&new_id)
+            .context("merge: reload")?
+            .ok_or_else(|| anyhow::anyhow!("merged conversation missing after commit"))
+    }
+}
+
+pub struct FolderRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl FolderRepository {
+    pub fn next_sort_order(&self) -> Result<i64> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM folders WHERE deleted_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .context("folder sort order")
+    }
+
+    pub fn exists_active(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
+            params![id],
+            |row| row.get(0),
+        )
+        .context("folder exists")?;
+        Ok(count > 0)
+    }
+
+    pub fn list(&self) -> Result<Vec<ConversationFolder>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT f.id, f.name, f.description, f.color, f.created_at, f.updated_at, f.sort_order,
+                       f.is_default, f.is_system, f.category_mapping,
+                       (SELECT COUNT(*) FROM conversations c
+                        WHERE c.folder_id = f.id AND c.deleted_at IS NULL)
+                FROM folders f
+                WHERE f.deleted_at IS NULL
+                ORDER BY f.sort_order ASC, f.name ASC
+                "#,
+            )
+            .context("prepare list folders")?;
+        let rows = stmt.query_map([], |row| {
+            let is_default_i: i64 = row.get(7)?;
+            let is_system_i: i64 = row.get(8)?;
+            Ok(ConversationFolder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                color: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                sort_order: row.get(6)?,
+                is_default: is_default_i != 0,
+                is_system: is_system_i != 0,
+                category_mapping: row.get(9)?,
+                conversation_count: row.get(10)?,
+            })
+        })?;
+        collect_rows(rows)
+    }
+
+    pub fn get(&self, id: &str) -> Result<Option<ConversationFolder>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT f.id, f.name, f.description, f.color, f.created_at, f.updated_at, f.sort_order,
+                   f.is_default, f.is_system, f.category_mapping,
+                   (SELECT COUNT(*) FROM conversations c
+                    WHERE c.folder_id = f.id AND c.deleted_at IS NULL)
+            FROM folders f
+            WHERE f.id = ?1 AND f.deleted_at IS NULL
+            "#,
+            params![id],
+            |row| {
+                let is_default_i: i64 = row.get(7)?;
+                let is_system_i: i64 = row.get(8)?;
+                Ok(ConversationFolder {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    color: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    sort_order: row.get(6)?,
+                    is_default: is_default_i != 0,
+                    is_system: is_system_i != 0,
+                    category_mapping: row.get(9)?,
+                    conversation_count: row.get(10)?,
+                })
+            },
+        )
+        .optional()
+        .context("get folder")
+    }
+
+    pub fn create(&self, new: NewFolder) -> Result<ConversationFolder> {
+        let now = Utc::now();
+        let sort_order = self.next_sort_order()?;
+        let color = new.color.unwrap_or_else(|| "#6B7280".to_string());
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            INSERT INTO folders (id, name, description, color, sort_order, created_at, updated_at, deleted_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL)
+            "#,
+            params![
+                new.id,
+                new.name,
+                new.description,
+                color,
+                sort_order,
+                now,
+                now,
+            ],
+        )
+        .context("insert folder")?;
+        drop(conn);
+        self.get(&new.id)?.ok_or_else(|| anyhow::anyhow!("folder missing after insert"))
+    }
+
+    pub fn update(&self, id: &str, update: UpdateFolder) -> Result<Option<ConversationFolder>> {
+        let Some(mut row) = self.get(id)? else {
+            return Ok(None);
+        };
+        if let Some(name) = update.name {
+            row.name = name;
+        }
+        if let Some(description) = update.description {
+            row.description = if description.is_empty() {
+                None
+            } else {
+                Some(description)
+            };
+        }
+        if let Some(color) = update.color {
+            row.color = color;
+        }
+        if let Some(order) = update.sort_order {
+            row.sort_order = order;
+        }
+        row.updated_at = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.execute(
+            r#"
+            UPDATE folders
+            SET name = ?2, description = ?3, color = ?4, sort_order = ?5, updated_at = ?6
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![
+                id,
+                row.name,
+                row.description,
+                row.color,
+                row.sort_order,
+                row.updated_at,
+            ],
+        )
+        .context("update folder")?;
+        drop(conn);
+        self.get(id)
+    }
+
+    pub fn soft_delete(&self, id: &str, move_to_folder_id: Option<&str>) -> Result<bool> {
+        let folder = self
+            .get(id)?
+            .ok_or_else(|| anyhow::anyhow!("folder not found"))?;
+        if folder.is_system {
+            anyhow::bail!("cannot delete system folders");
+        }
+        let now = Utc::now();
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        if let Some(target) = move_to_folder_id {
+            if target == id {
+                return Err(anyhow::anyhow!("move_to_folder_id must differ from deleted folder"));
+            }
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
+                params![target],
+                |row| row.get(0),
+            )?;
+            if exists == 0 {
+                anyhow::bail!("move_to_folder_id not found");
+            }
+            conn.execute(
+                r#"
+                UPDATE conversations
+                SET folder_id = ?1, updated_at = ?2, sync_version = sync_version + 1
+                WHERE folder_id = ?3 AND deleted_at IS NULL
+                "#,
+                params![target, now, id],
+            )
+            .context("reassign conversations on folder delete")?;
+        } else {
+            conn.execute(
+                r#"
+                UPDATE conversations
+                SET folder_id = NULL, updated_at = ?1, sync_version = sync_version + 1
+                WHERE folder_id = ?2 AND deleted_at IS NULL
+                "#,
+                params![now, id],
+            )
+            .context("unfile conversations on folder delete")?;
+        }
+        let changed = conn
+            .execute(
+                "UPDATE folders SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL",
+                params![now, id],
+            )
+            .context("soft-delete folder")?;
+        Ok(changed > 0)
+    }
 }
 
 pub struct ConversationRepository {
@@ -476,6 +1029,7 @@ impl ConversationRepository {
             sync_state: "local".to_string(),
             metadata_json: json_or_empty_object(new.metadata)?,
             starred: false,
+            folder_id: None,
         };
 
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
@@ -483,9 +1037,10 @@ impl ConversationRepository {
             r#"
             INSERT INTO conversations (
                 id, session_id, title, overview, status, started_at, ended_at, created_at,
-                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
+                updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred,
+                folder_id
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             "#,
             params![
                 conversation.id,
@@ -502,7 +1057,8 @@ impl ConversationRepository {
                 conversation.sync_version,
                 conversation.sync_state,
                 conversation.metadata_json,
-                conversation.starred
+                conversation.starred,
+                conversation.folder_id,
             ],
         )
         .context("failed to insert conversation")?;
@@ -515,7 +1071,8 @@ impl ConversationRepository {
         conn.query_row(
             r#"
             SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
-                   updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
+                   updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred,
+                   folder_id
             FROM conversations
             WHERE id = ?1 AND deleted_at IS NULL
             "#,
@@ -527,7 +1084,7 @@ impl ConversationRepository {
     }
 
     pub fn list(&self, limit: i64) -> Result<Vec<Conversation>> {
-        self.list_filtered(limit, 0, None, None, None)
+        self.list_filtered(limit, 0, None, None, None, None)
     }
 
     pub fn list_filtered(
@@ -537,20 +1094,23 @@ impl ConversationRepository {
         start_date: Option<DateTime<Utc>>,
         end_date: Option<DateTime<Utc>>,
         starred: Option<bool>,
+        folder_id: Option<&str>,
     ) -> Result<Vec<Conversation>> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         let mut stmt = conn
             .prepare(
                 r#"
                 SELECT id, session_id, title, overview, status, started_at, ended_at, created_at,
-                       updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred
+                       updated_at, deleted_at, cloud_id, sync_version, sync_state, metadata_json, starred,
+                       folder_id
                 FROM conversations
                 WHERE deleted_at IS NULL
                   AND (?1 IS NULL OR started_at >= ?1)
                   AND (?2 IS NULL OR started_at < ?2)
                   AND (?3 IS NULL OR starred = ?3)
+                  AND (?4 IS NULL OR folder_id = ?4)
                 ORDER BY updated_at DESC
-                LIMIT ?4 OFFSET ?5
+                LIMIT ?5 OFFSET ?6
                 "#,
             )
             .context("failed to prepare conversation list query")?;
@@ -560,6 +1120,7 @@ impl ConversationRepository {
                     start_date,
                     end_date,
                     starred.map(|value| if value { 1 } else { 0 }),
+                    folder_id,
                     limit,
                     offset
                 ],
@@ -601,14 +1162,30 @@ impl ConversationRepository {
         if let Some(starred) = update.starred {
             conversation.starred = starred;
         }
+        if let Some(folder_id) = update.folder_id {
+            conversation.folder_id = folder_id;
+        }
         conversation.updated_at = Utc::now();
 
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        if let Some(fid) = conversation.folder_id.as_ref() {
+            let folder_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
+                    params![fid],
+                    |row| row.get(0),
+                )
+                .context("validate folder assignment")?;
+            if folder_count == 0 {
+                anyhow::bail!("unknown folder id: {}", fid);
+            }
+        }
+
         conn.execute(
             r#"
             UPDATE conversations
             SET title = ?2, overview = ?3, status = ?4, ended_at = ?5, updated_at = ?6,
-                metadata_json = ?7, starred = ?8, sync_version = sync_version + 1
+                metadata_json = ?7, starred = ?8, folder_id = ?9, sync_version = sync_version + 1
             WHERE id = ?1 AND deleted_at IS NULL
             "#,
             params![
@@ -619,7 +1196,8 @@ impl ConversationRepository {
                 conversation.ended_at,
                 conversation.updated_at,
                 conversation.metadata_json,
-                conversation.starred
+                if conversation.starred { 1 } else { 0 },
+                conversation.folder_id,
             ],
         )
         .context("failed to update conversation")?;
@@ -1698,6 +2276,8 @@ pub struct UpdateConversation {
     pub ended_at: Option<Option<DateTime<Utc>>>,
     pub metadata: Option<serde_json::Value>,
     pub starred: Option<bool>,
+    /// `None` = omit field, `Some(None)` = clear folder, `Some(Some(id))` = set.
+    pub folder_id: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1840,7 +2420,8 @@ fn map_conversation(row: &rusqlite::Row<'_>) -> rusqlite::Result<Conversation> {
         sync_version: row.get(11)?,
         sync_state: row.get(12)?,
         metadata_json: row.get(13)?,
-        starred: row.get(14)?,
+        starred: row.get::<_, i64>(14)? != 0,
+        folder_id: row.get(15)?,
     })
 }
 
@@ -2027,6 +2608,361 @@ fn soft_delete_local_processing_except(
     Ok(changed)
 }
 
+/// Reserved session row for desktop “default chat” (no explicit multi-chat session).
+pub const LOCAL_DEFAULT_CHAT_SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChatSessionDto {
+    pub id: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    pub message_count: i64,
+    pub starred: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChatMessageDto {
+    pub id: String,
+    pub text: String,
+    pub created_at: DateTime<Utc>,
+    pub sender: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<i64>,
+    pub reported: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<String>,
+}
+
+pub struct ChatSessionsRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl ChatSessionsRepository {
+    pub fn list_sessions(
+        &self,
+        limit: i64,
+        offset: i64,
+        app_id: Option<&str>,
+        starred: Option<bool>,
+    ) -> Result<Vec<ChatSessionDto>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let limit = limit.max(1).min(500);
+        let offset = offset.max(0);
+
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<ChatSessionDto> {
+            let starred_i: i64 = row.get(4)?;
+            Ok(ChatSessionDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                preview: row.get(2)?,
+                app_id: row.get(3)?,
+                starred: starred_i != 0,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                message_count: row.get(7)?,
+            })
+        };
+
+        let sessions = match (app_id, starred) {
+            (None, None) => {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT s.id, s.title, s.preview, s.app_id, s.starred, s.created_at, s.updated_at,
+                           (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id)
+                    FROM chat_sessions s
+                    WHERE s.id != ?1
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?2 OFFSET ?3
+                    "#,
+                )?;
+                let rows = stmt
+                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, limit, offset], map_row)?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+            (Some(aid), None) => {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT s.id, s.title, s.preview, s.app_id, s.starred, s.created_at, s.updated_at,
+                           (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id)
+                    FROM chat_sessions s
+                    WHERE s.id != ?1 AND (s.app_id IS NOT DISTINCT FROM ?2)
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )?;
+                let rows = stmt
+                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, aid, limit, offset], map_row)?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+            (None, Some(st)) => {
+                let st_i = if st { 1 } else { 0 };
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT s.id, s.title, s.preview, s.app_id, s.starred, s.created_at, s.updated_at,
+                           (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id)
+                    FROM chat_sessions s
+                    WHERE s.id != ?1 AND s.starred = ?2
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )?;
+                let rows = stmt
+                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, st_i, limit, offset], map_row)?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+            (Some(aid), Some(st)) => {
+                let st_i = if st { 1 } else { 0 };
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT s.id, s.title, s.preview, s.app_id, s.starred, s.created_at, s.updated_at,
+                           (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id)
+                    FROM chat_sessions s
+                    WHERE s.id != ?1 AND (s.app_id IS NOT DISTINCT FROM ?2) AND s.starred = ?3
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?4 OFFSET ?5
+                    "#,
+                )?;
+                let rows = stmt
+                    .query_map(
+                        params![LOCAL_DEFAULT_CHAT_SESSION_ID, aid, st_i, limit, offset],
+                        map_row,
+                    )?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+        };
+
+        Ok(sessions)
+    }
+
+    pub fn create_session(&self, title: Option<&str>, app_id: Option<&str>) -> Result<ChatSessionDto> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let now = Utc::now();
+        let id = deterministic_id(
+            "chat_sess",
+            &[&now.timestamp_nanos_opt().unwrap_or(0).to_string()],
+        );
+        let title_str = title.unwrap_or("New Chat");
+        conn.execute(
+            r#"
+            INSERT INTO chat_sessions (id, title, preview, app_id, starred, created_at, updated_at)
+            VALUES (?1, ?2, NULL, ?3, 0, ?4, ?5)
+            "#,
+            params![id, title_str, app_id, now, now],
+        )
+        .context("insert chat_session")?;
+
+        Ok(ChatSessionDto {
+            id,
+            title: title_str.to_string(),
+            preview: None,
+            app_id: app_id.map(|s| s.to_string()),
+            starred: false,
+            created_at: now,
+            updated_at: now,
+            message_count: 0,
+        })
+    }
+
+    pub fn get_session(&self, id: &str) -> Result<Option<ChatSessionDto>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let row = conn
+            .query_row(
+                r#"
+                SELECT s.id, s.title, s.preview, s.app_id, s.starred, s.created_at, s.updated_at,
+                       (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id)
+                FROM chat_sessions s
+                WHERE s.id = ?1
+                "#,
+                params![id],
+                |row| {
+                    let starred_i: i64 = row.get(4)?;
+                    Ok(ChatSessionDto {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        preview: row.get(2)?,
+                        app_id: row.get(3)?,
+                        starred: starred_i != 0,
+                        created_at: row.get(5)?,
+                        updated_at: row.get(6)?,
+                        message_count: row.get(7)?,
+                    })
+                },
+            )
+            .optional()
+            .context("get chat_session")?;
+        Ok(row)
+    }
+
+    pub fn update_session(
+        &self,
+        id: &str,
+        title: Option<&str>,
+        starred: Option<bool>,
+    ) -> Result<Option<ChatSessionDto>> {
+        if id == LOCAL_DEFAULT_CHAT_SESSION_ID {
+            anyhow::bail!("cannot update reserved default chat session");
+        }
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM chat_sessions WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if exists == 0 {
+            return Ok(None);
+        }
+
+        let now = Utc::now();
+        if let Some(t) = title {
+            conn.execute(
+                "UPDATE chat_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
+                params![t, now, id],
+            )?;
+        }
+        if let Some(st) = starred {
+            conn.execute(
+                "UPDATE chat_sessions SET starred = ?1, updated_at = ?2 WHERE id = ?3",
+                params![if st { 1 } else { 0 }, now, id],
+            )?;
+        }
+
+        drop(conn);
+        self.get_session(id)
+    }
+
+    pub fn delete_session(&self, id: &str) -> Result<bool> {
+        if id == LOCAL_DEFAULT_CHAT_SESSION_ID {
+            anyhow::bail!("cannot delete reserved default chat session");
+        }
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let changed = conn.execute("DELETE FROM chat_sessions WHERE id = ?1", params![id])?;
+        Ok(changed > 0)
+    }
+
+    pub fn list_messages(
+        &self,
+        session_id: &str,
+        app_id: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<ChatMessageDto>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let limit = limit.max(1).min(500);
+        let offset = offset.max(0);
+
+        let rows = match app_id {
+            None => {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT id, text, created_at, sender, app_id, session_id, rating, reported, metadata
+                    FROM chat_messages
+                    WHERE session_id = ?1
+                    ORDER BY created_at DESC
+                    LIMIT ?2 OFFSET ?3
+                    "#,
+                )?;
+                let rows = stmt.query_map(params![session_id, limit, offset], Self::map_message_row)?
+                    .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+            Some(aid) => {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT id, text, created_at, sender, app_id, session_id, rating, reported, metadata
+                    FROM chat_messages
+                    WHERE session_id = ?1 AND (app_id IS NOT DISTINCT FROM ?2)
+                    ORDER BY created_at DESC
+                    LIMIT ?3 OFFSET ?4
+                    "#,
+                )?;
+                let rows =
+                    stmt.query_map(params![session_id, aid, limit, offset], Self::map_message_row)?
+                        .collect::<Result<Vec<_>, _>>()?;
+                rows
+            }
+        };
+
+        Ok(rows)
+    }
+
+    fn map_message_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatMessageDto> {
+        let reported_i: i64 = row.get(7)?;
+        Ok(ChatMessageDto {
+            id: row.get(0)?,
+            text: row.get(1)?,
+            created_at: row.get(2)?,
+            sender: row.get(3)?,
+            app_id: row.get(4)?,
+            session_id: row.get(5)?,
+            rating: row.get(6)?,
+            reported: reported_i != 0,
+            metadata: row.get(8)?,
+        })
+    }
+
+    pub fn append_message(
+        &self,
+        session_id: &str,
+        text: &str,
+        sender: &str,
+        app_id: Option<&str>,
+        metadata: Option<&str>,
+    ) -> Result<(String, DateTime<Utc>)> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM chat_sessions WHERE id = ?1",
+            params![session_id],
+            |row| row.get(0),
+        )?;
+        if exists == 0 {
+            anyhow::bail!("chat session not found");
+        }
+
+        let now = Utc::now();
+        let msg_id = deterministic_id(
+            "chat_msg",
+            &[
+                session_id,
+                &now.timestamp_nanos_opt().unwrap_or(0).to_string(),
+                sender,
+                text,
+            ],
+        );
+
+        conn.execute(
+            r#"
+            INSERT INTO chat_messages (id, session_id, text, sender, app_id, metadata, created_at, rating, reported)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 0)
+            "#,
+            params![msg_id, session_id, text, sender, app_id, metadata, now],
+        )
+        .context("insert chat_message")?;
+
+        let preview: String = text.chars().take(240).collect();
+        conn.execute(
+            "UPDATE chat_sessions SET updated_at = ?1, preview = ?2 WHERE id = ?3",
+            params![now, preview, session_id],
+        )?;
+
+        Ok((msg_id, now))
+    }
+}
+
 impl ProcessingJobStatus {
     fn as_str(&self) -> &'static str {
         match self {
@@ -2072,6 +3008,9 @@ mod tests {
             "sync_outbox",
             "local_files",
             "conversation_search",
+            "folders",
+            "chat_sessions",
+            "chat_messages",
         ] {
             let exists: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1",
@@ -2211,6 +3150,7 @@ mod tests {
                     ended_at: None,
                     metadata: None,
                     starred: Some(true),
+                    folder_id: None,
                 },
             )?
             .expect("conversation should update");
@@ -2380,6 +3320,115 @@ mod tests {
             .expect("failed exhausted job should be reusable");
         assert_eq!(reusable.id, failed.id);
         assert_eq!(reusable.status, ProcessingJobStatus::Failed);
+
+        Ok(())
+    }
+
+    #[test]
+    fn folders_crud_assign_conversations_and_soft_delete_unfiles() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let folder = store.folders().create(NewFolder {
+            id: "fld-crm".to_string(),
+            name: "Work".to_string(),
+            description: Some("desc".into()),
+            color: Some("#112233".into()),
+        })?;
+        assert_eq!(folder.name, "Work");
+        assert_eq!(store.folders().list()?.len(), 1);
+
+        store.conversations().create(NewConversation {
+            id: "conv-fld".into(),
+            session_id: "s-fld".into(),
+            title: "Tagged".into(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store
+            .conversations()
+            .update(
+                "conv-fld",
+                UpdateConversation {
+                    title: None,
+                    overview: None,
+                    status: None,
+                    ended_at: None,
+                    metadata: None,
+                    starred: None,
+                    folder_id: Some(Some("fld-crm".into())),
+                },
+            )?
+            .expect("update");
+
+        let conv = store.conversations().get("conv-fld")?.expect("conversation");
+        assert_eq!(conv.folder_id.as_deref(), Some("fld-crm"));
+
+        store.folders().soft_delete("fld-crm", None)?;
+        assert!(store.folders().get("fld-crm")?.is_none());
+
+        let unfiled = store.conversations().get("conv-fld")?.expect("conversation");
+        assert!(unfiled.folder_id.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn merge_conversations_moves_segments_and_soft_deletes_sources() -> Result<()> {
+        let store = Store::open_in_memory()?;
+
+        store.conversations().create(NewConversation {
+            id: "merge-a".into(),
+            session_id: "s-a".into(),
+            title: "A".into(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store.conversations().create(NewConversation {
+            id: "merge-b".into(),
+            session_id: "s-b".into(),
+            title: "B".into(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+
+        store.transcripts().append(NewTranscriptSegment {
+            id: "seg-a0".into(),
+            conversation_id: "merge-a".into(),
+            session_id: "s-a".into(),
+            speaker_id: None,
+            speaker_label: Some("Sp1".into()),
+            text: "alpha".into(),
+            start_ms: 0,
+            end_ms: 50,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+        store.transcripts().append(NewTranscriptSegment {
+            id: "seg-b0".into(),
+            conversation_id: "merge-b".into(),
+            session_id: "s-b".into(),
+            speaker_id: None,
+            speaker_label: Some("Sp2".into()),
+            text: "beta".into(),
+            start_ms: 0,
+            end_ms: 60,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+
+        let merged = store.merge_conversations(&["merge-b".into(), "merge-a".into()], false)?;
+        let merged_segs = store.transcripts().list_for_conversation(&merged.id)?;
+        let texts: Vec<&str> = merged_segs.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(texts.len(), 2);
+        assert!(texts.contains(&"alpha"));
+        assert!(texts.contains(&"beta"));
+
+        assert!(store.conversations().get("merge-a")?.is_none());
+        assert!(store.conversations().get("merge-b")?.is_none());
 
         Ok(())
     }

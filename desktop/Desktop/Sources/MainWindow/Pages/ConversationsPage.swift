@@ -308,16 +308,14 @@ struct ConversationsPage: View {
       .padding(.vertical, 12)
 
       // Folder tabs strip
-      if !isLocalDaemonMode {
-        FolderTabsStrip(
-          appState: appState,
-          onCreateFolder: { showCreateFolderSheet = true },
-          onEditFolder: { folder in editingFolder = folder },
-          onDeleteFolder: { folder in deletingFolder = folder }
-        )
-        .padding(.horizontal, 24)
-        .padding(.bottom, 12)
-      }
+      FolderTabsStrip(
+        appState: appState,
+        onCreateFolder: { showCreateFolderSheet = true },
+        onEditFolder: { folder in editingFolder = folder },
+        onDeleteFolder: { folder in deletingFolder = folder }
+      )
+      .padding(.horizontal, 24)
+      .padding(.bottom, 12)
 
       // List - show search results or regular conversations
       if !searchQuery.isEmpty {
@@ -529,6 +527,37 @@ struct ConversationsPage: View {
       }
       .buttonStyle(.plain)
       .disabled(isFilteringStarred)
+
+      // Multi-select to merge conversations (local daemon + cloud)
+      Button(action: {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          if isMultiSelectMode {
+            isMultiSelectMode = false
+            selectedConversationIds.removeAll()
+          } else {
+            isMultiSelectMode = true
+          }
+        }
+      }) {
+        HStack(spacing: 6) {
+          Image(systemName: isMultiSelectMode ? "xmark.circle" : "checkmark.circle")
+            .scaledFont(size: 12)
+          Text(isMultiSelectMode ? "Cancel" : "Select")
+            .scaledFont(size: 12, weight: .medium)
+        }
+        .foregroundColor(isMultiSelectMode ? OmiColors.purplePrimary : OmiColors.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .omiControlSurface(
+          fill: isMultiSelectMode
+            ? OmiColors.purplePrimary.opacity(0.12)
+            : OmiColors.backgroundSecondary,
+          radius: 16,
+          stroke: isMultiSelectMode
+            ? OmiColors.purplePrimary.opacity(0.28)
+            : OmiColors.border.opacity(0.14))
+      }
+      .buttonStyle(.plain)
 
       // Date filter button
       Button(action: {

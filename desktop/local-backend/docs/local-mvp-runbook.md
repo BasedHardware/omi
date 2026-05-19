@@ -10,6 +10,8 @@ conversation storage, transcript ingestion, processing fallback, and search.
 - Rust toolchain with `cargo`.
 - Python 3 for the import helper.
 - `curl` for health and API checks.
+- Homebrew **`webp`** for the desktop Swift build (`CWebP` / screen capture):
+  `brew install webp` (verify with `pkg-config --exists libwebp`).
 - For desktop app testing: the normal desktop development prerequisites from
   `desktop/README.md` and `desktop/run.sh`.
 
@@ -33,8 +35,49 @@ Omi-hosted backend requests. It prints a concise pass/fail summary at the end.
 
 ## Primary Desktop Launch
 
-For user-test runs, use one command from the repo root. This launches the
-development app bundle only (`Omi Dev.app` / `com.omi.desktop-dev`), checks the
+### One command from repo root (recommended)
+
+`make serve-local` starts the local daemon and desktop dev app in a tmux session
+(`omi-hybrid-local`): top pane runs `cargo run` in `desktop/local-backend`, bottom
+pane runs `desktop/run.sh` in hybrid local mode. Teardown: `make down-local`.
+
+```bash
+make serve-local    # attach or switch tmux client to omi-hybrid-local
+make down-local     # stop tmux session, daemon, and Omi Dev.app
+```
+
+If you are already inside another tmux session, `make serve-local` switches your
+client to `omi-hybrid-local` (it does not nest sessions). To start without
+attaching:
+
+```bash
+OMI_HYBRID_LOCAL_ATTACH=0 make serve-local
+tmux attach -t omi-hybrid-local
+```
+
+The first desktop build can take several minutes while SwiftPM resolves
+packages; `run.sh` waits if another `swift-build` is already running on the
+machine.
+
+**Troubleshooting `make serve-local`:**
+
+- You still see a different tmux session (for example `local-supergemma`): run
+  `tmux attach -t omi-hybrid-local` or `tmux switch-client -t omi-hybrid-local`.
+- Bottom pane stuck on `Waiting for other SwiftPM instance`: another
+  `swift-build` is running (often Firebase/GRDB package resolve). Wait for it to
+  finish or stop that build, then re-run `make serve-local`.
+- Daemon port in use after a crash: `make down-local`, then `make serve-local`.
+- Verify daemon only: `curl http://127.0.0.1:8765/health` should return
+  `"service":"omi-local-backend"`.
+- Hybrid providers: `make serve-local` and `desktop/run.sh` (local mode) run
+  `desktop/local-backend/tools/seed_hybrid_defaults.sh` when the daemon is healthy,
+  seeding `ai_provider` and `chat_provider` to `http://127.0.0.1:11434/v1` (Ollama) if unset.
+  Override with `OMI_HYBRID_DEFAULT_CHAT_BASE_URL` and `OMI_HYBRID_DEFAULT_CHAT_MODEL`.
+
+### Manual `run.sh` launch
+
+For user-test runs without tmux, use one command from the repo root. This launches
+the development app bundle only (`Omi Dev.app` / `com.omi.desktop-dev`), checks the
 local daemon health endpoint, starts `desktop/local-backend` if needed, and
 keeps Omi-hosted backend URLs deliberately invalid so accidental cloud routing
 is obvious:
@@ -56,6 +99,9 @@ Required environment:
   `/health` is not already reachable.
 
 Recommended test-boundary environment:
+
+- Live transcription in local daemon mode uses on-device Apple Speech when hybrid direct STT is enabled.
+  `./run.sh` injects `OMI_HYBRID_DIRECT_STT_ENABLED=1` into the bundled app `.env` for local daemon mode by default (and sets the same in the launcher environment). Disable with `OMI_HYBRID_DIRECT_STT_ENABLED=0` if you need to turn it off.
 
 - `OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765` makes the daemon URL explicit.
 - `OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001` makes accidental Python
@@ -116,6 +162,18 @@ OMI_DESKTOP_API_URL=http://omi-rust-invalid:9002 \
 ```
 
 ## Confirm Local Mode In The App
+
+Hybrid local mode does **not** require Apple/Google sign-in for daily use. The app
+enters an on-device guest session automatically (`local-hybrid-guest`). Cloud
+sign-in remains optional for account UI only; OAuth uses the Python backend and
+will not work when `OMI_PYTHON_API_URL` is set to an invalid host (intentional
+for hybrid testing).
+
+**Settings → Plan and Usage** shows a **Local** plan (not cloud Free/Neo tiers).
+Use that section to configure hybrid providers (`ai_provider`, `chat_provider`,
+`embedding_provider`). Keys are stored in the local daemon SQLite database on this Mac.
+Cloud subscription, usage quotas, and the Advanced “BYOK free forever” flow are hidden
+in local mode.
 
 The Conversations header shows a `Local` chip when the app is using local daemon
 mode. Settings → About also includes a Backend Mode card with the selected
@@ -223,6 +281,10 @@ title, overview, or transcript text.
 
 ## Local Provider Configuration
 
+See [hybrid-provider-settings.md](hybrid-provider-settings.md) for the full settings schema
+(`ai_provider`, `stt_provider`, `chat_provider`, `embedding_provider`, `vision_provider`) and
+`POST /v1/settings/test-provider`.
+
 Processing works without provider keys by using deterministic fallback. To force
 that path, clear provider settings:
 
@@ -303,3 +365,21 @@ directly to the configured provider, not to Omi-hosted backend services.
   daemon port.
 - Desktop launch/auth callback issues in custom test builds: keep the app name
   and bundle suffix aligned as described in the repo desktop agent rules.
+- `swift build` fails with `cannot change to .../firebase-ios-sdk-...: No such file
+  or directory`: Swift Package Manager has a missing or partial git mirror for
+  `firebase-ios-sdk` (or `GRDB.swift`) in
+  `~/Library/Caches/org.swift.swiftpm/repositories/`. This is unrelated to local
+  daemon mode — the desktop app still resolves Firebase for auth even in local
+  mode. Stop competing builds, clear the broken mirrors, pre-resolve, then
+  re-run `./run.sh`:
+
+  ```bash
+  pkill -f 'swift-build|swift-package' 2>/dev/null || true
+  rm -rf ~/Library/Caches/org.swift.swiftpm/repositories/firebase-ios-sdk-*
+  rm -rf ~/Library/Caches/org.swift.swiftpm/repositories/GRDB.swift-*
+  cd desktop
+  xcrun swift package resolve --package-path Desktop
+  ```
+
+  The first resolve can take several minutes. Do not interrupt it; a partial clone
+  leaves SPM pointing at a cache path that does not exist yet.

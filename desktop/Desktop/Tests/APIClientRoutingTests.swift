@@ -367,6 +367,10 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   func testLocalDaemonCapabilityMatrixDisablesCloudBoundFeatures() {
+    setenv("OMI_HYBRID_DIRECT_STT_ENABLED", "0", 1)
+    defer {
+      unsetenv("OMI_HYBRID_DIRECT_STT_ENABLED")
+    }
     let capabilities = Dictionary(
       uniqueKeysWithValues: DesktopBackendEnvironment.capabilities(for: .localDaemon)
         .map { ($0.capability, $0) }
@@ -381,7 +385,29 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(capabilities[.payments]?.available, false)
     XCTAssertEqual(capabilities[.crispSupport]?.available, false)
     XCTAssertEqual(capabilities[.hostedTranscription]?.available, false)
+    XCTAssertEqual(capabilities[.directSTT]?.available, false)
+    XCTAssertEqual(capabilities[.directChat]?.available, false)
+    XCTAssertEqual(capabilities[.directEmbeddings]?.available, false)
+    XCTAssertEqual(capabilities[.optionalCloudSTT]?.available, false)
+    XCTAssertEqual(capabilities[.optionalCloudChat]?.available, false)
     XCTAssertNotNil(capabilities[.managedAgentVM]?.reason)
+    XCTAssertNotNil(capabilities[.directSTT]?.reason)
+  }
+
+  func testLocalDaemonDirectSTTCanBeOptedInViaEnvRegardlessOfEngine() {
+    setenv("OMI_HYBRID_DIRECT_STT_ENABLED", "1", 1)
+    defer {
+      unsetenv("OMI_HYBRID_DIRECT_STT_ENABLED")
+    }
+    XCTAssertTrue(DesktopBackendEnvironment.isCapability(.directSTT, availableIn: .localDaemon))
+  }
+
+  func testLocalDaemonDirectChatCanBeOptedInViaEnv() {
+    setenv("OMI_HYBRID_DIRECT_CHAT_ENABLED", "1", 1)
+    defer {
+      unsetenv("OMI_HYBRID_DIRECT_CHAT_ENABLED")
+    }
+    XCTAssertTrue(DesktopBackendEnvironment.isCapability(.directChat, availableIn: .localDaemon))
   }
 
   func testCloudCapabilityMatrixAllowsCloudBoundFeatures() {
@@ -428,6 +454,9 @@ final class APIClientRoutingTests: XCTestCase {
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
     unsetenv("OMI_LOCAL_DAEMON_URL")
     unsetenv("OMI_REWIND_DATABASE_ROOT")
+    unsetenv("OMI_HYBRID_DIRECT_STT_ENABLED")
+    unsetenv("OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED")
+    unsetenv("OMI_HYBRID_DIRECT_CHAT_ENABLED")
   }
 
   override func tearDown() {
@@ -437,6 +466,9 @@ final class APIClientRoutingTests: XCTestCase {
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
     unsetenv("OMI_LOCAL_DAEMON_URL")
     unsetenv("OMI_REWIND_DATABASE_ROOT")
+    unsetenv("OMI_HYBRID_DIRECT_STT_ENABLED")
+    unsetenv("OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED")
+    unsetenv("OMI_HYBRID_DIRECT_CHAT_ENABLED")
     URLCapture.reset()
     super.tearDown()
   }
@@ -754,74 +786,105 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(body?["starred"] as? Bool, true)
   }
 
-  func testLocalModeMergeAndFolderActionsFailBeforeNetworkRequests() async {
+  func testLocalModeMergeRoutesToLocalDaemonWithoutAuth() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
-    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:9765", 1)
     let client = await makeTestClient()
 
-    do {
-      _ = try await client.mergeConversations(ids: ["c1", "c2"])
-      XCTFail("expected merge to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable(let feature, _) = error else {
-        XCTFail("expected featureUnavailable for merge, got \(error)")
-        return
-      }
-      XCTAssertEqual(feature, "conversation_merge")
-    }
+    _ = try? await client.mergeConversations(ids: ["conv-1", "conv-2"], reprocess: false)
 
-    do {
-      _ = try await client.getFolders()
-      XCTFail("expected folders to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable(let feature, _) = error else {
-        XCTFail("expected featureUnavailable for folders, got \(error)")
-        return
-      }
-      XCTAssertEqual(feature, "conversation_folders")
-    }
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 9765,
+      pathContains: "v1/conversations/merge", method: "POST",
+      label: "local mergeConversations")
+    XCTAssertNil(requests.first?.headers["Authorization"])
 
-    do {
-      _ = try await client.createFolder(name: "Work")
-      XCTFail("expected folder creation to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable = error else {
-        XCTFail("expected featureUnavailable for folder creation, got \(error)")
-        return
-      }
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
     }
+    XCTAssertEqual(body?["conversation_ids"] as? [String], ["conv-1", "conv-2"])
+    XCTAssertEqual(body?["reprocess"] as? Bool, false)
+  }
 
-    do {
-      _ = try await client.updateFolder(id: "f1", name: "Renamed")
-      XCTFail("expected folder update to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable = error else {
-        XCTFail("expected featureUnavailable for folder update, got \(error)")
-        return
-      }
+  func testLocalModeGetFoldersRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8877", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.getFolders()
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8877,
+      pathContains: "v1/conversation-folders", method: "GET",
+      label: "local getFolders")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+  }
+
+  func testLocalModeCreateFolderRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8878", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.createFolder(name: "Work", description: "Notes")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8878,
+      pathContains: "v1/conversation-folders", method: "POST",
+      label: "local createFolder")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+  }
+
+  func testLocalModeUpdateFolderRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8879", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.updateFolder(id: "fld-local-1", name: "Renamed")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8879,
+      pathContains: "v1/conversation-folders/fld-local-1", method: "PATCH",
+      label: "local updateFolder")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+  }
+
+  func testLocalModeDeleteFolderRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8880", 1)
+    let client = await makeTestClient()
+
+    try? await client.deleteFolder(id: "fld-del", moveToFolderId: "fld-other")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8880,
+      pathContains: "v1/conversation-folders/fld-del", method: "DELETE",
+      label: "local deleteFolder")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+    XCTAssertTrue(requests.first?.url.absoluteString.contains("move_to_folder_id=fld-other") ?? false)
+  }
+
+  func testLocalModeMoveConversationToFolderPatchesLocalConversationWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8881", 1)
+    let client = await makeTestClient()
+
+    try? await client.moveConversationToFolder(conversationId: "c-local", folderId: "f-local")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8881,
+      pathContains: "v1/conversations/c-local", method: "PATCH",
+      label: "local moveConversationToFolder")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
     }
-
-    do {
-      try await client.deleteFolder(id: "f1")
-      XCTFail("expected folder deletion to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable = error else {
-        XCTFail("expected featureUnavailable for folder deletion, got \(error)")
-        return
-      }
-    }
-
-    do {
-      try await client.moveConversationToFolder(conversationId: "c1", folderId: "f1")
-      XCTFail("expected move-to-folder to be unavailable")
-    } catch {
-      guard case APIError.featureUnavailable = error else {
-        XCTFail("expected featureUnavailable for move-to-folder, got \(error)")
-        return
-      }
-    }
-
-    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+    XCTAssertEqual(body?["folder_id"] as? String, "f-local")
   }
 
   func testLocalUnauthenticatedRequestDoesNotRefreshAuthOn401() async {
@@ -999,6 +1062,49 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/folders", method: "GET",
       label: "getFolders")
+  }
+
+  func testLocalModeConversationFoldersRouteToLocalDaemon() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.getFolders() as [Folder]
+    try? await client.createFolder(name: "Work", description: nil, color: "#111111")
+    _ = try? await client.updateFolder(
+      id: "f1", name: "Renamed", description: nil, color: nil, order: 1)
+    try? await client.deleteFolder(id: "f1", moveToFolderId: "f2")
+
+    let requests = URLCapture.capturedRequests
+    XCTAssertEqual(requests.count, 4)
+    XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 8765 })
+    XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+    XCTAssertEqual(requests.map(\.method), ["GET", "POST", "PATCH", "DELETE"])
+    XCTAssertTrue(requests[0].url.path.contains("/v1/conversation-folders"))
+    XCTAssertEqual(requests[0].method, "GET")
+    XCTAssertTrue(requests[1].url.path.contains("/v1/conversation-folders"))
+    XCTAssertEqual(requests[1].method, "POST")
+    XCTAssertTrue(requests[2].url.path.contains("/v1/conversation-folders/f1"))
+    XCTAssertEqual(requests[2].method, "PATCH")
+    XCTAssertTrue(requests[3].url.path.contains("/v1/conversation-folders/f1"))
+    XCTAssertEqual(requests[3].method, "DELETE")
+    XCTAssertTrue(requests[3].url.query?.contains("move_to_folder_id=f2") == true)
+  }
+
+  func testLocalModeMergeConversationsRoutesToLocalDaemon() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.mergeConversations(ids: ["a", "b"], reprocess: false)
+
+    XCTAssertEqual(URLCapture.capturedRequests.count, 1)
+    let request = URLCapture.capturedRequests.first
+    XCTAssertEqual(request?.url.host, "127.0.0.1")
+    XCTAssertEqual(request?.url.port, 8765)
+    XCTAssertEqual(request?.method, "POST")
+    XCTAssertTrue(request?.url.path.contains("/v1/conversations/merge") == true)
+    XCTAssertEqual(request?.headers["Authorization"], nil)
   }
 
   // -- Memories (POST → Python) --
@@ -1451,6 +1557,70 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
       label: "deleteChatSession")
+  }
+
+  func testLocalModeGetChatSessionsRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.getChatSessions() as [ChatSession]
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v2/chat-sessions", method: "GET",
+      label: "local getChatSessions")
+    XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+  }
+
+  func testLocalModeCreateChatSessionRoutesToLocalDaemon() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.createChatSession(title: "local-title") as ChatSession
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v2/chat-sessions", method: "POST",
+      label: "local createChatSession")
+    XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+  }
+
+  func testLocalModeSaveMessageUsesDefaultDaemonSessionWhenSessionIdNil() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.saveMessage(text: "hello", sender: "human", sessionId: nil)
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v2/chat-sessions/\(APIClient.localDaemonDefaultChatSessionId)/messages",
+      method: "POST",
+      label: "local saveMessage default session")
+  }
+
+  func testLocalModeGetMessagesForSessionRoutesToLocalDaemon() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.getMessages(sessionId: "sess-local", limit: 10, offset: 2)
+      as [ChatMessageDB]
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v2/chat-sessions/sess-local/messages", method: "GET",
+      label: "local getMessages(sessionId:)")
   }
 
   // -- Desktop messages (DELETE → Python, path changed to v2/desktop/messages) --

@@ -130,14 +130,16 @@ credentials. Cloud mode routing basics are covered by `APIClientRoutingTests`,
 which verifies default cloud URL selection, custom URL selection, and local
 daemon routing without auth.
 
+## Rewind And The Local Daemon
+
+Rewind timeline, OCR, **GRDB FTS** over screenshot text, and on-disk vector search all use the desktop app’s existing local **GRDB/SQLite** database and files. They do not depend on the local daemon process. The daemon’s SQLite store is focused on conversations, transcripts, and hybrid provider settings; **migrating Rewind’s indices or media into the daemon database is deferred** until a sync and storage story is defined, so hybrid mode keeps Rewind fully local while MVP data still flows through the loopback API.
+
 ## Known Limitations And Follow-Up Work
 
 - The desktop app currently has a documented dev launch contract for the daemon;
   production supervision/packaging is not implemented.
 - Hosted transcription is intentionally unavailable in local daemon mode. The
   MVP validates transcript import/append/finalize, not direct local STT parity.
-- Existing desktop GRDB/Rewind stores are not migrated into the local daemon
-  database yet.
 - Local provider configuration exists at the daemon API/settings layer, but the
   user-facing settings workflow is still thin.
 - Cloud sync remains disabled until a dedicated optional sync adapter is

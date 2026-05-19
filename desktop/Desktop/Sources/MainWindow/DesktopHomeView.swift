@@ -74,7 +74,9 @@ struct DesktopHomeView: View {
           }
       } else if !appState.hasCompletedOnboarding {
         // State 2: Signed in but onboarding not complete
-        if shouldSkipOnboarding() {
+        if shouldSkipOnboarding()
+          || DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+        {
           Color.clear.onAppear {
             log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
             appState.hasCompletedOnboarding = true
@@ -363,6 +365,7 @@ struct DesktopHomeView: View {
     .preferredColorScheme(.dark)
     .tint(OmiColors.purplePrimary)
     .onAppear {
+      AuthService.shared.establishLocalGuestSessionIfNeeded()
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )

@@ -232,6 +232,7 @@ fn persist_processing_output(
                 ended_at: None,
                 metadata: None,
                 starred: None,
+                folder_id: None,
             },
         )?
         .ok_or_else(|| anyhow!("conversation missing while persisting processing output"))?;

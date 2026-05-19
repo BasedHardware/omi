@@ -15,7 +15,8 @@ dmg-assets/       DMG installer resources
 
 ## Development
 
-Requires macOS 14.0+, Rust toolchain, and code signing with an Apple Developer ID.
+Requires macOS 14.0+, Rust toolchain, code signing with an Apple Developer ID, and
+Homebrew `webp` for the Swift app (`brew install webp`).
 
 ```bash
 # Run (builds Swift app, starts Rust backend, launches app)

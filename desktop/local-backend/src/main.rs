@@ -707,6 +707,206 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn hybrid_v2_chat_sessions_and_messages_routes() -> Result<()> {
+        let app = test_app()?;
+
+        let empty_list = request_json(app.clone(), Method::GET, "/v2/chat-sessions", None).await?;
+        assert!(
+            empty_list.as_array().map(|a| a.is_empty()).unwrap_or(false),
+            "expected no user sessions yet"
+        );
+
+        let created = request_json(
+            app.clone(),
+            Method::POST,
+            "/v2/chat-sessions",
+            Some(json!({"title": "Route test"})),
+        )
+        .await?;
+        let sid = created["id"].as_str().expect("session id");
+
+        let listed = request_json(app.clone(), Method::GET, "/v2/chat-sessions", None).await?;
+        assert_eq!(listed.as_array().expect("sessions").len(), 1);
+
+        let one = request_json(
+            app.clone(),
+            Method::GET,
+            &format!("/v2/chat-sessions/{sid}"),
+            None,
+        )
+        .await?;
+        assert_eq!(one["title"], "Route test");
+
+        request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v2/chat-sessions/{sid}"),
+            Some(json!({"starred": true})),
+        )
+        .await?;
+
+        let saved = request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v2/chat-sessions/{sid}/messages"),
+            Some(json!({"text": "hello daemon", "sender": "human"})),
+        )
+        .await?;
+        assert!(saved["id"].as_str().is_some());
+
+        let msgs = request_json(
+            app.clone(),
+            Method::GET,
+            &format!("/v2/chat-sessions/{sid}/messages"),
+            None,
+        )
+        .await?;
+        assert_eq!(msgs.as_array().expect("messages").len(), 1);
+
+        let default_sid = "00000000-0000-4000-8000-000000000001";
+        request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v2/chat-sessions/{default_sid}/messages"),
+            Some(json!({"text": "default thread", "sender": "human"})),
+        )
+        .await?;
+
+        let default_msgs = request_json(
+            app.clone(),
+            Method::GET,
+            &format!("/v2/chat-sessions/{default_sid}/messages"),
+            None,
+        )
+        .await?;
+        assert_eq!(default_msgs.as_array().expect("default msgs").len(), 1);
+
+        request_status(
+            app.clone(),
+            Method::DELETE,
+            &format!("/v2/chat-sessions/{sid}"),
+            None,
+            StatusCode::NO_CONTENT,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn conversation_folders_merge_and_folder_assignment_routes() -> Result<()> {
+        let app = test_app()?;
+
+        let folder = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversation-folders",
+            Some(json!({
+                "name": "Desk",
+                "description": "papers",
+                "color": "#111111",
+            })),
+        )
+        .await?;
+        let folder_id = folder["folder"]["id"].as_str().expect("folder id");
+
+        let folders =
+            request_json(app.clone(), Method::GET, "/v1/conversation-folders", None).await?;
+        assert_eq!(folders["folders"].as_array().expect("folders array").len(), 1);
+
+        let conv_a = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "session_id": "s-merge-a",
+                "title": "A",
+                "overview": "",
+            })),
+        )
+        .await?;
+        let id_a = conv_a["conversation"]["id"].as_str().unwrap();
+
+        let conv_b = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations",
+            Some(json!({
+                "session_id": "s-merge-b",
+                "title": "B",
+                "overview": "",
+            })),
+        )
+        .await?;
+        let id_b = conv_b["conversation"]["id"].as_str().unwrap();
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v1/conversations/{id_a}/transcript-segments"),
+            Some(json!({"text": "one", "start_ms": 0, "end_ms": 50})),
+        )
+        .await?;
+        request_json(
+            app.clone(),
+            Method::POST,
+            &format!("/v1/conversations/{id_b}/transcript-segments"),
+            Some(json!({"text": "two", "start_ms": 0, "end_ms": 60})),
+        )
+        .await?;
+
+        let merge_resp = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/conversations/merge",
+            Some(json!({
+                "conversation_ids": [id_a, id_b],
+                "reprocess": false,
+            })),
+        )
+        .await?;
+        assert_eq!(merge_resp["status"], "completed");
+        let merged_id = merge_resp["new_conversation_id"]
+            .as_str()
+            .expect("merged id")
+            .to_string();
+
+        let folder_update = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/conversation-folders/{folder_id}"),
+            Some(json!({"name": "Desk2"})),
+        )
+        .await?;
+        assert_eq!(folder_update["folder"]["name"], "Desk2");
+
+        let assigned = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/conversations/{merged_id}"),
+            Some(json!({"folder_id": folder_id})),
+        )
+        .await?;
+        assert_eq!(assigned["conversation"]["folder_id"], folder_id);
+
+        request_status(
+            app.clone(),
+            Method::DELETE,
+            &format!("/v1/conversation-folders/{folder_id}"),
+            None,
+            StatusCode::NO_CONTENT,
+        )
+        .await?;
+
+        let unfiled =
+            request_json(app.clone(), Method::GET, &format!("/v1/conversations/{merged_id}"), None)
+                .await?;
+        assert!(unfiled["conversation"]["folder_id"].is_null());
+
+        Ok(())
+    }
+
     fn test_app() -> Result<Router> {
         let config = Config {
             bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),

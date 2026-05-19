@@ -1640,7 +1640,38 @@ class AppState: ObservableObject {
     // After WS close, the Python backend processes the conversation automatically.
     // Call force-process to ensure finalization and get the backend conversation ID.
     // This prevents the retry service from picking up the pendingUpload session.
+    // Post-stop: cloud needs time for WS teardown + force-process; local daemon uploads assembled SQLite transcripts.
     Task {
+      if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+        guard let sid = capturedSessionId else {
+          log(
+            "Transcription: Local daemon stopped with no persisted session id — nothing to upload"
+          )
+          return
+        }
+        // Allow SQLite segment upserts and Apple Speech finals to settle before upload.
+        try? await Task.sleep(nanoseconds: 550_000_000)
+
+        guard self.recordingGeneration == generationAtStop else {
+          log(
+            "Transcription: Skipping local daemon finalize — new recording started during upload delay"
+          )
+          return
+        }
+
+        do {
+          _ = try await TranscriptionRetryService.shared.finalizeLocalDaemonSessionNow(
+            sessionId: sid)
+          log(
+            "Transcription: Local daemon finalized stop session \(sid) via upload pipeline (or queued retry)"
+          )
+        } catch {
+          logError("Transcription: Local daemon finalize-after-stop failed for \(sid)", error: error)
+        }
+        await loadConversations()
+        return
+      }
+
       try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s for backend to process after WS close
 
       // If a new recording started during the delay, skip force-process — it would
@@ -1649,13 +1680,6 @@ class AppState: ObservableObject {
       guard self.recordingGeneration == generationAtStop else {
         log(
           "Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")"
-        )
-        return
-      }
-
-      if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
-        log(
-          "Transcription: Local daemon mode stopped capture; leaving session \(capturedSessionId.map(String.init) ?? "nil") for local transcript retry/finalize"
         )
         return
       }
@@ -2231,12 +2255,6 @@ class AppState: ObservableObject {
   /// Load folders from API
   func loadFolders() async {
     guard !isLoadingFolders else { return }
-
-    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
-      folders = []
-      selectedFolderId = nil
-      return
-    }
 
     isLoadingFolders = true
 

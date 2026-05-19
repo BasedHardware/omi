@@ -3,6 +3,10 @@ import SwiftUI
 struct SignInView: View {
     @ObservedObject var authState: AuthState
 
+    private var isLocalHybridMode: Bool {
+        DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+    }
+
     var body: some View {
         ZStack {
             // Full background
@@ -28,16 +32,38 @@ struct SignInView: View {
                         .scaledFont(size: 48, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Sign in to continue")
+                    Text(isLocalHybridMode ? "Local hybrid mode" : "Sign in to continue")
                         .font(.title3)
                         .foregroundColor(OmiColors.textTertiary)
+
+                    if isLocalHybridMode {
+                        Text("Cloud sign-in is optional. Your data stays on this Mac.")
+                            .font(.subheadline)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
                 }
 
                 Spacer()
 
                 // Sign in buttons
                 VStack(spacing: 12) {
-                    // Sign in with Apple
+                    if isLocalHybridMode {
+                        Button(action: {
+                            AuthService.shared.establishLocalGuestSessionIfNeeded()
+                        }) {
+                            Text("Continue without signing in")
+                                .scaledFont(size: 17, weight: .medium)
+                                .foregroundColor(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color.white)
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    // Sign in with Apple (cloud mode only — hybrid local uses guest session)
                     Button(action: {
                         Task {
                             do {
@@ -66,7 +92,7 @@ struct SignInView: View {
                         .cornerRadius(10)
                     }
                     .buttonStyle(.plain)
-                    .disabled(authState.isLoading)
+                    .disabled(authState.isLoading || isLocalHybridMode)
 
                     // Sign in with Google
                     Button(action: {
@@ -101,7 +127,7 @@ struct SignInView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(authState.isLoading)
+                    .disabled(authState.isLoading || isLocalHybridMode)
 
                     // Loading overlay for both buttons
                     if authState.isLoading {
@@ -138,6 +164,11 @@ struct SignInView: View {
                     .frame(height: 60)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            if isLocalHybridMode {
+                AuthService.shared.establishLocalGuestSessionIfNeeded()
+            }
         }
     }
 }

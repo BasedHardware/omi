@@ -107,7 +107,7 @@ pub fn configured_openai_provider(store: &Store) -> Result<Option<OpenAiCompatib
 }
 
 pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig>> {
-    for key in ["ai_provider", "provider"] {
+    for key in ["ai_provider", "provider", "chat_provider"] {
         let Some(setting) = store.settings().get(key)? else {
             continue;
         };
@@ -144,7 +144,20 @@ pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig
     Ok(None)
 }
 
+/// Settings keys validated on `PUT /v1/settings` for hybrid direct providers.
+pub const HYBRID_PROVIDER_SETTING_KEYS: &[&str] = &[
+    "ai_provider",
+    "provider",
+    "stt_provider",
+    "chat_provider",
+    "embedding_provider",
+    "vision_provider",
+];
+
 pub fn validate_provider_setting(value: &Value) -> Result<()> {
+    if value.is_null() {
+        return Ok(());
+    }
     let kind = value["kind"].as_str().unwrap_or_default();
     if kind != "openai" && kind != "openai_compatible" {
         return Ok(());
@@ -154,6 +167,34 @@ pub fn validate_provider_setting(value: &Value) -> Result<()> {
         .as_str()
         .unwrap_or("https://api.openai.com/v1");
     validate_provider_base_url(base_url)
+}
+
+pub fn validate_hybrid_provider_setting(key: &str, value: &Value) -> Result<()> {
+    if value.is_null() {
+        return Ok(());
+    }
+    if !HYBRID_PROVIDER_SETTING_KEYS.contains(&key) {
+        return Ok(());
+    }
+    validate_provider_setting(value)
+}
+
+pub fn is_provider_configured(value: &Value) -> bool {
+    if value.is_null() {
+        return false;
+    }
+    let kind = value["kind"].as_str().unwrap_or_default();
+    if kind != "openai" && kind != "openai_compatible" {
+        return false;
+    }
+    let api_key = value["api_key"]
+        .as_str()
+        .or_else(|| value["key"].as_str())
+        .unwrap_or_default();
+    !api_key.trim().is_empty()
+        || value["base_url"]
+            .as_str()
+            .is_some_and(|url| url.contains("127.0.0.1") || url.contains("localhost"))
 }
 
 fn validate_provider_base_url(base_url: &str) -> Result<()> {
@@ -177,7 +218,60 @@ fn validate_provider_base_url(base_url: &str) -> Result<()> {
     Ok(())
 }
 
-fn is_denied_provider_host(host: &str) -> bool {
+pub async fn test_configured_provider(store: &Store, key: &str) -> Result<String> {
+    let Some(setting) = store.settings().get(key)? else {
+        return Err(anyhow!("setting {key} is not configured"));
+    };
+    let value: Value = serde_json::from_str(&setting.value_json)
+        .with_context(|| format!("failed to parse {key}"))?;
+    if value.is_null() {
+        return Err(anyhow!("setting {key} is not configured"));
+    }
+    let kind = value["kind"].as_str().unwrap_or_default();
+    if kind != "openai" && kind != "openai_compatible" {
+        return Err(anyhow!("test connection supports openai_compatible providers only"));
+    }
+    let provider = load_openai_config_from_value(&value)?;
+    let client = OpenAiCompatibleProvider::new(provider);
+    let _ = client
+        .complete_json(vec![
+            ChatMessage::system("Reply with JSON only: {\"ok\":true}"),
+            ChatMessage::user("ping"),
+        ])
+        .await?;
+    Ok(format!("{key} responded successfully"))
+}
+
+fn load_openai_config_from_value(value: &Value) -> Result<OpenAiCompatibleConfig> {
+    let kind = value["kind"].as_str().unwrap_or_default();
+    if kind != "openai" && kind != "openai_compatible" {
+        return Err(anyhow!("unsupported provider kind: {kind}"));
+    }
+    let base_url = value["base_url"]
+        .as_str()
+        .unwrap_or("https://api.openai.com/v1")
+        .to_string();
+    validate_provider_base_url(&base_url)?;
+    let model = value["model"].as_str().unwrap_or("gpt-4o-mini").to_string();
+    let api_key = value["api_key"]
+        .as_str()
+        .or_else(|| value["key"].as_str())
+        .unwrap_or_default()
+        .to_string();
+    if api_key.trim().is_empty()
+        && !base_url.contains("127.0.0.1")
+        && !base_url.contains("localhost")
+    {
+        return Err(anyhow!("api_key is required for test connection"));
+    }
+    Ok(OpenAiCompatibleConfig {
+        base_url,
+        model,
+        api_key,
+    })
+}
+
+pub fn is_denied_provider_host(host: &str) -> bool {
     matches!(host, "api.omi.me" | "api.omiapi.com")
         || (host.starts_with("desktop-backend-") && host.ends_with(".a.run.app"))
         || host == "firebase.google.com"

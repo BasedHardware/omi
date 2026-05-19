@@ -28,6 +28,9 @@ actor APIClient {
     selectedBackendTarget.mode == .localDaemon
   }
 
+  /// Matches `LOCAL_DEFAULT_CHAT_SESSION_ID` in `desktop/local-backend` (implicit default-chat thread).
+  static let localDaemonDefaultChatSessionId = "00000000-0000-4000-8000-000000000001"
+
   let session: URLSession
   private let decoder: JSONDecoder
 
@@ -241,6 +244,22 @@ actor APIClient {
     return response.settings
   }
 
+  func testHybridProvider(key: String) async throws -> LocalDaemonTestProviderResponse {
+    let target = selectedBackendTarget
+    guard target.mode == .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "test_hybrid_provider",
+        reason: "Provider tests are only available in local daemon mode."
+      )
+    }
+    return try await post(
+      "v1/settings/test-provider",
+      body: LocalDaemonTestProviderRequest(key: key),
+      requireAuth: false,
+      customBaseURL: target.baseURL
+    )
+  }
+
   // MARK: - Request Execution
 
   private func performRequest<T: Decodable>(_ request: URLRequest, retryOnUnauthorized: Bool)
@@ -357,6 +376,16 @@ struct LocalDaemonSettingsResponse: Decodable {
   let settings: [LocalDaemonSetting]
 }
 
+struct LocalDaemonTestProviderRequest: Encodable {
+  let key: String
+}
+
+struct LocalDaemonTestProviderResponse: Decodable, Equatable {
+  let ok: Bool
+  let key: String
+  let message: String
+}
+
 struct LocalDaemonSetting: Decodable, Equatable {
   let key: String
   let valueJson: String
@@ -471,6 +500,9 @@ extension APIClient {
       }
       if let starred = starred {
         queryItems.append("starred=\(starred)")
+      }
+      if let folderId = folderId {
+        queryItems.append("folder_id=\(Self.queryValue(folderId))")
       }
       let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
       let response: LocalConversationsResponse = try await get(
@@ -834,13 +866,6 @@ extension APIClient {
   func mergeConversations(ids: [String], reprocess: Bool = true) async throws
     -> MergeConversationsResponse
   {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_merge",
-        reason: "Conversation merge is not implemented in local daemon mode yet."
-      )
-    }
-
     struct MergeRequest: Encodable {
       let conversationIds: [String]
       let reprocess: Bool
@@ -851,6 +876,17 @@ extension APIClient {
       }
     }
 
+    let target = mvpBackendTarget
+    if target.mode == .localDaemon {
+      let body = MergeRequest(conversationIds: ids, reprocess: reprocess)
+      return try await post(
+        "v1/conversations/merge",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+    }
+
     let body = MergeRequest(conversationIds: ids, reprocess: reprocess)
     return try await post("v1/conversations/merge", body: body)
   }
@@ -859,11 +895,17 @@ extension APIClient {
 
   /// Gets all folders for the user
   func getFolders() async throws -> [Folder] {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_folders",
-        reason: "Conversation folders are not implemented in local daemon mode yet."
+    let target = mvpBackendTarget
+    if target.mode == .localDaemon {
+      struct FoldersPayload: Decodable {
+        let folders: [Folder]
+      }
+      let response: FoldersPayload = try await get(
+        "v1/conversation-folders",
+        requireAuth: false,
+        customBaseURL: target.baseURL
       )
+      return response.folders
     }
 
     return try await get("v1/folders")
@@ -873,14 +915,21 @@ extension APIClient {
   func createFolder(name: String, description: String? = nil, color: String? = nil) async throws
     -> Folder
   {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_folders",
-        reason: "Conversation folders are not implemented in local daemon mode yet."
+    let target = mvpBackendTarget
+    let body = CreateFolderRequest(name: name, description: description, color: color)
+    if target.mode == .localDaemon {
+      struct FolderPayload: Decodable {
+        let folder: Folder
+      }
+      let response: FolderPayload = try await post(
+        "v1/conversation-folders",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
       )
+      return response.folder
     }
 
-    let body = CreateFolderRequest(name: name, description: description, color: color)
     return try await post("v1/folders", body: body)
   }
 
@@ -889,40 +938,60 @@ extension APIClient {
     id: String, name: String? = nil, description: String? = nil, color: String? = nil,
     order: Int? = nil
   ) async throws -> Folder {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_folders",
-        reason: "Conversation folders are not implemented in local daemon mode yet."
+    let target = mvpBackendTarget
+    let body = UpdateFolderRequest(name: name, description: description, color: color, order: order)
+    if target.mode == .localDaemon {
+      struct FolderPayload: Decodable {
+        let folder: Folder
+      }
+      let response: FolderPayload = try await patch(
+        "v1/conversation-folders/\(id)",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
       )
+      return response.folder
     }
 
-    let body = UpdateFolderRequest(name: name, description: description, color: color, order: order)
     return try await patch("v1/folders/\(id)", body: body)
   }
 
   /// Deletes a folder
   func deleteFolder(id: String, moveToFolderId: String? = nil) async throws {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_folders",
-        reason: "Conversation folders are not implemented in local daemon mode yet."
-      )
+    let target = mvpBackendTarget
+    if target.mode == .localDaemon {
+      var endpoint = "v1/conversation-folders/\(id)"
+      if let moveToId = moveToFolderId {
+        endpoint += "?move_to_folder_id=\(Self.queryValue(moveToId))"
+      }
+      try await delete(endpoint, requireAuth: false, customBaseURL: target.baseURL)
+      return
     }
 
     var endpoint = "v1/folders/\(id)"
     if let moveToId = moveToFolderId {
-      endpoint += "?move_to_folder_id=\(moveToId)"
+      endpoint += "?move_to_folder_id=\(Self.queryValue(moveToId))"
     }
     try await delete(endpoint)
   }
 
   /// Moves a conversation to a folder
   func moveConversationToFolder(conversationId: String, folderId: String?) async throws {
-    if mvpBackendTarget.mode == .localDaemon {
-      throw APIError.featureUnavailable(
-        feature: "conversation_folders",
-        reason: "Conversation folders are not implemented in local daemon mode yet."
+    let target = mvpBackendTarget
+    if target.mode == .localDaemon {
+      struct FolderIdBody: Encodable {
+        let folderId: String?
+        enum CodingKeys: String, CodingKey {
+          case folderId = "folder_id"
+        }
+      }
+      let _: LocalConversationEnvelope = try await patch(
+        "v1/conversations/\(conversationId)",
+        body: FolderIdBody(folderId: folderId),
+        requireAuth: false,
+        customBaseURL: target.baseURL
       )
+      return
     }
 
     let body = MoveToFolderRequest(folderId: folderId)
@@ -1427,6 +1496,7 @@ private struct LocalConversation: Decodable {
   let createdAt: Date
   let deletedAt: Date?
   let starred: Bool
+  let folderId: String?
 
   enum CodingKeys: String, CodingKey {
     case id, title, overview, status, starred
@@ -1435,6 +1505,7 @@ private struct LocalConversation: Decodable {
     case endedAt = "ended_at"
     case createdAt = "created_at"
     case deletedAt = "deleted_at"
+    case folderId = "folder_id"
   }
 
   func toServerConversation(transcriptSegments: [TranscriptSegment]) -> ServerConversation {
@@ -1462,7 +1533,7 @@ private struct LocalConversation: Decodable {
       deleted: deletedAt != nil,
       isLocked: false,
       starred: starred,
-      folderId: nil,
+      folderId: folderId,
       inputDeviceName: nil
     )
   }
@@ -3677,6 +3748,8 @@ struct ScoreResponse: Codable {
   static func emptyLocal(date: Date? = nil) -> ScoreResponse {
     let empty = ScoreData(score: 0, completedTasks: 0, totalTasks: 0)
     let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
     formatter.dateFormat = "yyyy-MM-dd"
     return ScoreResponse(
       daily: empty,
@@ -5233,14 +5306,33 @@ extension APIClient {
     sessionId: String? = nil,
     metadata: String? = nil
   ) async throws -> SaveMessageResponse {
-    struct SaveRequest: Encodable {
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      struct LocalSaveRequest: Encodable {
+        let text: String
+        let sender: String
+        let app_id: String?
+        let metadata: String?
+      }
+      let sid = sessionId ?? Self.localDaemonDefaultChatSessionId
+      let body = LocalSaveRequest(
+        text: text, sender: sender, app_id: appId, metadata: metadata)
+      return try await post(
+        "v2/chat-sessions/\(sid)/messages",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+    }
+
+    struct CloudSaveRequest: Encodable {
       let text: String
       let sender: String
       let app_id: String?
       let session_id: String?
       let metadata: String?
     }
-    let body = SaveRequest(
+    let body = CloudSaveRequest(
       text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
     return try await post("v2/desktop/messages", body: body)
   }
@@ -5251,6 +5343,20 @@ extension APIClient {
     limit: Int = 100,
     offset: Int = 0
   ) async throws -> [ChatMessageDB] {
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      var queryItems: [String] = [
+        "limit=\(limit)",
+        "offset=\(offset)",
+      ]
+      if let appId = appId {
+        queryItems.append("app_id=\(appId)")
+      }
+      let sid = Self.localDaemonDefaultChatSessionId
+      let endpoint = "v2/chat-sessions/\(sid)/messages?\(queryItems.joined(separator: "&"))"
+      return try await get(endpoint, requireAuth: false, customBaseURL: target.baseURL)
+    }
+
     var queryItems: [String] = [
       "limit=\(limit)",
       "offset=\(offset)",
@@ -5299,13 +5405,20 @@ extension APIClient {
     limit: Int = 100,
     offset: Int = 0
   ) async throws -> [ChatMessageDB] {
+    let target = selectedBackendTarget
     let queryItems: [String] = [
-      "session_id=\(sessionId)",
       "limit=\(limit)",
       "offset=\(offset)",
     ]
 
-    let endpoint = "v2/desktop/messages?\(queryItems.joined(separator: "&"))"
+    if target.mode == .localDaemon {
+      let endpoint =
+        "v2/chat-sessions/\(sessionId)/messages?\(queryItems.joined(separator: "&"))"
+      return try await get(endpoint, requireAuth: false, customBaseURL: target.baseURL)
+    }
+
+    let endpoint =
+      "v2/desktop/messages?session_id=\(sessionId)&\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
   }
 
@@ -5424,6 +5537,15 @@ extension APIClient {
       let app_id: String?
     }
     let body = CreateRequest(title: title, app_id: appId)
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      return try await post(
+        "v2/chat-sessions",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+    }
     return try await post("v2/chat-sessions", body: body)
   }
 
@@ -5447,6 +5569,10 @@ extension APIClient {
     }
 
     let endpoint = "v2/chat-sessions?\(queryItems.joined(separator: "&"))"
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      return try await get(endpoint, requireAuth: false, customBaseURL: target.baseURL)
+    }
     return try await get(endpoint)
   }
 
@@ -5461,11 +5587,29 @@ extension APIClient {
       let starred: Bool?
     }
     let body = UpdateRequest(title: title, starred: starred)
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      return try await patch(
+        "v2/chat-sessions/\(sessionId)",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+    }
     return try await patch("v2/chat-sessions/\(sessionId)", body: body)
   }
 
   /// Delete a chat session and its messages
   func deleteChatSession(sessionId: String) async throws {
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      try await delete(
+        "v2/chat-sessions/\(sessionId)",
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+      return
+    }
     try await delete("v2/chat-sessions/\(sessionId)")
   }
 

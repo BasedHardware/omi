@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 
 // MARK: - Thinking Budget Configuration
 
@@ -180,7 +181,17 @@ struct GeminiResponse: Decodable {
 /// Low-level client for communicating with the Gemini API via backend proxy.
 /// All requests route through the Rust backend (/v1/proxy/gemini/*) which adds
 /// the Gemini API key server-side. Auth uses Firebase Bearer token.
+///
+/// In `localDaemon` hybrid mode there is no Gemini proxy — when `ai_provider` /
+/// `chat_provider` (or BYOK OpenAI) is configured, requests use
+/// ``HybridLLMClient`` (OpenAI-compatible chat completions) instead.
 actor GeminiClient {
+  private enum Transport {
+    case geminiProxy
+    case hybridOpenAICompatible
+  }
+
+  private let transport: Transport
   private let model: String
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
@@ -251,14 +262,96 @@ actor GeminiClient {
   }
 
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
-    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
-    // All Gemini requests now route through the backend proxy which supplies
-    // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
-    // so installed test bundles launched from Finder still have AI features.
+    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored for cloud proxy mode.
+    self.model = model
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+      self.transport = .hybridOpenAICompatible
+      return
+    }
     guard !Self.proxyBaseURL.isEmpty else {
       throw GeminiClientError.missingAPIKey
     }
-    self.model = model
+    self.transport = .geminiProxy
+  }
+
+  private func mapHybridError(_ error: HybridLLMClient.ClientError) -> GeminiClientError {
+    switch error {
+    case .notConfigured:
+      return .missingAPIKey
+    case .invalidSettings:
+      return .apiError(error.localizedDescription)
+    case .invalidResponse:
+      return .invalidResponse
+    case .httpFailure(let status, let body):
+      return .apiError("HTTP \(status): \(body)")
+    }
+  }
+
+  /// Text chat completion via hybrid OpenAI-compatible provider (or BYOK OpenAI).
+  private func hybridChatText(
+    systemPrompt: String,
+    userText: String,
+    jsonMode: Bool,
+    timeout: TimeInterval = 300
+  ) async throws -> String {
+    let settings = try await HybridDaemonSettingsCache.shared.settings()
+    guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
+      throw GeminiClientError.missingAPIKey
+    }
+    do {
+      return try await HybridLLMClient.chatCompletionText(
+        config: config,
+        systemPrompt: systemPrompt,
+        userText: userText,
+        jsonMode: jsonMode,
+        timeout: timeout
+      )
+    } catch let error as HybridLLMClient.ClientError {
+      throw mapHybridError(error)
+    }
+  }
+
+  /// Multimodal when `vision_provider` is set; otherwise macOS Vision OCR + text JSON.
+  private func hybridChatImageOrOCR(
+    prompt: String,
+    imageData: Data,
+    systemPrompt: String,
+    jsonMode: Bool,
+    timeout: TimeInterval = 300
+  ) async throws -> String {
+    let settings = try await HybridDaemonSettingsCache.shared.settings()
+    guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
+      throw GeminiClientError.missingAPIKey
+    }
+    let visionConfig = HybridLLMClient.loadVisionProviderConfig(from: settings)
+    do {
+      if let visionConfig {
+        return try await HybridLLMClient.chatCompletionMultimodalJPEG(
+          config: visionConfig,
+          systemPrompt: systemPrompt,
+          userText: prompt,
+          jpegData: imageData,
+          jsonMode: jsonMode,
+          timeout: timeout
+        )
+      }
+      let ocr = try await HybridLLMClient.ScreenOCR.recognizeTextFromJPEG(imageData)
+      let user =
+        prompt
+        + "\n\n--- ON-SCREEN TEXT (macOS OCR) ---\n\(ocr)\n--- END OCR ---\n"
+      let sysp =
+        systemPrompt
+        + "\n\nReturn a single JSON object only (no prose or markdown fences)."
+      return try await HybridLLMClient.chatCompletionText(
+        config: config,
+        systemPrompt: sysp,
+        userText: user,
+        jsonMode: jsonMode,
+        timeout: timeout
+      )
+    } catch let error as HybridLLMClient.ClientError {
+      throw mapHybridError(error)
+    }
   }
 
   /// Get Firebase auth header for proxy requests
@@ -326,6 +419,12 @@ actor GeminiClient {
         return false
       }
     }
+    if let hybridError = error as? HybridLLMClient.ClientError {
+      if case .httpFailure(let status, _) = hybridError {
+        return status == 429 || status == 503
+      }
+      return false
+    }
     // URLSession network errors are transient
     return (error as NSError).domain == NSURLErrorDomain
   }
@@ -357,6 +456,15 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .hybridOpenAICompatible {
+          return try await hybridChatImageOrOCR(
+            prompt: prompt,
+            imageData: imageData,
+            systemPrompt: systemPrompt,
+            jsonMode: true
+          )
+        }
+
         // Wrap base64 encoding + JSON serialization in autoreleasepool.
         // These create bridged Obj-C objects (NSString, NSData) that accumulate
         // in Swift concurrency's cooperative thread pool without being drained.
@@ -442,6 +550,15 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .hybridOpenAICompatible {
+          return try await hybridChatText(
+            systemPrompt: systemPrompt,
+            userText: prompt,
+            jsonMode: false,
+            timeout: timeout
+          )
+        }
+
         let request = GeminiRequest(
           contents: [
             GeminiRequest.Content(parts: [
@@ -514,6 +631,14 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .hybridOpenAICompatible {
+          return try await hybridChatText(
+            systemPrompt: systemPrompt,
+            userText: prompt,
+            jsonMode: true
+          )
+        }
+
         let request = GeminiRequest(
           contents: [
             GeminiRequest.Content(parts: [
@@ -566,6 +691,60 @@ actor GeminiClient {
     }
 
     throw lastError!
+  }
+
+  /// When hybrid mode has no `vision_provider`, strip inline image bytes and attach macOS OCR text instead.
+  private func hybridContentsWithOCRInsteadOfImages(
+    _ contents: [GeminiImageToolRequest.Content]
+  ) async throws -> [GeminiImageToolRequest.Content] {
+    var results: [GeminiImageToolRequest.Content] = []
+    for content in contents {
+      var newParts: [GeminiImageToolRequest.Part] = []
+      for part in content.parts {
+        if let inline = part.inlineData {
+          let mime = inline.mimeType.lowercased()
+          guard let rawImageData = Data(base64Encoded: inline.data, options: [.ignoreUnknownCharacters])
+          else {
+            continue
+          }
+          let jpegData: Data
+          if mime.contains("webp"), let converted = Self.webpDataAsJPEG(rawImageData) {
+            jpegData = converted
+          } else if mime.contains("jpeg") || mime.contains("jpg") {
+            jpegData = rawImageData
+          } else {
+            continue
+          }
+          let ocr = try await HybridLLMClient.ScreenOCR.recognizeTextFromJPEG(jpegData)
+          let banner =
+            "\n\n--- ON-SCREEN TEXT (macOS OCR; hybrid mode without vision_provider) ---\n\(ocr)\n--- END OCR ---\n"
+          newParts.append(GeminiImageToolRequest.Part(text: banner))
+          continue
+        }
+        newParts.append(part)
+      }
+      results.append(GeminiImageToolRequest.Content(role: content.role, parts: newParts))
+    }
+    return results
+  }
+
+  /// Best-effort WebP → JPEG for Vision OCR when assistants embed WebP inline data.
+  private nonisolated static func webpDataAsJPEG(_ webpData: Data) -> Data? {
+    guard let src = CGImageSourceCreateWithData(webpData as CFData, nil),
+      let cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil)
+    else {
+      return nil
+    }
+    let destData = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(destData, "public.jpeg" as CFString, 1, nil)
+    else {
+      return nil
+    }
+    CGImageDestinationAddImage(dest, cgImage, nil)
+    guard CGImageDestinationFinalize(dest) else {
+      return nil
+    }
+    return destData as Data
   }
 
 }
@@ -627,15 +806,39 @@ struct GeminiTool: Encodable {
 
       struct Property: Encodable {
         let type: String
-        let description: String
+        let description: String?
         let `enum`: [String]?
         let items: Items?
+        let nestedProperties: [String: Property]?
+        let nestedRequired: [String]?
 
-        init(type: String, description: String, enumValues: [String]? = nil, items: Items? = nil) {
+        enum CodingKeys: String, CodingKey {
+          case type
+          case `enum`
+          case description
+          case items
+          case nestedProperties = "properties"
+          case nestedRequired = "required"
+        }
+
+        init(type: String, description: String = "", enumValues: [String]? = nil, items: Items? = nil) {
           self.type = type
-          self.description = description
+          self.description = description.isEmpty ? nil : description
           self.enum = enumValues
           self.items = items
+          self.nestedProperties = nil
+          self.nestedRequired = nil
+        }
+
+        init(
+          type: String, description: String = "", properties: [String: Property], required: [String]
+        ) {
+          self.type = type
+          self.description = description.isEmpty ? nil : description
+          self.enum = nil
+          self.items = nil
+          self.nestedProperties = properties
+          self.nestedRequired = required
         }
 
         struct Items: Encodable {
@@ -806,6 +1009,33 @@ extension GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .hybridOpenAICompatible {
+          let settings = try await HybridDaemonSettingsCache.shared.settings()
+          guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
+            throw GeminiClientError.missingAPIKey
+          }
+          let allowVision = HybridVisionProvider.isConfigured(settings: settings)
+          do {
+            let contentsForHybrid: [GeminiImageToolRequest.Content]
+            if allowVision {
+              contentsForHybrid = contents
+            } else {
+              contentsForHybrid = try await hybridContentsWithOCRInsteadOfImages(contents)
+            }
+            return try await HybridLLMClient.performGeminiCompatibleToolRound(
+              config: config,
+              systemPrompt: systemPrompt,
+              contents: contentsForHybrid,
+              tools: tools,
+              forceToolCall: forceToolCall,
+              allowVisionInlineJPEG: allowVision,
+              timeout: 300
+            )
+          } catch let error as HybridLLMClient.ClientError {
+            throw mapHybridError(error)
+          }
+        }
+
         // Wrap JSON serialization in autoreleasepool (contents may include
         // large base64 image data that creates bridged Obj-C intermediaries).
         let requestBody: Data = try autoreleasepool {

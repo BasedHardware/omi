@@ -4,6 +4,8 @@ import Foundation
 /// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
 /// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
 /// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
+/// Local daemon hybrid (`OMI_HYBRID_DIRECT_STT_ENABLED` + Speech availability): buffered Apple Speech streaming,
+/// uploads finished sessions through the Rust local daemon transcript pipeline (`TranscriptionRetryService`).
 /// Full stereo batch: removed (formerly Rust proxy Deepgram, now dead code).
 class TranscriptionService {
 
@@ -37,6 +39,29 @@ class TranscriptionService {
         let start: Double
         let end: Double
         let translations: [BackendTranslation]?
+
+        /// Construct segments for adapters (Apple Speech hybrid path) without JSON decoding.
+        internal init(
+            id: String?,
+            text: String,
+            speaker: String?,
+            speaker_id: Int?,
+            is_user: Bool,
+            person_id: String?,
+            start: Double,
+            end: Double,
+            translations: [BackendTranslation]?
+        ) {
+            self.id = id
+            self.text = text
+            self.speaker = speaker
+            self.speaker_id = speaker_id
+            self.is_user = is_user
+            self.person_id = person_id
+            self.start = start
+            self.end = end
+            self.translations = translations
+        }
     }
 
     /// Message event (from `/v4/listen` only — not used by PTT transcribe-stream)
@@ -98,6 +123,10 @@ class TranscriptionService {
     private let channels = 1  // Always mono for Python backend streaming
     private let streamingMode: StreamingMode
     private let contextKeywords: [String]
+
+    /// When true, PCM is recognized with Apple Speech (local daemon hybrid) instead of Python WebSockets.
+    private let useHybridLocalSpeech: Bool
+    private var localSpeechAdapter: LocalSpeechTranscriptionAdapter?
 
     /// Python backend base URL for transcription endpoints.
     /// Resolution order: beta release channel → OMI_PYTHON_API_URL → https://api.omi.me/
@@ -163,23 +192,36 @@ class TranscriptionService {
     ///   - language: Language code for transcription (e.g., "en", "uk", "ru", "multi" for auto-detect)
     ///   - mode: Streaming mode — `.conversation` for `/v4/listen` (default), `.ptt` for `/v2/voice-message/transcribe-stream`
     init(language: String = "en", mode: StreamingMode = .conversation, contextKeywords: [String] = []) throws {
-        guard DesktopBackendEnvironment.isCapability(
-            .hostedTranscription,
-            availableIn: DesktopBackendEnvironment.selectedBackendTarget.mode
-        ) else {
+        let backendMode = DesktopBackendEnvironment.selectedBackendTarget.mode
+        // Local daemon: stream PCM through Apple Speech when `directSTT` is on — either explicitly
+        // (`OMI_HYBRID_DIRECT_STT_ENABLED=1`) or when the Speech engine is available for preferred languages.
+        let hybridSpeech = backendMode == .localDaemon
+            && DesktopBackendEnvironment.isCapability(.directSTT, availableIn: backendMode)
+
+        guard
+            DesktopBackendEnvironment.isCapability(
+                .hostedTranscription,
+                availableIn: backendMode
+            )
+            || hybridSpeech
+        else {
             throw TranscriptionError.webSocketError(
                 DesktopBackendEnvironment.unavailableReason(
                     for: .hostedTranscription,
-                    in: DesktopBackendEnvironment.selectedBackendTarget.mode
+                    in: backendMode
                 ) ?? "Hosted transcription is unavailable in local daemon mode"
             )
         }
 
+        self.useHybridLocalSpeech = hybridSpeech
         self.apiKey = ""  // Not needed — Python backend uses Firebase auth
         self.language = language
         self.streamingMode = mode
         self.contextKeywords = Self.sanitizedContextKeywords(contextKeywords)
-        log("TranscriptionService: Initialized for \(mode == .conversation ? "/v4/listen" : "/v2/voice-message/transcribe-stream"), language=\(language), contextKeywords=\(self.contextKeywords.count)")
+
+        log(
+            "TranscriptionService: Initialized for \(Self.endpointLabel(mode: mode, hybridLocal: hybridSpeech)), language=\(language), contextKeywords=\(self.contextKeywords.count)"
+        )
     }
 
     /// Initialize for batch (PTT) mode only — uses Python backend `/v2/voice-message/transcribe`
@@ -204,6 +246,7 @@ class TranscriptionService {
         }
 
         // Batch mode uses Firebase auth + Python backend — no DG key needed
+        self.useHybridLocalSpeech = false
         self.apiKey = ""
         self.language = language
         self.streamingMode = .ptt  // Batch doesn't stream, but PTT is the correct context
@@ -227,6 +270,11 @@ class TranscriptionService {
     /// manages its own endpointing via the pusher pipeline).
     func finishStream() {
         flushAudioBuffer()
+
+        if useHybridLocalSpeech {
+            localSpeechAdapter?.endAudioInput()
+            return
+        }
 
         // Only PTT mode uses the "finalize" protocol — conversation mode (/v4/listen) doesn't support it
         guard streamingMode == .ptt else { return }
@@ -254,8 +302,13 @@ class TranscriptionService {
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
-        self.shouldReconnect = true
+        self.shouldReconnect = !useHybridLocalSpeech
         self.reconnectAttempts = 0
+
+        if useHybridLocalSpeech {
+            startHybridLocalSpeechStreaming()
+            return
+        }
 
         connect()
     }
@@ -271,12 +324,16 @@ class TranscriptionService {
         // Flush any remaining audio
         flushAudioBuffer()
 
+        if useHybridLocalSpeech {
+            localSpeechAdapter?.endAudioInput()
+        }
+
         disconnect()
     }
 
     /// Send audio data to the backend (buffered for efficiency)
     func sendAudio(_ data: Data) {
-        guard isConnected else { return }
+        guard useHybridLocalSpeech || isConnected else { return }
 
         audioBufferLock.lock()
         audioBuffer.append(data)
@@ -304,9 +361,16 @@ class TranscriptionService {
         }
     }
 
-    /// Actually send an audio chunk to the backend
+    /// Actually send an audio chunk to the backend (or Apple Speech hybrid path).
     private func sendAudioChunk(_ data: Data) {
-        guard isConnected, let webSocketTask = webSocketTask else { return }
+        guard useHybridLocalSpeech || isConnected else { return }
+
+        if useHybridLocalSpeech {
+            localSpeechAdapter?.appendLinear16PCMSamples(data)
+            return
+        }
+
+        guard let webSocketTask = webSocketTask else { return }
 
         let message = URLSessionWebSocketTask.Message.data(data)
         webSocketTask.send(message) { [weak self] error in
@@ -322,9 +386,77 @@ class TranscriptionService {
         return isConnected
     }
 
+    /// Label for diagnostics (hosted WebSocket endpoints vs hybrid local Apple Speech).
+    private static func endpointLabel(mode: StreamingMode, hybridLocal: Bool) -> String {
+        if hybridLocal {
+            switch mode {
+            case .conversation: return "/v4/listen (Apple Speech hybrid local)"
+            case .ptt: return "/v2/voice-message/transcribe-stream (Apple Speech hybrid local)"
+            }
+        }
+        switch mode {
+        case .conversation: return "/v4/listen"
+        case .ptt: return "/v2/voice-message/transcribe-stream"
+        }
+    }
+
+    /// Apple Speech buffered recognition for local daemon hybrid mode (`OMI_HYBRID_DIRECT_STT_ENABLED=1`).
+    private func startHybridLocalSpeechStreaming() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
+
+        let adapter = LocalSpeechTranscriptionAdapter(languageCode: language)
+        localSpeechAdapter = adapter
+
+        localSpeechAdapter?.start(
+            onSegments: { [weak self] segments in
+                guard let self else { return }
+                self.lastDataReceivedAt = Date()
+                if !segments.isEmpty {
+                    self.onBackendSegments?(segments)
+                }
+            },
+            onError: { [weak self] error in
+                guard let self else { return }
+                self.shouldReconnect = false
+                self.isConnected = false
+                self.watchdogTask?.cancel()
+                self.watchdogTask = nil
+                self.cleanupLocalSpeechAdapterImmediately()
+                self.onError?(error)
+            },
+            onReady: { [weak self] in
+                guard let self else { return }
+                self.isConnected = true
+                self.reconnectAttempts = 0
+                self.lastDataReceivedAt = Date()
+                log("TranscriptionService: Apple Speech hybrid ready")
+                self.onConnected?()
+            }
+        )
+    }
+
+    /// Cancel hybrid recognition synchronously — used after fatal Speech errors before WebSocket teardown.
+    private func cleanupLocalSpeechAdapterImmediately() {
+        localSpeechAdapter?.cancel()
+        localSpeechAdapter = nil
+    }
+
+    /// Tear down Speech with a brief delay after `endAudioInput()` so the task can flush finals.
+    private func scheduleLocalSpeechAdapterCancellation() {
+        guard let adapter = localSpeechAdapter else { return }
+        localSpeechAdapter = nil
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.55) {
+            adapter.cancel()
+        }
+    }
+
     // MARK: - Private Methods (Connection)
 
     private func connect() {
+        guard !useHybridLocalSpeech else { return }
         // Always use Firebase auth for Python backend
         Task { [weak self] in
             guard let self = self else { return }
@@ -459,6 +591,16 @@ class TranscriptionService {
     }
 
     private func disconnect() {
+        if useHybridLocalSpeech {
+            isConnected = false
+            watchdogTask?.cancel()
+            watchdogTask = nil
+            scheduleLocalSpeechAdapterCancellation()
+            log("TranscriptionService: Disconnected (hybrid Apple Speech)")
+            onDisconnected?()
+            return
+        }
+
         isConnected = false
         watchdogTask?.cancel()
         watchdogTask = nil
@@ -471,6 +613,7 @@ class TranscriptionService {
     }
 
     func handleDisconnection() {
+        guard !useHybridLocalSpeech else { return }
         guard isConnected else { return }
 
         isConnected = false
@@ -501,6 +644,7 @@ class TranscriptionService {
     /// Cleanup a failed/pending connection and schedule reconnect.
     /// Unlike handleDisconnection(), this works even when isConnected is false (pre-handshake failures).
     func cleanupAndReconnect() {
+        guard !useHybridLocalSpeech else { return }
         webSocketTask?.cancel(with: .abnormalClosure, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()

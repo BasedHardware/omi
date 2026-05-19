@@ -50,6 +50,10 @@ class AuthService {
     private var isLocalDaemonMode: Bool {
         DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
     }
+
+    /// Stable identity for hybrid local daemon mode (no Firebase / OAuth).
+    static let localGuestUserId = "local-hybrid-guest"
+    static let localGuestEmail = "local@omi.local"
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }
@@ -137,6 +141,7 @@ class AuthService {
         isConfigured = true
         restoreAuthState()
         setupAuthStateListener()
+        establishLocalGuestSessionIfNeeded()
 
         // Timeout: if auth isn't restored within 5 seconds, stop showing loading
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -144,6 +149,29 @@ class AuthService {
                 NSLog("OMI AUTH: Auth restore timed out after 5s, clearing loading state")
                 AuthState.shared.isRestoringAuth = false
             }
+        }
+    }
+
+    /// Hybrid local daemon mode does not use the Python OAuth backend or Firebase for data APIs.
+    /// Enter a stable on-device guest session so the main UI is reachable without cloud sign-in.
+    @MainActor
+    func establishLocalGuestSessionIfNeeded() {
+        guard isLocalDaemonMode else { return }
+        guard !isSignedIn else {
+            isLoading = false
+            AuthState.shared.isRestoringAuth = false
+            return
+        }
+
+        NSLog("OMI AUTH: Local daemon mode — establishing offline guest session (no cloud login)")
+        isSignedIn = true
+        isLoading = false
+        AuthState.shared.isRestoringAuth = false
+        AuthState.shared.userEmail = Self.localGuestEmail
+        saveAuthState(isSignedIn: true, email: Self.localGuestEmail, userId: Self.localGuestUserId)
+        Task {
+            await RewindDatabase.shared.configure(userId: Self.localGuestUserId)
+            await HybridProviderBootstrap.ensureDefaultsIfNeeded()
         }
     }
 

@@ -62,6 +62,11 @@ actor EmbeddingService {
   ///   - text: Text to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
   func embed(text: String, taskType: String? = nil) async throws -> [Float] {
+    if HybridEmbeddingClient.isEnabled() {
+      let result = try await HybridEmbeddingClient.embedFromDaemonSettings(text: text)
+      return result.vector
+    }
+
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }
@@ -107,6 +112,16 @@ actor EmbeddingService {
   ///   - texts: Texts to embed
   ///   - taskType: Optional Gemini task type (e.g. "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY")
   func embedBatch(texts: [String], taskType: String? = nil) async throws -> [[Float]] {
+    if HybridEmbeddingClient.isEnabled() {
+      var results: [[Float]] = []
+      results.reserveCapacity(texts.count)
+      for text in texts {
+        let result = try await HybridEmbeddingClient.embedFromDaemonSettings(text: text)
+        results.append(result.vector)
+      }
+      return results
+    }
+
     guard !Self.proxyBaseURL.isEmpty else {
       throw EmbeddingError.missingAPIKey
     }

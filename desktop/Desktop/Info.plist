@@ -39,6 +39,8 @@
     <string>Omi needs permission to detect which application is currently active.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Omi needs microphone access to transcribe your conversations in real-time.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Omi uses speech recognition to transcribe your voice while local conversations use on-device daemon mode.</string>
     <key>NSAudioCaptureUsageDescription</key>
     <string>Omi needs permission to capture system audio for transcription of calls and meetings.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>

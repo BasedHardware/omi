@@ -2164,6 +2164,18 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("hybridEmbeddingMetadata") { db in
+            try db.alter(table: "screenshots") { t in
+                t.add(column: "embeddingModel", .text)
+                t.add(column: "embeddingDim", .integer)
+            }
+            try db.alter(table: "staged_tasks") { t in
+                t.add(column: "embeddingModel", .text)
+                t.add(column: "embeddingDim", .integer)
+            }
+            print("[RewindDatabase] Migration: Added embedding_model/embedding_dim metadata for hybrid embedders")
+        }
+
         try migrator.migrate(queue)
     }
 

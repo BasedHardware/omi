@@ -10,6 +10,11 @@ enum DesktopBackendEnvironment {
   enum Capability: String, CaseIterable, Equatable {
     case localConversationData
     case firebaseSignIn
+    case directSTT
+    case directChat
+    case directEmbeddings
+    case optionalCloudSTT
+    case optionalCloudChat
     case managedAgentVM
     case omiBackendProviderProxy
     case publicSharing
@@ -182,10 +187,24 @@ enum DesktopBackendEnvironment {
     }
 
     switch capability {
-    case .localConversationData:
+    case .localConversationData, .firebaseSignIn:
       return true
-    case .firebaseSignIn:
-      return true
+    case .directSTT:
+      if hybridDirectSTTExplicitlyDisabled() {
+        return false
+      }
+      if isAffirmative(currentEnvironmentValue("OMI_HYBRID_DIRECT_STT_ENABLED")) {
+        return true
+      }
+      return LocalSpeechTranscriptionAdapter.isRecognitionEngineAvailableForPreferredSystemLanguages()
+    case .directChat:
+      return isAffirmative(currentEnvironmentValue("OMI_HYBRID_DIRECT_CHAT_ENABLED"))
+    case .directEmbeddings:
+      return isAffirmative(currentEnvironmentValue("OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED"))
+    case .optionalCloudSTT:
+      return isAffirmative(currentEnvironmentValue("OMI_HYBRID_OPTIONAL_CLOUD_STT"))
+    case .optionalCloudChat:
+      return isAffirmative(currentEnvironmentValue("OMI_HYBRID_OPTIONAL_CLOUD_CHAT"))
     case .managedAgentVM,
          .omiBackendProviderProxy,
          .publicSharing,
@@ -203,6 +222,22 @@ enum DesktopBackendEnvironment {
     }
 
     switch capability {
+    case .directSTT:
+      if hybridDirectSTTExplicitlyDisabled() {
+        return "Direct local speech-to-text is disabled (OMI_HYBRID_DIRECT_STT_ENABLED is off)."
+      }
+      return
+        "Apple Speech is not available for this Mac’s preferred languages (or Speech Recognition is off in System Settings). Set OMI_HYBRID_DIRECT_STT_ENABLED=1 to opt in when the engine is available."
+    case .directChat:
+      return
+        "Direct local chat requires OMI_HYBRID_DIRECT_CHAT_ENABLED=1 and a chat_provider in hybrid settings."
+    case .directEmbeddings:
+      return
+        "Direct local embeddings require OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1 and an embedding_provider in hybrid settings."
+    case .optionalCloudSTT:
+      return "Optional cloud speech-to-text is off. Set OMI_HYBRID_OPTIONAL_CLOUD_STT=1 to allow hosted Listen."
+    case .optionalCloudChat:
+      return "Optional cloud chat is off. Set OMI_HYBRID_OPTIONAL_CLOUD_CHAT=1 to allow Omi-hosted chat."
     case .managedAgentVM:
       return "Managed agent VMs are cloud-only and are disabled in local daemon mode."
     case .omiBackendProviderProxy:
@@ -257,5 +292,12 @@ enum DesktopBackendEnvironment {
     guard let value else { return false }
     let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return normalized == "1" || normalized == "true" || normalized == "yes"
+  }
+
+  /// Treats `OMI_HYBRID_DIRECT_STT_ENABLED=0|false|no|off` as an explicit hybrid direct-STT kill switch.
+  private static func hybridDirectSTTExplicitlyDisabled() -> Bool {
+    guard let raw = currentEnvironmentValue("OMI_HYBRID_DIRECT_STT_ENABLED") else { return false }
+    let n = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return n == "0" || n == "false" || n == "no" || n == "off"
   }
 }
