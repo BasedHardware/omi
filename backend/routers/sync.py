@@ -55,6 +55,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    _PRECACHE_FILE_SEM,
 )
 
 from utils import encryption
@@ -202,12 +203,19 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
-    # Start background parallel pre-caching for all audio files using storage_executor
+    # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = [
-            submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af) for af in audio_files
-        ]
+        futures = []
+        for af in audio_files:
+            _PRECACHE_FILE_SEM.acquire()
+            try:
+                f = submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
+                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                futures.append(f)
+            except Exception:
+                _PRECACHE_FILE_SEM.release()
+                raise
         for future in futures:
             try:
                 future.result()
@@ -304,10 +312,16 @@ def get_audio_signed_urls_endpoint(
     if uncached_files:
 
         def _cache_uncached_parallel():
-            futures = [
-                submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
-                for af in uncached_files
-            ]
+            futures = []
+            for af in uncached_files:
+                _PRECACHE_FILE_SEM.acquire()
+                try:
+                    f = submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
+                    f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                    futures.append(f)
+                except Exception:
+                    _PRECACHE_FILE_SEM.release()
+                    raise
             for future in futures:
                 try:
                     future.result()
