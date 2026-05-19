@@ -102,27 +102,28 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
 
 
 def record_app_webhook_success(app_id: str):
-    """Record a successful webhook delivery. Resets all failure state."""
+    """Record a successful webhook delivery. Updates last_success_at without resetting failure tracking.
+
+    Failure state is tracked independently so that a healthy endpoint on the same app
+    cannot prevent auto-disable of a broken endpoint. The key TTLs out naturally (7 days)
+    or is explicitly cleared on re-enable.
+    """
     try:
         key = f'app_webhook_health:{app_id}'
         now_ts = int(time.time())
-        r.hset(
-            key,
-            mapping={
-                'first_failure_at': '',
-                'last_failure_at': '',
-                'last_success_at': str(now_ts),
-                'failure_count': '0',
-                'last_status': '200',
-                'last_error': '',
-                'notified_day1': '0',
-                'notified_day2': '0',
-                'disabled': '0',
-            },
-        )
+        r.hset(key, 'last_success_at', str(now_ts))
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
         logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
+
+
+def clear_app_webhook_health(app_id: str):
+    """Clear all webhook health state for an app. Used on re-enable."""
+    try:
+        key = f'app_webhook_health:{app_id}'
+        r.delete(key)
+    except Exception as e:
+        logger.warning(f'clear_app_webhook_health redis error app_id={app_id}: {e}')
 
 
 def is_app_webhook_disabled(app_id: str) -> bool:
@@ -178,6 +179,11 @@ local error_msg = ARGV[3]
 local ttl = tonumber(ARGV[4])
 local threshold = tonumber(ARGV[5])
 
+local already_disabled = redis.call('HGET', key, 'disabled')
+if already_disabled == '1' then
+    return 0
+end
+
 local count = redis.call('HINCRBY', key, 'failure_count', 1)
 redis.call('HSET', key,
     'last_failure_at', now_ts,
@@ -186,6 +192,7 @@ redis.call('HSET', key,
 redis.call('EXPIRE', key, ttl)
 
 if count >= threshold then
+    redis.call('HSET', key, 'disabled', '1')
     return 1
 end
 return 0
