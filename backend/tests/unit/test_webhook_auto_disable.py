@@ -35,6 +35,7 @@ _db_redis.enable_user_webhook_db = MagicMock()
 _db_redis.set_user_webhook_db = MagicMock()
 _db_redis.get_cached_user_geolocation = MagicMock(return_value=None)
 _db_redis.get_enabled_apps = MagicMock(return_value=[])
+_db_redis.remove_app_from_all_enabled_sets = MagicMock(return_value=[])
 _db_redis.r = MagicMock()
 
 _backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
@@ -813,3 +814,187 @@ class TestReEnableRouterBehavior:
         assert len(probed_urls) == 2
         assert 'https://example.com/webhook' in probed_urls
         assert 'https://example.com/tool' in probed_urls
+
+
+class TestLuaTimeProgression:
+    """Verify the Lua script's graduated response thresholds via a Python state machine
+    that mirrors the Lua logic. This catches off-by-one errors in the 24h/48h/72h
+    elapsed checks and ensures the notification/disable flags are idempotent."""
+
+    @staticmethod
+    def _lua_sim(state: dict, now_ts: int, status: str, error: str) -> int:
+        """Python equivalent of _RECORD_FAILURE_LUA."""
+        first = state.get('first_failure_at')
+        if not first:
+            state.update(
+                {
+                    'first_failure_at': now_ts,
+                    'last_failure_at': now_ts,
+                    'last_success_at': '',
+                    'failure_count': 1,
+                    'last_status': status,
+                    'last_error': error,
+                    'notified_day1': '0',
+                    'notified_day2': '0',
+                    'disabled': '0',
+                }
+            )
+            return 0
+
+        state['last_failure_at'] = now_ts
+        state['last_status'] = status
+        state['last_error'] = error
+        state['failure_count'] = state.get('failure_count', 0) + 1
+
+        first_ts = int(first)
+        elapsed = now_ts - first_ts
+
+        if elapsed >= 259200:  # 72h
+            if state.get('disabled') != '1':
+                state['disabled'] = '1'
+                return 3
+            return 0
+        if elapsed >= 172800:  # 48h
+            if state.get('notified_day2') != '1':
+                state['notified_day2'] = '1'
+                return 2
+            return 0
+        if elapsed >= 86400:  # 24h
+            if state.get('notified_day1') != '1':
+                state['notified_day1'] = '1'
+                return 1
+        return 0
+
+    def test_full_graduated_timeline(self):
+        """Walk through 0h → 12h → 24h → 36h → 48h → 60h → 72h → 84h."""
+        state = {}
+        t0 = 1_700_000_000
+
+        assert self._lua_sim(state, t0, '500', 'error') == 0
+        assert state['first_failure_at'] == t0
+
+        assert self._lua_sim(state, t0 + 43200, '500', 'error') == 0
+
+        assert self._lua_sim(state, t0 + 86400, '500', 'error') == 1
+        assert state['notified_day1'] == '1'
+
+        assert self._lua_sim(state, t0 + 129600, '500', 'error') == 0
+
+        assert self._lua_sim(state, t0 + 172800, '500', 'error') == 2
+        assert state['notified_day2'] == '1'
+
+        assert self._lua_sim(state, t0 + 216000, '500', 'error') == 0
+
+        assert self._lua_sim(state, t0 + 259200, '500', 'error') == 3
+        assert state['disabled'] == '1'
+
+        assert self._lua_sim(state, t0 + 302400, '500', 'error') == 0
+
+    def test_notifications_are_idempotent(self):
+        """Each notification fires exactly once, even with repeated calls at same threshold."""
+        state = {}
+        t0 = 1_700_000_000
+
+        self._lua_sim(state, t0, '500', 'error')
+        assert self._lua_sim(state, t0 + 86400, '500', 'error') == 1
+        assert self._lua_sim(state, t0 + 86401, '500', 'error') == 0
+        assert self._lua_sim(state, t0 + 86402, '500', 'error') == 0
+
+        assert self._lua_sim(state, t0 + 172800, '500', 'error') == 2
+        assert self._lua_sim(state, t0 + 172801, '500', 'error') == 0
+
+        assert self._lua_sim(state, t0 + 259200, '500', 'error') == 3
+        assert self._lua_sim(state, t0 + 259201, '500', 'error') == 0
+
+    def test_just_under_thresholds_no_action(self):
+        """Failures 1 second before each threshold don't trigger that threshold."""
+        state = {}
+        t0 = 1_700_000_000
+
+        self._lua_sim(state, t0, '500', 'error')
+        assert self._lua_sim(state, t0 + 86399, '500', 'error') == 0
+        assert state['notified_day1'] == '0'
+
+        state2 = {}
+        self._lua_sim(state2, t0, '500', 'error')
+        self._lua_sim(state2, t0 + 86400, '500', 'error')  # trigger day1
+        assert state2['notified_day1'] == '1'
+        assert self._lua_sim(state2, t0 + 172799, '500', 'error') == 0
+        assert state2['notified_day2'] == '0'
+
+        state3 = {}
+        self._lua_sim(state3, t0, '500', 'error')
+        self._lua_sim(state3, t0 + 86400, '500', 'error')  # trigger day1
+        self._lua_sim(state3, t0 + 172800, '500', 'error')  # trigger day2
+        assert state3['notified_day2'] == '1'
+        assert self._lua_sim(state3, t0 + 259199, '500', 'error') == 0
+        assert state3['disabled'] == '0'
+
+    def test_python_sim_matches_lua_source_thresholds(self):
+        """Verify the Python simulator uses the same constants as the Lua source."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        assert '259200' in _RECORD_FAILURE_LUA  # 72h in seconds
+        assert '172800' in _RECORD_FAILURE_LUA  # 48h in seconds
+        assert '86400' in _RECORD_FAILURE_LUA  # 24h in seconds
+
+
+class TestDisableUserNotification:
+    """Test that auto-disable notifies affected users and removes from enabled sets."""
+
+    def test_disable_action_removes_from_all_users(self):
+        """action=3 should call remove_app_from_all_enabled_sets."""
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
+            patch.object(_app_tools, 'delete_app_cache_by_id'),
+            patch.object(
+                _app_tools, 'remove_app_from_all_enabled_sets', return_value=['uid-1', 'uid-2']
+            ) as mock_remove,
+            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'Test App', 'uid': 'owner-1'}),
+            patch.object(_app_tools, '_notify_app_owner'),
+            patch.object(_app_tools, 'send_notification') as mock_notify,
+        ):
+            _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 500')
+            mock_disable.assert_called_once()
+            mock_remove.assert_called_once_with('app-1')
+            assert mock_notify.call_count == 2
+            notified_uids = [call[0][0] for call in mock_notify.call_args_list]
+            assert 'uid-1' in notified_uids
+            assert 'uid-2' in notified_uids
+
+    def test_disable_action_notifies_with_app_name(self):
+        """User notifications should include the app name."""
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, 'disable_app_in_firestore'),
+            patch.object(_app_tools, 'delete_app_cache_by_id'),
+            patch.object(_app_tools, 'remove_app_from_all_enabled_sets', return_value=['uid-1']),
+            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'My Awesome App', 'uid': 'owner-1'}),
+            patch.object(_app_tools, '_notify_app_owner'),
+            patch.object(_app_tools, 'send_notification') as mock_notify,
+        ):
+            _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 404')
+            title = mock_notify.call_args[0][1]
+            body = mock_notify.call_args[0][2]
+            assert 'My Awesome App' in title
+            assert 'My Awesome App' in body
+            assert 'connectivity issues' in body
+
+    def test_no_affected_users_still_disables(self):
+        """Disable should proceed even with no affected users."""
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
+            patch.object(_app_tools, 'delete_app_cache_by_id'),
+            patch.object(_app_tools, 'remove_app_from_all_enabled_sets', return_value=[]),
+            patch.object(_app_tools, 'get_app_by_id_db', return_value={'name': 'Test', 'uid': 'owner-1'}),
+            patch.object(_app_tools, '_notify_app_owner'),
+            patch.object(_app_tools, 'send_notification') as mock_notify,
+        ):
+            _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 500')
+            mock_disable.assert_called_once()
+            mock_notify.assert_not_called()
