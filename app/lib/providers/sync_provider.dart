@@ -41,8 +41,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
-  List<Wal> get pendingWals =>
-      _allWals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted || w.isSyncing).toList();
+  // `uploaded` is not yet backed up (the server job is still processing), so
+  // it counts as pending — keeps it visible in the legacy SyncPage and in
+  // pending counts until the reconciler confirms it `synced`.
+  List<Wal> get pendingWals => _allWals
+      .where((w) =>
+          w.status == WalStatus.miss ||
+          w.status == WalStatus.uploaded ||
+          w.status == WalStatus.corrupted ||
+          w.isSyncing)
+      .toList();
+
+  /// Recordings uploaded but not yet confirmed processed (reconciler pending).
+  List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
   List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
 
@@ -198,7 +209,38 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   void _initializeProvider() async {
     await refreshWals();
     if (_isDisposed) return;
+    _attachReconciler();
     _scheduleAutoUploadPendingPhoneFiles();
+  }
+
+  /// Wire the background reconciler to the phone sync + our conversation
+  /// surfacing, then poke once to resume any recordings left `uploaded` by a
+  /// previous session (app-kill recovery).
+  void _attachReconciler() {
+    try {
+      final phone = _walService.getSyncs().phone;
+      SyncReconciler.instance.attach(phone, _onReconciledConversations);
+      SyncReconciler.instance.poke();
+    } catch (e) {
+      Logger.debug('SyncProvider: attach reconciler failed: $e');
+    }
+  }
+
+  /// Called by the reconciler when a background job finished and produced
+  /// conversations. Surfaces them without disturbing an active sync.
+  Future<void> _onReconciledConversations(SyncLocalFilesResponse result) async {
+    if (_isDisposed) return;
+    final conversations = await ConversationSyncUtils.processConversationIds(
+      newConversationIds: result.newConversationIds,
+      updatedConversationIds: result.updatedConversationIds,
+    );
+    if (_isDisposed) return;
+    if (conversations.isNotEmpty && !_syncState.isProcessing) {
+      // Append to whatever is already shown — jobs reconcile incrementally.
+      final merged = [..._syncState.syncedConversations, ...conversations];
+      _updateSyncState(_syncState.toCompleted(conversations: merged));
+    }
+    await refreshWals();
   }
 
   bool _isAutoUploading = false;
@@ -340,6 +382,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []));
       }
+      // Uploads just finished — recordings are now `uploaded`. Kick the
+      // reconciler so their conversations stream in without the user waiting.
+      SyncReconciler.instance.poke();
     } catch (e) {
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
@@ -536,6 +581,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else {
       _updateSyncState(_syncState.toIdle());
     }
+    // Cancel only stops further uploads. Recordings already `uploaded` are
+    // safe on the server — keep reconciling them.
+    SyncReconciler.instance.poke();
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
