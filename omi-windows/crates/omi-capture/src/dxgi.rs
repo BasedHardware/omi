@@ -44,20 +44,34 @@ pub fn capture_screen_jpeg() -> Result<Option<CapturedFrame>> {
     };
 
     // Capture as RGBA image
-    let rgba = monitor.capture_image().context("Monitor::capture_image failed")?;
+    tracing::info!("[DXGI] Calling capture_image()...");
+    let rgba = match monitor.capture_image() {
+        Ok(img) => {
+            tracing::info!("[DXGI] capture_image OK: {}x{}", img.width(), img.height());
+            img
+        }
+        Err(e) => {
+            tracing::error!("[DXGI] capture_image FAILED: {e:#}");
+            return Err(anyhow::anyhow!("capture_image failed: {e}"));
+        }
+    };
 
     // Scale to thumbnail (max 1280px wide)
     let (w, h) = (rgba.width(), rgba.height());
     let thumb_w = w.min(1280);
     let thumb_h = (h as f32 * thumb_w as f32 / w as f32) as u32;
-    let thumb = image::imageops::resize(&rgba, thumb_w, thumb_h, image::imageops::FilterType::Triangle);
+    let thumb_rgba = image::imageops::resize(&rgba, thumb_w, thumb_h, image::imageops::FilterType::Triangle);
+
+    // JPEG does not support alpha — convert RGBA → RGB before saving
+    let thumb_rgb = image::DynamicImage::ImageRgba8(thumb_rgba).into_rgb8();
 
     // Save as JPEG
     std::fs::create_dir_all(screenshot_dir()).context("create screenshot dir")?;
     let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let path = screenshot_dir().join(format!("{ts}.jpg"));
-    thumb.save_with_format(&path, image::ImageFormat::Jpeg)
+    thumb_rgb.save_with_format(&path, image::ImageFormat::Jpeg)
         .context("Failed to save JPEG")?;
+    tracing::info!("[DXGI] Saved JPEG: {} ({}x{})", path.display(), thumb_w, thumb_h);
 
     Ok(Some(CapturedFrame { path, window_title }))
 }

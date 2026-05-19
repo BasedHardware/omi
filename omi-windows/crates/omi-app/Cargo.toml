@@ -25,6 +25,7 @@ chrono = { workspace = true }
 webbrowser = "0.8"
 urlencoding = "2.1"
 dotenvy = "0.15"
+base64 = "0.22"
 
 # Sibling crates
 omi-capture = { path = "../omi-capture" }

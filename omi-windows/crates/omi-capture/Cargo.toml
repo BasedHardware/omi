@@ -10,6 +10,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 xcap = "0.0.14"
+base64 = "0.22"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [

@@ -24,7 +24,7 @@ fn RewindThumb(shot: Screenshot, on_click: EventHandler<Screenshot>) -> Element 
             if let Some(ref p) = path {
                 img {
                     class: "rewind-thumb-img",
-                    src: "file://{p}",
+                    src: "{p}",
                     alt: "Screenshot",
                 }
             } else {
@@ -65,7 +65,7 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
             if let Some(p) = path {
                 img {
                     class: "rewind-screenshot",
-                    src: "file://{p}",
+                    src: "{p}",
                     alt: "Screenshot",
                 }
             }
