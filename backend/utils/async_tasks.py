@@ -3,7 +3,7 @@
 Implements structured concurrency primitives that replace raw asyncio.gather():
 - supervise_tasks(): FIRST_COMPLETED supervisor loop for WS handlers
 - drain_tasks(): timeout-bounded task cancellation
-- gather_with_logging(): bounded fan-out with exception observability
+- gather_safe(): bounded fan-out with exception observability
 - gather_chunked(): chunked fan-out for large coroutine lists
 - create_named_task(): tracked task creation with done-callback cleanup
 - wait_for_event(): interruptible sleep that wakes on shutdown event
@@ -53,13 +53,13 @@ DRAIN_DURATION = Histogram(
 
 GATHER_FAILURES_TOTAL = Counter(
     'async_gather_failures_total',
-    'Individual coroutine failures in gather_with_logging',
+    'Individual coroutine failures in gather_safe',
     ['label'],
 )
 
 GATHER_DURATION = Histogram(
     'async_gather_duration_seconds',
-    'Total duration of gather_with_logging calls',
+    'Total duration of gather_safe calls',
     ['label'],
     buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0],
 )
@@ -72,7 +72,7 @@ GATHER_DURATION = Histogram(
 
 @dataclass(slots=True)
 class GatherResult(Generic[T]):
-    """Result of a single coroutine in gather_with_logging."""
+    """Result of a single coroutine in gather_safe."""
 
     index: int
     ok: bool
@@ -82,7 +82,7 @@ class GatherResult(Generic[T]):
 
 
 @dataclass(slots=True)
-class SupervisorExit:
+class SupervisorResult:
     """Result of supervise_tasks indicating why the supervisor loop exited."""
 
     reason: str  # "disconnect", "crash", "lifetime_done"
@@ -101,7 +101,7 @@ async def supervise_tasks(
     bg_tasks: list[asyncio.Task],
     finite_tasks: set[asyncio.Task] | None = None,
     label: str,
-) -> SupervisorExit:
+) -> SupervisorResult:
     """Supervisor loop using asyncio.wait(FIRST_COMPLETED).
 
     Monitors receive_task + bg_tasks. Exits when:
@@ -116,7 +116,7 @@ async def supervise_tasks(
 
     monitored = {receive_task, *bg_tasks}
     if not monitored:
-        return SupervisorExit(reason="empty", task_name="none")
+        return SupervisorResult(reason="empty", task_name="none")
 
     while monitored:
         done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
@@ -124,7 +124,7 @@ async def supervise_tasks(
         exit_result = None
         for task in done:
             if task is receive_task:
-                exit_result = SupervisorExit(reason="disconnect", task_name=task.get_name())
+                exit_result = SupervisorResult(reason="disconnect", task_name=task.get_name())
                 break
             if not task.cancelled():
                 try:
@@ -133,18 +133,18 @@ async def supervise_tasks(
                     continue
                 if exc is not None:
                     logger.error("BG task %s crashed: %r [%s]", task.get_name(), exc, label)
-                    exit_result = SupervisorExit(reason="crash", task_name=task.get_name(), exception=exc)
+                    exit_result = SupervisorResult(reason="crash", task_name=task.get_name(), exception=exc)
                     break
                 if task not in finite_tasks:
                     logger.info("Lifetime task %s completed, tearing down [%s]", task.get_name(), label)
-                    exit_result = SupervisorExit(reason="lifetime_done", task_name=task.get_name())
+                    exit_result = SupervisorResult(reason="lifetime_done", task_name=task.get_name())
                     break
 
         if exit_result:
             SUPERVISOR_EXIT_TOTAL.labels(label=label, reason=exit_result.reason).inc()
             return exit_result
 
-    return SupervisorExit(reason="all_done", task_name="none")
+    return SupervisorResult(reason="all_done", task_name="none")
 
 
 # ---------------------------------------------------------------------------
@@ -204,11 +204,11 @@ async def drain_tasks(
 
 
 # ---------------------------------------------------------------------------
-# gather_with_logging — bounded fan-out with observability
+# gather_safe — bounded fan-out with observability
 # ---------------------------------------------------------------------------
 
 
-async def gather_with_logging(
+async def gather_safe(
     *coros: Awaitable[T],
     label: str,
     max_concurrency: int = 10,
@@ -238,7 +238,7 @@ async def gather_with_logging(
                 return GatherResult(index=index, ok=False, cancelled=True)
             except Exception as e:
                 GATHER_FAILURES_TOTAL.labels(label=label).inc()
-                logger.warning("gather_with_logging[%s] item %d failed: %r", label, index, e)
+                logger.warning("gather_safe[%s] item %d failed: %r", label, index, e)
                 return GatherResult(index=index, ok=False, exception=e)
 
     tasks = [asyncio.create_task(_run_one(i, coro), name=f"{label}:{i}") for i, coro in enumerate(coros)]
@@ -278,7 +278,7 @@ async def gather_chunked(
     for coro in coros:
         chunk.append(coro)
         if len(chunk) >= chunk_size:
-            chunk_results = await gather_with_logging(
+            chunk_results = await gather_safe(
                 *chunk,
                 label=label,
                 max_concurrency=concurrency,
@@ -288,7 +288,7 @@ async def gather_chunked(
             chunk = []
 
     if chunk:
-        chunk_results = await gather_with_logging(
+        chunk_results = await gather_safe(
             *chunk,
             label=label,
             max_concurrency=concurrency,
