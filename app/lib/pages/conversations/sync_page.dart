@@ -238,6 +238,8 @@ class WalListItem extends StatelessWidget {
                             )
                           else if (hasError)
                             _buildStatusChip(context.l10n.failedStatus, Colors.red)
+                          else if (wal.status == WalStatus.uploaded)
+                            _buildStatusChip(context.l10n.processing, const Color(0xFF4DA3FF))
                           else if (wal.status == WalStatus.corrupted)
                             _buildStatusChip(context.l10n.corruptedStatus, Colors.grey),
                         ],
