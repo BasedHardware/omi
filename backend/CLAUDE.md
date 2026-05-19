@@ -168,6 +168,20 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
 - **Lane 3 — Lint**: `python scripts/lint_async_blockers.py` catches `requests.*`, `time.sleep()`, `Thread().start()` in async code. Run before committing.
 - **Shutdown**: `close_all_clients()` + `shutdown_executors()` wired in `main.py` and `pusher/main.py`.
 
+## WebSocket Concurrency (Long-Lived Connections)
+
+WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per connection. Use `utils/async_tasks.py` utilities — never raw `asyncio.gather()` or bare `await receive_task`.
+
+- **Supervision**: `supervise_tasks()` wraps `asyncio.wait(FIRST_COMPLETED)` — detects both client disconnect and bg task crashes immediately. Classify tasks as finite (can complete during session) or lifetime (completion = session ending).
+- **Drain**: `drain_tasks()` cancels remaining bg tasks with bounded timeout, force-cancels stragglers via `asyncio.wait` (not `asyncio.gather`, which hangs if a task suppresses CancelledError).
+- **Fan-out**: `gather_safe()` replaces `asyncio.gather(return_exceptions=True)` — semaphore-bounded concurrency, per-item exception logging, typed `GatherResult[T]` return.
+- **Interruptible sleep**: `wait_for_event(event, seconds)` replaces `asyncio.sleep()` in polling loops — wakes instantly on disconnect via per-connection `asyncio.Event`. Never bare `asyncio.sleep()` in WS task loops.
+- **Receive timeouts**: every `websocket.receive()` must be wrapped in `asyncio.wait_for(..., timeout=WS_RECEIVE_TIMEOUT)`.
+- **Gauge placement**: `GAUGE.inc()` inside `try` body, `GAUGE.dec()` in `finally`. Init `bg_main_tasks = []` before `try`.
+- **Task naming**: `create_named_task()` for WS-scoped tasks (tracked in task_set for supervise/drain). Use `start_background_task()` from `utils/executors.py` for fire-and-forget work that outlives the handler.
+- **Prometheus labels**: static low-cardinality only (e.g. "pusher", "listen") — never uid/session_id.
+- **Module-level dicts**: add TTL-based eviction or cap size — they grow forever otherwise.
+
 ## Common Gotchas
 
 1. **Python 3.11 only** — no 3.12+ syntax (nested same-type quotes in f-strings break the Docker build)

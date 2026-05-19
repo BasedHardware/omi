@@ -28,6 +28,7 @@ from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -62,6 +63,17 @@ TRANSCRIPT_QUEUE_WARN_SIZE = 50
 
 # Constants for audio bytes queue
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
+
+# Receive timeout: if no data arrives for this long, the connection is considered dead.
+# Backend-listen sends heartbeats every ~30s, so 5 minutes without ANY data means the
+# upstream connection is gone.  Without this, half-open TCP connections hang forever,
+# leaking the gauge + ~15 MB per ghost connection.
+WS_RECEIVE_TIMEOUT = 300.0  # seconds
+
+# After receive_task exits, background tasks get this long to drain their queues
+# before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
+# blocking cleanup indefinitely.
+BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
 async def _process_conversation_task(
@@ -162,6 +174,7 @@ async def _websocket_util_trigger(
         return
 
     websocket_active = True
+    shutdown_event = asyncio.Event()
     websocket_close_code = 1000
 
     # audio bytes
@@ -274,7 +287,7 @@ async def _websocket_util_trigger(
             del chunk_data
 
         while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0:
-            await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -307,19 +320,22 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(speaker_sample_queue) > 0:
-            await asyncio.sleep(SPEAKER_SAMPLE_PROCESS_INTERVAL)
+            await wait_for_event(shutdown_event, SPEAKER_SAMPLE_PROCESS_INTERVAL)
 
             if not speaker_sample_queue:
                 continue
 
             current_time = time.time()
+            is_shutdown = not websocket_active
 
-            # Separate ready and pending requests
+            # Separate ready and pending requests.
+            # On shutdown, skip the age check — process everything so pending
+            # samples aren't silently dropped when the drain timeout fires.
             ready_requests = []
             pending_requests = []
 
             for request in list(speaker_sample_queue):
-                if current_time - request['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
+                if is_shutdown or current_time - request['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
                     ready_requests.append(request)
                 else:
                     pending_requests.append(request)
@@ -350,7 +366,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(transcript_queue) > 0:
-            await asyncio.sleep(TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
+            await wait_for_event(shutdown_event, TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
 
             if not transcript_queue:
                 continue
@@ -377,7 +393,9 @@ async def _websocket_util_trigger(
             try:
                 await asyncio.wait_for(audio_bytes_event.wait(), timeout=1.0)
             except asyncio.TimeoutError:
-                continue  # Check websocket_active and queue on timeout
+                if shutdown_event.is_set() and not audio_bytes_queue:
+                    break
+                continue
 
             audio_bytes_event.clear()
 
@@ -412,7 +430,12 @@ async def _websocket_util_trigger(
 
         try:
             while websocket_active:
-                data = await websocket.receive_bytes()
+                try:
+                    data = await asyncio.wait_for(websocket.receive_bytes(), timeout=WS_RECEIVE_TIMEOUT)
+                except asyncio.TimeoutError:
+                    logger.warning(f"WebSocket receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid}")
+                    websocket_close_code = 1000
+                    break
                 header_type = struct.unpack('<I', data[:4])[0]
 
                 # Heartbeat (data-frame keepalive from backend to reset GKE ILB idle timer)
@@ -594,32 +617,49 @@ async def _websocket_util_trigger(
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             websocket_active = False
 
+    bg_main_tasks = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = asyncio.create_task(receive_tasks())
-        speaker_sample_task = asyncio.create_task(process_speaker_sample_queue())
-        private_cloud_task = asyncio.create_task(process_private_cloud_queue())
-        transcript_task = asyncio.create_task(process_transcript_queue())
-        audio_bytes_task = asyncio.create_task(process_audio_bytes_queue())
-        await asyncio.gather(
-            receive_task,
-            speaker_sample_task,
-            private_cloud_task,
-            transcript_task,
-            audio_bytes_task,
+        receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
+        bg_main_tasks = [
+            create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+            create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+            create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+            create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
+        ]
+
+        exit_result = await supervise_tasks(
+            receive_task=receive_task,
+            bg_tasks=bg_main_tasks,
+            finite_tasks=None,
+            label="pusher",
         )
+        logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid}")
+
+        if receive_task.done() and not receive_task.cancelled():
+            exc = receive_task.exception()
+            if exc is not None:
+                raise exc
+
+        if not receive_task.done():
+            websocket_active = False
+            receive_task.cancel()
+            try:
+                await receive_task
+            except asyncio.CancelledError:
+                pass
+
+        shutdown_event.set()
+        await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
     finally:
+        shutdown_event.set()
         websocket_active = False
 
-        # Cancel all tracked background tasks to prevent memory leaks
-        tasks_to_cancel = list(bg_tasks)
-        for task in tasks_to_cancel:
-            task.cancel()
-        if tasks_to_cancel:
-            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        all_to_cancel = list(bg_tasks) + [t for t in bg_main_tasks if not t.done()]
+        await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
