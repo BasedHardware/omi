@@ -1031,6 +1031,57 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertTrue(requests[2].url.path.contains("/v1/memories/mem-local"))
   }
 
+  func testLocalModeGetMemoriesPreservesQueryParametersWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.getMemories(
+      limit: 25,
+      offset: 50,
+      category: "manual",
+      tags: ["focus", "health"],
+      includeDismissed: true
+    )
+
+    let request = URLCapture.capturedRequests.first
+    XCTAssertEqual(URLCapture.capturedRequests.count, 1)
+    XCTAssertEqual(request?.url.host, "127.0.0.1")
+    XCTAssertEqual(request?.url.port, 8765)
+    XCTAssertEqual(request?.method, "GET")
+    XCTAssertEqual(request?.headers["Authorization"], nil)
+    XCTAssertEqual(request?.url.path, "/v1/memories")
+    let components = URLComponents(url: request!.url, resolvingAgainstBaseURL: false)
+    let query = Dictionary(uniqueKeysWithValues: (components?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+    XCTAssertEqual(query["limit"], "25")
+    XCTAssertEqual(query["offset"], "50")
+    XCTAssertEqual(query["category"], "manual")
+    XCTAssertEqual(query["tags"], "focus,health")
+    XCTAssertEqual(query["include_dismissed"], "true")
+  }
+
+  func testLocalModeCreateMemoriesBatchRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.createMemoriesBatch([
+      MemoryBatchItem(content: "local imported memory", tags: ["focus"], headline: "Focus")
+    ])
+
+    let request = URLCapture.capturedRequests.first
+    XCTAssertEqual(URLCapture.capturedRequests.count, 1)
+    XCTAssertEqual(request?.url.host, "127.0.0.1")
+    XCTAssertEqual(request?.url.port, 8765)
+    XCTAssertEqual(request?.url.path, "/v1/memories/batch")
+    XCTAssertEqual(request?.method, "POST")
+    XCTAssertEqual(request?.headers["Authorization"], nil)
+    let body = try? JSONSerialization.jsonObject(with: request?.body ?? Data()) as? [String: Any]
+    let memories = body?["memories"] as? [[String: Any]]
+    XCTAssertEqual(memories?.first?["content"] as? String, "local imported memory")
+    XCTAssertEqual(memories?.first?["tags"] as? [String], ["focus"])
+  }
+
   func testLocalModeCloudOnlyMemoryBulkOperationsFailBeforeNetworkRequests() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)

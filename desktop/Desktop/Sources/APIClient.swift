@@ -1851,8 +1851,21 @@ extension APIClient {
   ) async throws -> [ServerMemory] {
     let target = selectedBackendTarget
     if target.mode == .localDaemon {
+      var queryItems: [String] = [
+        "limit=\(limit)",
+        "offset=\(offset)",
+      ]
+      if let category = category {
+        queryItems.append("category=\(Self.queryValue(category))")
+      }
+      if let tags = tags, !tags.isEmpty {
+        queryItems.append("tags=\(Self.queryValue(tags.joined(separator: ",")))")
+      }
+      if includeDismissed {
+        queryItems.append("include_dismissed=true")
+      }
       let response: LocalMemoriesResponse = try await get(
-        "v1/memories",
+        "v1/memories?\(queryItems.joined(separator: "&"))",
         requireAuth: false,
         customBaseURL: target.baseURL
       )
@@ -1960,6 +1973,15 @@ extension APIClient {
       let memories: [MemoryBatchItem]
     }
     let body = BatchRequest(memories: memories)
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      return try await post(
+        "v1/memories/batch",
+        body: body,
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+    }
     return try await post("v3/memories/batch", body: body)
   }
 

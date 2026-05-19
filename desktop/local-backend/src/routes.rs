@@ -46,6 +46,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/v1/search/conversations", get(search_conversations))
         .route("/v1/memories", get(list_memories).post(create_memory))
+        .route("/v1/memories/batch", post(create_memories_batch))
         .route(
             "/v1/memories/:id",
             get(get_memory).patch(update_memory).delete(delete_memory),
@@ -430,8 +431,38 @@ async fn search_conversations(
     Ok(Json(json!({ "results": results })))
 }
 
-async fn list_memories(State(state): State<AppState>) -> ApiResult<Value> {
-    let memories = state.store.memories().list().map_err(ApiError::internal)?;
+#[derive(Deserialize)]
+struct ListMemoriesQuery {
+    limit: Option<i64>,
+    offset: Option<usize>,
+    category: Option<String>,
+    tags: Option<String>,
+    #[serde(rename = "include_dismissed")]
+    _include_dismissed: Option<bool>,
+}
+
+async fn list_memories(
+    State(state): State<AppState>,
+    Query(query): Query<ListMemoriesQuery>,
+) -> ApiResult<Value> {
+    let tags = query.tags.map(|tags| {
+        tags.split(',')
+            .map(str::trim)
+            .filter(|tag| !tag.is_empty())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    });
+    let memories = state
+        .store
+        .memories()
+        .list_filtered(crate::storage::MemoryListOptions {
+            limit: Some(limit_or_default(query.limit) as usize),
+            offset: query.offset.unwrap_or(0),
+            category: query.category,
+            tags: tags.unwrap_or_default(),
+            include_deleted: false,
+        })
+        .map_err(ApiError::internal)?;
     Ok(Json(json!({ "memories": memories })))
 }
 
@@ -475,6 +506,59 @@ async fn create_memory(
         .create(new_memory)
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "memory": memory })))
+}
+
+#[derive(Deserialize)]
+struct CreateMemoriesBatchRequest {
+    memories: Vec<CreateMemoryBatchItem>,
+}
+
+#[derive(Deserialize)]
+struct CreateMemoryBatchItem {
+    content: String,
+    tags: Option<Vec<String>>,
+    headline: Option<String>,
+}
+
+async fn create_memories_batch(
+    State(state): State<AppState>,
+    Json(request): Json<CreateMemoriesBatchRequest>,
+) -> ApiResult<Value> {
+    if request.memories.len() > 100 {
+        return Err(ApiError::bad_request("memory batch size exceeds 100"));
+    }
+
+    let mut created = Vec::with_capacity(request.memories.len());
+    for item in request.memories {
+        let mut metadata = Map::new();
+        if let Some(tags) = item.tags {
+            metadata.insert("tags".to_string(), json!(tags));
+        }
+        if let Some(headline) = item.headline {
+            metadata.insert("headline".to_string(), json!(headline));
+        }
+        let memory = state
+            .store
+            .memories()
+            .create(NewMemory {
+                id: local_id("mem"),
+                content: item.content,
+                category: Some("manual".to_string()),
+                conversation_id: None,
+                metadata: Some(Value::Object(metadata)),
+            })
+            .map_err(ApiError::internal)?;
+        created.push(json!({
+            "id": memory.id,
+            "content": memory.content,
+        }));
+    }
+
+    let created_count = created.len();
+    Ok(Json(json!({
+        "memories": created,
+        "created_count": created_count,
+    })))
 }
 
 async fn get_memory(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {

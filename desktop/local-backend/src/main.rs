@@ -585,6 +585,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn memory_list_supports_pagination_category_and_tags() -> Result<()> {
+        let app = test_app()?;
+
+        let batch = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/memories/batch",
+            Some(json!({
+                "memories": [
+                    {"content": "Manual focus memory", "tags": ["focus", "productivity"]},
+                    {"content": "Manual health memory", "tags": ["health"]},
+                    {"content": "Manual focus followup", "tags": ["focus"]}
+                ]
+            })),
+        )
+        .await?;
+        assert_eq!(batch["created_count"], 3);
+
+        request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/memories",
+            Some(json!({
+                "id": "mem-system",
+                "content": "System memory",
+                "category": "system",
+                "metadata": {"tags": ["focus"]}
+            })),
+        )
+        .await?;
+
+        let page_one = request_json(
+            app.clone(),
+            Method::GET,
+            "/v1/memories?limit=2&offset=0",
+            None,
+        )
+        .await?;
+        let page_two = request_json(
+            app.clone(),
+            Method::GET,
+            "/v1/memories?limit=2&offset=2",
+            None,
+        )
+        .await?;
+        let page_one_ids: Vec<&str> = page_one["memories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|memory| memory["id"].as_str().unwrap())
+            .collect();
+        let page_two_ids: Vec<&str> = page_two["memories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|memory| memory["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(page_one_ids.len(), 2);
+        assert_eq!(page_two_ids.len(), 2);
+        assert!(page_one_ids.iter().all(|id| !page_two_ids.contains(id)));
+
+        let system_focus = request_json(
+            app.clone(),
+            Method::GET,
+            "/v1/memories?category=system&tags=focus",
+            None,
+        )
+        .await?;
+        assert_eq!(system_focus["memories"].as_array().unwrap().len(), 1);
+        assert_eq!(system_focus["memories"][0]["id"], "mem-system");
+
+        let focus = request_json(app, Method::GET, "/v1/memories?tags=focus", None).await?;
+        assert_eq!(focus["memories"].as_array().unwrap().len(), 3);
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn settings_reject_omi_firebase_and_google_provider_hosts() -> Result<()> {
         let app = test_app()?;
 

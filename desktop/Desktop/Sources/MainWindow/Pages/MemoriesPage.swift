@@ -178,6 +178,13 @@ class MemoriesViewModel: ObservableObject {
   private var currentOffset = 0
   private let pageSize = 100  // Reduced from 500 for better performance
 
+  private func appendUniqueMemories(_ newMemories: [ServerMemory]) -> Int {
+    let existingIds = Set(memories.map(\.id))
+    let uniqueMemories = newMemories.filter { !existingIds.contains($0.id) }
+    memories.append(contentsOf: uniqueMemories)
+    return uniqueMemories.count
+  }
+
   // Bulk operations state
   @Published var showingDeleteAllConfirmation = false
   @Published var isBulkOperationInProgress = false
@@ -658,11 +665,11 @@ class MemoriesViewModel: ObservableObject {
       )
 
       if !moreFromCache.isEmpty {
-        memories.append(contentsOf: moreFromCache)
+        let appendedCount = appendUniqueMemories(moreFromCache)
         currentOffset += moreFromCache.count
         hasMoreMemories = moreFromCache.count >= pageSize
         log(
-          "MemoriesViewModel: Loaded \(moreFromCache.count) more from local cache (total: \(memories.count))"
+          "MemoriesViewModel: Loaded \(appendedCount) unique memories from local cache (total: \(memories.count))"
         )
         isLoadingMore = false
         return
@@ -680,10 +687,10 @@ class MemoriesViewModel: ObservableObject {
       try await MemoryStorage.shared.syncServerMemories(newMemories)
 
       // Then append to display
-      memories.append(contentsOf: newMemories)
+      let appendedCount = appendUniqueMemories(newMemories)
       currentOffset += newMemories.count
       hasMoreMemories = newMemories.count >= pageSize
-      log("MemoriesViewModel: Loaded \(newMemories.count) more from API (total: \(memories.count))")
+      log("MemoriesViewModel: Loaded \(appendedCount) unique memories from API (total: \(memories.count))")
     } catch {
       logError("Failed to load more memories", error: error)
     }

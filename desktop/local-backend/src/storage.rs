@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 const MIGRATIONS: &[Migration] = &[
@@ -1074,6 +1075,15 @@ pub struct MemoryRepository {
     conn: Arc<Mutex<Connection>>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct MemoryListOptions {
+    pub limit: Option<usize>,
+    pub offset: usize,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    pub include_deleted: bool,
+}
+
 impl MemoryRepository {
     pub fn create(&self, new: NewMemory) -> Result<Memory> {
         let now = Utc::now();
@@ -1178,6 +1188,10 @@ impl MemoryRepository {
     }
 
     pub fn list(&self) -> Result<Vec<Memory>> {
+        self.list_filtered(MemoryListOptions::default())
+    }
+
+    pub fn list_filtered(&self, options: MemoryListOptions) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         let mut stmt = conn
             .prepare(
@@ -1185,15 +1199,22 @@ impl MemoryRepository {
                 SELECT id, content, category, conversation_id, created_at, updated_at, deleted_at,
                        cloud_id, sync_version, sync_state, metadata_json
                 FROM memories
-                WHERE deleted_at IS NULL
+                WHERE (?1 OR deleted_at IS NULL)
                 ORDER BY updated_at DESC
                 "#,
             )
             .context("failed to prepare memory list query")?;
         let rows = stmt
-            .query_map([], map_memory)
+            .query_map(params![options.include_deleted], map_memory)
             .context("failed to list memories")?;
-        collect_rows(rows)
+        let memories = collect_rows(rows)?;
+        let filtered = memories
+            .into_iter()
+            .filter(|memory| memory_matches_list_options(memory, &options))
+            .skip(options.offset)
+            .take(options.limit.unwrap_or(usize::MAX))
+            .collect();
+        Ok(filtered)
     }
 
     pub fn update(&self, id: &str, update: UpdateMemory) -> Result<Option<Memory>> {
@@ -1883,6 +1904,32 @@ fn map_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
         sync_version: row.get(8)?,
         sync_state: row.get(9)?,
         metadata_json: row.get(10)?,
+    })
+}
+
+fn memory_matches_list_options(memory: &Memory, options: &MemoryListOptions) -> bool {
+    if let Some(category) = &options.category {
+        if memory.category.as_deref() != Some(category.as_str()) {
+            return false;
+        }
+    }
+
+    if options.tags.is_empty() {
+        return true;
+    }
+
+    let Ok(metadata) = serde_json::from_str::<Value>(&memory.metadata_json) else {
+        return false;
+    };
+    let Some(memory_tags) = metadata.get("tags").and_then(Value::as_array) else {
+        return false;
+    };
+
+    options.tags.iter().all(|requested_tag| {
+        memory_tags
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|memory_tag| memory_tag == requested_tag)
     })
 }
 
