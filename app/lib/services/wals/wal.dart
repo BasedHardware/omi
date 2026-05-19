@@ -15,6 +15,22 @@ enum WalStorage { mem, disk, sdcard, flashPage }
 
 enum SyncMethod { ble, wifi }
 
+/// User-facing sync state for a single recording, derived from [Wal.status],
+/// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a
+/// recording is never shown as an indistinct row — every state is explicit.
+///
+/// - [syncing]    — actively uploading right now
+/// - [synced]     — safely backed up to the cloud
+/// - [waiting]    — recorded, never attempted yet (will sync automatically)
+/// - [retrying]   — a sync attempt failed; will be retried automatically
+/// - [failed]     — auto-retries exhausted; needs a manual retry
+/// - [corrupted]  — the underlying file is missing/unreadable
+enum WalSyncDisplayState { syncing, synced, waiting, retrying, failed, corrupted }
+
+/// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
+/// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
+const int walMaxAutoRetries = 3;
+
 class WalStats {
   final int totalFiles;
   final int phoneFiles;
@@ -97,6 +113,25 @@ class Wal {
   int lastRetryAt;
 
   String get id => '${device}_$timerStart';
+
+  /// Single source of truth for how this recording's sync state is shown to the
+  /// user. The sync page renders an explicit label + icon for every value so a
+  /// not-yet-synced recording is never visually identical to a failed one.
+  WalSyncDisplayState get syncDisplayState {
+    if (isSyncing) return WalSyncDisplayState.syncing;
+    switch (status) {
+      case WalStatus.synced:
+        return WalSyncDisplayState.synced;
+      case WalStatus.corrupted:
+        return WalSyncDisplayState.corrupted;
+      case WalStatus.miss:
+        if (retryCount >= walMaxAutoRetries) return WalSyncDisplayState.failed;
+        if (retryCount > 0) return WalSyncDisplayState.retrying;
+        return WalSyncDisplayState.waiting;
+      case WalStatus.inProgress:
+        return WalSyncDisplayState.waiting;
+    }
+  }
 
   Wal({
     required this.timerStart,
