@@ -24,6 +24,8 @@ class AutoSyncPage extends StatefulWidget {
 }
 
 class _AutoSyncPageState extends State<AutoSyncPage> {
+  WalDisplayFilter _filter = WalDisplayFilter.all;
+
   @override
   void initState() {
     super.initState();
@@ -80,11 +82,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               ],
               const SizedBox(height: 32),
               _buildStorageSettings(userProvider),
-              if (pendingWals.isNotEmpty || syncedWals.isNotEmpty) ...[
+              if (syncProvider.displaySortedWals.isNotEmpty) ...[
                 const SizedBox(height: 32),
-                _buildFilterChips(syncProvider),
-                const SizedBox(height: 16),
-                _buildFilteredWalList(syncProvider),
+                _buildListStatusHeader(syncProvider),
+                const SizedBox(height: 14),
+                _buildSegmentedFilter(syncProvider),
+                const SizedBox(height: 14),
+                _buildUnifiedWalList(syncProvider),
               ],
               const SizedBox(height: 48),
             ],
@@ -526,25 +530,100 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  Widget _buildFilterChips(SyncProvider syncProvider) {
-    final pendingCount = syncProvider.pendingWals.length;
-    final syncedCount = syncProvider.syncedWals.length;
+  void _setFilter(WalDisplayFilter f) => setState(() => _filter = f);
 
-    return Row(
+  /// One plain-language line summarizing the whole list, always visible.
+  /// When everything is backed up this stays on screen as persistent
+  /// completion feedback (Google Photos pattern) — success is no longer
+  /// hidden behind a tab the user has to discover.
+  Widget _buildListStatusHeader(SyncProvider p) {
+    final syncing = p.syncingWalsCount;
+    final attention = p.needsAttentionWalsCount;
+    final waiting = p.waitingWalsCount; // equals pure waiting when syncing == 0
+
+    Color color;
+    IconData icon = Icons.cloud_done_rounded;
+    String text;
+    bool spinner = false;
+
+    if (syncing > 0) {
+      color = Colors.deepPurpleAccent;
+      text = context.l10n.backingUpRecordingsCount(syncing);
+      spinner = true;
+    } else if (attention > 0) {
+      color = Colors.orangeAccent;
+      icon = Icons.error_outline_rounded;
+      text = context.l10n.recordingsNeedAttentionCount(attention);
+    } else if (waiting > 0) {
+      color = const Color(0xFF8E8E93);
+      icon = Icons.cloud_upload_outlined;
+      text = context.l10n.recordingsWaitingCount(waiting);
+    } else {
+      color = Colors.green;
+      text = context.l10n.allRecordingsBackedUp;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          if (spinner)
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(color)),
+            )
+          else
+            Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(text, style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600)),
+                // Keep failures visible even while an active sync is the headline.
+                if (syncing > 0 && attention > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      context.l10n.recordingsNeedAttentionCount(attention),
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentedFilter(SyncProvider p) {
+    final all = p.displaySortedWals.length;
+    final synced = p.syncedWalsCount;
+    final pending = all - synced;
+    final issues = p.needsAttentionWalsCount + p.retryingWalsCount;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
+        _chipButton(context.l10n.filterAll, _filter == WalDisplayFilter.all, () => _setFilter(WalDisplayFilter.all),
+            count: all),
         _chipButton(
-          context.l10n.pending,
-          syncProvider.statusFilter == WalStatusFilter.pending,
-          () => syncProvider.setStatusFilter(WalStatusFilter.pending),
-          count: pendingCount,
-        ),
-        const SizedBox(width: 8),
-        _chipButton(
-          context.l10n.synced,
-          syncProvider.statusFilter == WalStatusFilter.synced,
-          () => syncProvider.setStatusFilter(WalStatusFilter.synced),
-          count: syncedCount,
-        ),
+            context.l10n.pending, _filter == WalDisplayFilter.pending, () => _setFilter(WalDisplayFilter.pending),
+            count: pending),
+        _chipButton(context.l10n.synced, _filter == WalDisplayFilter.synced, () => _setFilter(WalDisplayFilter.synced),
+            count: synced),
+        if (issues > 0)
+          _chipButton(
+              context.l10n.filterIssues, _filter == WalDisplayFilter.issues, () => _setFilter(WalDisplayFilter.issues),
+              count: issues),
       ],
     );
   }
@@ -594,20 +673,27 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  Widget _buildFilteredWalList(SyncProvider syncProvider) {
-    final wals = syncProvider.filteredByStatusWals;
-    final isSyncedFilter = syncProvider.statusFilter == WalStatusFilter.synced;
+  Widget _buildUnifiedWalList(SyncProvider syncProvider) {
+    final wals = syncProvider.walsForDisplayFilter(_filter);
 
     if (wals.isEmpty) {
+      final String emptyText;
+      switch (_filter) {
+        case WalDisplayFilter.synced:
+          emptyText = context.l10n.noSyncedRecordings;
+          break;
+        case WalDisplayFilter.pending:
+          emptyText = context.l10n.noPendingRecordings;
+          break;
+        case WalDisplayFilter.issues:
+        case WalDisplayFilter.all:
+          emptyText = context.l10n.noRecordingsYet;
+          break;
+      }
       return Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-        child: Center(
-          child: Text(
-            isSyncedFilter ? context.l10n.noSyncedRecordings : context.l10n.noPendingRecordings,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-          ),
-        ),
+        child: Center(child: Text(emptyText, style: TextStyle(color: Colors.grey.shade500, fontSize: 14))),
       );
     }
 
@@ -638,20 +724,28 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               onDismissed: (direction) {
                 syncProvider.deleteWal(wals[i]);
               },
-              child: _walItem(wals[i], synced: isSyncedFilter),
+              child: _walRow(wals[i]),
             ),
-            if (i < wals.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
+            if (i < wals.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43), indent: 62),
           ],
         ],
       ),
     );
   }
 
-  Widget _walItem(Wal wal, {required bool synced}) {
+  /// One row per recording. Every row carries an explicit status icon + label
+  /// + colour so a recording that hasn't synced yet is never visually
+  /// identical to one that failed or one that's safely backed up.
+  Widget _walRow(Wal wal) {
     final date = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     final timeStr = dateTimeFormat('h:mm a', date);
     final dateStr = '${_monthName(date.month)} ${date.day}';
     final duration = wal.seconds > 0 ? _fmtDuration(wal.seconds) : null;
+
+    final state = wal.syncDisplayState;
+    final (color, icon, label) = _rowVisual(state);
+    final isSynced = state == WalSyncDisplayState.synced;
+    final isSyncing = state == WalSyncDisplayState.syncing;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -659,7 +753,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sync in progress'), duration: Duration(seconds: 2)),
+            SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)),
           );
           return;
         }
@@ -669,36 +763,95 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
+              child: isSyncing
+                  ? Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(color)),
+                    )
+                  : Icon(icon, color: color, size: 17),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: TextStyle(color: synced ? Colors.grey.shade400 : Colors.white, fontSize: 14),
-                  ),
-                  if (wal.isSyncing && wal.syncSpeedKBps != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text('${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                          style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 12)),
+                    style: TextStyle(
+                      color: isSynced ? Colors.grey.shade500 : Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: color, fontSize: 12),
+                        ),
+                      ),
+                      if (isSyncing && wal.syncSpeedKBps != null) ...[
+                        Text('  \u00b7  ', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                        Text('${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 12)),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
-            if (wal.isSyncing)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
-              )
-            else
-              Icon(Icons.chevron_right, color: Colors.grey.shade700, size: 18),
+            const SizedBox(width: 10),
+            _rowTrailing(wal, state),
           ],
         ),
       ),
     );
+  }
+
+  Widget _rowTrailing(Wal wal, WalSyncDisplayState state) {
+    if (state == WalSyncDisplayState.syncing) {
+      return const SizedBox.shrink();
+    }
+    if (state == WalSyncDisplayState.failed) {
+      return GestureDetector(
+        onTap: () => context.read<SyncProvider>().syncWal(wal),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(context.l10n.retry,
+              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+        ),
+      );
+    }
+    return Icon(Icons.chevron_right, color: Colors.grey.shade700, size: 18);
+  }
+
+  (Color, IconData, String) _rowVisual(WalSyncDisplayState state) {
+    switch (state) {
+      case WalSyncDisplayState.synced:
+        return (Colors.green, Icons.cloud_done_rounded, context.l10n.syncStatusBackedUp);
+      case WalSyncDisplayState.syncing:
+        return (Colors.deepPurpleAccent, Icons.sync_rounded, context.l10n.syncStatusBackingUp);
+      case WalSyncDisplayState.waiting:
+        return (const Color(0xFF8E8E93), Icons.cloud_upload_outlined, context.l10n.syncStatusWaiting);
+      case WalSyncDisplayState.retrying:
+        return (Colors.orangeAccent, Icons.autorenew_rounded, context.l10n.syncStatusRetrying);
+      case WalSyncDisplayState.failed:
+        return (Colors.redAccent, Icons.error_outline_rounded, context.l10n.syncStatusFailed);
+      case WalSyncDisplayState.corrupted:
+        return (Colors.redAccent, Icons.warning_amber_rounded, context.l10n.syncStatusFileUnavailable);
+    }
   }
 
   // ─────────────────────────────────────────
