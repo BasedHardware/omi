@@ -28,7 +28,7 @@ from utils.conversations.location import async_get_google_maps_location
 from utils.byok import set_byok_keys
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, sleep_until_shutdown
+from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -287,7 +287,7 @@ async def _websocket_util_trigger(
             del chunk_data
 
         while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0:
-            await sleep_until_shutdown(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             # Drain queue into pending batches
             if private_cloud_queue:
@@ -320,7 +320,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(speaker_sample_queue) > 0:
-            await sleep_until_shutdown(shutdown_event, SPEAKER_SAMPLE_PROCESS_INTERVAL)
+            await wait_for_event(shutdown_event, SPEAKER_SAMPLE_PROCESS_INTERVAL)
 
             if not speaker_sample_queue:
                 continue
@@ -366,7 +366,7 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         while websocket_active or len(transcript_queue) > 0:
-            await sleep_until_shutdown(shutdown_event, TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
+            await wait_for_event(shutdown_event, TRANSCRIPT_QUEUE_FLUSH_INTERVAL)
 
             if not transcript_queue:
                 continue
