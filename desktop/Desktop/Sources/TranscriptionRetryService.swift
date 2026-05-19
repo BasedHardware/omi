@@ -14,6 +14,19 @@ class TranscriptionRetryService {
 
     private init() {}
 
+    /// Immediately uploads and finalizes a finished local session instead of waiting for the retry timer.
+    func finalizeLocalDaemonSessionNow(sessionId: Int64) async throws -> String? {
+        guard await APIClient.shared.isUsingLocalDaemon else { return nil }
+        guard let session = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
+            return nil
+        }
+        if session.status == .completed {
+            return session.backendId
+        }
+        let conversation = try await uploadSessionToLocalDaemon(session, sessionId: sessionId)
+        return conversation.id
+    }
+
     // MARK: - Service Lifecycle
 
     /// Start the retry service (call on app launch)
@@ -260,13 +273,14 @@ class TranscriptionRetryService {
         }
     }
 
-    private func uploadSessionToLocalDaemon(_ session: TranscriptionSessionRecord, sessionId: Int64) async throws {
+    @discardableResult
+    private func uploadSessionToLocalDaemon(_ session: TranscriptionSessionRecord, sessionId: Int64) async throws -> ServerConversation {
         try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
         let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
         guard !segments.isEmpty else {
             try await TranscriptionStorage.shared.markSessionFailed(
                 id: sessionId, error: "No transcript segments to upload to local daemon")
-            return
+            throw APIError.httpError(statusCode: 400)
         }
 
         let conversation = try await APIClient.shared.createLocalDaemonConversation(
@@ -286,6 +300,7 @@ class TranscriptionRetryService {
         try await APIClient.shared.finalizeLocalDaemonTranscript(conversationId: conversation.id)
         try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
         log("TranscriptionRetryService: Session \(sessionId) stored in local daemon as \(conversation.id)")
+        return conversation
     }
 
 }

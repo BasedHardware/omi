@@ -939,6 +939,10 @@ struct MemoriesPage: View {
   @State private var pendingSelectedTags: Set<MemoryTag> = []
   @State private var showManagementMenu = false
 
+  private var isLocalDaemonMode: Bool {
+    DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+  }
+
   var body: some View {
     Group {
       if let conversation = viewModel.linkedConversation {
@@ -1147,20 +1151,22 @@ struct MemoriesPage: View {
       .buttonStyle(.plain)
       .help("Add Memory")
 
-      // Management menu
-      Button {
-        showManagementMenu = true
-      } label: {
-        Image(systemName: "chevron.down")
-          .scaledFont(size: 12, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-        managementMenuPopover
+      if !isLocalDaemonMode {
+        // Management menu
+        Button {
+          showManagementMenu = true
+        } label: {
+          Image(systemName: "chevron.down")
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(.black)
+            .frame(width: 42, height: 42)
+            .background(OmiColors.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
+          managementMenuPopover
+        }
       }
     }
     .padding(.horizontal, 28)
@@ -1952,6 +1958,10 @@ struct MemoryDetailSheet: View {
   @State private var isEditingContent = false
   @State private var editContentText = ""
 
+  private var isLocalDaemonMode: Bool {
+    DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+  }
+
   private func dismissSheet() {
     if let onDismiss = onDismiss {
       onDismiss()
@@ -1978,26 +1988,28 @@ struct MemoryDetailSheet: View {
 
           Spacer()
 
-          // Public toggle
-          HStack(spacing: 6) {
-            Text("Public")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
-            if viewModel.isTogglingVisibility {
-              ProgressView()
-                .scaleEffect(0.7)
-            } else {
-              Toggle(
-                "",
-                isOn: Binding(
-                  get: { memory.isPublic },
-                  set: { _ in
-                    Task { await viewModel.toggleVisibility(memory) }
-                  }
+          if !isLocalDaemonMode {
+            // Public toggle
+            HStack(spacing: 6) {
+              Text("Public")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+              if viewModel.isTogglingVisibility {
+                ProgressView()
+                  .scaleEffect(0.7)
+              } else {
+                Toggle(
+                  "",
+                  isOn: Binding(
+                    get: { memory.isPublic },
+                    set: { _ in
+                      Task { await viewModel.toggleVisibility(memory) }
+                    }
+                  )
                 )
-              )
-              .toggleStyle(.switch)
-              .labelsHidden()
+                .toggleStyle(.switch)
+                .labelsHidden()
+              }
             }
           }
 

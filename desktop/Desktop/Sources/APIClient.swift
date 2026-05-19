@@ -457,7 +457,20 @@ extension APIClient {
   ) async throws -> [ServerConversation] {
     let target = mvpBackendTarget
     if target.mode == .localDaemon {
-      let endpoint = "v1/conversations?limit=\(limit)"
+      var queryItems: [String] = [
+        "limit=\(limit)",
+        "offset=\(offset)",
+      ]
+      if let startDate = startDate {
+        queryItems.append("start_date=\(Self.queryValue(Self.isoString(startDate)))")
+      }
+      if let endDate = endDate {
+        queryItems.append("end_date=\(Self.queryValue(Self.isoString(endDate)))")
+      }
+      if let starred = starred {
+        queryItems.append("starred=\(starred)")
+      }
+      let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
       let response: LocalConversationsResponse = try await get(
         endpoint,
         requireAuth: false,

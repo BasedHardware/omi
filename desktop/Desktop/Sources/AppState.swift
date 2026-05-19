@@ -1741,6 +1741,7 @@ class AppState: ObservableObject {
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
     finishedSessionId = currentSessionId
     finishedRecordingStartTime = recordingStartTime
+    let sessionIdToFinalizeLocally = currentSessionId
 
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
@@ -1838,6 +1839,23 @@ class AppState: ObservableObject {
         log("Transcription: Created new DB session \(sessionId) for next conversation")
       } catch {
         logError("Transcription: Failed to create DB session for next conversation", error: error)
+      }
+    }
+
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon,
+      let sessionId = sessionIdToFinalizeLocally
+    {
+      do {
+        if let conversationId = try await TranscriptionRetryService.shared
+          .finalizeLocalDaemonSessionNow(sessionId: sessionId)
+        {
+          log(
+            "Transcription: Local daemon finalized session \(sessionId) as conversation \(conversationId)"
+          )
+        }
+      } catch {
+        logError("Transcription: Local daemon finalize failed for session \(sessionId)", error: error)
+        return .error(error.localizedDescription)
       }
     }
 

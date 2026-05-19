@@ -156,6 +156,10 @@ async fn profile_status(State(state): State<AppState>) -> ApiResult<Value> {
 #[derive(Deserialize)]
 struct ListQuery {
     limit: Option<i64>,
+    offset: Option<i64>,
+    start_date: Option<DateTime<Utc>>,
+    end_date: Option<DateTime<Utc>>,
+    starred: Option<bool>,
 }
 
 async fn list_conversations(
@@ -165,7 +169,13 @@ async fn list_conversations(
     let conversations = state
         .store
         .conversations()
-        .list(limit_or_default(query.limit))
+        .list_filtered(
+            limit_or_default(query.limit),
+            query.offset.unwrap_or(0).max(0),
+            query.start_date,
+            query.end_date,
+            query.starred,
+        )
         .map_err(ApiError::internal)?;
     Ok(Json(json!({ "conversations": conversations })))
 }

@@ -554,6 +554,42 @@ final class APIClientRoutingTests: XCTestCase {
     assertNoOmiHostedBackendRequests(requests)
   }
 
+  func testLocalModeGetConversationsPreservesVisibleFilters() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)
+    setenv("OMI_DESKTOP_API_URL", "https://desktop-backend-hhibjajaja-uc.a.run.app", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+    let startDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let endDate = Date(timeIntervalSince1970: 1_700_086_400)
+
+    _ = try? await client.getConversations(
+      limit: 25,
+      offset: 10,
+      startDate: startDate,
+      endDate: endDate,
+      starred: true
+    )
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "127.0.0.1", port: 8765,
+      pathContains: "v1/conversations", method: "GET",
+      label: "local filtered getConversations")
+    XCTAssertNil(requests.first?.headers["Authorization"])
+    let queryItems = Dictionary(
+      uniqueKeysWithValues: URLComponents(url: requests[0].url, resolvingAgainstBaseURL: false)!
+        .queryItems!
+        .compactMap { item in item.value.map { (item.name, $0) } }
+    )
+    XCTAssertEqual(queryItems["limit"], "25")
+    XCTAssertEqual(queryItems["offset"], "10")
+    XCTAssertEqual(queryItems["starred"], "true")
+    XCTAssertNotNil(queryItems["start_date"])
+    XCTAssertNotNil(queryItems["end_date"])
+    assertNoOmiHostedBackendRequests(requests)
+  }
+
   func testLocalModeTranscriptImportRoutesToLocalDaemonWithoutAuth() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_PYTHON_API_URL", "https://api.omi.me", 1)

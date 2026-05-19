@@ -289,12 +289,31 @@ assert_json_value "${segment_file}" "transcript_segment.id" "seg-e2e-smoke-0"
 
 updated_file="$(request PATCH /v1/conversations/conv-e2e-smoke '{
   "title": "Smoke updated",
-  "overview": "Updated before processing"
+  "overview": "Updated before processing",
+  "starred": true
 }')"
 assert_json_value "${updated_file}" "conversation.title" "Smoke updated"
+assert_json_value "${updated_file}" "conversation.starred" "True"
 
 list_file="$(request GET /v1/conversations)"
 assert_json_value "${list_file}" "conversations.0.id" "conv-e2e-smoke"
+filtered_list_file="$(request GET '/v1/conversations?limit=10&offset=0&starred=true&start_date=2000-01-01T00:00:00Z&end_date=2100-01-01T00:00:00Z')"
+assert_json_value "${filtered_list_file}" "conversations.0.id" "conv-e2e-smoke"
+unstarred_list_file="$(request GET '/v1/conversations?starred=false')"
+unstarred_count="$(python3 - "${unstarred_list_file}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+print(len(data["conversations"]))
+PY
+)"
+if [[ "${unstarred_count}" != "0" ]]; then
+  echo "Expected starred=false filter to hide starred smoke conversation, got ${unstarred_count}" >&2
+  echo "Response file: ${unstarred_list_file}" >&2
+  exit 1
+fi
 
 search_file="$(request GET '/v1/search/conversations?q=deterministic')"
 assert_json_value "${search_file}" "results.0.conversation_id" "conv-e2e-smoke"
@@ -467,6 +486,6 @@ cat <<EOF
 PASS local backend E2E smoke
 - daemon: ${BASE_URL}
 - data_dir: ${DATA_DIR}
-- verified: health, profile, settings, conversation CRUD, transcript append/finalize, search, fallback processing, loopback provider processing, provider denylist, retry exhaustion, duplicate finalize safety, processing status, restart persistence
+- verified: health, profile, settings, conversation CRUD, starred/date filters, transcript append/finalize, search, fallback processing, loopback provider processing, provider denylist, retry exhaustion, duplicate finalize safety, processing status, restart persistence
 - desktop_env: OMI_DESKTOP_BACKEND_MODE=local OMI_LOCAL_DAEMON_URL=${BASE_URL}
 EOF
