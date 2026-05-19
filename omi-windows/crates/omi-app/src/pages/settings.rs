@@ -135,14 +135,53 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
-                    label { class: "settings-label", "OpenAI" }
+                    label { class: "settings-label", "Groq" }
                     input {
                         class: "settings-input",
                         r#type: "password",
-                        placeholder: "sk-...",
+                        placeholder: "gsk_...",
+                        value: "{config.read().groq_api_key}",
+                        onchange: move |e| {
+                            config.write().groq_api_key = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "OpenAI / Azure Key" }
+                    input {
+                        class: "settings-input",
+                        r#type: "password",
+                        placeholder: "sk-... or Azure api-key",
                         value: "{config.read().openai_api_key}",
                         onchange: move |e| {
                             config.write().openai_api_key = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "OpenAI Base URL" }
+                    input {
+                        class: "settings-input",
+                        r#type: "text",
+                        placeholder: "https://api.openai.com/v1",
+                        value: "{config.read().openai_base_url}",
+                        onchange: move |e| {
+                            config.write().openai_base_url = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "OpenAI Model" }
+                    input {
+                        class: "settings-input",
+                        r#type: "text",
+                        placeholder: "gpt-4o-mini",
+                        value: "{config.read().openai_model}",
+                        onchange: move |e| {
+                            config.write().openai_model = e.value();
                             let _ = config.read().save();
                         },
                     }

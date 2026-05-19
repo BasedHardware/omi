@@ -23,9 +23,22 @@ pub struct AppConfig {
     #[serde(default)]
     pub gemini_api_key: String,
 
-    /// OpenAI API key (alternative LLM)
+    /// OpenAI / Azure OpenAI API key
     #[serde(default)]
     pub openai_api_key: String,
+
+    /// OpenAI base URL (set to Azure endpoint for Azure OpenAI)
+    /// e.g. https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT
+    #[serde(default = "default_openai_base_url")]
+    pub openai_base_url: String,
+
+    /// OpenAI model name (or Azure deployment name)
+    #[serde(default = "default_openai_model")]
+    pub openai_model: String,
+
+    /// Groq API key (fast inference)
+    #[serde(default)]
+    pub groq_api_key: String,
 
     /// Screen capture interval in seconds
     #[serde(default = "default_capture_interval")]
@@ -80,6 +93,14 @@ fn default_true() -> bool {
     true
 }
 
+fn default_openai_base_url() -> String {
+    "https://api.openai.com/v1".to_string()
+}
+
+fn default_openai_model() -> String {
+    "gpt-4o-mini".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -88,6 +109,9 @@ impl Default for AppConfig {
             deepgram_api_key: String::new(),
             gemini_api_key: String::new(),
             openai_api_key: String::new(),
+            openai_base_url: default_openai_base_url(),
+            openai_model: default_openai_model(),
+            groq_api_key: String::new(),
             capture_interval_secs: default_capture_interval(),
             screen_capture_enabled: false,
             ocr_enabled: true,

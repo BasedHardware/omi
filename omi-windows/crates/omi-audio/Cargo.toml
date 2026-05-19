@@ -7,3 +7,6 @@ edition = "2021"
 tokio = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+cpal = "0.15"
+ringbuf = "0.4"
+bytemuck = { version = "1", features = ["derive"] }

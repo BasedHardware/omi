@@ -4,6 +4,7 @@ use crate::auth::AuthStatus;
 use crate::components::sidebar::Sidebar;
 use crate::config::AppConfig;
 use crate::pages;
+use crate::recording::{LiveTranscript, RecordingStatus};
 use crate::sidecar::BackendStatus;
 
 /// Top-level route enum — each variant maps to a sidebar nav item.
@@ -56,10 +57,16 @@ pub fn App() -> Element {
     // Backend sidecar health
     let mut backend_status = use_signal(|| BackendStatus::Starting);
 
-    // Provide all three as global context
+    // Recording state
+    let recording_status = use_signal(|| RecordingStatus::Idle);
+    let live_transcript = use_signal(LiveTranscript::default);
+
+    // Provide all as global context
     use_context_provider(|| config);
     use_context_provider(|| auth_status);
     use_context_provider(|| backend_status);
+    use_context_provider(|| recording_status);
+    use_context_provider(|| live_transcript);
 
     // Kick off the sidecar health poller once
     use_effect(move || {

@@ -6,11 +6,15 @@ mod components;
 mod config;
 mod hooks;
 mod pages;
+mod recording;
 mod sidecar;
 
 pub const MAIN_CSS: &str = include_str!("assets/main.css");
 
 fn main() {
+    // Load .env from working directory (omi-windows/.env)
+    dotenvy::dotenv().ok();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

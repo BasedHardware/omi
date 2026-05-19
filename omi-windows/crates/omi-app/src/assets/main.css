@@ -269,6 +269,86 @@ body {
   color: var(--text-muted);
 }
 
+/* ── Chat Bubbles ────────────────────────────────────────────────── */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.chat-bubble {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.chat-bubble.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.assistant {
+  align-self: flex-start;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble.loading {
+  opacity: 0.7;
+}
+
+.typing-dots {
+  animation: blink 1s ease-in-out infinite;
+}
+
+.chat-empty {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--text-muted);
+}
+
+/* ── Conversation Card ───────────────────────────────────────────── */
+.conversation-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.conversation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.conversation-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.conversation-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.conversation-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────── */
 .btn {
   padding: 8px 18px;
@@ -395,6 +475,134 @@ body {
 
 .btn-secondary:hover {
   background: var(--bg-hover);
+}
+
+/* ── Recording Controls ──────────────────────────────────────────── */
+.record-controls {
+  margin-bottom: 24px;
+}
+
+.btn-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent);
+  border-radius: 24px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-record:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-recording {
+  background: #e17055;
+  border-color: #e17055;
+  color: white;
+  animation: pulse-record 2s ease-in-out infinite;
+}
+
+.btn-recording:hover {
+  background: #d63031;
+  border-color: #d63031;
+}
+
+.record-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.record-dot.recording {
+  background: white;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes pulse-record {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(225, 112, 85, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(225, 112, 85, 0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.text-warning {
+  color: var(--warning);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+/* ── Transcript Panel ────────────────────────────────────────────── */
+.transcript-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.transcript-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.transcript-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-empty {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.transcript-segment {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  line-height: 1.5;
+}
+
+.transcript-segment.interim {
+  opacity: 0.6;
+}
+
+.speaker-badge {
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.segment-text {
+  font-size: 14px;
+}
+
+/* ── Card Stats ──────────────────────────────────────────────────── */
+.card-stat {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 2px;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────── */
