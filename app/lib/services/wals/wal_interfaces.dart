@@ -5,7 +5,15 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
-export 'package:omi/backend/http/api/conversations.dart' show syncLocalFilesV2, SyncJobPollCallback;
+export 'package:omi/backend/http/api/conversations.dart'
+    show
+        syncLocalFilesV2,
+        SyncJobPollCallback,
+        uploadLocalFilesV2,
+        UploadFilesResult,
+        fetchSyncJobStatus,
+        SyncJobFetch,
+        SyncJobFetchOutcome;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
