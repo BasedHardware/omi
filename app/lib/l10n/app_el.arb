@@ -506,7 +506,7 @@
     "designingApp": "Σχεδιασμός εφαρμογής",
     "generatingIconStep": "Δημιουργία εικονιδίου",
     "finalTouches": "Τελικές πινελιές",
-    "processing": "Επεξεργασία...",
+    "processing": "Επεξεργασία",
     "features": "Χαρακτηριστικά",
     "creatingYourApp": "Δημιουργία της εφαρμογής σας...",
     "generatingIcon": "Δημιουργία εικονιδίου...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Αυτή η σύνοψη θα διαγραφεί οριστικά. Οι αρχικές συνομιλίες της ημέρας δεν επηρεάζονται.",
     "deleteRecapAction": "Διαγραφή",
     "recapDeletedSnackbar": "Η σύνοψη διαγράφηκε",
-    "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα."
+    "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.",
+    "syncStatusBackedUp": "Δημιουργήθηκε αντίγραφο",
+    "syncStatusBackingUp": "Δημιουργία αντιγράφου…",
+    "syncStatusWaiting": "Αναμονή για αντίγραφο",
+    "syncStatusRetrying": "Αποτυχία επεξεργασίας — νέα προσπάθεια",
+    "syncStatusFailed": "Απέτυχε — πατήστε Επανάληψη",
+    "syncStatusFileUnavailable": "Το αρχείο δεν είναι διαθέσιμο",
+    "syncStatusUploaded": "Μεταφορτώθηκε · επεξεργασία στο Omi",
+    "noRecordingsYet": "Δεν υπάρχουν ακόμη ηχογραφήσεις",
+    "syncInProgress": "Συγχρονισμός σε εξέλιξη",
+    "deleteWhileProcessingTitle": "Συνεχίζεται η επεξεργασία",
+    "deleteWhileProcessingMessage": "Αυτή η ηχογράφηση μεταφορτώθηκε, αλλά το Omi δημιουργεί ακόμη τη συνομιλία. Αν τη διαγράψετε τώρα και η επεξεργασία αποτύχει, δεν θα μπορεί να ανακτηθεί. Διαγραφή ούτως ή άλλως;"
 }

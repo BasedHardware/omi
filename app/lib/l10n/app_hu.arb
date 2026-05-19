@@ -506,7 +506,7 @@
     "designingApp": "Alkalmazás tervezése",
     "generatingIconStep": "Ikon generálása",
     "finalTouches": "Utolsó simítások",
-    "processing": "Feldolgozás...",
+    "processing": "Feldolgozás",
     "features": "Funkciók",
     "creatingYourApp": "Alkalmazásod létrehozása...",
     "generatingIcon": "Ikon generálása...",
@@ -3121,5 +3121,16 @@
     "deleteRecapConfirmBody": "Az összefoglaló véglegesen eltávolításra kerül. Az adott nap eredeti beszélgetései érintetlenek maradnak.",
     "deleteRecapAction": "Törlés",
     "recapDeletedSnackbar": "Összefoglaló törölve",
-    "recapDeleteFailed": "Nem sikerült törölni az összefoglalót. Próbáld újra később."
+    "recapDeleteFailed": "Nem sikerült törölni az összefoglalót. Próbáld újra később.",
+    "syncStatusBackedUp": "Mentve",
+    "syncStatusBackingUp": "Biztonsági mentés…",
+    "syncStatusWaiting": "Mentésre vár",
+    "syncStatusRetrying": "A feldolgozás sikertelen — újrapróbálkozás",
+    "syncStatusFailed": "Sikertelen — koppintson az Újra gombra",
+    "syncStatusFileUnavailable": "A fájl nem érhető el",
+    "syncStatusUploaded": "Feltöltve · feldolgozás az Omin",
+    "noRecordingsYet": "Még nincs felvétel",
+    "syncInProgress": "Szinkronizálás folyamatban",
+    "deleteWhileProcessingTitle": "Még feldolgozás alatt",
+    "deleteWhileProcessingMessage": "Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?"
 }

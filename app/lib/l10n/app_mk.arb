@@ -1580,7 +1580,7 @@
     "designingApp": "Дизајнирање апликација",
     "generatingIconStep": "Генерирање икона",
     "finalTouches": "Последни штипови",
-    "processing": "Обработка...",
+    "processing": "Се обработува",
     "features": "Карактеристики",
     "creatingYourApp": "Создавање на вашата апликација...",
     "generatingIcon": "Генерирање икона...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Овој преглед ќе биде трајно отстранет. Оригиналните разговори од тој ден остануваат недопрени.",
     "deleteRecapAction": "Избриши",
     "recapDeletedSnackbar": "Прегледот е избришан",
-    "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна."
+    "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
+    "syncStatusBackedUp": "Резервно зачувано",
+    "syncStatusBackingUp": "Се прави резервна копија…",
+    "syncStatusWaiting": "Чека резервна копија",
+    "syncStatusRetrying": "Обработката не успеа — нов обид",
+    "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusFileUnavailable": "Датотеката е недостапна",
+    "syncStatusUploaded": "Поставено · се обработува на Omi",
+    "noRecordingsYet": "Сè уште нема снимки",
+    "syncInProgress": "Синхронизацијата е во тек",
+    "deleteWhileProcessingTitle": "Сè уште се обработува",
+    "deleteWhileProcessingMessage": "Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?"
 }

@@ -506,7 +506,7 @@
     "designingApp": "Progettazione app",
     "generatingIconStep": "Generazione icona",
     "finalTouches": "Ritocchi finali",
-    "processing": "Elaborazione...",
+    "processing": "Elaborazione",
     "features": "Funzionalità",
     "creatingYourApp": "Creazione della tua app...",
     "generatingIcon": "Generazione icona...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Questo riepilogo verrà rimosso in modo permanente. Le conversazioni originali di quel giorno non verranno modificate.",
     "deleteRecapAction": "Elimina",
     "recapDeletedSnackbar": "Riepilogo eliminato",
-    "recapDeleteFailed": "Impossibile eliminare il riepilogo. Riprova più tardi."
+    "recapDeleteFailed": "Impossibile eliminare il riepilogo. Riprova più tardi.",
+    "syncStatusBackedUp": "Backup eseguito",
+    "syncStatusBackingUp": "Backup in corso…",
+    "syncStatusWaiting": "In attesa del backup",
+    "syncStatusRetrying": "Elaborazione non riuscita — nuovo tentativo",
+    "syncStatusFailed": "Non riuscito — tocca Riprova",
+    "syncStatusFileUnavailable": "File non disponibile",
+    "syncStatusUploaded": "Caricato · elaborazione su Omi",
+    "noRecordingsYet": "Ancora nessuna registrazione",
+    "syncInProgress": "Sincronizzazione in corso",
+    "deleteWhileProcessingTitle": "Ancora in elaborazione",
+    "deleteWhileProcessingMessage": "Questa registrazione è stata caricata ma Omi sta ancora creando la conversazione. Se la elimini ora e l'elaborazione non riesce, non potrà essere recuperata. Eliminare comunque?"
 }

@@ -1580,7 +1580,7 @@
     "designingApp": "طراحی برنامه",
     "generatingIconStep": "تولید آیکون",
     "finalTouches": "لمسات نهایی",
-    "processing": "در حال پردازش...",
+    "processing": "در حال پردازش",
     "features": "ویژگی‌ها",
     "creatingYourApp": "در حال ایجاد برنامه شما...",
     "generatingIcon": "در حال تولید آیکون...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.",
     "deleteRecapAction": "حذف",
     "recapDeletedSnackbar": "خلاصه حذف شد",
-    "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید."
+    "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
+    "syncStatusBackedUp": "پشتیبان‌گیری شد",
+    "syncStatusBackingUp": "در حال پشتیبان‌گیری…",
+    "syncStatusWaiting": "در انتظار پشتیبان‌گیری",
+    "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
+    "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
+    "syncStatusFileUnavailable": "فایل در دسترس نیست",
+    "syncStatusUploaded": "بارگذاری شد · در حال پردازش در Omi",
+    "noRecordingsYet": "هنوز ضبطی وجود ندارد",
+    "syncInProgress": "همگام‌سازی در حال انجام است",
+    "deleteWhileProcessingTitle": "هنوز در حال پردازش",
+    "deleteWhileProcessingMessage": "این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟"
 }

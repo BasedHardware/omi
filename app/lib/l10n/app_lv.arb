@@ -506,7 +506,7 @@
     "designingApp": "Projektē lietotni",
     "generatingIconStep": "Ģenerē ikonu",
     "finalTouches": "Pēdējie pieskārieni",
-    "processing": "Apstrādā...",
+    "processing": "Apstrāde",
     "features": "Funkcijas",
     "creatingYourApp": "Izveido jūsu lietotni...",
     "generatingIcon": "Ģenerē ikonu...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Šis kopsavilkums tiks neatgriezeniski noņemts. Tās dienas oriģinālās sarunas netiks ietekmētas.",
     "deleteRecapAction": "Dzēst",
     "recapDeletedSnackbar": "Kopsavilkums dzēsts",
-    "recapDeleteFailed": "Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk."
+    "recapDeleteFailed": "Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.",
+    "syncStatusBackedUp": "Dublēts",
+    "syncStatusBackingUp": "Notiek dublēšana…",
+    "syncStatusWaiting": "Gaida dublēšanu",
+    "syncStatusRetrying": "Neizdevās apstrādāt — mēģina vēlreiz",
+    "syncStatusFailed": "Neizdevās — pieskarieties Mēģināt vēlreiz",
+    "syncStatusFileUnavailable": "Fails nav pieejams",
+    "syncStatusUploaded": "Augšupielādēts · tiek apstrādāts Omi",
+    "noRecordingsYet": "Vēl nav ierakstu",
+    "syncInProgress": "Notiek sinhronizācija",
+    "deleteWhileProcessingTitle": "Vēl tiek apstrādāts",
+    "deleteWhileProcessingMessage": "Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?"
 }

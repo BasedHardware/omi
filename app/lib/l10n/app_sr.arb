@@ -1580,7 +1580,7 @@
     "designingApp": "Дизајнирање апликације",
     "generatingIconStep": "Прављење иконе",
     "finalTouches": "Финалне дораде",
-    "processing": "Обрада...",
+    "processing": "Обрада",
     "features": "Функције",
     "creatingYourApp": "Прављење ваше апликације...",
     "generatingIcon": "Прављење иконе...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Овај преглед биће трајно уклоњен. Изворни разговори тог дана нису погођени.",
     "deleteRecapAction": "Обриши",
     "recapDeletedSnackbar": "Преглед обрисан",
-    "recapDeleteFailed": "Преглед није могуће обрисати. Покушајте поново касније."
+    "recapDeleteFailed": "Преглед није могуће обрисати. Покушајте поново касније.",
+    "syncStatusBackedUp": "Направљена резервна копија",
+    "syncStatusBackingUp": "Прави се резервна копија…",
+    "syncStatusWaiting": "Чека резервну копију",
+    "syncStatusRetrying": "Обрада није успела — нови покушај",
+    "syncStatusFailed": "Неуспело — додирните Покушај поново",
+    "syncStatusFileUnavailable": "Датотека није доступна",
+    "syncStatusUploaded": "Отпремљено · обрада на Omi",
+    "noRecordingsYet": "Још нема снимака",
+    "syncInProgress": "Синхронизација у току",
+    "deleteWhileProcessingTitle": "Још се обрађује",
+    "deleteWhileProcessingMessage": "Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?"
 }

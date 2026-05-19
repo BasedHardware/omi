@@ -506,7 +506,7 @@
     "designingApp": "Se proiectează aplicația",
     "generatingIconStep": "Se generează iconița",
     "finalTouches": "Retușuri finale",
-    "processing": "Se procesează...",
+    "processing": "Se procesează",
     "features": "Funcționalități",
     "creatingYourApp": "Se creează aplicația ta...",
     "generatingIcon": "Se generează iconița...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Acest rezumat va fi eliminat definitiv. Conversațiile originale din ziua respectivă nu sunt afectate.",
     "deleteRecapAction": "Șterge",
     "recapDeletedSnackbar": "Rezumat șters",
-    "recapDeleteFailed": "Rezumatul nu a putut fi șters. Încearcă din nou mai târziu."
+    "recapDeleteFailed": "Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.",
+    "syncStatusBackedUp": "Copiat de rezervă",
+    "syncStatusBackingUp": "Se face copia de rezervă…",
+    "syncStatusWaiting": "Așteaptă copierea de rezervă",
+    "syncStatusRetrying": "Procesarea a eșuat — se reîncearcă",
+    "syncStatusFailed": "A eșuat — atinge Reîncearcă",
+    "syncStatusFileUnavailable": "Fișierul nu este disponibil",
+    "syncStatusUploaded": "Încărcat · se procesează pe Omi",
+    "noRecordingsYet": "Încă nu există înregistrări",
+    "syncInProgress": "Sincronizare în curs",
+    "deleteWhileProcessingTitle": "Încă se procesează",
+    "deleteWhileProcessingMessage": "Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?"
 }

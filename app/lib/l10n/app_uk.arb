@@ -506,7 +506,7 @@
     "designingApp": "Проектування додатка",
     "generatingIconStep": "Генерація іконки",
     "finalTouches": "Фінальні штрихи",
-    "processing": "Обробка...",
+    "processing": "Обробка",
     "features": "Можливості",
     "creatingYourApp": "Створення вашого додатка...",
     "generatingIcon": "Генерація іконки...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Цей підсумок буде видалено назавжди. Оригінальні розмови того дня не зазнають змін.",
     "deleteRecapAction": "Видалити",
     "recapDeletedSnackbar": "Підсумок видалено",
-    "recapDeleteFailed": "Не вдалося видалити підсумок. Спробуйте пізніше."
+    "recapDeleteFailed": "Не вдалося видалити підсумок. Спробуйте пізніше.",
+    "syncStatusBackedUp": "Збережено в резерв",
+    "syncStatusBackingUp": "Резервне копіювання…",
+    "syncStatusWaiting": "Очікує резервного копіювання",
+    "syncStatusRetrying": "Не вдалося обробити — повтор",
+    "syncStatusFailed": "Помилка — натисніть «Повторити»",
+    "syncStatusFileUnavailable": "Файл недоступний",
+    "syncStatusUploaded": "Завантажено · обробка в Omi",
+    "noRecordingsYet": "Записів ще немає",
+    "syncInProgress": "Триває синхронізація",
+    "deleteWhileProcessingTitle": "Ще обробляється",
+    "deleteWhileProcessingMessage": "Цей запис завантажено, але Omi ще створює розмову. Якщо видалити його зараз і обробка не вдасться, відновити буде неможливо. Усе одно видалити?"
 }

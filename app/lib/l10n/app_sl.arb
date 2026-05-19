@@ -1580,7 +1580,7 @@
     "designingApp": "Oblikujem aplikacijo",
     "generatingIconStep": "Generiram ikono",
     "finalTouches": "Končni dotiki",
-    "processing": "Obdelava...",
+    "processing": "Obdelava",
     "features": "Lastnosti",
     "creatingYourApp": "Ustvarjam vašo aplikacijo...",
     "generatingIcon": "Generiram ikono...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Ta povzetek bo trajno odstranjen. Izvirni pogovori tega dne ostanejo nespremenjeni.",
     "deleteRecapAction": "Izbriši",
     "recapDeletedSnackbar": "Povzetek izbrisan",
-    "recapDeleteFailed": "Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje."
+    "recapDeleteFailed": "Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje.",
+    "syncStatusBackedUp": "Varnostno kopirano",
+    "syncStatusBackingUp": "Ustvarjanje kopije…",
+    "syncStatusWaiting": "Čaka na varnostno kopiranje",
+    "syncStatusRetrying": "Obdelava ni uspela — vnovični poskus",
+    "syncStatusFailed": "Ni uspelo — tapnite Poskusi znova",
+    "syncStatusFileUnavailable": "Datoteka ni na voljo",
+    "syncStatusUploaded": "Naloženo · obdelava v Omi",
+    "noRecordingsYet": "Še ni posnetkov",
+    "syncInProgress": "Sinhronizacija poteka",
+    "deleteWhileProcessingTitle": "Še poteka obdelava",
+    "deleteWhileProcessingMessage": "Ta posnetek je naložen, vendar Omi še ustvarja pogovor. Če ga zdaj izbrišete in obdelava ne uspe, ga ne bo mogoče obnoviti. Vseeno izbrišem?"
 }

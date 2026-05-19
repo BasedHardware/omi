@@ -1580,7 +1580,7 @@
     "designingApp": "ಅ್ಯಪ್ ವಿನ್ಯಾಸಿತ ಮಾಡುತ್ತಿದೆ",
     "generatingIconStep": "ಐಕನ್ ರಚಿಸಲಾಗುತ್ತಿದೆ",
     "finalTouches": "ಅಂತಿಮ ಸ್ಪರ್ಶ",
-    "processing": "ಪ್ರಕ್ರಿಯೆಕರಣ...",
+    "processing": "ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
     "features": "ವೈಶಿಷ್ಟ್ಯಗಳು",
     "creatingYourApp": "ನಿಮ್ಮ ಅ್ಯಪ್ ರಚಿಸಲಾಗುತ್ತಿದೆ...",
     "generatingIcon": "ಐಕನ್ ರಚಿಸುತ್ತಿದೆ...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "ಈ ಸಾರಾಂಶವನ್ನು ಶಾಶ್ವತವಾಗಿ ತೆಗೆದುಹಾಕಲಾಗುತ್ತದೆ. ಆ ದಿನದ ಮೂಲ ಸಂಭಾಷಣೆಗಳಿಗೆ ಪರಿಣಾಮ ಉಂಟಾಗುವುದಿಲ್ಲ.",
     "deleteRecapAction": "ಅಳಿಸಿ",
     "recapDeletedSnackbar": "ಸಾರಾಂಶ ಅಳಿಸಲಾಗಿದೆ",
-    "recapDeleteFailed": "ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."
+    "recapDeleteFailed": "ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
+    "syncStatusBackedUp": "ಬ್ಯಾಕಪ್ ಆಗಿದೆ",
+    "syncStatusBackingUp": "ಬ್ಯಾಕಪ್ ಆಗುತ್ತಿದೆ…",
+    "syncStatusWaiting": "ಬ್ಯಾಕಪ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
+    "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
+    "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
+    "syncStatusFileUnavailable": "ಫೈಲ್ ಲಭ್ಯವಿಲ್ಲ",
+    "syncStatusUploaded": "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ · Omi ನಲ್ಲಿ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
+    "noRecordingsYet": "ಇನ್ನೂ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
+    "syncInProgress": "ಸಿಂಕ್ ನಡೆಯುತ್ತಿದೆ",
+    "deleteWhileProcessingTitle": "ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
+    "deleteWhileProcessingMessage": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಆದರೆ Omi ಇನ್ನೂ ಸಂಭಾಷಣೆ ರಚಿಸುತ್ತಿದೆ. ಈಗ ಅಳಿಸಿ ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ ಮರುಪಡೆಯಲಾಗದು. ಹೇಗಿದ್ದರೂ ಅಳಿಸಬೇಕೆ?"
 }

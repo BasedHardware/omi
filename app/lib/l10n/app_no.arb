@@ -506,7 +506,7 @@
     "designingApp": "Designer app",
     "generatingIconStep": "Genererer ikon",
     "finalTouches": "Siste finpuss",
-    "processing": "Behandler...",
+    "processing": "Behandler",
     "features": "Funksjoner",
     "creatingYourApp": "Oppretter appen din...",
     "generatingIcon": "Genererer ikon...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Oppsummeringen fjernes permanent. De opprinnelige samtalene fra den dagen påvirkes ikke.",
     "deleteRecapAction": "Slett",
     "recapDeletedSnackbar": "Oppsummering slettet",
-    "recapDeleteFailed": "Kunne ikke slette oppsummeringen. Prøv igjen senere."
+    "recapDeleteFailed": "Kunne ikke slette oppsummeringen. Prøv igjen senere.",
+    "syncStatusBackedUp": "Sikkerhetskopiert",
+    "syncStatusBackingUp": "Sikkerhetskopierer…",
+    "syncStatusWaiting": "Venter på sikkerhetskopiering",
+    "syncStatusRetrying": "Kunne ikke behandles — prøver igjen",
+    "syncStatusFailed": "Mislyktes — trykk på Prøv igjen",
+    "syncStatusFileUnavailable": "Filen er utilgjengelig",
+    "syncStatusUploaded": "Lastet opp · behandles på Omi",
+    "noRecordingsYet": "Ingen opptak ennå",
+    "syncInProgress": "Synkronisering pågår",
+    "deleteWhileProcessingTitle": "Behandles fortsatt",
+    "deleteWhileProcessingMessage": "Dette opptaket er lastet opp, men Omi lager fortsatt samtalen. Hvis du sletter det nå og behandlingen mislykkes, kan det ikke gjenopprettes. Slette likevel?"
 }

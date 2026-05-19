@@ -1580,7 +1580,7 @@
     "designingApp": "Dizajniranje aplikacije",
     "generatingIconStep": "Pravljenje ikone",
     "finalTouches": "Završne izmene",
-    "processing": "Obrada...",
+    "processing": "Obrada",
     "features": "Karakteristike",
     "creatingYourApp": "Pravljenje vaše aplikacije...",
     "generatingIcon": "Pravljenje ikone...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Ovaj pregled bit će trajno uklonjen. Originalni razgovori s tog dana ostaju netaknuti.",
     "deleteRecapAction": "Obriši",
     "recapDeletedSnackbar": "Pregled obrisan",
-    "recapDeleteFailed": "Pregled nije moguće obrisati. Pokušajte ponovo kasnije."
+    "recapDeleteFailed": "Pregled nije moguće obrisati. Pokušajte ponovo kasnije.",
+    "syncStatusBackedUp": "Sigurnosno kopirano",
+    "syncStatusBackingUp": "Pravljenje kopije…",
+    "syncStatusWaiting": "Čeka na kopiranje",
+    "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
+    "syncStatusFailed": "Neuspjelo — dodirnite Ponovi",
+    "syncStatusFileUnavailable": "Datoteka nije dostupna",
+    "syncStatusUploaded": "Otpremljeno · obrada na Omi",
+    "noRecordingsYet": "Još nema snimaka",
+    "syncInProgress": "Sinhronizacija u toku",
+    "deleteWhileProcessingTitle": "Još se obrađuje",
+    "deleteWhileProcessingMessage": "Ovaj snimak je otpremljen, ali Omi još kreira razgovor. Ako ga sada izbrišete i obrada ne uspije, ne može se vratiti. Svejedno izbrisati?"
 }

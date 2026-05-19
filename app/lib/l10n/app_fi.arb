@@ -506,7 +506,7 @@
     "designingApp": "Suunnitellaan sovellusta",
     "generatingIconStep": "Luodaan kuvaketta",
     "finalTouches": "Viimeiset viimeistelyt",
-    "processing": "Käsitellään...",
+    "processing": "Käsitellään",
     "features": "Ominaisuudet",
     "creatingYourApp": "Luodaan sovellustasi...",
     "generatingIcon": "Luodaan kuvaketta...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Yhteenveto poistetaan pysyvästi. Tuon päivän alkuperäiset keskustelut säilyvät.",
     "deleteRecapAction": "Poista",
     "recapDeletedSnackbar": "Yhteenveto poistettu",
-    "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen."
+    "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.",
+    "syncStatusBackedUp": "Varmuuskopioitu",
+    "syncStatusBackingUp": "Varmuuskopioidaan…",
+    "syncStatusWaiting": "Odottaa varmuuskopiointia",
+    "syncStatusRetrying": "Käsittely epäonnistui — yritetään uudelleen",
+    "syncStatusFailed": "Epäonnistui — napauta Yritä uudelleen",
+    "syncStatusFileUnavailable": "Tiedosto ei ole käytettävissä",
+    "syncStatusUploaded": "Ladattu · käsitellään Omissa",
+    "noRecordingsYet": "Ei vielä tallenteita",
+    "syncInProgress": "Synkronointi käynnissä",
+    "deleteWhileProcessingTitle": "Käsitellään yhä",
+    "deleteWhileProcessingMessage": "Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?"
 }

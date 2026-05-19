@@ -506,7 +506,7 @@
     "designingApp": "Dissenyant aplicació",
     "generatingIconStep": "Generant icona",
     "finalTouches": "Tocs finals",
-    "processing": "Processant...",
+    "processing": "Processant",
     "features": "Funcionalitats",
     "creatingYourApp": "Creant la vostra aplicació...",
     "generatingIcon": "Generant icona...",
@@ -2994,5 +2994,16 @@
     "deleteRecapConfirmBody": "Aquest resum s'eliminarà permanentment. Les converses originals d'aquell dia no es veuran afectades.",
     "deleteRecapAction": "Esborra",
     "recapDeletedSnackbar": "Resum esborrat",
-    "recapDeleteFailed": "No s'ha pogut esborrar el resum. Torna-ho a provar més tard."
+    "recapDeleteFailed": "No s'ha pogut esborrar el resum. Torna-ho a provar més tard.",
+    "syncStatusBackedUp": "Còpia feta",
+    "syncStatusBackingUp": "Fent còpia…",
+    "syncStatusWaiting": "Esperant la còpia",
+    "syncStatusRetrying": "No s'ha pogut processar — reintentant",
+    "syncStatusFailed": "Ha fallat — toca Reintenta",
+    "syncStatusFileUnavailable": "Fitxer no disponible",
+    "syncStatusUploaded": "Pujat · processant-se a Omi",
+    "noRecordingsYet": "Encara no hi ha enregistraments",
+    "syncInProgress": "Sincronització en curs",
+    "deleteWhileProcessingTitle": "Encara s'està processant",
+    "deleteWhileProcessingMessage": "Aquest enregistrament s'ha pujat però Omi encara està creant la conversa. Si l'elimines ara i el processament falla, no es podrà recuperar. Vols eliminar-lo igualment?"
 }

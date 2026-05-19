@@ -506,7 +506,7 @@
     "designingApp": "App ontwerpen",
     "generatingIconStep": "Icoon genereren",
     "finalTouches": "Laatste aanpassingen",
-    "processing": "Verwerken...",
+    "processing": "Verwerken",
     "features": "Functies",
     "creatingYourApp": "Je app maken...",
     "generatingIcon": "Icoon genereren...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Deze samenvatting wordt permanent verwijderd. De oorspronkelijke gesprekken van die dag blijven behouden.",
     "deleteRecapAction": "Verwijderen",
     "recapDeletedSnackbar": "Samenvatting verwijderd",
-    "recapDeleteFailed": "Kan de samenvatting niet verwijderen. Probeer het later opnieuw."
+    "recapDeleteFailed": "Kan de samenvatting niet verwijderen. Probeer het later opnieuw.",
+    "syncStatusBackedUp": "Geback-upt",
+    "syncStatusBackingUp": "Back-up maken…",
+    "syncStatusWaiting": "Wacht op back-up",
+    "syncStatusRetrying": "Verwerken mislukt — opnieuw proberen",
+    "syncStatusFailed": "Mislukt — tik op Opnieuw",
+    "syncStatusFileUnavailable": "Bestand niet beschikbaar",
+    "syncStatusUploaded": "Geüpload · wordt verwerkt op Omi",
+    "noRecordingsYet": "Nog geen opnames",
+    "syncInProgress": "Synchronisatie bezig",
+    "deleteWhileProcessingTitle": "Nog bezig met verwerken",
+    "deleteWhileProcessingMessage": "Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?"
 }

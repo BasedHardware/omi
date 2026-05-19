@@ -1580,7 +1580,7 @@
     "designingApp": "Дызайн прыкладання",
     "generatingIconStep": "Генерацыя значка",
     "finalTouches": "Канцовыя штахы",
-    "processing": "Апрацоўка...",
+    "processing": "Апрацоўка",
     "features": "Функцыі",
     "creatingYourApp": "Стварэнне вашага прыкладання...",
     "generatingIcon": "Генерацыя значка...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Гэты агляд будзе выдалены назаўсёды. Зыходныя размовы за той дзень не будуць закрануты.",
     "deleteRecapAction": "Выдаліць",
     "recapDeletedSnackbar": "Агляд выдалены",
-    "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней."
+    "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней.",
+    "syncStatusBackedUp": "Рэзервова захавана",
+    "syncStatusBackingUp": "Рэзервнае капіраванне…",
+    "syncStatusWaiting": "Чакае рэзервавання",
+    "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
+    "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
+    "syncStatusFileUnavailable": "Файл недаступны",
+    "syncStatusUploaded": "Запампавана · апрацоўка ў Omi",
+    "noRecordingsYet": "Запісаў пакуль няма",
+    "syncInProgress": "Сінхранізацыя выконваецца",
+    "deleteWhileProcessingTitle": "Усё яшчэ апрацоўваецца",
+    "deleteWhileProcessingMessage": "Гэты запіс запампаваны, але Omi яшчэ стварае размову. Калі выдаліць зараз і апрацоўка не атрымаецца, аднавіць будзе немагчыма. Усё роўна выдаліць?"
 }

@@ -506,7 +506,7 @@
     "designingApp": "تصميم التطبيق",
     "generatingIconStep": "إنشاء أيقونة",
     "finalTouches": "اللمسات الأخيرة",
-    "processing": "جاري المعالجة...",
+    "processing": "قيد المعالجة",
     "features": "الميزات",
     "creatingYourApp": "جاري إنشاء تطبيقك...",
     "generatingIcon": "جاري إنشاء الأيقونة...",
@@ -2992,5 +2992,16 @@
     "deleteRecapConfirmBody": "سيتم حذف هذا الملخص نهائيًا. لن تتأثر المحادثات الأصلية لذلك اليوم.",
     "deleteRecapAction": "حذف",
     "recapDeletedSnackbar": "تم حذف الملخص",
-    "recapDeleteFailed": "تعذر حذف الملخص. حاول مرة أخرى لاحقًا."
+    "recapDeleteFailed": "تعذر حذف الملخص. حاول مرة أخرى لاحقًا.",
+    "syncStatusBackedUp": "تم النسخ الاحتياطي",
+    "syncStatusBackingUp": "جارٍ النسخ الاحتياطي…",
+    "syncStatusWaiting": "في انتظار النسخ الاحتياطي",
+    "syncStatusRetrying": "تعذّرت المعالجة — جارٍ إعادة المحاولة",
+    "syncStatusFailed": "فشل — اضغط إعادة المحاولة",
+    "syncStatusFileUnavailable": "الملف غير متوفر",
+    "syncStatusUploaded": "تم الرفع · قيد المعالجة على Omi",
+    "noRecordingsYet": "لا توجد تسجيلات بعد",
+    "syncInProgress": "المزامنة قيد التقدم",
+    "deleteWhileProcessingTitle": "لا تزال قيد المعالجة",
+    "deleteWhileProcessingMessage": "تم رفع هذا التسجيل لكن Omi لا يزال ينشئ المحادثة. إذا حذفته الآن وفشلت المعالجة، فلن يمكن استرداده. هل تريد الحذف على أي حال؟"
 }

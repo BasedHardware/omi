@@ -1641,7 +1641,7 @@
     "processNow": "Apdoroti dabar",
     "processedConversations": "Apdoroti pokalbiai",
     "processedFilesDeleted": "Apdoroti failai ištrinti",
-    "processing": "Apdorojama...",
+    "processing": "Apdorojama",
     "processingFailed": "Apdorojimas nepavyko",
     "processingProgress": "Apdorojama {current}/{total}",
     "productName": "Produkto pavadinimas",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Ši suvestinė bus visam laikui pašalinta. Tos dienos pradinės pokalbiai nebus paveikti.",
     "deleteRecapAction": "Ištrinti",
     "recapDeletedSnackbar": "Suvestinė ištrinta",
-    "recapDeleteFailed": "Nepavyko ištrinti suvestinės. Bandykite vėliau."
+    "recapDeleteFailed": "Nepavyko ištrinti suvestinės. Bandykite vėliau.",
+    "syncStatusBackedUp": "Sukurta atsarginė kopija",
+    "syncStatusBackingUp": "Kuriama atsarginė kopija…",
+    "syncStatusWaiting": "Laukiama kopijavimo",
+    "syncStatusRetrying": "Nepavyko apdoroti — bandoma dar kartą",
+    "syncStatusFailed": "Nepavyko — palieskite Bandyti dar kartą",
+    "syncStatusFileUnavailable": "Failas nepasiekiamas",
+    "syncStatusUploaded": "Įkelta · apdorojama Omi",
+    "noRecordingsYet": "Įrašų dar nėra",
+    "syncInProgress": "Vyksta sinchronizavimas",
+    "deleteWhileProcessingTitle": "Vis dar apdorojama",
+    "deleteWhileProcessingMessage": "Šis įrašas įkeltas, bet Omi vis dar kuria pokalbį. Jei ištrinsite dabar ir apdorojimas nepavyks, jo nebus galima atkurti. Vis tiek ištrinti?"
 }

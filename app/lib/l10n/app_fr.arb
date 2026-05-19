@@ -506,7 +506,7 @@
     "designingApp": "Conception de l'application",
     "generatingIconStep": "Génération de l'icône",
     "finalTouches": "Touches finales",
-    "processing": "Traitement...",
+    "processing": "Traitement",
     "features": "Fonctionnalités",
     "creatingYourApp": "Création de votre application...",
     "generatingIcon": "Génération de l'icône...",
@@ -3060,5 +3060,16 @@
     "deleteRecapConfirmBody": "Ce résumé sera définitivement supprimé. Les conversations originales de ce jour ne sont pas affectées.",
     "deleteRecapAction": "Supprimer",
     "recapDeletedSnackbar": "Résumé supprimé",
-    "recapDeleteFailed": "Impossible de supprimer le résumé. Réessayez plus tard."
+    "recapDeleteFailed": "Impossible de supprimer le résumé. Réessayez plus tard.",
+    "syncStatusBackedUp": "Sauvegardé",
+    "syncStatusBackingUp": "Sauvegarde…",
+    "syncStatusWaiting": "En attente de sauvegarde",
+    "syncStatusRetrying": "Échec du traitement — nouvelle tentative",
+    "syncStatusFailed": "Échec — appuyez sur Réessayer",
+    "syncStatusFileUnavailable": "Fichier indisponible",
+    "syncStatusUploaded": "Envoyé · traitement sur Omi",
+    "noRecordingsYet": "Aucun enregistrement pour l'instant",
+    "syncInProgress": "Synchronisation en cours",
+    "deleteWhileProcessingTitle": "Traitement en cours",
+    "deleteWhileProcessingMessage": "Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?"
 }

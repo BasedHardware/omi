@@ -506,7 +506,7 @@
     "designingApp": "Rakenduse kujundamine",
     "generatingIconStep": "Ikooni genereerimine",
     "finalTouches": "Viimased lihvid",
-    "processing": "Töötlemine...",
+    "processing": "Töötlemine",
     "features": "Funktsioonid",
     "creatingYourApp": "Teie rakenduse loomine...",
     "generatingIcon": "Ikooni genereerimine...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Kokkuvõte eemaldatakse jäädavalt. Selle päeva algsed vestlused jäävad puutumata.",
     "deleteRecapAction": "Kustuta",
     "recapDeletedSnackbar": "Kokkuvõte kustutatud",
-    "recapDeleteFailed": "Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti."
+    "recapDeleteFailed": "Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.",
+    "syncStatusBackedUp": "Varundatud",
+    "syncStatusBackingUp": "Varundamine…",
+    "syncStatusWaiting": "Ootab varundamist",
+    "syncStatusRetrying": "Töötlemine ebaõnnestus — proovin uuesti",
+    "syncStatusFailed": "Ebaõnnestus — puuduta Proovi uuesti",
+    "syncStatusFileUnavailable": "Fail pole saadaval",
+    "syncStatusUploaded": "Üles laaditud · töödeldakse Omis",
+    "noRecordingsYet": "Salvestisi veel pole",
+    "syncInProgress": "Sünkroonimine käib",
+    "deleteWhileProcessingTitle": "Töötlemine veel käib",
+    "deleteWhileProcessingMessage": "See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?"
 }

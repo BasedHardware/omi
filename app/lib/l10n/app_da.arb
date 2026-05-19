@@ -3034,5 +3034,16 @@
     "deleteRecapConfirmBody": "Opsummeringen fjernes permanent. De oprindelige samtaler fra den dag påvirkes ikke.",
     "deleteRecapAction": "Slet",
     "recapDeletedSnackbar": "Opsummering slettet",
-    "recapDeleteFailed": "Kunne ikke slette opsummeringen. Prøv igen senere."
+    "recapDeleteFailed": "Kunne ikke slette opsummeringen. Prøv igen senere.",
+    "syncStatusBackedUp": "Sikkerhedskopieret",
+    "syncStatusBackingUp": "Sikkerhedskopierer…",
+    "syncStatusWaiting": "Venter på sikkerhedskopiering",
+    "syncStatusRetrying": "Kunne ikke behandles — prøver igen",
+    "syncStatusFailed": "Mislykkedes — tryk på Prøv igen",
+    "syncStatusFileUnavailable": "Filen er utilgængelig",
+    "syncStatusUploaded": "Uploadet · behandles på Omi",
+    "noRecordingsYet": "Ingen optagelser endnu",
+    "syncInProgress": "Synkronisering i gang",
+    "deleteWhileProcessingTitle": "Behandles stadig",
+    "deleteWhileProcessingMessage": "Denne optagelse er uploadet, men Omi opretter stadig samtalen. Hvis du sletter den nu, og behandlingen mislykkes, kan den ikke gendannes. Slet alligevel?"
 }

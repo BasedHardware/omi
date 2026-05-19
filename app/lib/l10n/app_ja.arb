@@ -506,7 +506,7 @@
     "designingApp": "アプリをデザイン中",
     "generatingIconStep": "アイコンを生成中",
     "finalTouches": "最終調整",
-    "processing": "処理中...",
+    "processing": "処理中",
     "features": "機能",
     "creatingYourApp": "アプリを作成中...",
     "generatingIcon": "アイコンを生成中...",
@@ -3026,5 +3026,16 @@
     "deleteRecapConfirmBody": "このリキャップは完全に削除されます。その日の元の会話には影響しません。",
     "deleteRecapAction": "削除",
     "recapDeletedSnackbar": "リキャップを削除しました",
-    "recapDeleteFailed": "リキャップを削除できませんでした。後でもう一度お試しください。"
+    "recapDeleteFailed": "リキャップを削除できませんでした。後でもう一度お試しください。",
+    "syncStatusBackedUp": "バックアップ済み",
+    "syncStatusBackingUp": "バックアップ中…",
+    "syncStatusWaiting": "バックアップ待ち",
+    "syncStatusRetrying": "処理できませんでした — 再試行中",
+    "syncStatusFailed": "失敗 — 「再試行」をタップ",
+    "syncStatusFileUnavailable": "ファイルを利用できません",
+    "syncStatusUploaded": "アップロード済み · Omi で処理中",
+    "noRecordingsYet": "まだ録音がありません",
+    "syncInProgress": "同期中",
+    "deleteWhileProcessingTitle": "まだ処理中です",
+    "deleteWhileProcessingMessage": "この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？"
 }

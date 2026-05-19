@@ -506,7 +506,7 @@
     "designingApp": "Designar app",
     "generatingIconStep": "Genererar ikon",
     "finalTouches": "Sista finishen",
-    "processing": "Bearbetar...",
+    "processing": "Bearbetar",
     "features": "Funktioner",
     "creatingYourApp": "Skapar din app...",
     "generatingIcon": "Genererar ikon...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Sammanfattningen tas bort permanent. De ursprungliga samtalen från den dagen påverkas inte.",
     "deleteRecapAction": "Radera",
     "recapDeletedSnackbar": "Sammanfattning raderad",
-    "recapDeleteFailed": "Det gick inte att radera sammanfattningen. Försök igen senare."
+    "recapDeleteFailed": "Det gick inte att radera sammanfattningen. Försök igen senare.",
+    "syncStatusBackedUp": "Säkerhetskopierad",
+    "syncStatusBackingUp": "Säkerhetskopierar…",
+    "syncStatusWaiting": "Väntar på säkerhetskopiering",
+    "syncStatusRetrying": "Kunde inte bearbetas — försöker igen",
+    "syncStatusFailed": "Misslyckades — tryck på Försök igen",
+    "syncStatusFileUnavailable": "Filen är inte tillgänglig",
+    "syncStatusUploaded": "Uppladdad · bearbetas på Omi",
+    "noRecordingsYet": "Inga inspelningar än",
+    "syncInProgress": "Synkronisering pågår",
+    "deleteWhileProcessingTitle": "Bearbetas fortfarande",
+    "deleteWhileProcessingMessage": "Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?"
 }

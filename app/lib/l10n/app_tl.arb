@@ -1580,7 +1580,7 @@
     "designingApp": "Dinadala ang app",
     "generatingIconStep": "Bumubuo ng icon",
     "finalTouches": "Huling touchup",
-    "processing": "Nagpoproseso...",
+    "processing": "Pinoproseso",
     "features": "Mga Features",
     "creatingYourApp": "Lumilikha ng iyong app...",
     "generatingIcon": "Bumubuo ng icon...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.",
     "deleteRecapAction": "Burahin",
     "recapDeletedSnackbar": "Burado na ang recap",
-    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya."
+    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
+    "syncStatusBackedUp": "Na-back up na",
+    "syncStatusBackingUp": "Nagba-back up…",
+    "syncStatusWaiting": "Naghihintay ng back up",
+    "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
+    "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusFileUnavailable": "Hindi available ang file",
+    "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
+    "noRecordingsYet": "Wala pang mga recording",
+    "syncInProgress": "Kasalukuyang nagsi-sync",
+    "deleteWhileProcessingTitle": "Pinoproseso pa rin",
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?"
 }

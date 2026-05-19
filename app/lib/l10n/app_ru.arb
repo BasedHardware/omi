@@ -506,7 +506,7 @@
     "designingApp": "Проектирование приложения",
     "generatingIconStep": "Генерация иконки",
     "finalTouches": "Завершающие штрихи",
-    "processing": "Обработка...",
+    "processing": "Обработка",
     "features": "Возможности",
     "creatingYourApp": "Создание вашего приложения...",
     "generatingIcon": "Генерация иконки...",
@@ -3060,5 +3060,16 @@
     "deleteRecapConfirmBody": "Эта сводка будет удалена навсегда. Исходные разговоры за этот день не затронуты.",
     "deleteRecapAction": "Удалить",
     "recapDeletedSnackbar": "Сводка удалена",
-    "recapDeleteFailed": "Не удалось удалить сводку. Повторите попытку позже."
+    "recapDeleteFailed": "Не удалось удалить сводку. Повторите попытку позже.",
+    "syncStatusBackedUp": "Сохранено в облаке",
+    "syncStatusBackingUp": "Резервное копирование…",
+    "syncStatusWaiting": "Ожидает резервного копирования",
+    "syncStatusRetrying": "Не удалось обработать — повтор",
+    "syncStatusFailed": "Ошибка — нажмите «Повторить»",
+    "syncStatusFileUnavailable": "Файл недоступен",
+    "syncStatusUploaded": "Загружено · обработка в Omi",
+    "noRecordingsYet": "Записей пока нет",
+    "syncInProgress": "Идёт синхронизация",
+    "deleteWhileProcessingTitle": "Ещё обрабатывается",
+    "deleteWhileProcessingMessage": "Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?"
 }

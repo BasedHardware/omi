@@ -506,7 +506,7 @@
     "designingApp": "Дизайниране на приложение",
     "generatingIconStep": "Генериране на икона",
     "finalTouches": "Финални щрихи",
-    "processing": "Обработка...",
+    "processing": "Обработва се",
     "features": "Функции",
     "creatingYourApp": "Създаване на вашето приложение...",
     "generatingIcon": "Генериране на икона...",
@@ -2994,5 +2994,16 @@
     "deleteRecapConfirmBody": "Резюмето ще бъде премахнато завинаги. Оригиналните разговори от този ден не се засягат.",
     "deleteRecapAction": "Изтрий",
     "recapDeletedSnackbar": "Резюмето е изтрито",
-    "recapDeleteFailed": "Резюмето не може да бъде изтрито. Опитайте по-късно."
+    "recapDeleteFailed": "Резюмето не може да бъде изтрито. Опитайте по-късно.",
+    "syncStatusBackedUp": "Архивирано",
+    "syncStatusBackingUp": "Архивиране…",
+    "syncStatusWaiting": "Изчаква архивиране",
+    "syncStatusRetrying": "Неуспешна обработка — нов опит",
+    "syncStatusFailed": "Неуспешно — натиснете „Опитай отново“",
+    "syncStatusFileUnavailable": "Файлът е недостъпен",
+    "syncStatusUploaded": "Качено · обработва се в Omi",
+    "noRecordingsYet": "Все още няма записи",
+    "syncInProgress": "Извършва се синхронизация",
+    "deleteWhileProcessingTitle": "Все още се обработва",
+    "deleteWhileProcessingMessage": "Този запис е качен, но Omi още създава разговора. Ако го изтриете сега и обработката се провали, той не може да бъде възстановен. Изтриване въпреки това?"
 }

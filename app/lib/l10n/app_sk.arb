@@ -506,7 +506,7 @@
     "designingApp": "Navrhovanie aplikácie",
     "generatingIconStep": "Generovanie ikony",
     "finalTouches": "Záverečné úpravy",
-    "processing": "Spracováva sa...",
+    "processing": "Spracúva sa",
     "features": "Funkcie",
     "creatingYourApp": "Vytváranie vašej aplikácie...",
     "generatingIcon": "Generovanie ikony...",
@@ -3030,5 +3030,16 @@
     "deleteRecapConfirmBody": "Zhrnutie bude trvalo odstránené. Pôvodné konverzácie z toho dňa zostávajú nedotknuté.",
     "deleteRecapAction": "Odstrániť",
     "recapDeletedSnackbar": "Zhrnutie odstránené",
-    "recapDeleteFailed": "Zhrnutie sa nepodarilo odstrániť. Skúste neskôr."
+    "recapDeleteFailed": "Zhrnutie sa nepodarilo odstrániť. Skúste neskôr.",
+    "syncStatusBackedUp": "Zálohované",
+    "syncStatusBackingUp": "Zálohovanie…",
+    "syncStatusWaiting": "Čaká na zálohovanie",
+    "syncStatusRetrying": "Spracovanie zlyhalo — opakuje sa",
+    "syncStatusFailed": "Zlyhalo — ťuknite na Skúsiť znova",
+    "syncStatusFileUnavailable": "Súbor nie je dostupný",
+    "syncStatusUploaded": "Nahraté · spracúva sa v Omi",
+    "noRecordingsYet": "Zatiaľ žiadne nahrávky",
+    "syncInProgress": "Prebieha synchronizácia",
+    "deleteWhileProcessingTitle": "Stále sa spracúva",
+    "deleteWhileProcessingMessage": "Táto nahrávka je nahraná, ale Omi ešte vytvára konverzáciu. Ak ju teraz odstránite a spracovanie zlyhá, nebude sa dať obnoviť. Napriek tomu odstrániť?"
 }

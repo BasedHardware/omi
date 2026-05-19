@@ -506,7 +506,7 @@
     "designingApp": "Projektowanie aplikacji",
     "generatingIconStep": "Generowanie ikony",
     "finalTouches": "Końcowe poprawki",
-    "processing": "Przetwarzanie...",
+    "processing": "Przetwarzanie",
     "features": "Funkcje",
     "creatingYourApp": "Tworzenie Twojej aplikacji...",
     "generatingIcon": "Generowanie ikony...",
@@ -3060,5 +3060,16 @@
     "deleteRecapConfirmBody": "To podsumowanie zostanie trwale usunięte. Oryginalne rozmowy z tego dnia pozostaną nienaruszone.",
     "deleteRecapAction": "Usuń",
     "recapDeletedSnackbar": "Podsumowanie usunięte",
-    "recapDeleteFailed": "Nie udało się usunąć podsumowania. Spróbuj ponownie później."
+    "recapDeleteFailed": "Nie udało się usunąć podsumowania. Spróbuj ponownie później.",
+    "syncStatusBackedUp": "Utworzono kopię",
+    "syncStatusBackingUp": "Tworzenie kopii…",
+    "syncStatusWaiting": "Oczekiwanie na kopię",
+    "syncStatusRetrying": "Przetwarzanie nie powiodło się — ponawianie",
+    "syncStatusFailed": "Niepowodzenie — naciśnij Ponów",
+    "syncStatusFileUnavailable": "Plik niedostępny",
+    "syncStatusUploaded": "Przesłano · przetwarzanie w Omi",
+    "noRecordingsYet": "Brak nagrań",
+    "syncInProgress": "Trwa synchronizacja",
+    "deleteWhileProcessingTitle": "Wciąż przetwarzane",
+    "deleteWhileProcessingMessage": "To nagranie zostało przesłane, ale Omi nadal tworzy rozmowę. Jeśli usuniesz je teraz, a przetwarzanie się nie powiedzie, nie będzie można go odzyskać. Usunąć mimo to?"
 }

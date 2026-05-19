@@ -1586,7 +1586,7 @@
     "designingApp": "Designing app",
     "generatingIconStep": "Generating icon",
     "finalTouches": "Final touches",
-    "processing": "Processing...",
+    "processing": "Processing",
     "features": "Features",
     "creatingYourApp": "Creating your app...",
     "generatingIcon": "Generating icon...",
@@ -11047,41 +11047,15 @@
     "@recapDeleteFailed": {
         "description": "Snackbar shown when the recap delete API fails."
     },
-    "allRecordingsBackedUp": "All recordings backed up",
-    "backingUpRecordingsCount": "Backing up {count} recording{count, plural, =1{} other{s}}…",
-    "@backingUpRecordingsCount": {
-        "description": "Sync list header while uploads are in progress",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "recordingsWaitingCount": "{count} recording{count, plural, =1{} other{s}} waiting to back up",
-    "@recordingsWaitingCount": {
-        "description": "Sync list header when recordings are queued",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "recordingsNeedAttentionCount": "{count} recording{count, plural, =1{} other{s}} need attention",
-    "@recordingsNeedAttentionCount": {
-        "description": "Sync list header when some recordings failed",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "syncStatusBackedUp": "Backed up",
     "syncStatusBackingUp": "Backing up…",
     "syncStatusWaiting": "Waiting to back up",
     "syncStatusRetrying": "Couldn’t process — retrying",
     "syncStatusFailed": "Failed — tap Retry",
     "syncStatusFileUnavailable": "File unavailable",
-    "filterIssues": "Issues",
     "noRecordingsYet": "No recordings yet",
-    "syncInProgress": "Sync in progress"
+    "syncInProgress": "Sync in progress",
+    "syncStatusUploaded": "Uploaded · processing on Omi",
+    "deleteWhileProcessingTitle": "Still processing",
+    "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?"
 }

@@ -501,7 +501,7 @@
     "designingApp": "Diseñando App",
     "generatingIconStep": "Generando ícono",
     "finalTouches": "Toques finales",
-    "processing": "Procesando...",
+    "processing": "Procesando",
     "features": "Funcionalidades",
     "creatingYourApp": "Creando tu App...",
     "generatingIcon": "Generando ícono...",
@@ -3026,5 +3026,16 @@
     "deleteRecapConfirmBody": "Este resumen se eliminará de forma permanente. Las conversaciones originales de ese día no se ven afectadas.",
     "deleteRecapAction": "Eliminar",
     "recapDeletedSnackbar": "Resumen eliminado",
-    "recapDeleteFailed": "No se pudo eliminar el resumen. Inténtalo de nuevo más tarde."
+    "recapDeleteFailed": "No se pudo eliminar el resumen. Inténtalo de nuevo más tarde.",
+    "syncStatusBackedUp": "Copia de seguridad hecha",
+    "syncStatusBackingUp": "Haciendo copia…",
+    "syncStatusWaiting": "Esperando la copia",
+    "syncStatusRetrying": "No se pudo procesar — reintentando",
+    "syncStatusFailed": "Falló — toca Reintentar",
+    "syncStatusFileUnavailable": "Archivo no disponible",
+    "syncStatusUploaded": "Subido · procesándose en Omi",
+    "noRecordingsYet": "Aún no hay grabaciones",
+    "syncInProgress": "Sincronización en curso",
+    "deleteWhileProcessingTitle": "Aún procesándose",
+    "deleteWhileProcessingMessage": "Esta grabación se subió, pero Omi todavía está creando la conversación. Si la eliminas ahora y el procesamiento falla, no se podrá recuperar. ¿Eliminar de todos modos?"
 }

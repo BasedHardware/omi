@@ -1580,7 +1580,7 @@
     "designingApp": "অ্যাপ ডিজাইন করছেন",
     "generatingIconStep": "আইকন তৈরি করছেন",
     "finalTouches": "চূড়ান্ত স্পর্শ",
-    "processing": "প্রক্রিয়া করছেন...",
+    "processing": "প্রক্রিয়াধীন",
     "features": "বৈশিষ্ট্য",
     "creatingYourApp": "আপনার অ্যাপ তৈরি করছেন...",
     "generatingIcon": "আইকন তৈরি করছেন...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।",
     "deleteRecapAction": "মুছুন",
     "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
-    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।"
+    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।",
+    "syncStatusBackedUp": "ব্যাকআপ হয়েছে",
+    "syncStatusBackingUp": "ব্যাকআপ চলছে…",
+    "syncStatusWaiting": "ব্যাকআপের অপেক্ষায়",
+    "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
+    "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
+    "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
+    "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",
+    "syncInProgress": "সিঙ্ক চলছে",
+    "deleteWhileProcessingTitle": "এখনও প্রক্রিয়াধীন",
+    "deleteWhileProcessingMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?"
 }

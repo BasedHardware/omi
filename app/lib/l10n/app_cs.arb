@@ -506,7 +506,7 @@
     "designingApp": "Navrhování aplikace",
     "generatingIconStep": "Generování ikony",
     "finalTouches": "Závěrečné úpravy",
-    "processing": "Zpracování...",
+    "processing": "Zpracování",
     "features": "Funkce",
     "creatingYourApp": "Vytváření vaší aplikace...",
     "generatingIcon": "Generování ikony...",
@@ -2994,5 +2994,16 @@
     "deleteRecapConfirmBody": "Shrnutí bude trvale odstraněno. Původní konverzace z toho dne nebudou ovlivněny.",
     "deleteRecapAction": "Smazat",
     "recapDeletedSnackbar": "Shrnutí smazáno",
-    "recapDeleteFailed": "Shrnutí se nepodařilo smazat. Zkuste to znovu později."
+    "recapDeleteFailed": "Shrnutí se nepodařilo smazat. Zkuste to znovu později.",
+    "syncStatusBackedUp": "Zálohováno",
+    "syncStatusBackingUp": "Zálohování…",
+    "syncStatusWaiting": "Čeká na zálohování",
+    "syncStatusRetrying": "Zpracování selhalo — opakuji",
+    "syncStatusFailed": "Selhalo — klepněte na Opakovat",
+    "syncStatusFileUnavailable": "Soubor není k dispozici",
+    "syncStatusUploaded": "Nahráno · zpracovává se v Omi",
+    "noRecordingsYet": "Zatím žádné nahrávky",
+    "syncInProgress": "Probíhá synchronizace",
+    "deleteWhileProcessingTitle": "Stále se zpracovává",
+    "deleteWhileProcessingMessage": "Tato nahrávka je nahraná, ale Omi stále vytváří konverzaci. Pokud ji nyní smažete a zpracování selže, nepůjde obnovit. Přesto smazat?"
 }

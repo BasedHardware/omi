@@ -1580,7 +1580,7 @@
     "designingApp": "עיצוב אפליקציה",
     "generatingIconStep": "יצירת אייקון",
     "finalTouches": "המגעות הסופיות",
-    "processing": "מעבד...",
+    "processing": "מעבד",
     "features": "תכונות",
     "creatingYourApp": "יצירת האפליקציה שלך...",
     "generatingIcon": "יצירת אייקון...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.",
     "deleteRecapAction": "מחק",
     "recapDeletedSnackbar": "הסיכום נמחק",
-    "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר."
+    "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.",
+    "syncStatusBackedUp": "גובה",
+    "syncStatusBackingUp": "מגבה…",
+    "syncStatusWaiting": "ממתין לגיבוי",
+    "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
+    "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusFileUnavailable": "הקובץ אינו זמין",
+    "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
+    "noRecordingsYet": "אין הקלטות עדיין",
+    "syncInProgress": "מתבצע סנכרון",
+    "deleteWhileProcessingTitle": "עדיין בעיבוד",
+    "deleteWhileProcessingMessage": "ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?"
 }

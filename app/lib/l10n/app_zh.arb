@@ -501,7 +501,7 @@
     "designingApp": "设计应用",
     "generatingIconStep": "生成图标",
     "finalTouches": "最后修饰",
-    "processing": "处理中...",
+    "processing": "处理中",
     "features": "功能",
     "creatingYourApp": "正在创建您的应用...",
     "generatingIcon": "正在生成图标...",
@@ -3047,5 +3047,16 @@
     "deleteRecapConfirmBody": "此回顾将被永久删除。当天的原始对话不会受到影响。",
     "deleteRecapAction": "删除",
     "recapDeletedSnackbar": "回顾已删除",
-    "recapDeleteFailed": "无法删除回顾。请稍后重试。"
+    "recapDeleteFailed": "无法删除回顾。请稍后重试。",
+    "syncStatusBackedUp": "已备份",
+    "syncStatusBackingUp": "正在备份…",
+    "syncStatusWaiting": "等待备份",
+    "syncStatusRetrying": "无法处理 — 正在重试",
+    "syncStatusFailed": "失败 — 点按“重试”",
+    "syncStatusFileUnavailable": "文件不可用",
+    "syncStatusUploaded": "已上传 · 正在 Omi 上处理",
+    "noRecordingsYet": "暂无录音",
+    "syncInProgress": "正在同步",
+    "deleteWhileProcessingTitle": "仍在处理",
+    "deleteWhileProcessingMessage": "此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？"
 }

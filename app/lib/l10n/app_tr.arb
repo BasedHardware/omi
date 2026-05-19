@@ -506,7 +506,7 @@
     "designingApp": "Uygulama tasarlanıyor",
     "generatingIconStep": "İkon oluşturuluyor",
     "finalTouches": "Son dokunuşlar",
-    "processing": "İşleniyor...",
+    "processing": "İşleniyor",
     "features": "Özellikler",
     "creatingYourApp": "Uygulamanız oluşturuluyor...",
     "generatingIcon": "İkon oluşturuluyor...",
@@ -3060,5 +3060,16 @@
     "deleteRecapConfirmBody": "Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.",
     "deleteRecapAction": "Sil",
     "recapDeletedSnackbar": "Özet silindi",
-    "recapDeleteFailed": "Özet silinemedi. Daha sonra tekrar deneyin."
+    "recapDeleteFailed": "Özet silinemedi. Daha sonra tekrar deneyin.",
+    "syncStatusBackedUp": "Yedeklendi",
+    "syncStatusBackingUp": "Yedekleniyor…",
+    "syncStatusWaiting": "Yedekleme bekleniyor",
+    "syncStatusRetrying": "İşlenemedi — yeniden deneniyor",
+    "syncStatusFailed": "Başarısız — Yeniden Dene'ye dokunun",
+    "syncStatusFileUnavailable": "Dosya kullanılamıyor",
+    "syncStatusUploaded": "Yüklendi · Omi'de işleniyor",
+    "noRecordingsYet": "Henüz kayıt yok",
+    "syncInProgress": "Eşitleme sürüyor",
+    "deleteWhileProcessingTitle": "Hâlâ işleniyor",
+    "deleteWhileProcessingMessage": "Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?"
 }

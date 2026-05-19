@@ -501,7 +501,7 @@
     "designingApp": "ऐप डिज़ाइन किया जा रहा है",
     "generatingIconStep": "आइकन बनाया जा रहा है",
     "finalTouches": "अंतिम स्पर्श",
-    "processing": "प्रक्रिया चल रही है...",
+    "processing": "प्रोसेस हो रहा है",
     "features": "विशेषताएं",
     "creatingYourApp": "आपका ऐप बनाया जा रहा है...",
     "generatingIcon": "आइकन बनाया जा रहा है...",
@@ -3026,5 +3026,16 @@
     "deleteRecapConfirmBody": "यह रीकैप स्थायी रूप से हटा दी जाएगी। उस दिन की मूल बातचीतें प्रभावित नहीं होंगी।",
     "deleteRecapAction": "हटाएँ",
     "recapDeletedSnackbar": "रीकैप हटा दी गई",
-    "recapDeleteFailed": "रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।"
+    "recapDeleteFailed": "रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।",
+    "syncStatusBackedUp": "बैकअप हो गया",
+    "syncStatusBackingUp": "बैकअप हो रहा है…",
+    "syncStatusWaiting": "बैकअप की प्रतीक्षा में",
+    "syncStatusRetrying": "प्रोसेस नहीं हो सका — फिर कोशिश हो रही है",
+    "syncStatusFailed": "विफल — Retry दबाएँ",
+    "syncStatusFileUnavailable": "फ़ाइल उपलब्ध नहीं",
+    "syncStatusUploaded": "अपलोड हो गया · Omi पर प्रोसेस हो रहा है",
+    "noRecordingsYet": "अभी तक कोई रिकॉर्डिंग नहीं",
+    "syncInProgress": "सिंक जारी है",
+    "deleteWhileProcessingTitle": "अभी प्रोसेस हो रहा है",
+    "deleteWhileProcessingMessage": "यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?"
 }

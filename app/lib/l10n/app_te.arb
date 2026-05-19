@@ -1580,7 +1580,7 @@
     "designingApp": "అనువర్తనాన్ని డిజైన్ చేస్తుంది",
     "generatingIconStep": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది",
     "finalTouches": "చివరి స్పర్శ",
-    "processing": "ప్రక్రియ చేస్తుంది...",
+    "processing": "ప్రాసెస్ అవుతోంది",
     "features": "లక్షణాలు",
     "creatingYourApp": "మీ అనువర్తనాన్ని సృష్టిస్తుంది...",
     "generatingIcon": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది...",
@@ -10733,5 +10733,16 @@
     "deleteRecapConfirmBody": "ఈ సారాంశం శాశ్వతంగా తొలగించబడుతుంది. ఆ రోజు అసలు సంభాషణలపై ప్రభావం ఉండదు.",
     "deleteRecapAction": "తొలగించు",
     "recapDeletedSnackbar": "సారాంశం తొలగించబడింది",
-    "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి."
+    "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.",
+    "syncStatusBackedUp": "బ్యాకప్ అయింది",
+    "syncStatusBackingUp": "బ్యాకప్ అవుతోంది…",
+    "syncStatusWaiting": "బ్యాకప్ కోసం వేచి ఉంది",
+    "syncStatusRetrying": "ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది",
+    "syncStatusFailed": "విఫలమైంది — Retry నొక్కండి",
+    "syncStatusFileUnavailable": "ఫైల్ అందుబాటులో లేదు",
+    "syncStatusUploaded": "అప్‌లోడ్ అయింది · Omiలో ప్రాసెస్ అవుతోంది",
+    "noRecordingsYet": "ఇంకా రికార్డింగ్‌లు లేవు",
+    "syncInProgress": "సింక్ జరుగుతోంది",
+    "deleteWhileProcessingTitle": "ఇంకా ప్రాసెస్ అవుతోంది",
+    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?"
 }

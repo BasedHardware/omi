@@ -506,7 +506,7 @@
     "designingApp": "Designe App",
     "generatingIconStep": "Generiere Icon",
     "finalTouches": "Letzte Schliffe",
-    "processing": "Verarbeitung...",
+    "processing": "Wird verarbeitet",
     "features": "Funktionen",
     "creatingYourApp": "Erstelle Ihre App...",
     "generatingIcon": "Generiere Icon...",
@@ -2993,5 +2993,16 @@
     "deleteRecapConfirmBody": "Diese Zusammenfassung wird dauerhaft entfernt. Die ursprünglichen Gespräche dieses Tages bleiben erhalten.",
     "deleteRecapAction": "Löschen",
     "recapDeletedSnackbar": "Zusammenfassung gelöscht",
-    "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut."
+    "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut.",
+    "syncStatusBackedUp": "Gesichert",
+    "syncStatusBackingUp": "Wird gesichert…",
+    "syncStatusWaiting": "Wartet auf Sicherung",
+    "syncStatusRetrying": "Verarbeitung fehlgeschlagen — wird wiederholt",
+    "syncStatusFailed": "Fehlgeschlagen — auf Wiederholen tippen",
+    "syncStatusFileUnavailable": "Datei nicht verfügbar",
+    "syncStatusUploaded": "Hochgeladen · wird auf Omi verarbeitet",
+    "noRecordingsYet": "Noch keine Aufnahmen",
+    "syncInProgress": "Synchronisierung läuft",
+    "deleteWhileProcessingTitle": "Wird noch verarbeitet",
+    "deleteWhileProcessingMessage": "Diese Aufnahme wurde hochgeladen, aber Omi erstellt die Konversation noch. Wenn du sie jetzt löschst und die Verarbeitung fehlschlägt, kann sie nicht wiederhergestellt werden. Trotzdem löschen?"
 }

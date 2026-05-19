@@ -506,7 +506,7 @@
     "designingApp": "Mereka aplikasi",
     "generatingIconStep": "Menjana ikon",
     "finalTouches": "Sentuhan akhir",
-    "processing": "Memproses...",
+    "processing": "Memproses",
     "features": "Ciri-ciri",
     "creatingYourApp": "Mencipta aplikasi anda...",
     "generatingIcon": "Menjana ikon...",
@@ -3025,5 +3025,16 @@
     "deleteRecapConfirmBody": "Ringkasan ini akan dibuang secara kekal. Perbualan asal pada hari itu tidak terjejas.",
     "deleteRecapAction": "Padam",
     "recapDeletedSnackbar": "Ringkasan dipadam",
-    "recapDeleteFailed": "Tidak dapat memadam ringkasan. Cuba lagi kemudian."
+    "recapDeleteFailed": "Tidak dapat memadam ringkasan. Cuba lagi kemudian.",
+    "syncStatusBackedUp": "Telah disandarkan",
+    "syncStatusBackingUp": "Menyandarkan…",
+    "syncStatusWaiting": "Menunggu sandaran",
+    "syncStatusRetrying": "Gagal diproses — mencuba semula",
+    "syncStatusFailed": "Gagal — ketik Cuba Lagi",
+    "syncStatusFileUnavailable": "Fail tidak tersedia",
+    "syncStatusUploaded": "Dimuat naik · diproses di Omi",
+    "noRecordingsYet": "Belum ada rakaman",
+    "syncInProgress": "Penyegerakan sedang berjalan",
+    "deleteWhileProcessingTitle": "Masih diproses",
+    "deleteWhileProcessingMessage": "Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?"
 }
