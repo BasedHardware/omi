@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// A recorded conversation session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Conversation {
     pub id: String,
     pub title: Option<String>,
@@ -14,7 +14,7 @@ pub struct Conversation {
 }
 
 /// A transcription segment within a conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Segment {
     pub id: String,
     pub conversation_id: String,
@@ -27,7 +27,7 @@ pub struct Segment {
 }
 
 /// An extracted memory from conversations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Memory {
     pub id: String,
     pub conversation_id: Option<String>,
@@ -36,8 +36,19 @@ pub struct Memory {
     pub created_at: DateTime<Utc>,
 }
 
+/// A captured screenshot with OCR text.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Screenshot {
+    pub id: String,
+    pub captured_at: chrono::DateTime<chrono::Utc>,
+    pub app_name: Option<String>,
+    pub window_title: Option<String>,
+    pub ocr_text: Option<String>,
+    pub thumbnail_path: Option<String>,
+}
+
 /// An action item / task extracted from conversations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionItem {
     pub id: String,
     pub conversation_id: Option<String>,

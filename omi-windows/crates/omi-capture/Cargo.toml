@@ -7,3 +7,17 @@ edition = "2021"
 tokio = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+chrono = { workspace = true }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+xcap = "0.0.14"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Media_Ocr",
+    "Globalization",
+    "Storage",
+    "Storage_Streams",
+    "Graphics_Imaging",
+] }

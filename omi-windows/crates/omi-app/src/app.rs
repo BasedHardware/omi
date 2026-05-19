@@ -94,6 +94,29 @@ pub fn App() -> Element {
         });
     });
 
+    // Kick off periodic screen capture if enabled in config (runs once on mount)
+    let capture_started = use_signal(|| false);
+    use_effect(move || {
+        let cfg = config.read().clone();
+        let db_snap = db.read().clone();
+        tracing::info!("[APP] screen_capture_enabled={} capture_interval={}s",
+            cfg.screen_capture_enabled, cfg.capture_interval_secs);
+        if cfg.screen_capture_enabled && !*capture_started.read() {
+            if let Some(Db(d)) = db_snap {
+                let interval_secs = cfg.capture_interval_secs.max(1);
+                tracing::info!("[APP] Spawning screen capture task (every {interval_secs}s)");
+                capture_started.clone().set(true);
+                spawn(async move {
+                    crate::capture::run_capture_task(d, interval_secs).await;
+                });
+            } else {
+                tracing::warn!("[APP] Screen capture enabled but DB not open");
+            }
+        } else if !cfg.screen_capture_enabled {
+            tracing::info!("[APP] Screen capture is DISABLED in config — enable in Settings");
+        }
+    });
+
     rsx! {
         Router::<Route> {}
     }

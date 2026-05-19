@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 mod app;
 mod auth;
+mod capture;
 mod components;
 mod config;
 mod hooks;
@@ -19,7 +20,7 @@ fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "omi_app=info,omi_transcription=info,omi_audio=info".into()),
+                .unwrap_or_else(|_| "omi_app=info,omi_transcription=info,omi_audio=info,omi_capture=info".into()),
         )
         .with_target(false)
         .init();

@@ -29,6 +29,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
     }
 
+    if current < 3 {
+        tracing::info!("Running migration v3: screenshots");
+        conn.execute_batch(MIGRATION_V3)?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
+    }
+
     Ok(())
 }
 
@@ -55,6 +61,28 @@ CREATE TABLE IF NOT EXISTS segments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_segments_conversation ON segments(conversation_id);
+";
+
+const MIGRATION_V3: &str = "
+CREATE TABLE IF NOT EXISTS screenshots (
+    id TEXT PRIMARY KEY,
+    captured_at TEXT NOT NULL DEFAULT (datetime('now')),
+    app_name TEXT,
+    window_title TEXT,
+    ocr_text TEXT,
+    thumbnail_path TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_screenshots_captured ON screenshots(captured_at DESC);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS screenshots_fts USING fts5(
+    id UNINDEXED,
+    ocr_text,
+    app_name,
+    window_title,
+    content='screenshots',
+    content_rowid='rowid'
+);
 ";
 
 const MIGRATION_V2: &str = "

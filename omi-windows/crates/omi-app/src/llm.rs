@@ -185,7 +185,39 @@ pub async fn process_conversation(
         tracing::info!("[LLM] Saved summary for {conversation_id}: \"{title}\"");
     }
 
-    // ── 2. Extract memory bullets ─────────────────────────────────────────────
+    // ── 2. Extract action items ───────────────────────────────────────────────
+    let action_prompt = format!(
+        "Extract any concrete action items, tasks, or to-dos mentioned in this conversation. \
+        Return a JSON array of strings, each being a clear, actionable task. \
+        Return [] if there are no action items.\n\nTranscript:\n{transcript}"
+    );
+
+    let action_result = complete(
+        &api_key, &url, &model,
+        vec![LlmMessage { role: "user".into(), content: action_prompt }],
+        Some(400),
+    ).await;
+
+    match action_result {
+        Ok(text) => {
+            if let Ok(items) = serde_json::from_str::<Vec<String>>(&text) {
+                for item in &items {
+                    let content = item.trim();
+                    if !content.is_empty() {
+                        if let Err(e) = db.insert_action_item(Some(conversation_id), content) {
+                            tracing::error!("[LLM] Failed to insert action item: {e}");
+                        }
+                    }
+                }
+                tracing::info!("[LLM] Extracted {} action items for {conversation_id}", items.len());
+            } else {
+                tracing::warn!("[LLM] Could not parse action items JSON: {}", &text[..text.len().min(200)]);
+            }
+        }
+        Err(e) => tracing::error!("[LLM] Action item extraction failed: {e}"),
+    }
+
+    // ── 3. Extract memory bullets ─────────────────────────────────────────────
     let memory_prompt = format!(
         "Extract important facts, preferences, decisions, or commitments from this conversation \
         that are worth remembering long-term. Return a JSON array of objects with \"content\" \
