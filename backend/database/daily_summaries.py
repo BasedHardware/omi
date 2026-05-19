@@ -42,7 +42,6 @@ def create_daily_summary(uid: str, summary_data: dict) -> str:
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
     summary_ref.set(summary_data)
-    redis_db.store_daily_summary_to_uid(summary_data['id'], uid)
     return summary_data['id']
 
 

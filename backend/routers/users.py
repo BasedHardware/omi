@@ -1321,7 +1321,19 @@ def get_shared_daily_summary(summary_id: str):
     if not summary or summary.get('visibility') != 'shared':
         raise HTTPException(status_code=404, detail='Daily summary not found')
 
-    return summary
+    _PUBLIC_FIELDS = {
+        'id',
+        'date',
+        'headline',
+        'overview',
+        'day_emoji',
+        'stats',
+        'highlights',
+        'action_items',
+        'decisions_made',
+        'knowledge_nuggets',
+    }
+    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
 
 
 # ***********************************
