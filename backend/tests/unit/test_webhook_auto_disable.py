@@ -998,3 +998,206 @@ class TestDisableUserNotification:
             _app_tools._handle_app_webhook_disable('app-1', 3, 'HTTP 500')
             mock_disable.assert_called_once()
             mock_notify.assert_not_called()
+
+
+def _load_remove_app_func():
+    """Load remove_app_from_all_enabled_sets from source, mocking redis.Redis to avoid connection."""
+    _key = "_real_redis_db"
+    if _key in sys.modules:
+        return sys.modules[_key].remove_app_from_all_enabled_sets, sys.modules[_key]
+    saved_redis = sys.modules.get('redis')
+    mock_redis_mod = MagicMock()
+    mock_redis_mod.Redis.return_value = MagicMock()
+    sys.modules['redis'] = mock_redis_mod
+    spec = importlib.util.spec_from_file_location(
+        _key,
+        os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'redis_db.py'),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_key] = mod
+    spec.loader.exec_module(mod)
+    if saved_redis:
+        sys.modules['redis'] = saved_redis
+    return mod.remove_app_from_all_enabled_sets, mod
+
+
+class TestRemoveAppFromAllEnabledSets:
+    """Direct tests for remove_app_from_all_enabled_sets production code."""
+
+    @pytest.fixture(autouse=True)
+    def _load(self):
+        self._func, self._mod = _load_remove_app_func()
+
+    def test_removes_app_from_matching_users(self):
+        """SCAN finds users with app in set, removes it, returns UIDs."""
+        mock_r = MagicMock()
+        mock_r.scan.return_value = (
+            0,
+            [b'users:uid-1:enabled_plugins', b'users:uid-2:enabled_plugins', b'users:uid-3:enabled_plugins'],
+        )
+        mock_r.sismember.side_effect = lambda key, app_id: key in (
+            'users:uid-1:enabled_plugins',
+            'users:uid-3:enabled_plugins',
+        )
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert sorted(result) == ['uid-1', 'uid-3']
+        assert mock_r.srem.call_count == 2
+
+    def test_pagination_follows_cursor(self):
+        """SCAN with multiple pages should follow cursor until 0."""
+        mock_r = MagicMock()
+        mock_r.scan.side_effect = [
+            (42, [b'users:uid-a:enabled_plugins']),
+            (0, [b'users:uid-b:enabled_plugins']),
+        ]
+        mock_r.sismember.return_value = True
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert sorted(result) == ['uid-a', 'uid-b']
+        assert mock_r.scan.call_count == 2
+
+    def test_no_matching_users_returns_empty(self):
+        """If no users have the app enabled, return empty list."""
+        mock_r = MagicMock()
+        mock_r.scan.return_value = (0, [b'users:uid-1:enabled_plugins'])
+        mock_r.sismember.return_value = False
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert result == []
+        mock_r.srem.assert_not_called()
+
+    def test_no_keys_returns_empty(self):
+        """If SCAN returns no keys, return empty list."""
+        mock_r = MagicMock()
+        mock_r.scan.return_value = (0, [])
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert result == []
+
+    def test_redis_error_fails_open(self):
+        """Redis errors should return partial results, not raise."""
+        mock_r = MagicMock()
+        mock_r.scan.side_effect = Exception("Redis down")
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert result == []
+
+    def test_string_keys_handled(self):
+        """Keys returned as strings (not bytes) should still work."""
+        mock_r = MagicMock()
+        mock_r.scan.return_value = (0, ['users:uid-1:enabled_plugins'])
+        mock_r.sismember.return_value = True
+        with patch.object(self._mod, 'r', mock_r):
+            result = self._func('app-x')
+        assert result == ['uid-1']
+
+
+class TestLuaSourceVerification:
+    """Verify the Lua script structure matches expected behavior contracts."""
+
+    def test_lua_checks_thresholds_in_descending_order(self):
+        """72h must be checked before 48h before 24h to avoid wrong action."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        pos_72 = _RECORD_FAILURE_LUA.index('259200')
+        pos_48 = _RECORD_FAILURE_LUA.index('172800')
+        pos_24 = _RECORD_FAILURE_LUA.index('86400')
+        assert pos_72 < pos_48 < pos_24
+
+    def test_lua_sets_disabled_flag(self):
+        """Lua script must set disabled='1' when returning action 3."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        disabled_set = _RECORD_FAILURE_LUA.index("'disabled', '1'")
+        return_3 = _RECORD_FAILURE_LUA.index('return 3')
+        assert disabled_set < return_3
+
+    def test_lua_checks_idempotent_flags(self):
+        """Each notification checks its flag before setting, preventing duplicates."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        assert "notified_day1" in _RECORD_FAILURE_LUA
+        assert "notified_day2" in _RECORD_FAILURE_LUA
+        assert _RECORD_FAILURE_LUA.count("HGET") >= 3  # disabled, notified_day1, notified_day2
+
+    def test_lua_first_failure_initializes_all_fields(self):
+        """First failure branch must initialize all required fields."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        required_fields = [
+            'first_failure_at',
+            'last_failure_at',
+            'failure_count',
+            'disabled',
+            'notified_day1',
+            'notified_day2',
+        ]
+        first_branch_end = _RECORD_FAILURE_LUA.index('return 0')
+        first_branch = _RECORD_FAILURE_LUA[:first_branch_end]
+        for field in required_fields:
+            assert field in first_branch, f"Missing {field} in first-failure initialization"
+
+
+class TestMarketplaceIntegrationHealthPaths:
+    """Test health action handling in marketplace integration triggers."""
+
+    def test_action_1_warns_owner(self):
+        """Day 1 warning should notify app owner with correct message."""
+        _app_tools = _load_app_tools_module()
+
+        with patch.object(_app_tools, '_notify_app_owner') as mock_notify:
+            _app_tools._handle_app_webhook_disable('app-1', 1, 'HTTP 500')
+        mock_notify.assert_called_once()
+        args = mock_notify.call_args[0]
+        assert args[0] == 'app-1'
+        assert 'Failing' in args[1]
+        assert '24' in args[2]
+
+    def test_action_2_final_warning(self):
+        """Day 2 final warning should notify with urgency."""
+        _app_tools = _load_app_tools_module()
+
+        with patch.object(_app_tools, '_notify_app_owner') as mock_notify:
+            _app_tools._handle_app_webhook_disable('app-1', 2, 'HTTP 404')
+        mock_notify.assert_called_once()
+        args = mock_notify.call_args[0]
+        assert 'Final Warning' in args[1]
+        assert '48' in args[2]
+
+    def test_action_0_does_nothing(self):
+        """No action should not notify."""
+        _app_tools = _load_app_tools_module()
+
+        with patch.object(_app_tools, '_notify_app_owner') as mock_notify:
+            _app_tools._handle_app_webhook_disable('app-1', 0, 'error')
+        mock_notify.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_http_connect_error_records_failure(self):
+        """HTTP connection error on chat tool should record failure."""
+        _app_tools = _load_app_tools_module()
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        with (
+            patch.object(_app_tools, 'is_app_webhook_disabled', return_value=False),
+            patch.object(_app_tools, 'get_webhook_circuit_breaker', return_value=mock_cb),
+            patch.object(_app_tools, 'record_app_webhook_failure', return_value=0) as mock_fail,
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.request = AsyncMock(side_effect=httpx.ConnectError("refused"))
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            config = {'configurable': {'user_id': 'uid-1'}}
+            from models.app import ChatTool
+
+            tool = ChatTool(name="test", description="test", endpoint="https://dead.example.com/tool")
+            result = await _app_tools._call_tool_endpoint({}, config, tool, "app-1")
+        mock_fail.assert_called_once()
+        assert mock_fail.call_args[0][0] == 'app-1'
+        assert mock_fail.call_args[0][2] == 'ConnectError'
