@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ COPY plugins/apps-js/package*.json ./
 # Install dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
