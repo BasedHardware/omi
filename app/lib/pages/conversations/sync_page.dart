@@ -91,10 +91,11 @@ class WalListItem extends StatelessWidget {
                 key: Key(wal.id),
                 direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
                 confirmDismiss: (direction) {
+                  final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
                   return OmiConfirmDialog.show(
                     context,
-                    title: context.l10n.deleteRecording,
-                    message: context.l10n.thisCannotBeUndone,
+                    title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                    message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
                     confirmLabel: context.l10n.delete,
                     confirmColor: Colors.red,
                   );
