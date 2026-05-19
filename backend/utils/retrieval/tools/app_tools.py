@@ -17,7 +17,6 @@ from database.redis_db import (
     get_cached_user_geolocation,
     delete_app_cache_by_id,
     get_enabled_apps,
-    remove_app_from_all_enabled_sets,
 )
 from database.webhook_health import (
     record_app_webhook_failure,
@@ -66,27 +65,12 @@ def _handle_app_webhook_disable(app_id: str, action: int, error: str):
         logger.warning(f'App {app_id} auto-disabled after 72h of webhook failures: {error}')
         disable_app_in_firestore(app_id, error, 72)
         delete_app_cache_by_id(app_id)
-        affected_uids = remove_app_from_all_enabled_sets(app_id)
-        if affected_uids:
-            logger.info(f'Removed disabled app {app_id} from {len(affected_uids)} users enabled sets')
-        app_data = get_app_by_id_db(app_id)
-        app_name = app_data.get('name', 'An app') if app_data else 'An app'
         _notify_app_owner(
             app_id,
             'Webhook Auto-Disabled',
             f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
             'Please fix your endpoint and re-enable from your developer dashboard.',
         )
-        for uid in affected_uids:
-            try:
-                send_notification(
-                    uid,
-                    f'{app_name} Disabled',
-                    f'The app "{app_name}" has been temporarily disabled due to connectivity issues '
-                    'with the developer\'s server. The developer has been notified.',
-                )
-            except Exception as e:
-                logger.warning(f'Failed to notify user {uid} about disabled app {app_id}: {e}')
 
 
 # Import agent_config_context for accessing user context
