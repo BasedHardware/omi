@@ -74,6 +74,23 @@ actor GoalStorage {
         }
     }
 
+    /// Get one local goal by backendId/local goal id.
+    func getGoal(backendId: String, activeOnly: Bool = true) async throws -> Goal? {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            var query = GoalRecord
+                .filter(Column("backendId") == backendId)
+                .filter(Column("deleted") == false)
+
+            if activeOnly {
+                query = query.filter(Column("isActive") == true)
+            }
+
+            return try query.fetchOne(database)?.toGoal()
+        }
+    }
+
     // MARK: - Sync Operations
 
     /// Batch upsert from API response and reconcile.
@@ -215,6 +232,30 @@ actor GoalStorage {
             }
 
             record.currentValue = currentValue
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+    }
+
+    /// Update editable local goal fields by backendId/local goal id.
+    func updateGoal(
+        backendId: String,
+        title: String,
+        currentValue: Double,
+        targetValue: Double
+    ) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try GoalRecord
+                .filter(Column("backendId") == backendId)
+                .fetchOne(database) else {
+                throw GoalStorageError.recordNotFound
+            }
+
+            record.title = title
+            record.currentValue = currentValue
+            record.targetValue = targetValue
             record.updatedAt = Date()
             try record.update(database)
         }

@@ -1950,11 +1950,31 @@ extension APIClient {
 
   /// Deletes a memory by ID
   func deleteMemory(id: String) async throws {
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      try await delete("v1/memories/\(id)", requireAuth: false, customBaseURL: target.baseURL)
+      return
+    }
+
     try await delete("v3/memories/\(id)")
   }
 
   /// Edits a memory's content
   func editMemory(id: String, content: String) async throws {
+    let target = selectedBackendTarget
+    if target.mode == .localDaemon {
+      struct LocalEditRequest: Encodable {
+        let content: String
+      }
+      let _: LocalMemoryEnvelope = try await patch(
+        "v1/memories/\(id)",
+        body: LocalEditRequest(content: content),
+        requireAuth: false,
+        customBaseURL: target.baseURL
+      )
+      return
+    }
+
     struct EditRequest: Encodable {
       let value: String
     }
@@ -1964,6 +1984,13 @@ extension APIClient {
 
   /// Updates a memory's visibility
   func updateMemoryVisibility(id: String, visibility: String) async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "memory_visibility",
+        reason: "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
+      )
+    }
+
     struct VisibilityRequest: Encodable {
       let value: String
     }
@@ -1990,11 +2017,25 @@ extension APIClient {
 
   /// Marks all memories as read
   func markAllMemoriesRead() async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "memory_read_status",
+        reason: "Bulk memory read status is cloud-only metadata and is disabled in local daemon mode."
+      )
+    }
+
     let _: MemoryStatusResponse = try await post("v3/memories/mark-all-read", body: EmptyBody())
   }
 
   /// Updates visibility of all memories
   func updateAllMemoriesVisibility(visibility: String) async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "memory_visibility",
+        reason: "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
+      )
+    }
+
     struct VisibilityRequest: Encodable {
       let value: String
     }
@@ -2004,6 +2045,13 @@ extension APIClient {
 
   /// Deletes all memories
   func deleteAllMemories() async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      throw APIError.featureUnavailable(
+        feature: "memory_bulk_delete",
+        reason: "Bulk memory deletion is not exposed by the local daemon yet. Delete individual local memories instead."
+      )
+    }
+
     try await delete("v3/memories")
   }
 
@@ -2320,11 +2368,29 @@ extension APIClient {
         let title: String?
         let description: String?
         let dueAt: String?
+        let includeDueAt: Bool
+        let clearDueAt: Bool
         let status: String?
 
         enum CodingKeys: String, CodingKey {
           case title, description, status
           case dueAt = "due_at"
+          case clearDueAt = "clear_due_at"
+        }
+
+        func encode(to encoder: Encoder) throws {
+          var container = encoder.container(keyedBy: CodingKeys.self)
+          try container.encodeIfPresent(title, forKey: .title)
+          try container.encodeIfPresent(description, forKey: .description)
+          if includeDueAt {
+            if clearDueAt {
+              try container.encodeNil(forKey: .dueAt)
+              try container.encode(true, forKey: .clearDueAt)
+            } else {
+              try container.encodeIfPresent(dueAt, forKey: .dueAt)
+            }
+          }
+          try container.encodeIfPresent(status, forKey: .status)
         }
       }
       let response: LocalActionItemEnvelope = try await patch(
@@ -2333,6 +2399,8 @@ extension APIClient {
           title: description,
           description: description,
           dueAt: dueAt.map { formatter.string(from: $0) },
+          includeDueAt: clearDueAt || dueAt != nil,
+          clearDueAt: clearDueAt,
           status: completed.map { $0 ? "completed" : "open" }
         ),
         requireAuth: false,
@@ -2442,6 +2510,10 @@ extension APIClient {
 
   /// Batch update relevance scores for multiple action items
   func batchUpdateScores(_ scores: [(id: String, score: Int)]) async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      return
+    }
+
     struct ScoreUpdate: Encodable {
       let id: String
       let relevance_score: Int
@@ -2461,6 +2533,10 @@ extension APIClient {
   func batchUpdateSortOrders(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)])
     async throws
   {
+    if selectedBackendTarget.mode == .localDaemon {
+      return
+    }
+
     struct SortUpdate: Encodable {
       let id: String
       let sort_order: Int
@@ -2625,6 +2701,10 @@ extension APIClient {
 
   /// Fetches all active goals (up to 4). Uses 5-second cache to deduplicate parallel calls.
   func getGoals() async throws -> [Goal] {
+    if selectedBackendTarget.mode == .localDaemon {
+      return try await GoalStorage.shared.getLocalGoals()
+    }
+
     if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
       return cache
     }
@@ -2679,6 +2759,33 @@ extension APIClient {
       source: source
     )
 
+    if selectedBackendTarget.mode == .localDaemon {
+      let now = Date()
+      let record = GoalRecord(
+        backendId: "local_goal_\(UUID().uuidString)",
+        backendSynced: false,
+        title: title,
+        goalDescription: description,
+        goalType: goalType.rawValue,
+        targetValue: targetValue,
+        currentValue: currentValue,
+        minValue: minValue,
+        maxValue: maxValue,
+        unit: unit,
+        isActive: true,
+        completedAt: nil,
+        deleted: false,
+        createdAt: now,
+        updatedAt: now
+      )
+      let inserted = try await GoalStorage.shared.insertLocalGoal(record)
+      guard let goal = inserted.toGoal() else {
+        throw APIError.invalidResponse
+      }
+      goalsCache = nil
+      return goal
+    }
+
     let goal: Goal = try await post("v1/goals", body: request)
     goalsCache = nil
     return goal
@@ -2686,6 +2793,15 @@ extension APIClient {
 
   /// Updates a goal's progress
   func updateGoalProgress(goalId: String, currentValue: Double) async throws -> Goal {
+    if selectedBackendTarget.mode == .localDaemon {
+      try await GoalStorage.shared.updateProgress(backendId: goalId, currentValue: currentValue)
+      guard let goal = try await GoalStorage.shared.getGoal(backendId: goalId) else {
+        throw APIError.invalidResponse
+      }
+      goalsCache = nil
+      return goal
+    }
+
     let url = URL(string: baseURL + "v1/goals/\(goalId)/progress?current_value=\(currentValue)")!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
@@ -2725,6 +2841,20 @@ extension APIClient {
       targetValue: targetValue
     )
 
+    if selectedBackendTarget.mode == .localDaemon {
+      try await GoalStorage.shared.updateGoal(
+        backendId: goalId,
+        title: title,
+        currentValue: currentValue,
+        targetValue: targetValue
+      )
+      guard let goal = try await GoalStorage.shared.getGoal(backendId: goalId) else {
+        throw APIError.invalidResponse
+      }
+      goalsCache = nil
+      return goal
+    }
+
     let goal: Goal = try await patch("v1/goals/\(goalId)", body: request)
     goalsCache = nil
     return goal
@@ -2732,12 +2862,26 @@ extension APIClient {
 
   /// Gets completed goals for history
   func getCompletedGoals() async throws -> [Goal] {
+    if selectedBackendTarget.mode == .localDaemon {
+      return try await GoalStorage.shared.getLocalGoals(activeOnly: false)
+        .filter { !$0.isActive || $0.completedAt != nil }
+    }
+
     let goals: [Goal] = try await get("v1/goals/completed")
     return goals
   }
 
   /// Completes a goal (marks as inactive with completed_at)
   func completeGoal(id: String) async throws -> Goal {
+    if selectedBackendTarget.mode == .localDaemon {
+      try await GoalStorage.shared.markCompleted(backendId: id)
+      guard let goal = try await GoalStorage.shared.getGoal(backendId: id, activeOnly: false) else {
+        throw APIError.invalidResponse
+      }
+      goalsCache = nil
+      return goal
+    }
+
     struct CompleteGoalRequest: Encodable {
       let is_active: Bool
       let completed_at: String
@@ -2770,6 +2914,12 @@ extension APIClient {
 
   /// Deletes a goal
   func deleteGoal(id: String) async throws {
+    if selectedBackendTarget.mode == .localDaemon {
+      try await GoalStorage.shared.softDelete(backendId: id)
+      goalsCache = nil
+      return
+    }
+
     try await delete("v1/goals/\(id)")
     goalsCache = nil
   }

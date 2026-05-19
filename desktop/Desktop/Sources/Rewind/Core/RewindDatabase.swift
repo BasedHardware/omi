@@ -122,7 +122,7 @@ actor RewindDatabase {
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
     private func userBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = Self.applicationSupportDirectory()
         let userId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
         return appSupport
             .appendingPathComponent("Omi", isDirectory: true)
@@ -132,12 +132,20 @@ actor RewindDatabase {
 
     /// Static version of userBaseDirectory for nonisolated markCleanShutdown
     private static func staticUserBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = applicationSupportDirectory()
         let userId = currentUserId ?? "anonymous"
         return appSupport
             .appendingPathComponent("Omi", isDirectory: true)
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
+    }
+
+    private static func applicationSupportDirectory() -> URL {
+        if let override = ProcessInfo.processInfo.environment["OMI_REWIND_DATABASE_ROOT"],
+           !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     }
 
     /// Mark a clean shutdown by removing the running flag file.
@@ -351,7 +359,7 @@ actor RewindDatabase {
     /// Handles both first-time migration (DB move) and partial re-runs (directory merges).
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
         let fileManager = FileManager.default
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = Self.applicationSupportDirectory()
         let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
 
         // Determine migration source: prefer legacy root (Omi/omi.db), fall back to anonymous dir.

@@ -598,6 +598,7 @@ struct UpdateActionItemRequest {
     description: Option<String>,
     status: Option<String>,
     due_at: Option<DateTime<Utc>>,
+    clear_due_at: Option<bool>,
     metadata: Option<Value>,
 }
 
@@ -616,7 +617,11 @@ async fn update_action_item(
                 title: request.title,
                 description: request.description,
                 status: request.status,
-                due_at: request.due_at.map(Some),
+                due_at: if request.clear_due_at.unwrap_or(false) {
+                    Some(None)
+                } else {
+                    request.due_at.map(Some)
+                },
                 metadata: request.metadata,
             },
         )

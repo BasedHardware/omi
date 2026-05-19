@@ -406,6 +406,7 @@ final class APIClientRoutingTests: XCTestCase {
     setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
     unsetenv("OMI_LOCAL_DAEMON_URL")
+    unsetenv("OMI_REWIND_DATABASE_ROOT")
   }
 
   override func tearDown() {
@@ -413,6 +414,7 @@ final class APIClientRoutingTests: XCTestCase {
     unsetenv("OMI_DESKTOP_API_URL")
     unsetenv("OMI_DESKTOP_BACKEND_MODE")
     unsetenv("OMI_LOCAL_DAEMON_URL")
+    unsetenv("OMI_REWIND_DATABASE_ROOT")
     URLCapture.reset()
     super.tearDown()
   }
@@ -841,6 +843,109 @@ final class APIClientRoutingTests: XCTestCase {
       label: "createMemory")
   }
 
+  func testLocalModeMemoryMutationsRouteToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.createMemory(content: "local memory") as CreateMemoryResponse
+    try? await client.editMemory(id: "mem-local", content: "updated local memory")
+    try? await client.deleteMemory(id: "mem-local")
+
+    let requests = URLCapture.capturedRequests
+    XCTAssertEqual(requests.count, 3)
+    XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 8765 })
+    XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+    XCTAssertEqual(requests.map(\.method), ["POST", "PATCH", "DELETE"])
+    XCTAssertTrue(requests[0].url.path.contains("/v1/memories"))
+    XCTAssertTrue(requests[1].url.path.contains("/v1/memories/mem-local"))
+    XCTAssertTrue(requests[2].url.path.contains("/v1/memories/mem-local"))
+  }
+
+  func testLocalModeCloudOnlyMemoryBulkOperationsFailBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    var errors: [Error] = []
+    do {
+      try await client.updateMemoryVisibility(id: "mem-local", visibility: "public")
+    } catch {
+      errors.append(error)
+    }
+    do {
+      try await client.markAllMemoriesRead()
+    } catch {
+      errors.append(error)
+    }
+    do {
+      try await client.updateAllMemoriesVisibility(visibility: "private")
+    } catch {
+      errors.append(error)
+    }
+    do {
+      try await client.deleteAllMemories()
+    } catch {
+      errors.append(error)
+    }
+
+    XCTAssertEqual(errors.count, 4)
+    XCTAssertTrue(errors.allSatisfy {
+      if case APIError.featureUnavailable = $0 { return true }
+      return false
+    })
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
+  func testLocalModeActionItemMutationsRouteToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    _ = try? await client.getActionItems()
+    _ = try? await client.createActionItem(description: "local task", dueAt: nil)
+    _ = try? await client.updateActionItem(id: "act-local", completed: true, clearDueAt: true)
+    try? await client.deleteActionItem(id: "act-local")
+
+    let requests = URLCapture.capturedRequests
+    XCTAssertEqual(requests.count, 4)
+    XCTAssertTrue(requests.allSatisfy { $0.url.host == "127.0.0.1" && $0.url.port == 8765 })
+    XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+    XCTAssertEqual(requests.map(\.method), ["GET", "POST", "PATCH", "DELETE"])
+    XCTAssertTrue(requests[0].url.path.contains("/v1/action-items"))
+    XCTAssertTrue(requests[1].url.path.contains("/v1/action-items"))
+    XCTAssertTrue(requests[2].url.path.contains("/v1/action-items/act-local"))
+    XCTAssertTrue(requests[3].url.path.contains("/v1/action-items/act-local"))
+
+    let body = requests[2].body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+    }
+    XCTAssertEqual(body?["status"] as? String, "completed")
+    XCTAssertTrue(body?.keys.contains("due_at") == true)
+    XCTAssertEqual(body?["clear_due_at"] as? Bool, true)
+  }
+
+  func testLocalModeActionItemBatchAndShareDoNotCallCloud() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let client = await makeTestClient()
+
+    try? await client.batchUpdateScores([(id: "act-local", score: 10)])
+    try? await client.batchUpdateSortOrders([(id: "act-local", sortOrder: 1, indentLevel: 0)])
+    do {
+      _ = try await client.shareTasks(taskIds: ["act-local"])
+      XCTFail("expected task sharing to be unavailable")
+    } catch {
+      guard case APIError.featureUnavailable(let feature, _) = error else {
+        XCTFail("expected featureUnavailable for sharing, got \(error)")
+        return
+      }
+      XCTAssertEqual(feature, DesktopBackendEnvironment.Capability.publicSharing.rawValue)
+    }
+
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+  }
+
   // -- Goals: manual URL path (PATCH → Python) --
 
   func testUpdateGoalProgressRoutesToPython() async {
@@ -850,6 +955,34 @@ final class APIClientRoutingTests: XCTestCase {
       URLCapture.capturedRequests, host: "python-test", port: 9001,
       pathContains: "v1/goals/g1/progress", method: "PATCH",
       label: "updateGoalProgress")
+  }
+
+  func testLocalModeGoalAPIsUseLocalStorageBeforeNetworkRequests() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    let testUserId = "api-client-routing-goals-\(UUID().uuidString)"
+    let testRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+      .appendingPathComponent("omi-rewind-routing-\(UUID().uuidString)", isDirectory: true)
+    setenv("OMI_REWIND_DATABASE_ROOT", testRoot.path, 1)
+    await RewindDatabase.shared.close()
+    await RewindDatabase.shared.configure(userId: testUserId)
+    await GoalStorage.shared.invalidateCache()
+    let client = await makeTestClient()
+
+    _ = try? await client.getGoals()
+    _ = try? await client.createGoal(title: "Local goal", targetValue: 1)
+    _ = try? await client.updateGoalProgress(goalId: "missing-local-goal", currentValue: 1)
+    _ = try? await client.updateGoal(goalId: "missing-local-goal", title: "Updated", currentValue: 1, targetValue: 2)
+    _ = try? await client.getCompletedGoals()
+    _ = try? await client.completeGoal(id: "missing-local-goal")
+    try? await client.deleteGoal(id: "missing-local-goal")
+
+    XCTAssertTrue(URLCapture.capturedRequests.isEmpty)
+
+    await RewindDatabase.shared.close()
+    await GoalStorage.shared.invalidateCache()
+    try? FileManager.default.removeItem(at: testRoot)
+    unsetenv("OMI_REWIND_DATABASE_ROOT")
   }
 
   // -- Apps (GET → Python) --

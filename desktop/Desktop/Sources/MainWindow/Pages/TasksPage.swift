@@ -1104,6 +1104,7 @@ class TasksViewModel: ObservableObject {
     /// Collect current sort orders from all categories and write to SQLite + backend
     private func syncSortOrders() async {
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
+        let isLocalDaemon = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
 
         for category in TaskCategory.allCases {
             let orderedTasks = getOrderedTasks(for: category)
@@ -1126,6 +1127,11 @@ class TasksViewModel: ObservableObject {
             try await ActionItemStorage.shared.updateSortOrders(storageUpdates)
         } catch {
             log("TasksVM: Failed to write sort orders to SQLite: \(error)")
+        }
+
+        if isLocalDaemon {
+            log("TasksVM: Saved \(updates.count) sort orders locally; backend batch sync disabled in local daemon mode")
+            return
         }
 
         // Sync to backend API
@@ -4347,17 +4353,19 @@ struct TaskRow: View {
                     }
 
                     // Share link button
-                    Button {
-                        Task { await copyShareLink() }
-                    } label: {
-                        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "arrowshape.turn.up.right.fill")
-                            .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .frame(width: 24, height: 24)
+                    if DesktopBackendEnvironment.selectedBackendTarget.mode != .localDaemon {
+                        Button {
+                            Task { await copyShareLink() }
+                        } label: {
+                            Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "arrowshape.turn.up.right.fill")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isCopyingLink)
+                        .help("Copy share link")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isCopyingLink)
-                    .help("Copy share link")
 
                     // Delete button
                     Button {

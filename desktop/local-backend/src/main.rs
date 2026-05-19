@@ -200,6 +200,19 @@ mod tests {
         )
         .await?;
         assert!(memory["memory"]["id"].is_string());
+        let memory_id = memory["memory"]["id"].as_str().expect("memory id");
+
+        let updated_memory = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/memories/{memory_id}"),
+            Some(json!({"content": "Prefers local-only desktop mode"})),
+        )
+        .await?;
+        assert_eq!(
+            updated_memory["memory"]["content"],
+            "Prefers local-only desktop mode"
+        );
 
         let memories = request_json(app.clone(), Method::GET, "/v1/memories", None).await?;
         assert_eq!(memories["memories"].as_array().unwrap().len(), 1);
@@ -212,9 +225,57 @@ mod tests {
         )
         .await?;
         assert_eq!(action_item["action_item"]["status"], "open");
+        let action_item_id = action_item["action_item"]["id"]
+            .as_str()
+            .expect("action item id");
 
+        let updated_action_item = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/action-items/{action_item_id}"),
+            Some(json!({
+                "status": "completed",
+                "due_at": "2026-05-19T12:00:00Z"
+            })),
+        )
+        .await?;
+        assert_eq!(updated_action_item["action_item"]["status"], "completed");
+        assert!(updated_action_item["action_item"]["completed_at"].is_string());
+        assert_eq!(
+            updated_action_item["action_item"]["due_at"],
+            "2026-05-19T12:00:00Z"
+        );
+
+        let cleared_due_at = request_json(
+            app.clone(),
+            Method::PATCH,
+            &format!("/v1/action-items/{action_item_id}"),
+            Some(json!({"clear_due_at": true, "due_at": null})),
+        )
+        .await?;
+        assert!(cleared_due_at["action_item"]["due_at"].is_null());
+
+        request_status(
+            app.clone(),
+            Method::DELETE,
+            &format!("/v1/memories/{memory_id}"),
+            None,
+            StatusCode::NO_CONTENT,
+        )
+        .await?;
+        let memories = request_json(app.clone(), Method::GET, "/v1/memories", None).await?;
+        assert!(memories["memories"].as_array().unwrap().is_empty());
+
+        request_status(
+            app.clone(),
+            Method::DELETE,
+            &format!("/v1/action-items/{action_item_id}"),
+            None,
+            StatusCode::NO_CONTENT,
+        )
+        .await?;
         let action_items = request_json(app, Method::GET, "/v1/action-items", None).await?;
-        assert_eq!(action_items["action_items"].as_array().unwrap().len(), 1);
+        assert!(action_items["action_items"].as_array().unwrap().is_empty());
 
         Ok(())
     }
@@ -507,7 +568,7 @@ mod tests {
         uri: &str,
         body: Option<Value>,
         expected_status: StatusCode,
-    ) -> Result<Value> {
+    ) -> Result<()> {
         let request_body = match body {
             Some(value) => Body::from(serde_json::to_vec(&value)?),
             None => Body::empty(),
@@ -527,6 +588,6 @@ mod tests {
             "unexpected status {status}: {}",
             String::from_utf8_lossy(&bytes)
         );
-        Ok(serde_json::from_slice(&bytes)?)
+        Ok(())
     }
 }
