@@ -2183,7 +2183,7 @@
     "selected": "Geselecteerd",
     "selectOption": "Selecteren",
     "lowBatteryAlertTitle": "Waarschuwing lage batterij",
-    "lowBatteryAlertBody": "De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋",
+    "lowBatteryAlertBody": "Je batterij staat op {level}%. Tijd om op te laden! 🔋",
     "batteryFullyChargedTitle": "Omi is volledig opgeladen",
     "batteryFullyChargedBody": "Uw Omi-apparaat is volledig opgeladen. U kunt het loskoppelen!",
     "deviceDisconnectedNotificationTitle": "Uw Omi-apparaat is losgekoppeld",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Wacht op Omi",
     "syncStatusDownloadingFromDevice": "Downloaden van Omi",
     "newestFirst": "Nieuwste eerst",
-    "noSyncedRecordingsYet": "Nog geen gesynchroniseerde opnames"
+    "noSyncedRecordingsYet": "Nog geen gesynchroniseerde opnames",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

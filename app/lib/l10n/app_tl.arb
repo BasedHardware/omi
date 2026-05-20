@@ -8397,11 +8397,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋",
+    "lowBatteryAlertBody": "Ang iyong baterya ay nasa {level}%. Panahon na para mag-recharge! 🔋",
     "batteryFullyChargedTitle": "Naka-charge na ang Omi",
     "batteryFullyChargedBody": "Ang iyong Omi device ay ganap nang na-charge. Maaari mo na itong i-unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Ang Iyong Omi Device ay Nadiskonekta",
     "@deviceDisconnectedNotificationTitle": {

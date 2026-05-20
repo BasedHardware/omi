@@ -8397,11 +8397,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Vaša naprava ima nizko baterijo. Čas je za polnjenje! 🔋",
+    "lowBatteryAlertBody": "Vaša baterija je na {level}%. Čas je za polnjenje! 🔋",
     "batteryFullyChargedTitle": "Omi je popolnoma napolnjen",
     "batteryFullyChargedBody": "Vaša naprava Omi je popolnoma napolnjena. Lahko jo odklopite!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Vaša Naprava Omi je Odklopljena",
     "@deviceDisconnectedNotificationTitle": {

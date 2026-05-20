@@ -2183,7 +2183,7 @@
     "selected": "Đã chọn",
     "selectOption": "Chọn",
     "lowBatteryAlertTitle": "Cảnh báo pin yếu",
-    "lowBatteryAlertBody": "Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋",
+    "lowBatteryAlertBody": "Pin của bạn còn {level}%. Đã đến lúc sạc! 🔋",
     "batteryFullyChargedTitle": "Omi đã sạc đầy",
     "batteryFullyChargedBody": "Thiết bị Omi của bạn đã sạc đầy. Bạn có thể rút cáp ra!",
     "deviceDisconnectedNotificationTitle": "Thiết bị Omi của bạn đã ngắt kết nối",
@@ -3062,5 +3062,13 @@
     "syncStatusOnDevice": "Đang chờ trên Omi",
     "syncStatusDownloadingFromDevice": "Đang tải xuống từ Omi",
     "newestFirst": "Mới nhất trước",
-    "noSyncedRecordingsYet": "Chưa có bản ghi nào được đồng bộ"
+    "noSyncedRecordingsYet": "Chưa có bản ghi nào được đồng bộ",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

@@ -2184,7 +2184,7 @@
     "selected": "चयनित",
     "selectOption": "चुनें",
     "lowBatteryAlertTitle": "कम बैटरी अलर्ट",
-    "lowBatteryAlertBody": "आपके डिवाइस की बैटरी कम है। रिचार्ज करने का समय! 🔋",
+    "lowBatteryAlertBody": "आपकी बैटरी {level}% पर है। रिचार्ज करने का समय! 🔋",
     "batteryFullyChargedTitle": "Omi पूरी तरह चार्ज हो गया है",
     "batteryFullyChargedBody": "आपका Omi डिवाइस पूरी तरह चार्ज हो गया है। इसे अनप्लग कर सकते हैं!",
     "deviceDisconnectedNotificationTitle": "आपका Omi डिवाइस डिस्कनेक्ट हो गया",
@@ -3058,5 +3058,13 @@
     "syncStatusOnDevice": "Omi पर प्रतीक्षारत",
     "syncStatusDownloadingFromDevice": "Omi से डाउनलोड हो रहा है",
     "newestFirst": "सबसे नई पहले",
-    "noSyncedRecordingsYet": "अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं"
+    "noSyncedRecordingsYet": "अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

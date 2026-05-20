@@ -2183,7 +2183,7 @@
     "selected": "Vybrané",
     "selectOption": "Vybrať",
     "lowBatteryAlertTitle": "Upozornenie na nízku batériu",
-    "lowBatteryAlertBody": "Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋",
+    "lowBatteryAlertBody": "Vaša batéria je na {level}%. Je čas ju nabiť! 🔋",
     "batteryFullyChargedTitle": "Omi je plne nabitý",
     "batteryFullyChargedBody": "Vaše zariadenie Omi je plne nabité. Môžete ho odpojiť!",
     "deviceDisconnectedNotificationTitle": "Vaše zariadenie Omi bolo odpojené",
@@ -3062,5 +3062,13 @@
     "syncStatusOnDevice": "Čaká na Omi",
     "syncStatusDownloadingFromDevice": "Sťahuje sa z Omi",
     "newestFirst": "Najnovšie ako prvé",
-    "noSyncedRecordingsYet": "Zatiaľ žiadne synchronizované nahrávky"
+    "noSyncedRecordingsYet": "Zatiaľ žiadne synchronizované nahrávky",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

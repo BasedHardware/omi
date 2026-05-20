@@ -2183,7 +2183,7 @@
     "selected": "Kiválasztva",
     "selectOption": "Kiválasztás",
     "lowBatteryAlertTitle": "Alacsony akkumulátor figyelmeztetés",
-    "lowBatteryAlertBody": "Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋",
+    "lowBatteryAlertBody": "Az akkumulátorod {level}%-on van. Ideje feltölteni! 🔋",
     "batteryFullyChargedTitle": "Az Omi teljesen feltöltődött",
     "batteryFullyChargedBody": "Az Omi eszköz teljesen feltöltődött. Leválaszthatod!",
     "deviceDisconnectedNotificationTitle": "Az Omi eszköz lecsatlakozott",
@@ -3153,5 +3153,13 @@
     "syncStatusOnDevice": "Az Omin várakozik",
     "syncStatusDownloadingFromDevice": "Letöltés az Omiról",
     "newestFirst": "Legújabbak elöl",
-    "noSyncedRecordingsYet": "Még nincsenek szinkronizált felvételek"
+    "noSyncedRecordingsYet": "Még nincsenek szinkronizált felvételek",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

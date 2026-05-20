@@ -2183,7 +2183,7 @@
     "selected": "Выбрано",
     "selectOption": "Выбрать",
     "lowBatteryAlertTitle": "Предупреждение о низком заряде",
-    "lowBatteryAlertBody": "Батарея вашего устройства разряжена. Пора зарядить! 🔋",
+    "lowBatteryAlertBody": "Заряд батареи {level}%. Пора зарядить! 🔋",
     "batteryFullyChargedTitle": "Omi полностью заряжен",
     "batteryFullyChargedBody": "Ваше устройство Omi полностью заряжено. Можно отключить от зарядки!",
     "deviceDisconnectedNotificationTitle": "Ваше устройство Omi отключено",
@@ -3092,5 +3092,13 @@
     "syncStatusOnDevice": "Ожидает на Omi",
     "syncStatusDownloadingFromDevice": "Загрузка с Omi",
     "newestFirst": "Сначала новые",
-    "noSyncedRecordingsYet": "Пока нет синхронизированных записей"
+    "noSyncedRecordingsYet": "Пока нет синхронизированных записей",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

@@ -2166,7 +2166,7 @@
     "selected": "Избрано",
     "selectOption": "Избери",
     "lowBatteryAlertTitle": "Предупреждение за изтощена батерия",
-    "lowBatteryAlertBody": "Батерията на устройството ви е изтощена. Време е за презареждане! 🔋",
+    "lowBatteryAlertBody": "Батерията ви е на {level}%. Време е за презареждане! 🔋",
     "batteryFullyChargedTitle": "Omi е напълно зареден",
     "batteryFullyChargedBody": "Вашето устройство Omi е напълно заредено. Можете да го изключите!",
     "deviceDisconnectedNotificationTitle": "Вашето Omi устройство е изключено",
@@ -3026,5 +3026,13 @@
     "syncStatusOnDevice": "Изчаква Omi",
     "syncStatusDownloadingFromDevice": "Изтегляне от Omi",
     "newestFirst": "Първо най-новите",
-    "noSyncedRecordingsYet": "Все още няма синхронизирани записи"
+    "noSyncedRecordingsYet": "Все още няма синхронизирани записи",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

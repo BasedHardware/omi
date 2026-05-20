@@ -2141,7 +2141,7 @@
     "selected": "Valgt",
     "selectOption": "Vælg",
     "lowBatteryAlertTitle": "Advarsel om lavt batteri",
-    "lowBatteryAlertBody": "Din enheds batteri er lavt. Det er tid til at genoplade! 🔋",
+    "lowBatteryAlertBody": "Dit batteri er på {level}%. Tid til at lade op! 🔋",
     "batteryFullyChargedTitle": "Omi er fuldt opladet",
     "batteryFullyChargedBody": "Din Omi-enhed er fuldt opladet. Du kan frakoble den nu!",
     "deviceDisconnectedNotificationTitle": "Din Omi-enhed er afbrudt",
@@ -3066,5 +3066,13 @@
     "syncStatusOnDevice": "Venter på Omi",
     "syncStatusDownloadingFromDevice": "Downloader fra Omi",
     "newestFirst": "Nyeste først",
-    "noSyncedRecordingsYet": "Ingen synkroniserede optagelser endnu"
+    "noSyncedRecordingsYet": "Ingen synkroniserede optagelser endnu",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

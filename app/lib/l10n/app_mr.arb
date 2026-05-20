@@ -8397,11 +8397,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "आपली डिव्हाइस बॅटरीवर कमी चल रही आहे. रिचार्जने वेळ आली! 🔋",
+    "lowBatteryAlertBody": "तुमची बॅटरी {level}% आहे. रिचार्ज करण्याची वेळ! 🔋",
     "batteryFullyChargedTitle": "Omi पूर्णपणे चार्ज झाला आहे",
     "batteryFullyChargedBody": "तुमचे Omi डिव्हाइस पूर्णपणे चार्ज झाले आहे. अनप्लग करू शकता!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "आपली Omi डिव्हाइस डिस्कनेक्ट झाली",
     "@deviceDisconnectedNotificationTitle": {

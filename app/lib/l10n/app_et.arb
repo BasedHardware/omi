@@ -2183,7 +2183,7 @@
     "selected": "Valitud",
     "selectOption": "Vali",
     "lowBatteryAlertTitle": "Tühja aku hoiatus",
-    "lowBatteryAlertBody": "Teie seadme aku on tühi. Aeg laadida! 🔋",
+    "lowBatteryAlertBody": "Sinu aku on {level}%. Aeg laadida! 🔋",
     "batteryFullyChargedTitle": "Omi on täielikult laetud",
     "batteryFullyChargedBody": "Teie Omi seade on täielikult laetud. Võite selle lahti ühendada!",
     "deviceDisconnectedNotificationTitle": "Teie Omi seade on lahti ühendatud",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Ootab Omis",
     "syncStatusDownloadingFromDevice": "Allalaadimine Omist",
     "newestFirst": "Uusimad esmalt",
-    "noSyncedRecordingsYet": "Sünkroonitud salvestisi pole veel"
+    "noSyncedRecordingsYet": "Sünkroonitud salvestisi pole veel",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

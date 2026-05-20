@@ -2183,7 +2183,7 @@
     "selected": "เลือกแล้ว",
     "selectOption": "เลือก",
     "lowBatteryAlertTitle": "การแจ้งเตือนแบตเตอรี่ต่ำ",
-    "lowBatteryAlertBody": "แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋",
+    "lowBatteryAlertBody": "แบตเตอรี่ของคุณอยู่ที่ {level}% ถึงเวลาชาร์จแล้ว! 🔋",
     "batteryFullyChargedTitle": "Omi ชาร์จเต็มแล้ว",
     "batteryFullyChargedBody": "อุปกรณ์ Omi ของคุณชาร์จเต็มแล้ว รู้สึกอิสระที่จะถอดปลั๊กได้!",
     "deviceDisconnectedNotificationTitle": "อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "รอที่ Omi",
     "syncStatusDownloadingFromDevice": "กำลังดาวน์โหลดจาก Omi",
     "newestFirst": "ใหม่สุดก่อน",
-    "noSyncedRecordingsYet": "ยังไม่มีการบันทึกที่ซิงค์แล้ว"
+    "noSyncedRecordingsYet": "ยังไม่มีการบันทึกที่ซิงค์แล้ว",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

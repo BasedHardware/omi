@@ -2184,7 +2184,7 @@
     "selected": "已选择",
     "selectOption": "选择",
     "lowBatteryAlertTitle": "电池电量低警告",
-    "lowBatteryAlertBody": "您的设备电池电量低。是时候充电了！🔋",
+    "lowBatteryAlertBody": "您的电池电量为 {level}%。是时候充电了！🔋",
     "batteryFullyChargedTitle": "Omi已充满电",
     "batteryFullyChargedBody": "您的Omi设备已充满电，可以拔掉充电线了！",
     "deviceDisconnectedNotificationTitle": "您的 Omi 设备已断开连接",
@@ -3079,5 +3079,13 @@
     "syncStatusOnDevice": "等待 Omi",
     "syncStatusDownloadingFromDevice": "正在从 Omi 下载",
     "newestFirst": "最新优先",
-    "noSyncedRecordingsYet": "还没有已同步的录音"
+    "noSyncedRecordingsYet": "还没有已同步的录音",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

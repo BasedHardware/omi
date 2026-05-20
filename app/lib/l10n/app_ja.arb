@@ -2184,7 +2184,7 @@
     "selected": "選択済み",
     "selectOption": "選択",
     "lowBatteryAlertTitle": "バッテリー残量低下アラート",
-    "lowBatteryAlertBody": "デバイスのバッテリーが少なくなっています。充電してください！🔋",
+    "lowBatteryAlertBody": "バッテリー残量は {level}% です。充電してください！🔋",
     "batteryFullyChargedTitle": "Omiは満充電です",
     "batteryFullyChargedBody": "Omiデバイスが満充電になりました。充電ケーブルを外してください！",
     "deviceDisconnectedNotificationTitle": "Omiデバイスが切断されました",
@@ -3058,5 +3058,13 @@
     "syncStatusOnDevice": "Omiで待機中",
     "syncStatusDownloadingFromDevice": "Omiからダウンロード中",
     "newestFirst": "新しい順",
-    "noSyncedRecordingsYet": "同期済みの録音はまだありません"
+    "noSyncedRecordingsYet": "同期済みの録音はまだありません",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }
