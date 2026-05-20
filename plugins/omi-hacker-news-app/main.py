@@ -50,8 +50,12 @@ def _clean_text(value: Optional[str]) -> str:
     return text.strip()
 
 
-def _safe_limit(limit: Optional[int]) -> int:
-    if limit is None:
+def _safe_limit(limit: Any) -> int:
+    if limit is None or limit == "":
+        return 10
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
         return 10
     return max(1, min(limit, MAX_LIMIT))
 
@@ -110,6 +114,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_front_page",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "limit": {
                             "type": "integer",
@@ -127,6 +132,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/search_stories",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
@@ -153,6 +159,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_discussion",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "item_id": {
                             "type": "integer",
