@@ -11079,7 +11079,7 @@
             }
         }
     },
-    "syncFlowIntro": "Recordings are stored locally, then uploaded to Omi where they're transcribed and turned into conversations.",
+    "syncFlowIntro": "Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi's server where they're transcribed and turned into conversations.",
     "syncStepUpload": "Sync",
     "syncStepUploadDesc": "Your recording is sent to Omi's server",
     "syncStepProcess": "Transcribe",
