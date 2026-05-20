@@ -20,13 +20,18 @@ pub fn MemoriesPage() -> Element {
         }
     });
 
-    let filtered: Vec<Memory> = {
-        let q = search.read().to_lowercase();
-        memories.read().iter()
-            .filter(|m| q.is_empty() || m.content.to_lowercase().contains(&q))
-            .cloned()
-            .collect()
+    // Refresh helper
+    let mut refresh = move || {
+        if let Some(Db(ref d)) = *db.read() {
+            match d.list_memories(200) {
+                Ok(m) => memories.set(m),
+                Err(e) => tracing::error!("[MEMORIES] refresh failed: {e}"),
+            }
+        }
     };
+    let q = search.read().to_lowercase();
+    // Whether any memory matches the current filter
+    let has_any = memories.read().iter().any(|m| q.is_empty() || m.content.to_lowercase().contains(&q));
 
     rsx! {
         div { class: "page",
@@ -45,25 +50,57 @@ pub fn MemoriesPage() -> Element {
                 }
             }
 
-            if filtered.is_empty() {
+            div { class: "memories-controls",
+                button { class: "btn btn-secondary", onclick: move |_| refresh(), "Refresh" }
+            }
+
+            if !has_any {
                 div { class: "empty-state",
                     p { "No memories yet." }
                     p { class: "text-muted", "Record conversations and Omi will automatically extract important facts." }
                 }
             } else {
                 div { class: "memories-list",
-                    for mem in filtered.iter() {
-                        div { class: "memory-card",
-                            key: "{mem.id}",
-                            div { class: "memory-header",
-                                if let Some(ref cat) = mem.category {
-                                    span { class: "memory-category", "{cat}" }
-                                }
-                                span { class: "memory-date",
-                                    "{mem.created_at.format(\"%b %d\")}"
+                    for mem in memories.read().iter() {
+                        if q.is_empty() || mem.content.to_lowercase().contains(&q) {
+                            {
+                                let mem_clone = mem.clone();
+                                let db2 = db.clone();
+                                let time_str = mem_clone.created_at.format("%b %d").to_string();
+                                rsx! {
+                                    div { class: "memory-card",
+                                        key: "{mem_clone.id}",
+                                        div { class: "memory-header",
+                                            if let Some(ref cat) = mem_clone.category {
+                                                span { class: "memory-category", "{cat}" }
+                                            }
+                                            span { class: "memory-date",
+                                                "{time_str}"
+                                            }
+                                        }
+                                        p { class: "memory-content", "{mem_clone.content}" }
+                                        div { class: "memory-actions",
+                                            button {
+                                                class: "btn btn-secondary",
+                                                onclick: move |_| {
+                                                    let id = mem_clone.id.clone();
+                                                    if let Some(Db(ref d)) = *db2.read() {
+                                                        if let Err(e) = d.delete_memory(&id) {
+                                                            tracing::error!("[MEMORIES] delete failed: {e}");
+                                                        } else {
+                                                            // reload
+                                                            if let Ok(m) = d.list_memories(200) {
+                                                                memories.set(m);
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "Delete"
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            p { class: "memory-content", "{mem.content}" }
                         }
                     }
                 }

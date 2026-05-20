@@ -10,7 +10,7 @@ pub fn DashboardPage() -> Element {
     let db: Signal<Option<Db>> = use_context();
     let recording_status: Signal<RecordingStatus> = use_context();
     let live_transcript: Signal<LiveTranscript> = use_context();
-    let mut stop_handle: Signal<Option<StopRecording>> = use_signal(|| None);
+    let mut stop_handle: Signal<Option<StopRecording>> = use_context();
 
     let is_recording = matches!(*recording_status.read(), RecordingStatus::Recording { .. });
     let is_idle = matches!(*recording_status.read(), RecordingStatus::Idle);
@@ -48,6 +48,38 @@ pub fn DashboardPage() -> Element {
                         span { class: "record-dot recording" }
                         " Stop Recording"
                     }
+                    button {
+                        class: "btn btn-secondary",
+                        onclick: move |_| {
+                            // Restart: stop current recording then start again after a short delay
+                            if let Some(handle) = stop_handle.write().take() {
+                                handle.stop();
+                            }
+                            let api_key = config.read().deepgram_api_key.clone();
+                            let diarize = config.read().diarize_speakers;
+                            let cfg = config.read().clone();
+                            let db_val = db.read().clone();
+                            let mut status = recording_status.clone();
+                            let mut transcript = live_transcript.clone();
+                            let mut stop_handle_clone = stop_handle.clone();
+                            spawn(async move {
+                                // small pause to allow resources to release
+                                tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                                let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+                                stop_handle_clone.set(Some(crate::recording::StopRecording::new(stop_tx)));
+                                crate::recording::start_recording(
+                                    api_key,
+                                    diarize,
+                                    db_val,
+                                    cfg,
+                                    stop_rx,
+                                    &mut status,
+                                    &mut transcript,
+                                ).await;
+                            });
+                        },
+                        " Restart"
+                    }
                 } else {
                     button {
                         class: "btn btn-record",
@@ -61,6 +93,7 @@ pub fn DashboardPage() -> Element {
                             let mut transcript = live_transcript.clone();
                             // Create stop channel here so the sender is available immediately
                             let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+                            // Store stop handle in global app context so it survives tab changes
                             stop_handle.set(Some(crate::recording::StopRecording::new(stop_tx)));
                             spawn(async move {
                                 crate::recording::start_recording(

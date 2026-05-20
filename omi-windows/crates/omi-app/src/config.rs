@@ -52,6 +52,26 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub ocr_enabled: bool,
 
+    /// How many recent screenshots to include when summarizing screen context
+    #[serde(default = "default_screen_context_count")]
+    pub screen_context_count: usize,
+
+    /// Max chars to include from each OCR snippet when summarizing
+    #[serde(default = "default_ocr_summary_max_chars")]
+    pub ocr_summary_max_chars: usize,
+
+    /// Whether screenshots should be sent through the auto-extraction pipeline.
+    #[serde(default = "default_true")]
+    pub screenshot_auto_extract_enabled: bool,
+
+    /// Whether extracted screenshot summaries should be saved as memories.
+    #[serde(default)]
+    pub screenshot_auto_save_memory: bool,
+
+    /// Whether extracted screenshot action items should be saved as tasks.
+    #[serde(default)]
+    pub screenshot_auto_save_action_items: bool,
+
     /// Whether system audio capture is enabled
     #[serde(default)]
     pub system_audio_enabled: bool,
@@ -98,6 +118,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_screen_context_count() -> usize { 5 }
+
+fn default_ocr_summary_max_chars() -> usize { 800 }
+
 fn default_openai_base_url() -> String {
     "https://api.openai.com/v1".to_string()
 }
@@ -120,6 +144,11 @@ impl Default for AppConfig {
             capture_interval_secs: default_capture_interval(),
             screen_capture_enabled: false,
             ocr_enabled: true,
+            screen_context_count: default_screen_context_count(),
+            ocr_summary_max_chars: default_ocr_summary_max_chars(),
+            screenshot_auto_extract_enabled: true,
+            screenshot_auto_save_memory: false,
+            screenshot_auto_save_action_items: false,
             system_audio_enabled: false,
             mic_enabled: true,
             diarize_speakers: false,

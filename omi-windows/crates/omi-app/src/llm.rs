@@ -39,6 +39,21 @@ struct LlmResponseMsg {
     content: String,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ScreenshotMemoryExtraction {
+    pub content: String,
+    pub category: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ScreenshotExtraction {
+    pub summary: String,
+    #[serde(default)]
+    pub memories: Vec<ScreenshotMemoryExtraction>,
+    #[serde(default)]
+    pub action_items: Vec<String>,
+}
+
 // ── Endpoint resolution ──────────────────────────────────────────────────────
 
 /// Resolve (api_key, url, model) from AppConfig, falling back to env vars.
@@ -250,5 +265,118 @@ pub async fn process_conversation(
             }
         }
         Err(e) => tracing::error!("[LLM] Memory extraction failed: {e}"),
+    }
+}
+
+/// Summarize a list of recent screen OCR excerpts into a short, focused text.
+/// Each item is a tuple of (timestamp_rfc3339, window_title, ocr_text).
+pub async fn summarize_ocr_snippets(
+    cfg: &AppConfig,
+    items: Vec<(String, String, String)>,
+) -> Result<String> {
+    if items.is_empty() {
+        return Ok(String::new());
+    }
+
+    let (api_key, url, model) = resolve_llm_endpoint(cfg);
+    if api_key.is_empty() {
+        tracing::warn!("[LLM] No LLM API key configured, skipping OCR summarization");
+        return Ok(String::new());
+    }
+
+    // Build a compact prompt containing the recent OCR snippets.
+    let mut joined = String::new();
+    let per_item_max = cfg.ocr_summary_max_chars.min(5000).max(64);
+    for (ts, title, ocr) in &items {
+        let ocr_short = if ocr.len() > per_item_max { format!("{}...", &ocr[..per_item_max]) } else { ocr.clone() };
+        joined.push_str(&format!("{} | {}: {}\n", ts, title, ocr_short));
+    }
+
+    let prompt = format!(
+        "Summarize the following recent screen text extracts into up to 4 concise bullet points, \nfocus on important information and any actionable items. If nothing notable, return an empty string.\n\n{}",
+        joined
+    );
+
+    let resp = complete(
+        &api_key,
+        &url,
+        &model,
+        vec![LlmMessage { role: "user".into(), content: prompt }],
+        Some(200),
+    )
+    .await;
+
+    match resp {
+        Ok(s) => Ok(s.trim().to_string()),
+        Err(e) => {
+            tracing::error!("[LLM] OCR summarization failed: {e}");
+            Ok(String::new())
+        }
+    }
+}
+
+/// Extract a summary plus optional memories and action items from a screenshot.
+pub async fn extract_screenshot_artifacts(
+    cfg: &AppConfig,
+    window_title: Option<&str>,
+    ocr_text: Option<&str>,
+) -> Result<ScreenshotExtraction> {
+    let ocr_text = match ocr_text.map(str::trim) {
+        Some(text) if !text.is_empty() => text,
+        _ => return Ok(ScreenshotExtraction::default()),
+    };
+
+    let (api_key, url, model) = resolve_llm_endpoint(cfg);
+    if api_key.is_empty() {
+        tracing::warn!("[LLM] No LLM API key configured, skipping screenshot extraction");
+        return Ok(ScreenshotExtraction::default());
+    }
+
+    let max_chars = cfg.ocr_summary_max_chars.min(5000).max(64);
+    let ocr_short = if ocr_text.len() > max_chars { format!("{}...", &ocr_text[..max_chars]) } else { ocr_text.to_string() };
+    let title = window_title.unwrap_or("Unknown window");
+
+    let prompt = format!(
+        "Analyze this screenshot OCR and return EXACTLY one JSON object with this schema:\n\
+        {{\"summary\": \"<1-3 sentence summary>\", \"memories\": [{{\"content\": \"<important fact or preference>\", \"category\": \"fact|preference|decision|task|other\"}}], \"action_items\": [\"<clear actionable task>\"]}}\n\n\
+        Rules:\n\
+        - Return valid JSON only. No markdown, no prose.\n\
+        - Keep summary short and grounded in the screenshot.\n\
+        - Only include memories or action items that are explicitly supported by the screenshot.\n\
+        - Use empty arrays when nothing should be saved.\n\n\
+        Window title: {title}\n\
+        OCR text:\n{ocr_short}"
+    );
+
+    let resp = complete(
+        &api_key,
+        &url,
+        &model,
+        vec![LlmMessage { role: "user".into(), content: prompt }],
+        Some(250),
+    )
+    .await;
+
+    match resp {
+        Ok(text) => {
+            let parsed = serde_json::from_str::<ScreenshotExtraction>(&text)
+                .or_else(|_| serde_json::from_value::<ScreenshotExtraction>(serde_json::json!({
+                    "summary": text.trim(),
+                    "memories": [],
+                    "action_items": [],
+                })));
+
+            match parsed {
+                Ok(result) => Ok(result),
+                Err(e) => {
+                    tracing::warn!("[LLM] Screenshot extraction parse failed: {e}");
+                    Ok(ScreenshotExtraction::default())
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("[LLM] Screenshot extraction failed: {e}");
+            Ok(ScreenshotExtraction::default())
+        }
     }
 }

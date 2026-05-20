@@ -1,0 +1,223 @@
+warning: variable does not need to be mutable
+   --> crates\omi-transcription\src\streaming.rs:135:13
+    |
+135 |         let mut total_bytes: u64 = 0;
+    |             ----^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `omi-transcription` (lib) generated 1 warning (run `cargo fix --lib -p omi-transcription` to apply 1 suggestion)
+    Checking omi-app v0.1.0 (C:\omi\omi-windows\crates\omi-app)
+error[E0277]: the trait bound `muda::Menu: tray_icon::menu::ContextMenu` is not satisfied
+   --> crates\omi-app\src\tray.rs:65:20
+    |
+ 65 |         .with_menu(Box::new(menu.clone()))
+    |                    ^^^^^^^^^^^^^^^^^^^^^^ the trait `tray_icon::menu::ContextMenu` is not implemented for `muda::Menu`
+    |
+note: there are multiple different versions of crate `muda` in the dependency graph
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\muda-0.15.3\src\lib.rs:301:1
+    |
+301 | pub trait ContextMenu {
+    | ^^^^^^^^^^^^^^^^^^^^^ this is the expected trait
+    |
+   ::: C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\muda-0.14.1\src\lib.rs:302:1
+    |
+302 | pub trait ContextMenu {
+    | --------------------- this is the found trait
+    = help: you can use `cargo tree` to explore your dependency tree
+help: item with same name found
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\muda-0.11.5\src\menu.rs:12:1
+    |
+ 12 | pub struct Menu {
+    | ^^^^^^^^^^^^^^^
+    = note: there are multiple different versions of crate `muda` in the dependency graph
+help: the following other types implement trait `tray_icon::menu::ContextMenu`
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\muda-0.15.3\src\menu.rs:371:1
+    |
+371 | impl ContextMenu for Menu {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^ `tray_icon::menu::Menu`
+    |
+   ::: C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\muda-0.15.3\src\items\submenu.rs:213:1
+    |
+213 | impl ContextMenu for Submenu {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `tray_icon::menu::Submenu`
+    = note: there are multiple different versions of crate `muda` in the dependency graph
+    = help: you can use `cargo tree` to explore your dependency tree
+    = note: required for the cast from `Box<muda::Menu>` to `Box<(dyn tray_icon::menu::ContextMenu + 'static)>`
+
+error[E0609]: no field `button` on type `TrayIconEvent`
+   --> crates\omi-app\src\tray.rs:122:30
+    |
+122 |                     if event.button == MouseButton::Left
+    |                              ^^^^^^ unknown field
+
+error[E0609]: no field `button_state` on type `TrayIconEvent`
+   --> crates\omi-app\src\tray.rs:123:34
+    |
+123 |                         && event.button_state == MouseButtonState::Up
+    |                                  ^^^^^^^^^^^^ unknown field
+
+error[E0507]: cannot move out of `hk_rx`, a captured variable in an `FnMut` closure
+   --> crates\omi-app\src\app.rs:118:19
+    |
+103 |         let (hk_tx, mut hk_rx) = tokio::sync::broadcast::channel::<HotkeyAction>(8);
+    |                     --------- captured outer variable
+...
+117 |         use_effect(move || {
+    |                    ------- captured by this `FnMut` closure
+118 |             spawn(async move {
+    |                   ^^^^^^^^^^ `hk_rx` is moved here
+119 |                 loop {
+120 |                     match hk_rx.recv().await {
+    |                           -----
+    |                           |
+    |                           variable moved due to use in coroutine
+    |                           move occurs because `hk_rx` has type `tokio::sync::broadcast::Receiver<HotkeyAction>`, which does not implement the `Copy` trait
+    |
+help: `Fn` and `FnMut` closures require captured values to be able to be consumed multiple times, but `FnOnce` closures may consume them only once
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\dioxus-hooks-0.6.2\src\use_effect.rs:11:38
+    |
+ 11 | pub fn use_effect(mut callback: impl FnMut() + 'static) -> Effect {
+    |                                      ^^^^^^^
+
+error[E0507]: cannot move out of `tray_rx`, a captured variable in an `FnMut` closure
+   --> crates\omi-app\src\app.rs:156:19
+    |
+104 |         let (tray_tx, mut tray_rx) = tokio::sync::broadcast::channel::<TrayAction>(8);
+    |                       ----------- captured outer variable
+...
+155 |         use_effect(move || {
+    |                    ------- captured by this `FnMut` closure
+156 |             spawn(async move {
+    |                   ^^^^^^^^^^ `tray_rx` is moved here
+157 |                 loop {
+158 |                     match tray_rx.recv().await {
+    |                           -------
+    |                           |
+    |                           variable moved due to use in coroutine
+    |                           move occurs because `tray_rx` has type `tokio::sync::broadcast::Receiver<TrayAction>`, which does not implement the `Copy` trait
+    |
+help: `Fn` and `FnMut` closures require captured values to be able to be consumed multiple times, but `FnOnce` closures may consume them only once
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\dioxus-hooks-0.6.2\src\use_effect.rs:11:38
+    |
+ 11 | pub fn use_effect(mut callback: impl FnMut() + 'static) -> Effect {
+    |                                      ^^^^^^^
+
+error: future cannot be sent between threads safely
+   --> crates\omi-app\src\app.rs:139:33
+    |
+139 | / ...                   tokio::spawn(async move {
+140 | | ...                       crate::recording::start_recording(
+141 | | ...                           api_key, diarize, db_val, cfg,
+142 | | ...                           stop_rx, &mut status, &mut transcript,
+143 | | ...                       )
+144 | | ...                       .await;
+145 | | ...                   });
+    | |________________________^ future created by async block is not `Send`
+    |
+    = help: within `UnsyncStorage`, the trait `Sync` is not implemented for `RefCell<StorageEntry<RefCellStorageEntryData>>`
+    = note: if you want to do aliasing and mutation between multiple threads, use `std::sync::RwLock` instead
+note: captured value is not `Send`
+   --> crates\omi-app\src\app.rs:142:55
+    |
+142 | ...                   stop_rx, &mut status, &mut transcript,
+    |                                     ^^^^^^ has type `dioxus::prelude::Signal<RecordingStatus>` which is not `Send`
+note: required by a bound in `tokio::spawn`
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.3\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: the full name for the type has been written to 'c:\omi\omi-windows\target\debug\deps\omi-467214cd0c276f74.long-type-15057073061849153300.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+error: future cannot be sent between threads safely
+   --> crates\omi-app\src\app.rs:139:33
+    |
+139 | / ...                   tokio::spawn(async move {
+140 | | ...                       crate::recording::start_recording(
+141 | | ...                           api_key, diarize, db_val, cfg,
+142 | | ...                           stop_rx, &mut status, &mut transcript,
+143 | | ...                       )
+144 | | ...                       .await;
+145 | | ...                   });
+    | |________________________^ future created by async block is not `Send`
+    |
+    = help: within `cpal::platform::platform_impl::Stream`, the trait `Sync` is not implemented for `*mut ()`
+note: future is not `Send` as this value is used across an await
+   --> crates\omi-app\src\recording.rs:131:9
+    |
+ 58 |       let mic = match omi_audio::mic::start_mic_capture(audio_tx.clone()) {
+    |           --- has type `MicStream` which is not `Send`
+...
+131 | /         tokio::select! {
+132 | |             // Stop requested from UI
+133 | |             _ = &mut stop_rx => {
+134 | |                 tracing::info!("[RECORDING] Stop signal received from UI after {segment_count} segments");
+...   |
+193 | |         }
+    | |_________^ await occurs here, with `mic` maybe used later
+note: required by a bound in `tokio::spawn`
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.3\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: this error originates in the macro `$crate::select` which comes from the expansion of the macro `tokio::select` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: future cannot be sent between threads safely
+   --> crates\omi-app\src\app.rs:139:33
+    |
+139 | / ...                   tokio::spawn(async move {
+140 | | ...                       crate::recording::start_recording(
+141 | | ...                           api_key, diarize, db_val, cfg,
+142 | | ...                           stop_rx, &mut status, &mut transcript,
+143 | | ...                       )
+144 | | ...                       .await;
+145 | | ...                   });
+    | |________________________^ future created by async block is not `Send`
+    |
+    = help: within `cpal::platform::platform_impl::Stream`, the trait `Send` is not implemented for `*mut ()`
+note: future is not `Send` as this value is used across an await
+   --> crates\omi-app\src\recording.rs:131:9
+    |
+ 58 |       let mic = match omi_audio::mic::start_mic_capture(audio_tx.clone()) {
+    |           --- has type `MicStream` which is not `Send`
+...
+131 | /         tokio::select! {
+132 | |             // Stop requested from UI
+133 | |             _ = &mut stop_rx => {
+134 | |                 tracing::info!("[RECORDING] Stop signal received from UI after {segment_count} segments");
+...   |
+193 | |         }
+    | |_________^ await occurs here, with `mic` maybe used later
+note: required by a bound in `tokio::spawn`
+   --> C:\Users\kumar\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.3\src\task\spawn.rs:176:21
+    |
+174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+    |            ----- required by a bound in this function
+175 |     where
+176 |         F: Future + Send + 'static,
+    |                     ^^^^ required by this bound in `spawn`
+    = note: this error originates in the macro `$crate::select` which comes from the expansion of the macro `tokio::select` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+  --> crates\omi-app\src\components\floating_bar.rs:37:9
+   |
+37 |     let mut ai_loading = use_signal(|| false);
+   |         ----^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+Some errors have detailed explanations: E0277, E0507, E0609.
+For more information about an error, try `rustc --explain E0277`.
+warning: `omi-app` (bin "omi") generated 1 warning
+error: could not compile `omi-app` (bin "omi") due to 8 previous errors; 1 warning emitted

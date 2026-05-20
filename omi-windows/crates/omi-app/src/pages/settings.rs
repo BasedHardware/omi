@@ -259,6 +259,48 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
+                    span { class: "settings-label", "Auto Extract" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().screenshot_auto_extract_enabled,
+                            onchange: move |e| {
+                                config.write().screenshot_auto_extract_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Save Summary as Memory" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().screenshot_auto_save_memory,
+                            onchange: move |e| {
+                                config.write().screenshot_auto_save_memory = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Save Action Items" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().screenshot_auto_save_action_items,
+                            onchange: move |e| {
+                                config.write().screenshot_auto_save_action_items = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
                     span { class: "settings-label", "OCR" }
                     label { class: "toggle",
                         input {
@@ -283,6 +325,38 @@ pub fn SettingsPage() -> Element {
                         onchange: move |e| {
                             if let Ok(v) = e.value().parse::<u64>() {
                                 config.write().capture_interval_secs = v.max(1).min(60);
+                                let _ = config.read().save();
+                            }
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Screen Context Count" }
+                    input {
+                        class: "settings-input settings-input-sm",
+                        r#type: "number",
+                        min: "1",
+                        max: "20",
+                        value: "{config.read().screen_context_count}",
+                        onchange: move |e| {
+                            if let Ok(v) = e.value().parse::<usize>() {
+                                config.write().screen_context_count = v.min(20).max(1);
+                                let _ = config.read().save();
+                            }
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "OCR Snippet Max Chars" }
+                    input {
+                        class: "settings-input settings-input-sm",
+                        r#type: "number",
+                        min: "64",
+                        max: "5000",
+                        value: "{config.read().ocr_summary_max_chars}",
+                        onchange: move |e| {
+                            if let Ok(v) = e.value().parse::<usize>() {
+                                config.write().ocr_summary_max_chars = v.min(5000).max(64);
                                 let _ = config.read().save();
                             }
                         },

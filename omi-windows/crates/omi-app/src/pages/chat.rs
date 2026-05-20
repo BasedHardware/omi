@@ -66,8 +66,24 @@ pub fn ChatPage() -> Element {
         let cfg = config.read().clone();
         let (api_key, api_url, model) = resolve_llm_endpoint(&cfg);
 
-        // Build system prompt from recent conversation context + memories
-        let system_prompt = {
+        // Build system prompt from recent conversation context + memories + summarized screen OCR
+
+            spawn(async move {
+            loading.set(true);
+            tracing::info!("[CHAT] Sending to: {api_url} (model: {model})");
+
+            if api_key.is_empty() {
+                let mut msgs = messages.read().clone();
+                msgs.push(ChatMessage {
+                    role: "assistant".into(),
+                    content: "Please set your Groq or OpenAI API key in Settings to use chat.".into(),
+                });
+                messages.set(msgs);
+                loading.set(false);
+                return;
+            }
+
+            // Build system prompt (include recent convo summaries, memories, and summarized screen OCR)
             let mut parts: Vec<String> = vec![
                 "You are Omi, a helpful AI assistant with access to the user's recent voice conversations and memories.".into(),
                 "Answer concisely and helpfully. Reference specific things from the context when relevant.".into(),
@@ -92,30 +108,36 @@ pub fn ChatPage() -> Element {
                         parts.push(mem_text);
                     }
                 }
+
+                // Recent screenshots -> summarize via LLM to reduce tokens
+                if let Ok(screens) = d.list_screenshots(cfg.screen_context_count) {
+                    if !screens.is_empty() {
+                        // Prepare tuples (ts, title, ocr)
+                        let mut items: Vec<(String, String, String)> = Vec::new();
+                        for s in screens.iter() {
+                            let ts = s.captured_at.to_rfc3339();
+                            let title = s.window_title.clone().unwrap_or_else(|| "(no title)".into());
+                            let ocr = s.ocr_text.clone().unwrap_or_else(|| "".into());
+                            items.push((ts, title, ocr));
+                        }
+                        // Ask the LLM to summarize the OCR snippets into short bullets
+                        match crate::llm::summarize_ocr_snippets(&cfg, items).await {
+                            Ok(summary) => {
+                                if !summary.is_empty() {
+                                    parts.push("\n## Recent Screen Activity".into());
+                                    parts.push(summary);
+                                }
+                            }
+                            Err(e) => tracing::error!("[CHAT] OCR summarization failed: {e}"),
+                        }
+                    }
+                }
             }
 
-            parts.join("\n")
-        };
-
-        spawn(async move {
-            loading.set(true);
-            tracing::info!("[CHAT] Sending to: {api_url} (model: {model})");
-
-            if api_key.is_empty() {
-                let mut msgs = messages.read().clone();
-                msgs.push(ChatMessage {
-                    role: "assistant".into(),
-                    content: "Please set your Groq or OpenAI API key in Settings to use chat.".into(),
-                });
-                messages.set(msgs);
-                loading.set(false);
-                return;
-            }
+            let system_prompt = parts.join("\n");
 
             // Build full message list: system + conversation history
-            let mut llm_msgs: Vec<LlmMessage> = vec![
-                LlmMessage { role: "system".into(), content: system_prompt },
-            ];
+            let mut llm_msgs: Vec<LlmMessage> = vec![LlmMessage { role: "system".into(), content: system_prompt }];
             llm_msgs.extend(messages.read().iter().map(|m| LlmMessage {
                 role: m.role.clone(),
                 content: m.content.clone(),

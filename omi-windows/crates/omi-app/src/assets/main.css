@@ -867,3 +867,168 @@ body {
   padding: 10px;
   border-radius: var(--radius);
 }
+/* ── Floating Control Bar (M7) ───────────────────────────────────── */
+.fbar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(120%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(15, 15, 15, 0.92);
+  border: 1px solid rgba(108, 92, 231, 0.4);
+  border-radius: 40px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 0.2s ease;
+  min-width: 360px;
+  max-width: 600px;
+  user-select: none;
+}
+
+.fbar-visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Status pill */
+.fbar-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.fbar-status-idle {
+  background: rgba(102, 102, 102, 0.25);
+  color: var(--text-muted);
+}
+
+.fbar-status-recording {
+  background: rgba(225, 112, 85, 0.2);
+  color: var(--error);
+  animation: pulse-record 1.8s ease-in-out infinite;
+}
+
+.fbar-status-error {
+  background: rgba(225, 112, 85, 0.2);
+  color: var(--error);
+}
+
+@keyframes pulse-record {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* Buttons inside bar */
+.fbar-btn {
+  border: none;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fbar-btn:active { transform: scale(0.95); }
+
+.fbar-btn-record {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fbar-btn-record:hover { background: var(--accent-hover); }
+.fbar-btn-record:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.fbar-btn-stop {
+  background: var(--error);
+  color: #fff;
+}
+
+.fbar-btn-stop:hover { background: #ef5f47; }
+
+.fbar-btn-close {
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  font-size: 14px;
+}
+
+.fbar-btn-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Quick AI input */
+.fbar-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 5px 12px;
+  background: rgba(36, 36, 36, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.fbar-input:focus {
+  border-color: var(--accent);
+}
+
+.fbar-input::placeholder {
+  color: var(--text-muted);
+}
+
+.fbar-ai-loading {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* AI response popup that appears above the bar */
+.fbar-response {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  max-width: 480px;
+  width: max-content;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  z-index: 10000;
+}
+
+.fbar-response-text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

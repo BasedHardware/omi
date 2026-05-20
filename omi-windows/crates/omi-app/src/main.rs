@@ -6,10 +6,12 @@ mod capture;
 mod components;
 mod config;
 mod hooks;
+mod hotkey;
 mod llm;
 mod pages;
 mod recording;
 mod sidecar;
+mod tray;
 
 pub const MAIN_CSS: &str = include_str!("assets/main.css");
 
@@ -26,6 +28,30 @@ fn main() {
         .init();
 
     tracing::info!("Starting Omi Windows");
+
+    // ── Global hotkeys (Ctrl+Shift+Space / Ctrl+Shift+R) ──────────────────────
+    let _hotkey_manager = match hotkey::init() {
+        Ok(m) => {
+            tracing::info!("[HOTKEY] Registered global hotkeys");
+            Some(m)
+        }
+        Err(e) => {
+            tracing::warn!("[HOTKEY] Failed to register hotkeys: {e} (running without hotkeys)");
+            None
+        }
+    };
+
+    // ── System tray ────────────────────────────────────────────────────────────
+    let _tray = match tray::init() {
+        Ok(t) => {
+            tracing::info!("[TRAY] System tray created");
+            Some(t)
+        }
+        Err(e) => {
+            tracing::warn!("[TRAY] Failed to create tray: {e} (running without tray)");
+            None
+        }
+    };
 
     let window_cfg = dioxus::desktop::Config::new()
         .with_window(

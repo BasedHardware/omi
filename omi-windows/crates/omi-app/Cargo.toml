@@ -27,6 +27,10 @@ urlencoding = "2.1"
 dotenvy = "0.15"
 base64 = "0.22"
 
+# Global hotkeys & system tray (M7)
+global-hotkey = "0.6"
+tray-icon = "0.19"
+
 # Sibling crates
 omi-capture = { path = "../omi-capture" }
 omi-audio = { path = "../omi-audio" }

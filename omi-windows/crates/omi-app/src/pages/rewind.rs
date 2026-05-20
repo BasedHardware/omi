@@ -48,6 +48,8 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
     let path = shot.thumbnail_path.clone();
     let ocr = shot.ocr_text.clone();
     let title = shot.window_title.clone();
+    let cfg: Signal<AppConfig> = use_context();
+    let db: Signal<Option<crate::app::Db>> = use_context();
 
     rsx! {
         div { class: "rewind-detail",
@@ -73,6 +75,42 @@ fn RewindDetail(shot: Screenshot, on_close: EventHandler<()>) -> Element {
                 div { class: "rewind-ocr",
                     h4 { "Detected Text" }
                     pre { class: "ocr-text", "{text}" }
+                }
+            }
+            // Actions
+            div { class: "rewind-actions",
+                button {
+                    class: "btn btn-primary",
+                    onclick: move |_| {
+                        let cfg = cfg.read().clone();
+                        let db_val = db.read().clone();
+                        let shot_clone = shot.clone();
+                        spawn(async move {
+                            // Summarize this single screenshot via LLM
+                            let items = vec![(
+                                shot_clone.captured_at.to_rfc3339(),
+                                shot_clone.window_title.clone().unwrap_or_default(),
+                                shot_clone.ocr_text.clone().unwrap_or_default(),
+                            )];
+                            match crate::llm::summarize_ocr_snippets(&cfg, items).await {
+                                Ok(summary) => {
+                                    if !summary.is_empty() {
+                                        if let Some(crate::app::Db(ref d)) = db_val {
+                                            if let Err(e) = d.insert_memory(None, &summary, Some("screenshot")) {
+                                                tracing::error!("[REWIND] Failed to save memory: {e}");
+                                            } else {
+                                                tracing::info!("[REWIND] Saved screenshot summary as memory");
+                                            }
+                                        }
+                                    } else {
+                                        tracing::info!("[REWIND] OCR summarizer returned empty summary");
+                                    }
+                                }
+                                Err(e) => tracing::error!("[REWIND] OCR summarization error: {e}"),
+                            }
+                        });
+                    },
+                    "Summarize & Save"
                 }
             }
         }

@@ -55,4 +55,11 @@ impl Database {
             .collect::<Vec<_>>()
             .join("\n"))
     }
+
+    /// Delete a memory by id.
+    pub fn delete_memory(&self, id: &str) -> Result<()> {
+        let conn = self.conn();
+        conn.execute("DELETE FROM memories WHERE id = ?1", params![id])?;
+        Ok(())
+    }
 }

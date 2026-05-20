@@ -1,1 +1,1 @@
-pub mod sidebar;
+pub mod sidebar;pub mod floating_bar;
