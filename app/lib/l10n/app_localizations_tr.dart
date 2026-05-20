@@ -6847,7 +6847,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Düşük Pil Uyarısı';
 
   @override
-  String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Pil seviyeniz %$level. Şarj etme zamanı! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi tamamen şarj oldu';

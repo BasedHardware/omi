@@ -6838,7 +6838,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Tühja aku hoiatus';
 
   @override
-  String get lowBatteryAlertBody => 'Teie seadme aku on tühi. Aeg laadida! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Sinu aku on $level%. Aeg laadida! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi on täielikult laetud';

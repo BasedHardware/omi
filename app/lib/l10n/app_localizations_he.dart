@@ -6782,7 +6782,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'התראת סוללה נמוכה';
 
   @override
-  String get lowBatteryAlertBody => 'ההתקן שלך נמצא בסוללה נמוכה. הגיע הזמן לטעינה מחדש! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'הסוללה שלך ב-$level%. הגיע הזמן לטעון! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi טעון לגמרי';

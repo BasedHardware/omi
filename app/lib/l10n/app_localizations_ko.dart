@@ -6718,7 +6718,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get lowBatteryAlertTitle => '배터리 부족 알림';
 
   @override
-  String get lowBatteryAlertBody => '기기의 배터리가 부족합니다. 충전할 시간입니다! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return '배터리가 $level%입니다. 충전할 시간입니다! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi가 완전히 충전되었습니다';

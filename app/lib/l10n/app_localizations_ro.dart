@@ -6870,7 +6870,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alertă baterie descărcată';
 
   @override
-  String get lowBatteryAlertBody => 'Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Bateria ta este la $level%. E timpul să reîncărcați! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi este complet încărcat';

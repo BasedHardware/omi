@@ -6838,7 +6838,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alhaisen akun varoitus';
 
   @override
-  String get lowBatteryAlertBody => 'Laitteesi akku on alhainen. Aika ladata! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Akkusi on $level%. Aika ladata! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi on ladattu täyteen';

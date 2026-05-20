@@ -6818,7 +6818,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Advarsel om lavt batteri';
 
   @override
-  String get lowBatteryAlertBody => 'Din enheds batteri er lavt. Det er tid til at genoplade! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Dit batteri er på $level%. Tid til at lade op! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi er fuldt opladet';

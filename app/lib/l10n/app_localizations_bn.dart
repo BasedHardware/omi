@@ -6846,7 +6846,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get lowBatteryAlertTitle => 'কম ব্যাটারির সতর্কতা';
 
   @override
-  String get lowBatteryAlertBody => 'আপনার ডিভাইসের ব্যাটারি কম হয়ে যাচ্ছে। চার্জ করার সময় এসেছে! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'আপনার ব্যাটারি $level% এ আছে। চার্জ করার সময় এসেছে! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi সম্পূর্ণ চার্জ হয়েছে';

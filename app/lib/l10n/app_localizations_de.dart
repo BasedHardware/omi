@@ -6886,7 +6886,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Warnung: Niedriger Akkustand';
 
   @override
-  String get lowBatteryAlertBody => 'Der Akkustand Ihres Geräts ist niedrig. Zeit zum Aufladen! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Dein Akku ist bei $level%. Zeit zum Aufladen! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi ist vollständig geladen';

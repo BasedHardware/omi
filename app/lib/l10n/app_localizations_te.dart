@@ -6876,7 +6876,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'తక్కువ బ్యాటరీ సতর్కత';
 
   @override
-  String get lowBatteryAlertBody => 'మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'మీ బ్యాటరీ $level% వద్ద ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi పూర్తిగా చార్జ్ అయింది';

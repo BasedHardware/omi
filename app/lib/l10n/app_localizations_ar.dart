@@ -6786,7 +6786,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'تنبيه انخفاض البطارية';
 
   @override
-  String get lowBatteryAlertBody => 'بطارية جهازك منخفضة. حان وقت إعادة الشحن! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'بطاريتك عند $level٪. حان وقت إعادة الشحن! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'أومي مشحون بالكامل';

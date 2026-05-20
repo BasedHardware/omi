@@ -2183,7 +2183,7 @@
     "selected": "Selectat",
     "selectOption": "Selectează",
     "lowBatteryAlertTitle": "Alertă baterie descărcată",
-    "lowBatteryAlertBody": "Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋",
+    "lowBatteryAlertBody": "Bateria ta este la {level}%. E timpul să reîncărcați! 🔋",
     "batteryFullyChargedTitle": "Omi este complet încărcat",
     "batteryFullyChargedBody": "Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!",
     "deviceDisconnectedNotificationTitle": "Dispozitivul Omi a fost deconectat",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Așteaptă pe Omi",
     "syncStatusDownloadingFromDevice": "Se descarcă de pe Omi",
     "newestFirst": "Cele mai noi primele",
-    "noSyncedRecordingsYet": "Încă nu există înregistrări sincronizate"
+    "noSyncedRecordingsYet": "Încă nu există înregistrări sincronizate",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

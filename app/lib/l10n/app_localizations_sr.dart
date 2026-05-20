@@ -6845,7 +6845,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Обавештење о слабој батерији';
 
   @override
-  String get lowBatteryAlertBody => 'Батерија вашег уређаја је скоро празна. Време је за пуњење! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Батерија вам је на $level%. Време је за пуњење! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi је потпуно напуњен';

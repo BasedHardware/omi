@@ -8397,11 +8397,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋",
+    "lowBatteryAlertBody": "మీ బ్యాటరీ {level}% వద్ద ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋",
     "batteryFullyChargedTitle": "Omi పూర్తిగా చార్జ్ అయింది",
     "batteryFullyChargedBody": "మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "మీ Omi పరికరం డిస్‌కనెక్ట్ చేయబడింది",
     "@deviceDisconnectedNotificationTitle": {

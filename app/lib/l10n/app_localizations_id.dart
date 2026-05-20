@@ -6852,7 +6852,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Peringatan Baterai Lemah';
 
   @override
-  String get lowBatteryAlertBody => 'Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Baterai Anda di $level%. Saatnya mengisi ulang! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi sudah terisi penuh';

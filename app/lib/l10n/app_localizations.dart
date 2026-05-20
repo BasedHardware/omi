@@ -12888,8 +12888,8 @@ abstract class AppLocalizations {
   /// Body text for low battery notification
   ///
   /// In en, this message translates to:
-  /// **'Your device is running low on battery. Time for a recharge! 🔋'**
-  String get lowBatteryAlertBody;
+  /// **'Your battery is at {level}%. Time for a recharge! 🔋'**
+  String lowBatteryAlertBody(int level);
 
   /// No description provided for @batteryFullyChargedTitle.
   ///

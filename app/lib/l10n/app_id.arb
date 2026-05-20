@@ -2183,7 +2183,7 @@
     "selected": "Dipilih",
     "selectOption": "Pilih",
     "lowBatteryAlertTitle": "Peringatan Baterai Lemah",
-    "lowBatteryAlertBody": "Baterai perangkat Anda lemah. Saatnya mengisi ulang! 🔋",
+    "lowBatteryAlertBody": "Baterai Anda di {level}%. Saatnya mengisi ulang! 🔋",
     "batteryFullyChargedTitle": "Omi sudah terisi penuh",
     "batteryFullyChargedBody": "Perangkat Omi Anda sudah terisi penuh. Silakan cabut kabelnya!",
     "deviceDisconnectedNotificationTitle": "Perangkat Omi Anda Terputus",
@@ -3099,5 +3099,13 @@
     "syncStatusOnDevice": "Menunggu di Omi",
     "syncStatusDownloadingFromDevice": "Mengunduh dari Omi",
     "newestFirst": "Terbaru lebih dulu",
-    "noSyncedRecordingsYet": "Belum ada rekaman yang tersinkronisasi"
+    "noSyncedRecordingsYet": "Belum ada rekaman yang tersinkronisasi",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

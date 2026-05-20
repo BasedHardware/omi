@@ -2183,7 +2183,7 @@
     "selected": "선택됨",
     "selectOption": "선택",
     "lowBatteryAlertTitle": "배터리 부족 알림",
-    "lowBatteryAlertBody": "기기의 배터리가 부족합니다. 충전할 시간입니다! 🔋",
+    "lowBatteryAlertBody": "배터리가 {level}%입니다. 충전할 시간입니다! 🔋",
     "batteryFullyChargedTitle": "Omi가 완전히 충전되었습니다",
     "batteryFullyChargedBody": "Omi 기기가 완전히 충전되었습니다. 이제 플러그를 뽑으셔도 됩니다!",
     "deviceDisconnectedNotificationTitle": "Omi 기기가 연결 해제되었습니다",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Omi에서 대기 중",
     "syncStatusDownloadingFromDevice": "Omi에서 다운로드 중",
     "newestFirst": "최신순",
-    "noSyncedRecordingsYet": "아직 동기화된 녹음이 없습니다"
+    "noSyncedRecordingsYet": "아직 동기화된 녹음이 없습니다",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

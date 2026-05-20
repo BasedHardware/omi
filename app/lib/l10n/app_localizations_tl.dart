@@ -6894,7 +6894,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Low Battery Alert';
 
   @override
-  String get lowBatteryAlertBody => 'Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Ang iyong baterya ay nasa $level%. Panahon na para mag-recharge! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Naka-charge na ang Omi';

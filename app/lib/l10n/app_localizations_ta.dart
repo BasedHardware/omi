@@ -6884,8 +6884,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'குறைந்த பேட்டரி எச்சரிக்கை';
 
   @override
-  String get lowBatteryAlertBody =>
-      'உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'உங்கள் பேட்டரி $level% இல் உள்ளது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi முழுமையாக சார்ஜ் ஆகியது';

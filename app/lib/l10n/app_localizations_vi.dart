@@ -6842,7 +6842,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Cảnh báo pin yếu';
 
   @override
-  String get lowBatteryAlertBody => 'Pin thiết bị của bạn đang yếu. Đã đến lúc sạc! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Pin của bạn còn $level%. Đã đến lúc sạc! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi đã sạc đầy';

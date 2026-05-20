@@ -6868,7 +6868,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alacsony akkumulátor figyelmeztetés';
 
   @override
-  String get lowBatteryAlertBody => 'Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Az akkumulátorod $level%-on van. Ideje feltölteni! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Az Omi teljesen feltöltődött';

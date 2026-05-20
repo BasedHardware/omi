@@ -2165,7 +2165,7 @@
     "selected": "Ausgewählt",
     "selectOption": "Auswählen",
     "lowBatteryAlertTitle": "Warnung: Niedriger Akkustand",
-    "lowBatteryAlertBody": "Der Akkustand Ihres Geräts ist niedrig. Zeit zum Aufladen! 🔋",
+    "lowBatteryAlertBody": "Dein Akku ist bei {level}%. Zeit zum Aufladen! 🔋",
     "batteryFullyChargedTitle": "Omi ist vollständig geladen",
     "batteryFullyChargedBody": "Dein Omi-Gerät ist vollständig geladen. Du kannst es jetzt ausstecken!",
     "deviceDisconnectedNotificationTitle": "Ihr Omi-Gerät wurde getrennt",
@@ -3025,5 +3025,13 @@
     "syncStatusOnDevice": "Wartet auf Omi",
     "syncStatusDownloadingFromDevice": "Wird von Omi heruntergeladen",
     "newestFirst": "Neueste zuerst",
-    "noSyncedRecordingsYet": "Noch keine synchronisierten Aufnahmen"
+    "noSyncedRecordingsYet": "Noch keine synchronisierten Aufnahmen",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

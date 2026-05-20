@@ -2183,7 +2183,7 @@
     "selected": "Seçildi",
     "selectOption": "Seç",
     "lowBatteryAlertTitle": "Düşük Pil Uyarısı",
-    "lowBatteryAlertBody": "Cihazınızın pili azaldı. Şarj etme zamanı! 🔋",
+    "lowBatteryAlertBody": "Pil seviyeniz %{level}. Şarj etme zamanı! 🔋",
     "batteryFullyChargedTitle": "Omi tamamen şarj oldu",
     "batteryFullyChargedBody": "Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!",
     "deviceDisconnectedNotificationTitle": "Omi Cihazınız Bağlantı Kesildi",
@@ -3092,5 +3092,13 @@
     "syncStatusOnDevice": "Omi'de bekliyor",
     "syncStatusDownloadingFromDevice": "Omi'den indiriliyor",
     "newestFirst": "Önce en yeniler",
-    "noSyncedRecordingsYet": "Henüz senkronize edilmiş kayıt yok"
+    "noSyncedRecordingsYet": "Henüz senkronize edilmiş kayıt yok",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

@@ -8401,11 +8401,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Your device is running low on battery. Time for a recharge! 🔋",
+    "lowBatteryAlertBody": "Your battery is at {level}%. Time for a recharge! 🔋",
     "batteryFullyChargedTitle": "Omi is fully charged",
     "batteryFullyChargedBody": "Your Omi device is fully charged. Feel free to unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Your Omi Device Disconnected",
     "@deviceDisconnectedNotificationTitle": {

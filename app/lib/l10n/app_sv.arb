@@ -2183,7 +2183,7 @@
     "selected": "Vald",
     "selectOption": "Välj",
     "lowBatteryAlertTitle": "Varning för lågt batteri",
-    "lowBatteryAlertBody": "Enhetens batteri är lågt. Dags att ladda! 🔋",
+    "lowBatteryAlertBody": "Ditt batteri är på {level}%. Dags att ladda! 🔋",
     "batteryFullyChargedTitle": "Omi är fulladdad",
     "batteryFullyChargedBody": "Din Omi-enhet är fulladdad. Du kan koppla ur den nu!",
     "deviceDisconnectedNotificationTitle": "Din Omi-enhet har kopplats från",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Väntar på Omi",
     "syncStatusDownloadingFromDevice": "Laddar ner från Omi",
     "newestFirst": "Nyaste först",
-    "noSyncedRecordingsYet": "Inga synkroniserade inspelningar än"
+    "noSyncedRecordingsYet": "Inga synkroniserade inspelningar än",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

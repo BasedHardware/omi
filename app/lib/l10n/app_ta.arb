@@ -8397,11 +8397,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋",
+    "lowBatteryAlertBody": "உங்கள் பேட்டரி {level}% இல் உள்ளது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋",
     "batteryFullyChargedTitle": "Omi முழுமையாக சார்ஜ் ஆகியது",
     "batteryFullyChargedBody": "உங்கள் Omi சாதனம் முழுமையாக சார்ஜ் ஆகியது. அனப்ளக் செய்யலாம்!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "உங்கள் Omi சாதனம் துண்டிக்கப்பட்டது",
     "@deviceDisconnectedNotificationTitle": {

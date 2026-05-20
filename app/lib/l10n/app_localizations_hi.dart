@@ -6812,7 +6812,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get lowBatteryAlertTitle => 'कम बैटरी अलर्ट';
 
   @override
-  String get lowBatteryAlertBody => 'आपके डिवाइस की बैटरी कम है। रिचार्ज करने का समय! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'आपकी बैटरी $level% पर है। रिचार्ज करने का समय! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi पूरी तरह चार्ज हो गया है';

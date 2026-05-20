@@ -2184,7 +2184,7 @@
     "selected": "Seleccionado",
     "selectOption": "Seleccionar",
     "lowBatteryAlertTitle": "Alerta de batería baja",
-    "lowBatteryAlertBody": "La batería de tu dispositivo está baja. ¡Es hora de recargar! 🔋",
+    "lowBatteryAlertBody": "Tu batería está al {level}%. ¡Es hora de recargar! 🔋",
     "batteryFullyChargedTitle": "Omi está completamente cargado",
     "batteryFullyChargedBody": "Tu dispositivo Omi está completamente cargado. ¡Puedes desenchufarlo!",
     "deviceDisconnectedNotificationTitle": "Tu dispositivo Omi se desconectó",
@@ -3058,5 +3058,13 @@
     "syncStatusOnDevice": "Esperando en Omi",
     "syncStatusDownloadingFromDevice": "Descargando de Omi",
     "newestFirst": "Más recientes primero",
-    "noSyncedRecordingsYet": "Aún no hay grabaciones sincronizadas"
+    "noSyncedRecordingsYet": "Aún no hay grabaciones sincronizadas",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

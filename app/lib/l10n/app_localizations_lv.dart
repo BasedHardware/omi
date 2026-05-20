@@ -6849,7 +6849,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Zema akumulatora brīdinājums';
 
   @override
-  String get lowBatteryAlertBody => 'Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Tavs akumulators ir $level%. Laiks uzlādēt! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi ir pilnībā uzlādēts';

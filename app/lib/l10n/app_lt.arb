@@ -1185,7 +1185,7 @@
     "logs": "Žurnalai",
     "logsCopied": "Žurnalai nukopijuoti",
     "lovingOmi": "Patinka Omi?",
-    "lowBatteryAlertBody": "Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋",
+    "lowBatteryAlertBody": "Jūsų baterija yra {level}%. Laikas įkrauti! 🔋",
     "batteryFullyChargedTitle": "Omi yra visiškai įkrautas",
     "batteryFullyChargedBody": "Jūsų Omi įrenginys yra visiškai įkrautas. Galite jį atjungti!",
     "lowBatteryAlertTitle": "Įspėjimas apie senką bateriją",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Laukia Omi",
     "syncStatusDownloadingFromDevice": "Atsisiunčiama iš Omi",
     "newestFirst": "Pirma naujausi",
-    "noSyncedRecordingsYet": "Sinchronizuotų įrašų dar nėra"
+    "noSyncedRecordingsYet": "Sinchronizuotų įrašų dar nėra",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

@@ -2164,7 +2164,7 @@
     "selected": "محدد",
     "selectOption": "اختر",
     "lowBatteryAlertTitle": "تنبيه انخفاض البطارية",
-    "lowBatteryAlertBody": "بطارية جهازك منخفضة. حان وقت إعادة الشحن! 🔋",
+    "lowBatteryAlertBody": "بطاريتك عند {level}٪. حان وقت إعادة الشحن! 🔋",
     "batteryFullyChargedTitle": "أومي مشحون بالكامل",
     "batteryFullyChargedBody": "جهاز Omi الخاص بك مشحون بالكامل. يمكنك فصله الآن!",
     "deviceDisconnectedNotificationTitle": "تم قطع اتصال جهاز Omi",
@@ -3024,5 +3024,13 @@
     "syncStatusOnDevice": "في انتظار Omi",
     "syncStatusDownloadingFromDevice": "جارٍ التنزيل من Omi",
     "newestFirst": "الأحدث أولاً",
-    "noSyncedRecordingsYet": "لا توجد تسجيلات متزامنة بعد"
+    "noSyncedRecordingsYet": "لا توجد تسجيلات متزامنة بعد",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

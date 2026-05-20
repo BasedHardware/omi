@@ -2183,7 +2183,7 @@
     "selected": "Valittu",
     "selectOption": "Valitse",
     "lowBatteryAlertTitle": "Alhaisen akun varoitus",
-    "lowBatteryAlertBody": "Laitteesi akku on alhainen. Aika ladata! 🔋",
+    "lowBatteryAlertBody": "Akkusi on {level}%. Aika ladata! 🔋",
     "batteryFullyChargedTitle": "Omi on ladattu täyteen",
     "batteryFullyChargedBody": "Omi-laitteesi on ladattu täyteen. Voit irrottaa sen nyt!",
     "deviceDisconnectedNotificationTitle": "Omi-laitteesi yhteys katkesi",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Odottaa Omissa",
     "syncStatusDownloadingFromDevice": "Ladataan Omista",
     "newestFirst": "Uusimmat ensin",
-    "noSyncedRecordingsYet": "Ei vielä synkronoituja nauhoituksia"
+    "noSyncedRecordingsYet": "Ei vielä synkronoituja nauhoituksia",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }

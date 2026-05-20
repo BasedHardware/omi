@@ -6840,7 +6840,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'هشدار باتری کم';
 
   @override
-  String get lowBatteryAlertBody => 'باتری دستگاه شما تقریباً تمام است. وقت شارژ کردن است! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'باتری شما $level٪ است. وقت شارژ کردن است! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi کاملاً شارژ شد';

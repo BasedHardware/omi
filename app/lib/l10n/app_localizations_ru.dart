@@ -6854,7 +6854,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Предупреждение о низком заряде';
 
   @override
-  String get lowBatteryAlertBody => 'Батарея вашего устройства разряжена. Пора зарядить! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Заряд батареи $level%. Пора зарядить! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi полностью заряжен';

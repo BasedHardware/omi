@@ -2183,7 +2183,7 @@
     "selected": "Atlasīts",
     "selectOption": "Atlasīt",
     "lowBatteryAlertTitle": "Zema akumulatora brīdinājums",
-    "lowBatteryAlertBody": "Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋",
+    "lowBatteryAlertBody": "Tavs akumulators ir {level}%. Laiks uzlādēt! 🔋",
     "batteryFullyChargedTitle": "Omi ir pilnībā uzlādēts",
     "batteryFullyChargedBody": "Jūsu Omi ierīce ir pilnībā uzlādēta. Varat to atvienot!",
     "deviceDisconnectedNotificationTitle": "Jūsu Omi ierīce ir atvienota",
@@ -3057,5 +3057,13 @@
     "syncStatusOnDevice": "Gaida Omi",
     "syncStatusDownloadingFromDevice": "Lejupielādē no Omi",
     "newestFirst": "Vispirms jaunākie",
-    "noSyncedRecordingsYet": "Vēl nav sinhronizētu ierakstu"
+    "noSyncedRecordingsYet": "Vēl nav sinhronizētu ierakstu",
+    "@lowBatteryAlertBody": {
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
+    }
 }
