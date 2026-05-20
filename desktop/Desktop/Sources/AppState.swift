@@ -217,6 +217,7 @@ class AppState: ObservableObject {
   private let maxInMemorySegments = 200
   private var totalSegmentCount = 0  // Total segments created this session (including trimmed)
   private var totalWordCount = 0  // Running word count for analytics
+  private var speakerSegmentReducer = SpeakerSegmentReducer(maxInMemorySegments: 200)
 
   // Conversation tracking for auto-save
   private var recordingStartTime: Date?
@@ -1376,6 +1377,7 @@ class AppState: ObservableObject {
       speakerSegments = []
       totalSegmentCount = 0
       totalWordCount = 0
+      speakerSegmentReducer.reset()
       liveSpeakerPersonMap = [:]
       LiveTranscriptMonitor.shared.clear()
       recordingStartTime = Date()
@@ -1791,6 +1793,7 @@ class AppState: ObservableObject {
     speakerSegments = []
     totalSegmentCount = 0
     totalWordCount = 0
+    speakerSegmentReducer.reset()
     liveSpeakerPersonMap = [:]
     LiveTranscriptMonitor.shared.clear()
     LiveNotesMonitor.shared.endSession()
@@ -1965,6 +1968,7 @@ class AppState: ObservableObject {
     AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
     totalSegmentCount = 0
     totalWordCount = 0
+    speakerSegmentReducer.reset()
     currentTranscript = ""
 
     log("Transcription: Stopped")
@@ -2426,57 +2430,29 @@ class AppState: ObservableObject {
   /// Handle incoming transcript segments from Python backend `/v4/listen`.
   /// Backend sends pre-merged segments with speaker attribution — no client-side word merging needed.
   private func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
-    for segment in segments {
-      guard !segment.text.isEmpty else { continue }
-
-      // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
-      let speakerId = segment.speaker_id ?? 0
-
-      // Convert backend segment to local SpeakerSegment
-      let translations = (segment.translations ?? []).map {
-        SegmentTranslation(lang: $0.lang, text: $0.text)
-      }
-      let newSeg = SpeakerSegment(
+    let incomingSegments = segments.compactMap { segment -> SpeakerSegment? in
+      guard !segment.text.isEmpty else { return nil }
+      return SpeakerSegment(
         segmentId: segment.id,
-        speaker: speakerId,
+        speaker: segment.speaker_id ?? 0,
         text: segment.text,
         start: segment.start,
         end: segment.end,
         isUser: segment.is_user,
         personId: segment.person_id,
-        translations: translations
-      )
-
-      // Upsert: if we already have a segment with this ID, update it; otherwise append
-      if let segId = segment.id,
-        let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == segId })
-      {
-        // Adjust word count: subtract old words, add new words
-        let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
-        totalWordCount += newSeg.text.split(separator: " ").count - oldWords
-        // Preserve existing translations if the backend didn't send new ones
-        var updatedSeg = newSeg
-        if translations.isEmpty && !speakerSegments[existingIdx].translations.isEmpty {
-          updatedSeg.translations = speakerSegments[existingIdx].translations
+        translations: (segment.translations ?? []).map {
+          SegmentTranslation(lang: $0.lang, text: $0.text)
         }
-        speakerSegments[existingIdx] = updatedSeg
-        log(
-          "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
-        )
-      } else {
-        totalWordCount += newSeg.text.split(separator: " ").count
-        speakerSegments.append(newSeg)
-        totalSegmentCount += 1
-        log(
-          "Transcript [ADD] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
-        )
-      }
+      )
     }
 
-    // Sliding window: trim old segments from memory (they're already persisted in SQLite)
-    if speakerSegments.count > maxInMemorySegments {
-      let excess = speakerSegments.count - maxInMemorySegments
-      speakerSegments.removeFirst(excess)
+    let applyResult = speakerSegmentReducer.apply(incomingSegments)
+    speakerSegments = speakerSegmentReducer.segments
+    totalSegmentCount = speakerSegmentReducer.totalSegmentCount
+    totalWordCount = speakerSegmentReducer.totalWordCount
+
+    if applyResult.added > 0 || applyResult.updated > 0 {
+      log("Transcript [UPSERT] Added: \(applyResult.added), updated: \(applyResult.updated)")
     }
 
     log(
@@ -2594,19 +2570,10 @@ class AppState: ObservableObject {
     case "segments_deleted":
       if let segmentIds = event.raw["segment_ids"] as? [String] {
         log("Transcription: Backend deleted \(segmentIds.count) segments")
-        // Decrement counters for deleted segments
-        let deletedSegments = speakerSegments.filter { seg in
-          guard let segId = seg.segmentId else { return false }
-          return segmentIds.contains(segId)
-        }
-        let deletedWords = deletedSegments.reduce(0) { $0 + $1.text.split(separator: " ").count }
-        totalWordCount = max(0, totalWordCount - deletedWords)
-        totalSegmentCount = max(0, totalSegmentCount - deletedSegments.count)
-
-        speakerSegments.removeAll { seg in
-          guard let segId = seg.segmentId else { return false }
-          return segmentIds.contains(segId)
-        }
+        _ = speakerSegmentReducer.deleteSegmentIds(segmentIds)
+        speakerSegments = speakerSegmentReducer.segments
+        totalSegmentCount = speakerSegmentReducer.totalSegmentCount
+        totalWordCount = speakerSegmentReducer.totalWordCount
         LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
 
         // Also remove from DB
@@ -2657,6 +2624,7 @@ class AppState: ObservableObject {
             // Update in-memory if the segment is still loaded
             if let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId }) {
               speakerSegments[idx].translations = newTranslations
+              speakerSegmentReducer.replaceSegments(speakerSegments)
             }
 
             // Always persist to SQLite — even if the segment was trimmed from

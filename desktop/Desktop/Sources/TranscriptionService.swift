@@ -12,7 +12,7 @@ class TranscriptionService {
     // MARK: - Types
 
     /// Streaming mode determines which backend endpoint and parameters are used.
-    enum StreamingMode {
+    enum StreamingMode: Equatable {
         /// Conversation capture via `/v4/listen` — full pipeline with speech profiles,
         /// speaker assignment, memory creation events, and conversation lifecycle.
         case conversation
