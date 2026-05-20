@@ -202,12 +202,16 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
-    # Start background parallel pre-caching for all audio files using storage_executor
+    _precache_sem = threading.Semaphore(10)
+
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = [
-            submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af) for af in audio_files
-        ]
+
+        def _bounded_precache(af):
+            with _precache_sem:
+                return _precache_audio_file(uid, conversation_id, af)
+
+        futures = [submit_with_context(storage_executor, _bounded_precache, af) for af in audio_files]
         for future in futures:
             try:
                 future.result()
@@ -300,14 +304,15 @@ def get_audio_signed_urls_endpoint(
                 )
                 uncached_files.append(af)
 
-    # Cache remaining files in background
     if uncached_files:
+        _uncached_sem = threading.Semaphore(10)
 
         def _cache_uncached_parallel():
-            futures = [
-                submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
-                for af in uncached_files
-            ]
+            def _bounded_precache(af):
+                with _uncached_sem:
+                    return _precache_audio_file(uid, conversation_id, af)
+
+            futures = [submit_with_context(storage_executor, _bounded_precache, af) for af in uncached_files]
             for future in futures:
                 try:
                     future.result()
