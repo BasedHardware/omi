@@ -12,6 +12,28 @@ export OMI_LOCAL_BACKEND_HOST="${OMI_LOCAL_BACKEND_HOST:-127.0.0.1}"
 export OMI_LOCAL_BACKEND_PORT="${OMI_LOCAL_BACKEND_PORT:-8765}"
 export OMI_LOCAL_BACKEND_DATA_DIR="${OMI_LOCAL_BACKEND_DATA_DIR:-/tmp/omi-local-mvp}"
 export OMI_LOCAL_DAEMON_LOG="${OMI_LOCAL_DAEMON_LOG:-/tmp/omi-local-backend-dev.log}"
+export OMI_LOCAL_ASR_FIXTURE_DIR="${OMI_LOCAL_ASR_FIXTURE_DIR:-/tmp/omi-local-asr-fixture}"
+
+file_url_for_path() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve().as_uri())
+PY
+}
+
+configure_local_asr_manifest() {
+  if [ -n "${OMI_LOCAL_ASR_MANIFEST_URL:-}" ]; then
+    return
+  fi
+
+  local fixture_manifest="${OMI_LOCAL_ASR_FIXTURE_DIR}/manifest.json"
+  if [ -f "$fixture_manifest" ]; then
+    OMI_LOCAL_ASR_MANIFEST_URL="$(file_url_for_path "$fixture_manifest")"
+    export OMI_LOCAL_ASR_MANIFEST_URL
+  fi
+}
 
 # Shared hybrid desktop env (matches local-mvp-runbook.md).
 hybrid_desktop_env() {
@@ -21,6 +43,7 @@ hybrid_desktop_env() {
   export OMI_LOCAL_BACKEND_PORT
   export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-http://omi-cloud-invalid:9001}"
   export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-http://omi-rust-invalid:9002}"
+  configure_local_asr_manifest
 }
 
 local_daemon_health_ok() {
@@ -102,16 +125,23 @@ EOF
 }
 
 desktop_pane_command() {
+  hybrid_desktop_env
   cat <<EOF
 cd "${ROOT_DIR}/desktop"
 export OMI_DESKTOP_BACKEND_MODE=local \\
   OMI_LOCAL_DAEMON_SUPERVISE=0 \\
   OMI_LOCAL_DAEMON_URL="${OMI_LOCAL_DAEMON_URL}" \\
   OMI_LOCAL_BACKEND_PORT="${OMI_LOCAL_BACKEND_PORT}" \\
+  OMI_LOCAL_ASR_MANIFEST_URL="${OMI_LOCAL_ASR_MANIFEST_URL:-}" \\
   OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-http://omi-cloud-invalid:9001}" \\
   OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-http://omi-rust-invalid:9002}"
 echo '=== Omi Dev desktop (hybrid local mode) ==='
 echo "daemon=\${OMI_LOCAL_DAEMON_URL}"
+if [ -n "\${OMI_LOCAL_ASR_MANIFEST_URL:-}" ]; then
+  echo "local ASR manifest=\${OMI_LOCAL_ASR_MANIFEST_URL}"
+else
+  echo "local ASR manifest not configured; run: make local-asr-fixture"
+fi
 echo 'Waiting for local daemon /health...'
 elapsed=0
 until curl -fsS "\${OMI_LOCAL_DAEMON_URL}/health" >/dev/null 2>&1; do
@@ -208,6 +238,8 @@ Environment (optional):
   OMI_LOCAL_BACKEND_DATA_DIR      SQLite data dir (default: /tmp/omi-local-mvp)
   OMI_DAEMON_HEALTH_WAIT_SECS       wait for /health (default: 180)
   OMI_APP_NAME                      desktop bundle name (default: Omi Dev)
+  OMI_LOCAL_ASR_MANIFEST_URL        production-shaped local ASR add-on manifest URL
+  OMI_LOCAL_ASR_FIXTURE_DIR         auto-detected fixture dir (default: /tmp/omi-local-asr-fixture)
 
 See desktop/local-backend/docs/local-mvp-runbook.md
 EOF

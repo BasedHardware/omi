@@ -93,6 +93,7 @@ struct LocalASRHelperClient {
   func transcribe(_ request: LocalASRTranscriptionRequest) async throws
     -> LocalASRTranscriptionResponse
   {
+    LocalASRAddonManager.activateIfInstalled()
     let process = Process()
     process.executableURL = executableURL
 
@@ -145,6 +146,12 @@ struct LocalASRHelperClient {
 
 enum LocalASRHelperLocator {
   static let environmentKey = "OMI_LOCAL_ASR_HELPER_PATH"
+  private static let cacheLock = NSLock()
+  private static var cachedEngines: Set<LocalTranscriptionEngine>?
+  private static var cachedExecutablePath: String?
+  private static var cachedAt: Date?
+  private static var refreshInFlight = false
+  private static var refreshInFlightExecutablePath: String?
 
   static func defaultExecutableURL(
     environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -187,11 +194,36 @@ enum LocalASRHelperLocator {
   static func detectedEngines(executableURL: URL? = defaultExecutableURL())
     -> Set<LocalTranscriptionEngine>
   {
-    let probe = { detectedEnginesBlocking(executableURL: executableURL) }
+    LocalASRAddonManager.activateIfInstalled()
+    let executablePath = executableURL?.standardizedFileURL.path
     if Thread.isMainThread {
-      return DispatchQueue.global(qos: .userInitiated).sync(execute: probe)
+      if let cached = cachedEnginesIfFresh(for: executablePath) {
+        return cached
+      }
+      if executablePath != defaultExecutableURL()?.standardizedFileURL.path {
+        let engines = detectedEnginesBlocking(executableURL: executableURL)
+        storeCachedEngines(engines, for: executablePath)
+        return engines
+      }
+      refreshDetectedEnginesInBackground(executableURL: executableURL)
+      return cachedEnginesValue(for: executablePath) ?? []
     }
-    return probe()
+    let engines = detectedEnginesBlocking(executableURL: executableURL)
+    storeCachedEngines(engines, for: executablePath)
+    return engines
+  }
+
+  static func refreshDetectedEngines(executableURL: URL? = defaultExecutableURL()) async
+    -> Set<LocalTranscriptionEngine>
+  {
+    LocalASRAddonManager.activateIfInstalled()
+    return await withCheckedContinuation { continuation in
+      DispatchQueue.global(qos: .userInitiated).async {
+        let engines = detectedEnginesBlocking(executableURL: executableURL)
+        storeCachedEngines(engines, for: executableURL?.standardizedFileURL.path)
+        continuation.resume(returning: engines)
+      }
+    }
   }
 
   private static func detectedEnginesBlocking(executableURL: URL?)
@@ -231,6 +263,58 @@ enum LocalASRHelperLocator {
     }
 
     return Set(response.engines.filter(\.available).map(\.engine))
+  }
+
+  private static func cachedEnginesIfFresh(
+    for executablePath: String?,
+    maxAge: TimeInterval = 60
+  ) -> Set<LocalTranscriptionEngine>? {
+    cacheLock.lock()
+    defer { cacheLock.unlock() }
+    guard cachedExecutablePath == executablePath, let cachedEngines, let cachedAt,
+      Date().timeIntervalSince(cachedAt) <= maxAge
+    else {
+      return nil
+    }
+    return cachedEngines
+  }
+
+  private static func cachedEnginesValue(for executablePath: String?) -> Set<
+    LocalTranscriptionEngine
+  >? {
+    cacheLock.lock()
+    defer { cacheLock.unlock() }
+    guard cachedExecutablePath == executablePath else { return nil }
+    return cachedEngines
+  }
+
+  private static func storeCachedEngines(
+    _ engines: Set<LocalTranscriptionEngine>, for executablePath: String?
+  ) {
+    cacheLock.lock()
+    cachedEngines = engines
+    cachedExecutablePath = executablePath
+    cachedAt = Date()
+    refreshInFlight = false
+    refreshInFlightExecutablePath = nil
+    cacheLock.unlock()
+  }
+
+  private static func refreshDetectedEnginesInBackground(executableURL: URL?) {
+    let executablePath = executableURL?.standardizedFileURL.path
+    cacheLock.lock()
+    if refreshInFlight, refreshInFlightExecutablePath == executablePath {
+      cacheLock.unlock()
+      return
+    }
+    refreshInFlight = true
+    refreshInFlightExecutablePath = executablePath
+    cacheLock.unlock()
+
+    DispatchQueue.global(qos: .utility).async {
+      let engines = detectedEnginesBlocking(executableURL: executableURL)
+      storeCachedEngines(engines, for: executablePath)
+    }
   }
 }
 

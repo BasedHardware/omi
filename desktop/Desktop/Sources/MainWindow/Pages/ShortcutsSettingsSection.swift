@@ -387,6 +387,7 @@ struct ShortcutsSettingsSection: View {
     stopShortcutCapture()
     recordingTarget = target
     captureError = nil
+    PushToTalkManager.shared.setShortcutCaptureSuspended(true)
 
     localShortcutCaptureMonitor = NSEvent.addLocalMonitorForEvents(matching: [
       .flagsChanged, .keyDown,
@@ -400,6 +401,7 @@ struct ShortcutsSettingsSection: View {
       NSEvent.removeMonitor(monitor)
       localShortcutCaptureMonitor = nil
     }
+    PushToTalkManager.shared.setShortcutCaptureSuspended(false)
     recordingTarget = nil
     captureError = nil
   }
@@ -419,8 +421,11 @@ struct ShortcutsSettingsSection: View {
       else {
         return false
       }
-      settings.askOmiEnabled = true
-      settings.askOmiShortcut = shortcut
+      DispatchQueue.main.async {
+        settings.askOmiEnabled = true
+        settings.askOmiShortcut = shortcut
+        stopShortcutCapture()
+      }
     case .pushToTalk:
       guard
         let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
@@ -428,11 +433,13 @@ struct ShortcutsSettingsSection: View {
       else {
         return false
       }
-      settings.pttEnabled = true
-      settings.pttShortcut = shortcut
+      DispatchQueue.main.async {
+        settings.pttEnabled = true
+        settings.pttShortcut = shortcut
+        stopShortcutCapture()
+      }
     }
 
-    stopShortcutCapture()
     return true
   }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Direct OpenAI-compatible chat completions for hybrid local daemon mode (no pi-mono proxy).
+/// Direct OpenAI-compatible chat completions for desktop provider routes.
 enum HybridChatClient {
 
   struct ProviderConfig: Equatable {
@@ -52,7 +52,8 @@ enum HybridChatClient {
       switch self {
       case .notConfigured(let reason):
         if reason.isEmpty {
-          return "Chat model slot is not configured. Configure the chat slot in local provider policy."
+          return
+            "Chat model slot is not configured. Configure the chat slot in local provider policy."
         }
         return "Chat model slot is not configured: \(reason)"
       case .invalidSettings:
@@ -65,17 +66,61 @@ enum HybridChatClient {
     }
   }
 
-  static func isEnabled() -> Bool {
-    if CodexAuthService.isActive {
+  enum Route: Equatable {
+    case directCodex(ProviderConfig)
+    case directDaemonChatSlot
+    case agentBridge(reason: String)
+
+    var usesDirectProvider: Bool {
+      switch self {
+      case .directCodex, .directDaemonChatSlot:
       return true
+      case .agentBridge:
+        return false
+    }
+    }
+
+    var supportsInlineImages: Bool {
+      switch self {
+      case .directCodex:
+        return true
+      case .directDaemonChatSlot:
+      return false
+      case .agentBridge:
+        return true
+      }
+    }
+
+    var displayName: String {
+      switch self {
+      case .directCodex:
+        return "ChatGPT plan"
+      case .directDaemonChatSlot:
+        return "Local provider policy"
+      case .agentBridge:
+        return "Agent bridge"
+      }
+    }
+  }
+
+  static func currentRoute() -> Route {
+    if CodexAuthService.isActive {
+      if let config = codexChatConfig() {
+        return .directCodex(config)
+      }
+      return .agentBridge(
+        reason: "ChatGPT plan is connected, but no Codex auth snapshot is available.")
     }
     guard DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon else {
-      return false
+      return .agentBridge(reason: "Cloud backend mode uses the agent bridge.")
     }
     guard DesktopBackendEnvironment.isCapability(.directChat, availableIn: .localDaemon) else {
-      return false
+      return .agentBridge(
+        reason: DesktopBackendEnvironment.unavailableReason(for: .directChat, in: .localDaemon)
+          ?? "Direct local chat is unavailable."
+      )
     }
-    return true
+    return .directDaemonChatSlot
   }
 
   static func resolveEffectiveChatConfig(
@@ -84,23 +129,42 @@ enum HybridChatClient {
     HybridProviderPolicy.chatProviderConfig(from: response)
   }
 
-  /// Resolves the daemon chat slot and completes one chat turn (non-streaming).
-  static func completeFromDaemonSettings(
+  /// Completes one non-streaming turn through the active direct provider route.
+  static func completeWithActiveDirectProvider(
     systemPrompt: String,
     conversationMessages: [(role: String, text: String)],
-    userMessage: String
+    userMessage: String,
+    imageData: Data? = nil,
+    session: URLSession = .shared,
+    ensureCodexProxy: Bool = true
   ) async throws -> CompletionResult {
-    if CodexAuthService.isActive {
+    switch currentRoute() {
+    case .directCodex(let config):
+      if ensureCodexProxy {
       await CodexProxyService.shared.ensureRunning()
     }
+      return try await completeOpenAICompatible(
+        config: config,
+        systemPrompt: systemPrompt,
+        conversationMessages: conversationMessages,
+        userMessage: userMessage,
+        imageData: imageData,
+        session: session
+      )
+    case .directDaemonChatSlot:
     let resolution = try await APIClient.shared.resolveSelectedBackendProviderSlot(
       HybridProviderPolicy.chatSlot)
     return try await complete(
       systemPrompt: systemPrompt,
       conversationMessages: conversationMessages,
       userMessage: userMessage,
-      slotResolution: resolution
+        slotResolution: resolution,
+        imageData: imageData,
+        session: session
     )
+    case .agentBridge(let reason):
+      throw ClientError.notConfigured(reason)
+    }
   }
 
   static func complete(
@@ -108,6 +172,7 @@ enum HybridChatClient {
     conversationMessages: [(role: String, text: String)],
     userMessage: String,
     slotResolution: HybridProviderPolicy.SlotResolutionResponse,
+    imageData: Data? = nil,
     session: URLSession = .shared
   ) async throws -> CompletionResult {
     guard let config = resolveEffectiveChatConfig(from: slotResolution) else {
@@ -118,13 +183,82 @@ enum HybridChatClient {
       systemPrompt: systemPrompt,
       conversationMessages: conversationMessages,
       userMessage: userMessage,
+      imageData: imageData,
       session: session
     )
   }
 
+  private static func codexChatConfig() -> ProviderConfig? {
+    guard let config = HybridLLMClient.codexProviderConfig() else { return nil }
+    return ProviderConfig(
+      baseURL: config.baseURL,
+      model: config.model,
+      apiKey: config.apiKey,
+      providerAccountID: "chatgpt-plan",
+      providerKind: "openai_compatible",
+      slotSource: "chatgpt_plan",
+      resolutionReason: "ChatGPT plan subscription integration"
+    )
+  }
+
+  private enum ChatCompletionContent: Encodable {
+    case text(String)
+    case parts([ChatCompletionContentPart])
+
+    func encode(to encoder: Encoder) throws {
+      switch self {
+      case .text(let value):
+        var container = encoder.singleValueContainer()
+        try container.encode(value)
+      case .parts(let parts):
+        var container = encoder.singleValueContainer()
+        try container.encode(parts)
+      }
+    }
+  }
+
+  private struct ChatCompletionContentPart: Encodable {
+    private struct ImageURL: Encodable {
+      let url: String
+    }
+
+    private let type: String
+    private let text: String?
+    private let imageURL: ImageURL?
+
+    enum CodingKeys: String, CodingKey {
+      case type
+      case text
+      case imageURL = "image_url"
+    }
+
+    static func text(_ value: String) -> ChatCompletionContentPart {
+      ChatCompletionContentPart(type: "text", text: value, imageURL: nil)
+    }
+
+    static func image(_ imageData: Data) -> ChatCompletionContentPart {
+      ChatCompletionContentPart(
+        type: "image_url",
+        text: nil,
+        imageURL: ImageURL(url: "data:image/png;base64,\(imageData.base64EncodedString())")
+      )
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(type, forKey: .type)
+      if let text {
+        try container.encode(text, forKey: .text)
+      }
+      if let imageURL {
+        try container.encode(imageURL, forKey: .imageURL)
+      }
+    }
+  }
+
   private struct ChatCompletionMessage: Encodable {
     let role: String
-    let content: String
+    let content: ChatCompletionContent
   }
 
   private struct ChatCompletionRequest: Encodable {
@@ -138,6 +272,7 @@ enum HybridChatClient {
     systemPrompt: String,
     conversationMessages: [(role: String, text: String)],
     userMessage: String,
+    imageData: Data?,
     session: URLSession
   ) async throws -> CompletionResult {
     let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
@@ -146,12 +281,24 @@ enum HybridChatClient {
     }
 
     var apiMessages: [ChatCompletionMessage] = [
-      ChatCompletionMessage(role: "system", content: systemPrompt)
+      ChatCompletionMessage(role: "system", content: .text(systemPrompt))
     ]
     for turn in conversationMessages {
-      apiMessages.append(ChatCompletionMessage(role: turn.role, content: turn.text))
+      apiMessages.append(ChatCompletionMessage(role: turn.role, content: .text(turn.text)))
     }
-    apiMessages.append(ChatCompletionMessage(role: "user", content: userMessage))
+    if let imageData {
+      apiMessages.append(
+        ChatCompletionMessage(
+          role: "user",
+          content: .parts([
+            .text(userMessage),
+            .image(imageData),
+          ])
+        )
+      )
+    } else {
+      apiMessages.append(ChatCompletionMessage(role: "user", content: .text(userMessage)))
+    }
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -172,7 +319,8 @@ enum HybridChatClient {
       throw ClientError.invalidResponse
     }
     guard (200..<300).contains(http.statusCode) else {
-      throw ClientError.providerError(parseProviderErrorBody(data: data, statusCode: http.statusCode))
+      throw ClientError.providerError(
+        parseProviderErrorBody(data: data, statusCode: http.statusCode))
     }
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let choices = json["choices"] as? [[String: Any]],

@@ -33,4 +33,37 @@ final class TranscriptComparisonTests: XCTestCase {
     XCTAssertEqual(TranscriptComparison.wordErrorRate(reference: "", hypothesis: ""), 0)
     XCTAssertEqual(TranscriptComparison.wordErrorRate(reference: "", hypothesis: "extra"), 1)
   }
+
+  @MainActor
+  func testComparisonHarnessPublishesWhisperSnapshotWithoutDeepgramKey() {
+    var snapshots: [TranscriptionComparisonHarnessSnapshot] = []
+    let harness = TranscriptionComparisonHarness(
+      language: "en",
+      deepgramAPIKey: nil,
+      onSnapshot: { snapshots.append($0) }
+    )
+
+    harness.start()
+    harness.appendWhisperSegments([
+      NormalizedTranscriptSegment(
+        segmentId: "whisper-1",
+        speaker: 0,
+        speakerLabel: nil,
+        text: "hello local whisper",
+        start: 0,
+        end: 1,
+        isUser: true,
+        personId: nil,
+        translations: []
+      )
+    ])
+
+    let snapshot = try! XCTUnwrap(snapshots.last)
+    XCTAssertTrue(snapshot.isRunning)
+    XCTAssertEqual(snapshot.whisper.transcript, "hello local whisper")
+    XCTAssertEqual(snapshot.whisper.wordCount, 3)
+    XCTAssertEqual(snapshot.deepgram.status, "Missing Deepgram API key")
+    XCTAssertNotNil(snapshot.deepgram.error)
+    XCTAssertNil(snapshot.wordDifferenceRate)
+  }
 }

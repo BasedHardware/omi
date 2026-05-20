@@ -75,6 +75,17 @@ machine.
   OpenAI-compatible account if those slots lack provider accounts. Override with
   `OMI_HYBRID_DEFAULT_CHAT_BASE_URL`, `OMI_HYBRID_DEFAULT_CHAT_MODEL`, and
   `OMI_HYBRID_DEFAULT_PROVIDER_ACCOUNT_ID`.
+- Local Whisper: Settings installs through the same add-on manifest path in
+  local dev and production. Use `OMI_LOCAL_ASR_MANIFEST_URL` to point local dev
+  at fixture or staging artifacts when you want to test install/repair/update
+  flows without waiting for production hosting:
+  `OMI_LOCAL_ASR_MANIFEST_URL=file:///path/to/local-asr/manifest.json make serve-local`.
+- The Settings transcription card also has a Local Whisper Add-on control. Use
+  Install/Repair to create a managed local ASR runtime under
+  `~/Library/Application Support/Omi/LocalASR`. The production path downloads
+  Omi-hosted runtime/model artifacts from `/v1/local-asr/manifest`, verifies
+  checksums, validates the bundled helper `--capabilities` probe, and only then
+  activates the runtime.
 
 ### Manual `run.sh` launch
 
@@ -104,6 +115,15 @@ Recommended test-boundary environment:
 
 - Live transcription in local daemon mode uses on-device Apple Speech when hybrid direct STT is enabled.
   `./run.sh` injects `OMI_HYBRID_DIRECT_STT_ENABLED=1` into the bundled app `.env` for local daemon mode by default (and sets the same in the launcher environment). Disable with `OMI_HYBRID_DIRECT_STT_ENABLED=0` if you need to turn it off.
+- Local Whisper uses the bundled `local-asr-helper` plus the managed add-on
+  runtime. Build a production-shaped local fixture with `make local-asr-fixture`;
+  `make serve-local` auto-injects
+  `file:///tmp/omi-local-asr-fixture/manifest.json` when it exists. The fixture
+  keeps the app install path realistic: Settings still downloads a manifest,
+  verifies runtime/model zip checksums, extracts them, activates the managed
+  runtime, and runs the helper capability probe. Without a fixture or explicit
+  `OMI_LOCAL_ASR_MANIFEST_URL`, local daemon mode keeps the Rust backend
+  sentinel invalid so accidental cloud Rust calls still fail fast.
 
 - `OMI_LOCAL_DAEMON_URL=http://127.0.0.1:8765` makes the daemon URL explicit.
 - `OMI_PYTHON_API_URL=http://omi-cloud-invalid:9001` makes accidental Python

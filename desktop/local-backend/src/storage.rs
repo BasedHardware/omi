@@ -1234,6 +1234,14 @@ impl TranscriptRepository {
             };
         }
 
+        if let Some(existing) = self.get_by_id(&new.id)? {
+            return if transcript_matches_new(&existing, &new)? {
+                Ok(AppendTranscriptResult::Existing(existing))
+            } else {
+                Ok(AppendTranscriptResult::Conflict(existing))
+            };
+        }
+
         let now = Utc::now();
         let segment = TranscriptSegment {
             id: new.id,
@@ -1331,6 +1339,23 @@ impl TranscriptRepository {
         )
         .optional()
         .context("failed to fetch transcript segment by index")
+    }
+
+    pub fn get_by_id(&self, id: &str) -> Result<Option<TranscriptSegment>> {
+        let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
+        conn.query_row(
+            r#"
+            SELECT id, conversation_id, session_id, speaker_id, speaker_label, text, start_ms,
+                   end_ms, segment_index, source, created_at, updated_at, deleted_at, cloud_id,
+                   sync_version, sync_state, metadata_json
+            FROM transcript_segments
+            WHERE id = ?1 AND deleted_at IS NULL
+            "#,
+            params![id],
+            map_transcript_segment,
+        )
+        .optional()
+        .context("failed to fetch transcript segment by id")
     }
 
     pub fn next_segment_index(&self, conversation_id: &str) -> Result<i64> {
@@ -3188,6 +3213,62 @@ mod tests {
             metadata: Some(serde_json::json!({"source": "test"})),
         })?;
         assert!(matches!(conflict, AppendTranscriptResult::Conflict(_)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_transcript_id_across_conversations_is_conflict() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let first_conversation_id = deterministic_id("conv", &["session-duplicate-id-a"]);
+        let second_conversation_id = deterministic_id("conv", &["session-duplicate-id-b"]);
+
+        for (conversation_id, session_id) in [
+            (&first_conversation_id, "session-duplicate-id-a"),
+            (&second_conversation_id, "session-duplicate-id-b"),
+        ] {
+            store.conversations().create(NewConversation {
+                id: conversation_id.clone(),
+                session_id: session_id.to_string(),
+                title: String::new(),
+                overview: String::new(),
+                started_at: None,
+                metadata: None,
+            })?;
+        }
+
+        let shared_segment_id = "apple-hybrid-live".to_string();
+        assert!(matches!(
+            store.transcripts().append(NewTranscriptSegment {
+                id: shared_segment_id.clone(),
+                conversation_id: first_conversation_id,
+                session_id: "session-duplicate-id-a".to_string(),
+                speaker_id: Some("speaker-1".to_string()),
+                speaker_label: Some("Alice".to_string()),
+                text: "First conversation text.".to_string(),
+                start_ms: 0,
+                end_ms: 1200,
+                segment_index: 0,
+                source: None,
+                metadata: None,
+            })?,
+            AppendTranscriptResult::Inserted(_)
+        ));
+
+        let duplicate = store.transcripts().append(NewTranscriptSegment {
+            id: shared_segment_id,
+            conversation_id: second_conversation_id,
+            session_id: "session-duplicate-id-b".to_string(),
+            speaker_id: Some("speaker-1".to_string()),
+            speaker_label: Some("Alice".to_string()),
+            text: "Second conversation text.".to_string(),
+            start_ms: 0,
+            end_ms: 1200,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+        assert!(matches!(duplicate, AppendTranscriptResult::Conflict(_)));
 
         Ok(())
     }

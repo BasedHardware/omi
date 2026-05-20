@@ -149,7 +149,7 @@ actor TranscriptionStorage {
 
     /// Mark session as failed with error.
     /// No-op if the session is already completed (prevents race with concurrent completion).
-    func markSessionFailed(id: Int64, error: String) async throws {
+    func markSessionFailed(id: Int64, error: String, retryCount: Int? = nil) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
@@ -165,6 +165,9 @@ actor TranscriptionStorage {
 
             record.status = .failed
             record.lastError = error
+            if let retryCount {
+                record.retryCount = retryCount
+            }
             record.updatedAt = Date()
             try record.update(database)
         }

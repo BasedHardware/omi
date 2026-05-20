@@ -128,7 +128,8 @@ struct DesktopHomeView: View {
                 )
               }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
+            .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) {
+              notification in
               let reason = notification.userInfo?["reason"] as? String ?? ""
               appState.triggerUsageLimitPopup(reason: reason)
             }
@@ -151,7 +152,9 @@ struct DesktopHomeView: View {
               // Auto-start transcription if enabled in settings.
               // If API keys aren't loaded yet, onChange below retries.
               if settings.transcriptionEnabled && !appState.isTranscribing {
-                if APIKeyService.keysAvailable || !backgroundTranscriptionNeedsAPIKeys(settings: settings) {
+                if APIKeyService.keysAvailable
+                  || !backgroundTranscriptionNeedsAPIKeys(settings: settings)
+                {
                   log("DesktopHomeView: Auto-starting transcription")
                   appState.startTranscription()
                 } else {
@@ -232,7 +235,9 @@ struct DesktopHomeView: View {
             ) { _ in
               // Cooldown: only refresh conversations if last activation was 60+ seconds ago
               let now = Date()
-              if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
+              if PollingConfig.shouldAllowActivationRefresh(
+                now: now, lastRefresh: lastActivationRefresh)
+              {
                 lastActivationRefresh = now
                 Task { await appState.refreshConversations() }
               }
@@ -736,6 +741,16 @@ struct DesktopHomeView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
       selectedSettingsSection = .advanced
+      withAnimation(.easeInOut(duration: 0.2)) {
+        selectedIndex = SidebarNavItem.settings.rawValue
+      }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToTranscriptionSettings)) {
+      notification in
+      selectedSettingsSection = .transcription
+      highlightedSettingId =
+        notification.userInfo?["highlightedSettingId"] as? String
+        ?? "transcription.localWhisperAddon"
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }

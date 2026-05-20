@@ -915,7 +915,8 @@ extension APIClient {
     let _: LocalTranscriptSegmentEnvelope = try await post(
       "v1/conversations/\(conversationId)/transcript-segments",
       body: Request(
-        id: segment.segmentId,
+        // Provider segment ids are local to their source; let the local daemon mint durable ids.
+        id: nil,
         speakerId: String(segment.speaker),
         speakerLabel: segment.speakerLabel,
         text: segment.text,

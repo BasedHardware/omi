@@ -431,7 +431,7 @@ async fn append_transcript_segment(
         }
         AppendTranscriptResult::Conflict(_) => {
             return Err(ApiError::conflict(
-                "transcript segment already exists with different content at this index",
+                "transcript segment already exists with different content or id",
             ));
         }
     };

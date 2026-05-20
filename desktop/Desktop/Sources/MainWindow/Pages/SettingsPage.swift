@@ -189,6 +189,8 @@ struct SettingsContentView: View {
   @State private var rawTranscriptionHistory: [TranscriptionSessionWithSegments] = []
   @State private var isLoadingRawTranscriptionHistory = false
   @State private var rawTranscriptionHistoryError: String?
+  @AppStorage(TranscriptionComparisonHarness.enabledDefaultsKey)
+  private var transcriptionComparisonHarnessEnabled = false
   @State private var chatMessageCount: Int?
   @State private var isLoadingChatMessages = false
   @State private var showProfileAndStats = false
@@ -283,6 +285,9 @@ struct SettingsContentView: View {
   @State private var vadGateEnabled: Bool = false
   @State private var transcriptionProviderSelection: TranscriptionProviderSelection
   @State private var localTranscriptionCapabilities: LocalTranscriptionCapabilities
+  @State private var localASRAddonStatus: LocalASRAddonStatus
+  @State private var isInstallingLocalASRAddon = false
+  @State private var localASRAddonMessage: String?
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -455,6 +460,7 @@ struct SettingsContentView: View {
     _transcriptionProviderSelection = State(initialValue: settings.transcriptionProviderSelection)
     _localTranscriptionCapabilities = State(
       initialValue: SettingsContentView.detectLocalTranscriptionCapabilities())
+    _localASRAddonStatus = State(initialValue: LocalASRAddonManager.status())
   }
 
   /// Computed status text for notifications
@@ -523,7 +529,8 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
-      localTranscriptionCapabilities = SettingsContentView.detectLocalTranscriptionCapabilities()
+      refreshLocalTranscriptionCapabilities()
+      refreshLocalASRAddonStatus()
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
@@ -555,6 +562,13 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .navigateToTranscriptionSettings)) {
+      notification in
+      selectedSection = .transcription
+      highlightedSettingId =
+        notification.userInfo?["highlightedSettingId"] as? String
+        ?? "transcription.localWhisperAddon"
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
@@ -1133,8 +1147,15 @@ struct SettingsContentView: View {
                 .fill(OmiColors.warning.opacity(0.1))
             )
           }
+
+          localASRAddonControls
         }
       }
+
+      localTranscriptionDebugPanel
+      #if DEBUG
+        transcriptionComparisonHarnessPanel
+      #endif
 
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
@@ -1452,6 +1473,38 @@ struct SettingsContentView: View {
     ).detect()
   }
 
+  private static func refreshLocalTranscriptionCapabilities() async
+    -> LocalTranscriptionCapabilities
+  {
+    let engines = await LocalASRHelperLocator.refreshDetectedEngines()
+    return LocalTranscriptionCapabilityDetector(availableEngines: { engines }).detect()
+  }
+
+  private func refreshLocalTranscriptionCapabilities() {
+    Task {
+      let engines = await LocalASRHelperLocator.refreshDetectedEngines()
+      let capabilities = LocalTranscriptionCapabilityDetector(availableEngines: { engines })
+        .detect()
+      let addonStatus = LocalASRAddonManager.status(afterCapabilityProbe: engines)
+      await MainActor.run {
+        localTranscriptionCapabilities = capabilities
+        localASRAddonStatus = addonStatus
+      }
+    }
+  }
+
+  private func refreshLocalASRAddonStatus() {
+    Task {
+      let status = await LocalASRAddonManager.refreshStatusAgainstRemote()
+      await MainActor.run {
+        if case .repairRequired = localASRAddonStatus.state {
+          return
+        }
+        localASRAddonStatus = status
+      }
+    }
+  }
+
   private var resolvedTranscriptionProvider: TranscriptionProviderPolicyResult {
     TranscriptionProviderPolicy().resolve(
       selection: transcriptionProviderSelection,
@@ -1479,6 +1532,292 @@ struct SettingsContentView: View {
 
   private var transcriptionProviderStatusColor: Color {
     resolvedTranscriptionProvider.usesLocal ? OmiColors.success : OmiColors.textTertiary
+  }
+
+  private var localASRAddonControls: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .top, spacing: 10) {
+        Image(
+          systemName: localASRAddonStatus.isInstalled
+            ? "checkmark.seal.fill" : "arrow.down.circle"
+        )
+        .scaledFont(size: 14)
+        .foregroundColor(
+          localASRAddonStatus.isInstalled ? OmiColors.success : OmiColors.textSecondary
+        )
+        .frame(width: 18)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Local Whisper Add-on")
+            .scaledFont(size: 13, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+
+          Text(localASRAddonStatus.pythonPath ?? localASRAddonStatus.detail)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(2)
+            .truncationMode(.middle)
+        }
+
+        Spacer(minLength: 12)
+
+        if isInstallingLocalASRAddon {
+          ProgressView()
+            .controlSize(.small)
+        } else {
+          Button(localASRAddonPrimaryActionTitle) {
+            installLocalASRAddon()
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+          .disabled(!localASRAddonStatus.isActionableInstall)
+
+          if localASRAddonStatus.isInstalled {
+            Button("Remove") {
+              removeLocalASRAddon()
+            }
+            .buttonStyle(.bordered)
+          }
+        }
+      }
+
+      if let localASRAddonMessage {
+        Text(localASRAddonMessage)
+          .scaledFont(size: 11)
+          .foregroundColor(
+            localASRAddonMessage.hasPrefix("Installed") ? OmiColors.success : OmiColors.warning
+          )
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .modifier(
+      SettingHighlightModifier(
+        settingId: "transcription.localWhisperAddon",
+        highlightedSettingId: $highlightedSettingId
+      )
+    )
+    .padding(10)
+    .background(
+      RoundedRectangle(cornerRadius: 8)
+        .fill(OmiColors.backgroundSecondary.opacity(0.7))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8)
+            .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+        )
+    )
+  }
+
+  private var localTranscriptionDebugPanel: some View {
+    settingsCard(settingId: "transcription.rawdebug") {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .center, spacing: 12) {
+          Image(systemName: "text.magnifyingglass")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Raw Local Transcription")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Recent locally persisted sessions and raw segment text")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Button {
+            Task { await loadRawTranscriptionHistory() }
+          } label: {
+            HStack(spacing: 6) {
+              if isLoadingRawTranscriptionHistory {
+                ProgressView().controlSize(.mini)
+              } else {
+                Image(systemName: "arrow.clockwise")
+                  .scaledFont(size: 12, weight: .semibold)
+              }
+              Text("Refresh")
+                .scaledFont(size: 13, weight: .medium)
+            }
+          }
+          .buttonStyle(.plain)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(OmiColors.backgroundSecondary)
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .disabled(isLoadingRawTranscriptionHistory)
+        }
+
+        if let rawTranscriptionHistoryError {
+          Text(rawTranscriptionHistoryError)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.warning)
+        } else if rawTranscriptionHistory.isEmpty {
+          Text(
+            "No local transcription sessions found yet. Start local background transcription, then refresh this panel."
+          )
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+        } else {
+          VStack(alignment: .leading, spacing: 10) {
+            ForEach(rawTranscriptionHistory.prefix(3).indices, id: \.self) { index in
+              rawTranscriptionHistoryRow(rawTranscriptionHistory[index])
+            }
+          }
+        }
+      }
+      .task {
+        if rawTranscriptionHistory.isEmpty && rawTranscriptionHistoryError == nil {
+          await loadRawTranscriptionHistory()
+        }
+      }
+    }
+  }
+
+  #if DEBUG
+    private var transcriptionComparisonHarnessPanel: some View {
+      settingsCard(settingId: "transcription.comparisonharness") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "rectangle.split.2x1")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Whisper vs Deepgram Harness")
+                .scaledFont(size: 15, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text("Development-only side-by-side output for local background capture")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $transcriptionComparisonHarnessEnabled)
+              .toggleStyle(.switch)
+              .disabled(appState.isTranscribing)
+          }
+
+          if appState.isTranscribing && transcriptionComparisonHarnessEnabled {
+            Text("Stop and restart local background transcription after changing this toggle.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          let snapshot = appState.transcriptionComparisonSnapshot
+          if transcriptionComparisonHarnessEnabled {
+            HStack(spacing: 8) {
+              comparisonMetricChip(
+                title: "Word diff",
+                value: formattedComparisonRate(snapshot.wordDifferenceRate)
+              )
+              comparisonMetricChip(
+                title: "Char diff",
+                value: formattedComparisonRate(snapshot.characterDifferenceRate)
+              )
+              Spacer()
+              Text(snapshot.isRunning ? "Running" : "Idle")
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(snapshot.isRunning ? OmiColors.success : OmiColors.textTertiary)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+              comparisonProviderColumn(snapshot.whisper)
+              comparisonProviderColumn(snapshot.deepgram)
+            }
+          } else {
+            Text(
+              "Enable this, select a local background transcription provider, then start recording."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    }
+
+    private func comparisonMetricChip(title: String, value: String) -> some View {
+      HStack(spacing: 6) {
+        Text(title)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        Text(value)
+          .scaledMonospacedFont(size: 11, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      .padding(.horizontal, 8)
+      .padding(.vertical, 5)
+      .background(OmiColors.backgroundSecondary.opacity(0.8))
+      .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func comparisonProviderColumn(
+      _ provider: TranscriptionComparisonProviderSnapshot
+    ) -> some View {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
+          Text(provider.title)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Spacer()
+          Text(provider.status)
+            .scaledFont(size: 10, weight: .medium)
+            .foregroundColor(provider.error == nil ? OmiColors.textTertiary : OmiColors.warning)
+        }
+
+        HStack(spacing: 8) {
+          Text("\(provider.segmentCount) segments")
+          Text("\(provider.wordCount) words")
+        }
+        .scaledFont(size: 10)
+        .foregroundColor(OmiColors.textTertiary)
+
+        if let error = provider.error {
+          Text(error)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.warning)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Text(provider.transcript.isEmpty ? "(waiting for transcript)" : provider.transcript)
+          .scaledMonospacedFont(size: 11)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(10)
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+          .padding(10)
+          .background(OmiColors.backgroundSecondary.opacity(0.8))
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+      }
+      .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func formattedComparisonRate(_ value: Double?) -> String {
+      guard let value else { return "n/a" }
+      return "\(Int((value * 100).rounded()))%"
+    }
+  #endif
+
+  private var localASRAddonPrimaryActionTitle: String {
+    switch localASRAddonStatus.state {
+    case .updateAvailable:
+      return "Update"
+    case .repairRequired:
+      return "Repair"
+    case .installed(_, let models):
+      let required = LocalASRAddonManager.initialModel(for: transcriptionProviderSelection.quality)
+      return models.contains(required) ? "Repair" : "Install Model"
+    case .notInstalled:
+      return "Install"
+    case .installing:
+      return "Installing"
+    case .unsupported:
+      return "Unavailable"
+    }
   }
 
   private func transcriptionProviderOption(
@@ -1537,6 +1876,59 @@ struct SettingsContentView: View {
     transcriptionProviderSelection = selection
     AssistantSettings.shared.transcriptionProviderSelection = selection
     restartTranscriptionIfNeeded()
+  }
+
+  private func installLocalASRAddon() {
+    guard !isInstallingLocalASRAddon else { return }
+    isInstallingLocalASRAddon = true
+    localASRAddonMessage = "Installing local Whisper runtime..."
+    let startingStatus = localASRAddonStatus
+    let requiredModel = LocalASRAddonManager.initialModel(
+      for: transcriptionProviderSelection.quality)
+
+    Task {
+      do {
+        let reportProgress: LocalASRAddonManager.ProgressHandler = { progress in
+          localASRAddonMessage =
+            progress.fraction.map { "\(progress.label) \(Int($0 * 100))%" } ?? progress.label
+        }
+        let status: LocalASRAddonStatus
+        if case .installed(_, let models) = startingStatus.state, !models.contains(requiredModel) {
+          status = try await LocalASRAddonManager.installModel(
+            for: transcriptionProviderSelection.quality,
+            progress: reportProgress
+          )
+        } else {
+          status = try await LocalASRAddonManager.install(
+            quality: transcriptionProviderSelection.quality,
+            progress: reportProgress
+          )
+        }
+        let capabilities = await SettingsContentView.refreshLocalTranscriptionCapabilities()
+        await MainActor.run {
+          localASRAddonStatus = status
+          localTranscriptionCapabilities = capabilities
+          localASRAddonMessage = "Installed local Whisper add-on."
+          isInstallingLocalASRAddon = false
+        }
+      } catch {
+        await MainActor.run {
+          localASRAddonStatus = LocalASRAddonManager.status()
+          localASRAddonMessage = error.localizedDescription
+          isInstallingLocalASRAddon = false
+        }
+      }
+    }
+  }
+
+  private func removeLocalASRAddon() {
+    do {
+      localASRAddonStatus = try LocalASRAddonManager.remove()
+      refreshLocalTranscriptionCapabilities()
+      localASRAddonMessage = "Removed local Whisper add-on."
+    } catch {
+      localASRAddonMessage = error.localizedDescription
+    }
   }
 
   // MARK: - Notifications Section
@@ -2101,7 +2493,8 @@ struct SettingsContentView: View {
 
         hybridSlotEditorBlock(
           title: "Proactive assistants",
-          subtitle: "Local assistant jobs; defaults to \(HybridProviderReadiness.defaultSmallModel())",
+          subtitle:
+            "Local assistant jobs; defaults to \(HybridProviderReadiness.defaultSmallModel())",
           model: $hybridEmbedModel,
           slot: HybridProviderPolicy.proactiveSlot
         )
@@ -2163,7 +2556,11 @@ struct SettingsContentView: View {
           testHybridProviderSlot(slot)
         }
         .buttonStyle(.bordered)
-        .disabled(isTestingHybridProvider || (optional && model.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+        .disabled(
+          isTestingHybridProvider
+            || (optional
+              && model.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        )
       }
     }
   }
@@ -3519,8 +3916,6 @@ struct SettingsContentView: View {
       preferencesSubsection
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
-      advancedCategoryHeader(title: "ChatGPT plan", icon: "bubble.left.and.bubble.right")
-      chatGPTPlanSubsection
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
@@ -3561,65 +3956,6 @@ struct SettingsContentView: View {
         }
       }
 
-      settingsCard(settingId: "advanced.devtools.rawtranscription") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 12) {
-            Image(systemName: "waveform.badge.magnifyingglass")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Raw Transcription History")
-                .scaledFont(size: 15, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-              Text("Inspect locally persisted sessions and segment text from background capture")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            Spacer()
-            Button {
-              Task { await loadRawTranscriptionHistory() }
-            } label: {
-              HStack(spacing: 6) {
-                if isLoadingRawTranscriptionHistory {
-                  ProgressView().controlSize(.mini)
-                } else {
-                  Image(systemName: "arrow.clockwise")
-                    .scaledFont(size: 12, weight: .semibold)
-                }
-                Text("Refresh")
-                  .scaledFont(size: 13, weight: .medium)
-              }
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(OmiColors.backgroundSecondary)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .disabled(isLoadingRawTranscriptionHistory)
-          }
-
-          if let rawTranscriptionHistoryError {
-            Text(rawTranscriptionHistoryError)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.warning)
-          } else if rawTranscriptionHistory.isEmpty {
-            Text("No local transcription sessions found yet.")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
-          } else {
-            VStack(alignment: .leading, spacing: 10) {
-              ForEach(rawTranscriptionHistory.indices, id: \.self) { index in
-                rawTranscriptionHistoryRow(rawTranscriptionHistory[index])
-              }
-            }
-          }
-        }
-        .task {
-          if rawTranscriptionHistory.isEmpty && rawTranscriptionHistoryError == nil {
-            await loadRawTranscriptionHistory()
-          }
-        }
-      }
     }
   }
 
@@ -3727,6 +4063,8 @@ struct SettingsContentView: View {
           }
         }
       }
+
+      chatGPTPlanSubsection
 
       settingsCard(settingId: "aichat.workspace") {
         VStack(alignment: .leading, spacing: 12) {
@@ -5699,10 +6037,13 @@ struct SettingsContentView: View {
 
   private var chatGPTPlanSubsection: some View {
     VStack(spacing: 20) {
-      settingsCard(settingId: "advanced.chatgpt.info") {
+      settingsCard(settingId: "aichat.chatgpt.info") {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 10) {
-            Image(systemName: codexAuthStore.isActive ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark")
+            Image(
+              systemName: codexAuthStore.isActive
+                ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark"
+            )
               .foregroundColor(codexAuthStore.isActive ? OmiColors.success : OmiColors.textTertiary)
             Text(codexAuthStore.isActive ? "ChatGPT plan active" : "Use your ChatGPT subscription")
               .scaledFont(size: 14, weight: .semibold)
@@ -5716,7 +6057,9 @@ struct SettingsContentView: View {
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
           if codexProxyService.isRunning {
-            Text("Proxy: \(CodexProxyService.defaultBaseURL)")
+            Text(
+              "Active provider: \(HybridChatClient.currentRoute().displayName) via \(CodexProxyService.defaultBaseURL)"
+            )
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.success)
           } else if codexAuthStore.isEnrolled, let proxyError = codexProxyService.lastError {
@@ -5732,7 +6075,7 @@ struct SettingsContentView: View {
       }
 
       if let codexEnrollmentError {
-        settingsCard(settingId: "advanced.chatgpt.error") {
+        settingsCard(settingId: "aichat.chatgpt.error") {
           HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
               .foregroundColor(OmiColors.warning)
@@ -6811,7 +7154,8 @@ struct SettingsContentView: View {
     {
       return "\(account.displayName ?? account.id) / \(resolved.modelID)"
     }
-    return "Deterministic fallback; post-transcript defaults to \(HybridProviderReadiness.defaultSmallModel()) until a provider account is configured"
+    return
+      "Deterministic fallback; post-transcript defaults to \(HybridProviderReadiness.defaultSmallModel()) until a provider account is configured"
   }
 
   private func backendStatusRow(title: String, value: String) -> some View {

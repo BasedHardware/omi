@@ -48,6 +48,7 @@ class PushToTalkManager: ObservableObject {
   private var currentContextSnapshot: PTTContextSnapshot?
   private var contextCaptureTask: Task<Void, Never>?
   private var currentTranscriptionProvider: TranscriptionProviderKind = .cloud
+  private var shortcutCaptureSuspended = false
 
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
@@ -72,6 +73,14 @@ class PushToTalkManager: ObservableObject {
     audioCaptureService = nil
     removeEventMonitors()
     log("PushToTalkManager: cleanup complete")
+  }
+
+  func setShortcutCaptureSuspended(_ suspended: Bool) {
+    shortcutCaptureSuspended = suspended
+    if suspended, state != .idle {
+      stopListening()
+      state = .idle
+    }
   }
 
   // MARK: - Event Monitors
@@ -115,6 +124,7 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Shortcut Handling
 
   private func handleShortcutEvent(_ event: NSEvent) {
+    guard !shortcutCaptureSuspended else { return }
     guard ShortcutSettings.shared.pttEnabled else { return }
     let shortcut = ShortcutSettings.shared.pttShortcut
 

@@ -157,6 +157,104 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
   }
 }
 
+final class LocalASRAddonManifestTests: XCTestCase {
+  func testRemoteManifestParsesRuntimeAndModels() throws {
+    let json = """
+      {
+        "version": 1,
+        "runtime": {
+          "version": "2026.05.20",
+          "platform": "macos",
+          "arch": "arm64",
+          "url": "https://example.com/runtime.zip",
+          "sha256": "abc123",
+          "size_bytes": 123456,
+          "minimum_app_version": "0.2.0"
+        },
+        "models": [
+          {
+            "model": "small",
+            "version": "mlx-2026.05.20",
+            "url": "https://example.com/model-small.zip",
+            "sha256": "def456",
+            "size_bytes": 654321
+          },
+          {
+            "model": "large_v3_turbo",
+            "version": "mlx-2026.05.20",
+            "url": "https://example.com/model-large.zip",
+            "sha256": "fed654",
+            "size_bytes": 987654
+          }
+        ]
+      }
+      """.data(using: .utf8)!
+
+    let manifest = try JSONDecoder.localASRAddon.decode(
+      LocalASRAddonRemoteManifest.self, from: json)
+
+    XCTAssertEqual(manifest.version, 1)
+    XCTAssertEqual(manifest.runtime.platform, "macos")
+    XCTAssertEqual(manifest.runtime.arch, "arm64")
+    XCTAssertEqual(manifest.runtime.sizeBytes, 123456)
+    XCTAssertEqual(manifest.runtime.minimumAppVersion, "0.2.0")
+    XCTAssertEqual(manifest.models.map(\.model), [.small, .largeV3Turbo])
+  }
+
+  func testInstalledManifestRoundTripsManagedState() throws {
+    let installedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    let manifest = LocalASRAddonInstalledManifest(
+      schemaVersion: 1,
+      runtimeVersion: "2026.05.20",
+      runtimeSha256: "runtime-sha",
+      pythonPath: "/tmp/Omi/LocalASR/runtime/bin/python3",
+      installedAt: installedAt,
+      models: [
+        LocalASRAddonInstalledManifest.InstalledModel(
+          model: .small,
+          version: "mlx-2026.05.20",
+          sha256: "model-sha",
+          path: "/tmp/Omi/LocalASR/models/small",
+          installedAt: installedAt
+        )
+      ]
+    )
+
+    let encoded = try JSONEncoder.localASRAddon.encode(manifest)
+    let decoded = try JSONDecoder.localASRAddon.decode(
+      LocalASRAddonInstalledManifest.self, from: encoded)
+
+    XCTAssertEqual(decoded, manifest)
+  }
+
+  func testInitialModelUsesBaseForFastPreset() {
+    XCTAssertEqual(LocalASRAddonManager.initialModel(for: .fast), .base)
+  }
+
+  func testLocalDevManifestMessageExplainsSentinelRustBackend() {
+    let message = LocalASRAddonManager.localDevManifestConfigurationMessage(
+      modeValue: "local",
+      rustBackendURL: "http://omi-rust-invalid:9002/",
+      manifestOverride: nil
+    )
+
+    XCTAssertEqual(
+      message,
+      "Local Whisper add-on manifest is not configured for local dev. Run `make local-asr-fixture`, or set OMI_LOCAL_ASR_MANIFEST_URL."
+    )
+  }
+
+  func testLocalDevManifestMessageAllowsExplicitOverride() {
+    let message = LocalASRAddonManager.localDevManifestConfigurationMessage(
+      modeValue: "local",
+      rustBackendURL: "http://omi-rust-invalid:9002/",
+      manifestOverride: "file:///tmp/omi-local-asr-fixture/manifest.json"
+    )
+
+    XCTAssertNil(message)
+  }
+}
+
 final class SpeakerSegmentReducerTests: XCTestCase {
   func testReducerAddsUpdatesAndPreservesTranslations() {
     var reducer = SpeakerSegmentReducer(maxInMemorySegments: 10)
@@ -772,7 +870,9 @@ final class LocalBackgroundLifecycleTests: XCTestCase {
   }
 
   func testLocalConversationTitleUsesDeterministicTranscriptPrefix() {
-    XCTAssertEqual(AppState.localConversationTitle(from: "  hello   local background  "), "hello local background")
+    XCTAssertEqual(
+      AppState.localConversationTitle(from: "  hello   local background  "),
+      "hello local background")
     XCTAssertEqual(AppState.localConversationTitle(from: "   "), "Local transcription")
   }
 

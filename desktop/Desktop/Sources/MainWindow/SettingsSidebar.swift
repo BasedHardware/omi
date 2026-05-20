@@ -165,7 +165,8 @@ struct SettingsSearchItem: Identifiable {
       settingId: "planusage.current"),
     SettingsSearchItem(
       name: "Upgrade Plan", subtitle: "Buy Operator or Architect",
-      keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"], section: .planUsage,
+      keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"],
+      section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
 
     // About
@@ -210,8 +211,14 @@ struct SettingsSearchItem: Identifiable {
       settingId: "advanced.stats"),
     SettingsSearchItem(
       name: "AI Provider", subtitle: "Choose between your omi account and Claude for desktop chat",
-      keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode"], section: .advanced,
+      keywords: ["provider", "agent sdk", "claude code", "acp", "bridge mode", "chatgpt", "codex"],
+      section: .advanced,
       icon: "cpu", settingId: "aichat.provider"),
+    SettingsSearchItem(
+      name: "ChatGPT Plan", subtitle: "Connect your ChatGPT subscription for desktop AI",
+      keywords: ["chatgpt", "codex", "subscription", "provider", "proxy", "openai"],
+      section: .advanced,
+      icon: "cpu", settingId: "aichat.chatgpt.info"),
     SettingsSearchItem(
       name: "Workspace", subtitle: "Set a project directory for desktop chat context",
       keywords: ["workspace", "project", "directory", "folder", "working directory"],

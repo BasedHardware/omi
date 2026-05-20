@@ -212,6 +212,9 @@ class AppState: ObservableObject {
   private var localBackgroundASRTask: Task<Void, Never>?
   private(set) var localBackgroundState: LocalBackgroundSessionState?
   private var localBackgroundSampleCursor: Int64 = 0
+  @Published private(set) var transcriptionComparisonSnapshot =
+    TranscriptionComparisonHarnessSnapshot.idle
+  private var transcriptionComparisonHarness: TranscriptionComparisonHarness?
   private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
   private var audioMixer: AudioMixer?
   private var vadGateService: VADGateService?
@@ -1257,6 +1260,16 @@ class AppState: ObservableObject {
     alert.runModal()
   }
 
+  private func openLocalTranscriptionRepair(message: String) {
+    log("Transcription: \(message)")
+    NSApp.activate(ignoringOtherApps: true)
+    NotificationCenter.default.post(
+      name: .navigateToTranscriptionSettings,
+      object: nil,
+      userInfo: ["highlightedSettingId": "transcription.localWhisperAddon"]
+    )
+  }
+
   // MARK: - Transcription
 
   /// Toggle transcription on/off
@@ -1293,11 +1306,7 @@ class AppState: ObservableObject {
       let message =
         backgroundRouting.unsupportedLocalReason
         ?? "Local background transcription is selected and will not use the cloud listen path."
-      log("Transcription: \(message)")
-      showAlert(
-        title: "Local Background Transcription",
-        message: message
-      )
+      openLocalTranscriptionRepair(message: message)
       return
     }
 
@@ -1454,7 +1463,8 @@ class AppState: ObservableObject {
   }
 
   /// Start local background transcription without creating a backend `/v4/listen` session.
-  private func startLocalBackgroundTranscription(source: AudioSource, plan: LocalTranscriptionPlan) {
+  private func startLocalBackgroundTranscription(source: AudioSource, plan: LocalTranscriptionPlan)
+  {
     guard source == .microphone else {
       showAlert(
         title: "Local Background Transcription",
@@ -1472,7 +1482,7 @@ class AppState: ObservableObject {
       let message = "Local transcription helper is not available."
       log("Transcription: \(message)")
       localBackgroundState = .failed
-      showAlert(title: "Local Background Transcription", message: message)
+      openLocalTranscriptionRepair(message: message)
       return
     }
 
@@ -1482,6 +1492,7 @@ class AppState: ObservableObject {
       plan: plan,
       executableURL: executableURL
     )
+    startTranscriptionComparisonHarnessIfNeeded(language: effectiveLanguage)
     localBackgroundState = .recording
     localBackgroundSampleCursor = 0
     currentConversationSource = .desktop
@@ -1545,10 +1556,34 @@ class AppState: ObservableObject {
     }
   }
 
+  private func startTranscriptionComparisonHarnessIfNeeded(language: String) {
+    guard TranscriptionComparisonHarness.isEnabled else {
+      transcriptionComparisonHarness = nil
+      transcriptionComparisonSnapshot = .idle
+      return
+    }
+
+    let harness = TranscriptionComparisonHarness(
+      language: language,
+      deepgramAPIKey: TranscriptionComparisonHarness.configuredDeepgramAPIKey(),
+      onSnapshot: { [weak self] snapshot in
+        Task { @MainActor in
+          self?.transcriptionComparisonSnapshot = snapshot
+        }
+      }
+    )
+    transcriptionComparisonHarness = harness
+    transcriptionComparisonSnapshot = harness.snapshot
+    harness.start()
+    log("Transcription: Started development Whisper/Deepgram comparison harness")
+  }
+
   private func initializeOptionalSystemAudioCapture() {
     let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
     if systemAudioDisabled {
-      log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+      log(
+        "Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)"
+      )
     } else if #available(macOS 14.4, *) {
       systemAudioCaptureService = SystemAudioCaptureService()
       log("Transcription: System audio capture initialized (macOS 14.4+)")
@@ -1643,6 +1678,7 @@ class AppState: ObservableObject {
       let startTime = Double(localBackgroundSampleCursor) / 16_000.0
       localBackgroundSampleCursor += Int64(monoMixed.count / 2)
       let ingest = localBackgroundSession.append(pcmData: monoMixed, startTime: startTime)
+      transcriptionComparisonHarness?.appendAudio(monoMixed)
       if !ingest.droppedChunks.isEmpty {
         log("Transcription: Local background dropped \(ingest.droppedChunks.count) stale chunks")
       }
@@ -1696,6 +1732,7 @@ class AppState: ObservableObject {
     totalSegmentCount = speakerSegmentReducer.totalSegmentCount
     totalWordCount = speakerSegmentReducer.totalWordCount
     LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+    transcriptionComparisonHarness?.appendWhisperSegments(normalizedSegments)
 
     if let sessionId = currentSessionId {
       Task {
@@ -1894,7 +1931,8 @@ class AppState: ObservableObject {
             "Transcription: Local daemon finalized stop session \(sid) via upload pipeline (or queued retry)"
           )
         } catch {
-          logError("Transcription: Local daemon finalize-after-stop failed for \(sid)", error: error)
+          logError(
+            "Transcription: Local daemon finalize-after-stop failed for \(sid)", error: error)
         }
         await loadConversations()
         return
@@ -1955,6 +1993,7 @@ class AppState: ObservableObject {
 
     stopAudioCapture()
     _ = localBackgroundSession?.finishInput()
+    transcriptionComparisonHarness?.finish()
     drainLocalBackgroundASRQueue()
 
     Task {
@@ -2031,6 +2070,8 @@ class AppState: ObservableObject {
     localBackgroundSession = nil
     localBackgroundASRTask = nil
     localBackgroundSampleCursor = 0
+    transcriptionComparisonHarness?.stop()
+    transcriptionComparisonHarness = nil
     AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
     totalSegmentCount = 0
     totalWordCount = 0
@@ -2040,7 +2081,8 @@ class AppState: ObservableObject {
   }
 
   nonisolated static func localConversationTitle(from transcript: String) -> String {
-    let normalized = transcript
+    let normalized =
+      transcript
       .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !normalized.isEmpty else { return "Local transcription" }
@@ -2211,7 +2253,8 @@ class AppState: ObservableObject {
           )
         }
       } catch {
-        logError("Transcription: Local daemon finalize failed for session \(sessionId)", error: error)
+        logError(
+          "Transcription: Local daemon finalize failed for session \(sessionId)", error: error)
         return .error(error.localizedDescription)
       }
     }
@@ -2397,7 +2440,8 @@ class AppState: ObservableObject {
 
     do {
       let fetchedConversations = try await conversationsTask
-      conversations = mergeLocalOnlyConversations(cachedLocalConversations, with: fetchedConversations)
+      conversations = mergeLocalOnlyConversations(
+        cachedLocalConversations, with: fetchedConversations)
       log(
         "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(showStarredOnly), date=\(selectedDateFilter?.description ?? "nil"))"
       )
@@ -3493,6 +3537,8 @@ extension Notification.Name {
   static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
   /// Posted to navigate to AI Chat settings
   static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
+  /// Posted to navigate to Transcription settings
+  static let navigateToTranscriptionSettings = Notification.Name("navigateToTranscriptionSettings")
   /// Posted when a new Rewind frame is captured (for live frame count updates)
   static let rewindFrameCaptured = Notification.Name("rewindFrameCaptured")
   /// Posted when Rewind page finishes loading initial data

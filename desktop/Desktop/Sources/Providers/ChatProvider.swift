@@ -196,6 +196,26 @@ enum ToolCallStatus {
     case completed
 }
 
+private actor SQLToolUsageStats {
+    private var rowsReturned = 0
+    private var queryCount = 0
+
+    func record(toolName: String, result: String) {
+        guard toolName == "execute_sql" else { return }
+
+        queryCount += 1
+        // Parse row count from result (format: "\nN row(s)" at end)
+        if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
+            let numStr = result[match].components(separatedBy: " ").first ?? "0"
+            rowsReturned += Int(numStr) ?? 0
+        }
+    }
+
+    func snapshot() -> (rowsReturned: Int, queryCount: Int) {
+        (rowsReturned, queryCount)
+    }
+}
+
 // MARK: - Chat Message Model
 
 /// Metadata about the context and resources used to generate an AI response
@@ -2443,10 +2463,13 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             return
         }
 
+        let providerRoute = HybridChatClient.currentRoute()
+        let usesOmiMeteredBridge = isUsingOmiAccountProvider && !providerRoute.usesDirectProvider
+
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
-        // Block the send, surface the popup, and let the user upgrade.
+        // Block metered Omi bridge sends, surface the popup, and let the user upgrade.
         let usageLimiter = FloatingBarUsageLimiter.shared
-        if isUsingOmiAccountProvider {
+        if usesOmiMeteredBridge {
             if usageLimiter.isLimitReached {
                 log("ChatProvider: sendMessage blocked — free-tier monthly chat limit reached")
                 errorMessage = "You've reached \(usageLimiter.limitDescription). Upgrade to keep chatting."
@@ -2460,11 +2483,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             usageLimiter.recordQuery()
         }
 
-        let mayUseHybridDirectChat = HybridChatClient.isEnabled()
-
-        // Ensure Claude / ACP bridge when not using hybrid direct chat. Hybrid path may
+        // Ensure Claude / ACP bridge when not using a direct provider. Direct paths may
         // skip the bridge until multimodal attachments require ACP.
-        if !mayUseHybridDirectChat {
+        if !providerRoute.usesDirectProvider {
             guard await ensureBridgeStarted() else {
                 errorMessage = "AI not available"
                 return
@@ -2472,7 +2493,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
 
         // Show upgrade prompt if over threshold but don't block the message
-        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
+        if usesOmiMeteredBridge && omiAICumulativeCostUsd >= 50.0 {
             showOmiThresholdAlert = true
         }
 
@@ -2605,8 +2626,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         let queryStartTime = Date()
         var toolNames: [String] = []
         var toolStartTimes: [String: Date] = [:]
-        var sqlRowsReturned = 0
-        var sqlQueryCount = 0
+        let sqlToolUsageStats = SQLToolUsageStats()
         var hybridResolvedModel: String?
         var hybridProviderAccountId: String?
         var hybridProviderKind: String?
@@ -2614,7 +2634,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         var hybridSlotReason: String?
 
         do {
-            if mayUseHybridDirectChat {
+            if providerRoute.usesDirectProvider {
                 await preparePromptContextIfNeeded()
                 if !isOnboarding {
                     cachedMainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
@@ -2662,13 +2682,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 }
             }
 
-            let useHybridNow =
-                mayUseHybridDirectChat && effectiveImageData == nil
+            let useDirectProviderNow =
+                providerRoute.usesDirectProvider
+                && (effectiveImageData == nil || providerRoute.supportsInlineImages)
                 && !attachmentsForMessage.contains(where: { $0.isImage })
 
             let queryResult: AgentBridge.QueryResult
 
-            if useHybridNow {
+            if useDirectProviderNow {
                 let historyPairs: [(role: String, text: String)] =
                     messages
                     .dropLast(2)
@@ -2679,10 +2700,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                             text: msg.text
                         )
                     }
-                let hybrid = try await HybridChatClient.completeFromDaemonSettings(
+                let hybrid = try await HybridChatClient.completeWithActiveDirectProvider(
                     systemPrompt: systemPrompt,
                     conversationMessages: historyPairs,
-                    userMessage: trimmedText
+                    userMessage: trimmedText,
+                    imageData: providerRoute.supportsInlineImages ? effectiveImageData : nil
                 )
                 hybridResolvedModel = hybrid.model
                 hybridProviderAccountId = hybrid.providerAccountID
@@ -2700,7 +2722,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     cacheWriteTokens: 0
                 )
             } else {
-                if mayUseHybridDirectChat && !useHybridNow {
+                if providerRoute.usesDirectProvider && !useDirectProviderNow {
                     guard await ensureBridgeStarted() else {
                         throw BridgeError.notRunning
                     }
@@ -2717,15 +2739,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                     let result = await ChatToolExecutor.execute(toolCall)
                     log("OMI tool \(name) executed for callId=\(callId)")
-                    // Track SQL query stats for metadata
-                    if name == "execute_sql" {
-                        sqlQueryCount += 1
-                        // Parse row count from result (format: "\nN row(s)" at end)
-                        if let match = result.range(of: #"(\d+) row\(s\)"#, options: .regularExpression) {
-                            let numStr = result[match].components(separatedBy: " ").first ?? "0"
-                            sqlRowsReturned += Int(numStr) ?? 0
-                        }
-                    }
+                    await sqlToolUsageStats.record(toolName: name, result: result)
                     return result
                 }
                 let toolActivityHandler: AgentBridge.ToolActivityHandler = {
@@ -2829,6 +2843,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
             // Determine the final text to display and save
             let messageText: String
+            let sqlToolUsageSnapshot = await sqlToolUsageStats.snapshot()
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
@@ -2845,8 +2860,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     hasScreenshot: imageData != nil,
                     screenshotSizeBytes: imageData?.count,
                     toolNames: toolNames,
-                    sqlRowsReturned: sqlRowsReturned,
-                    sqlQueryCount: sqlQueryCount
+                    sqlRowsReturned: sqlToolUsageSnapshot.rowsReturned,
+                    sqlQueryCount: sqlToolUsageSnapshot.queryCount
                 )
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {

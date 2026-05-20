@@ -85,6 +85,14 @@ final class HybridChatClientTests: XCTestCase {
   override func setUp() {
     super.setUp()
     ChatProviderCapture.reset()
+    UserDefaults.standard.removeObject(forKey: "codex_auth_enrolled")
+    UserDefaults.standard.removeObject(forKey: "codex_preferred_model")
+  }
+
+  override func tearDown() {
+    UserDefaults.standard.removeObject(forKey: "codex_auth_enrolled")
+    UserDefaults.standard.removeObject(forKey: "codex_preferred_model")
+    super.tearDown()
   }
 
   func testChatSlotResolutionBuildsProviderConfig() {
@@ -125,6 +133,68 @@ final class HybridChatClientTests: XCTestCase {
     XCTAssertEqual(result.model, "stub-model")
   }
 
+  func testImagePayloadUsesChatCompletionsContentParts() async throws {
+    let session = capturedSession()
+    let response = slotResolution(
+      accountID: "chatgpt-plan",
+      baseURL: "http://127.0.0.1:10531/v1",
+      model: "gpt-5.4"
+    )
+
+    _ = try await HybridChatClient.complete(
+      systemPrompt: "system",
+      conversationMessages: [],
+      userMessage: "what is on screen?",
+      slotResolution: response,
+      imageData: Data([0x89, 0x50, 0x4E, 0x47]),
+      session: session
+    )
+
+    let body = try XCTUnwrap(ChatProviderCapture.bodies.first)
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+    let user = try XCTUnwrap(messages.last)
+    let content = try XCTUnwrap(user["content"] as? [[String: Any]])
+
+    XCTAssertEqual(content.first?["type"] as? String, "text")
+    XCTAssertEqual(content.first?["text"] as? String, "what is on screen?")
+    XCTAssertEqual(content.last?["type"] as? String, "image_url")
+    let imageURL = try XCTUnwrap(content.last?["image_url"] as? [String: Any])
+    XCTAssertTrue((imageURL["url"] as? String)?.hasPrefix("data:image/png;base64,") == true)
+  }
+
+  func testCodexActiveBypassesDaemonSlotResolution() async throws {
+    let tempAuth = try makeTempCodexHomeWithAuth()
+    defer { tempAuth.cleanup() }
+    UserDefaults.standard.set(true, forKey: "codex_auth_enrolled")
+    let session = capturedSession()
+
+    let result = try await HybridChatClient.completeWithActiveDirectProvider(
+      systemPrompt: "system",
+      conversationMessages: [],
+      userMessage: "hello",
+      session: session,
+      ensureCodexProxy: false
+    )
+
+    let request = try XCTUnwrap(ChatProviderCapture.requests.first)
+    XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:10531/v1/chat/completions")
+    XCTAssertEqual(result.providerAccountID, "chatgpt-plan")
+    XCTAssertEqual(result.slotSource, "chatgpt_plan")
+  }
+
+  func testCurrentRouteUsesCodexWhenActive() throws {
+    let tempAuth = try makeTempCodexHomeWithAuth()
+    defer { tempAuth.cleanup() }
+    UserDefaults.standard.set(true, forKey: "codex_auth_enrolled")
+
+    let route = HybridChatClient.currentRoute()
+
+    XCTAssertEqual(route.displayName, "ChatGPT plan")
+    XCTAssertTrue(route.usesDirectProvider)
+    XCTAssertTrue(route.supportsInlineImages)
+  }
+
   func testProviderAccountSwitchChangesRequestTargetAndModel() async throws {
     let session = capturedSession()
 
@@ -152,7 +222,9 @@ final class HybridChatClientTests: XCTestCase {
     )
 
     let requests = ChatProviderCapture.requests
-    XCTAssertEqual(requests.map { $0.url?.absoluteString }, [
+    XCTAssertEqual(
+      requests.map { $0.url?.absoluteString },
+      [
       "http://127.0.0.1:11434/v1/chat/completions",
       "http://localhost:43210/v1/chat/completions",
     ])
@@ -242,4 +314,39 @@ final class HybridChatClientTests: XCTestCase {
     )
     return HybridProviderPolicy.SlotResolutionResponse(resolved: resolved, resolution: resolution)
   }
+}
+
+private struct TempCodexHomeForHybridChat {
+  let path: String
+  let previous: String?
+
+  func cleanup() {
+    if let previous {
+      setenv("CODEX_HOME", previous, 1)
+    } else {
+      unsetenv("CODEX_HOME")
+    }
+    try? FileManager.default.removeItem(atPath: path)
+  }
+}
+
+private func makeTempCodexHomeWithAuth() throws -> TempCodexHomeForHybridChat {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("hybrid-chat-codex-auth-\(UUID().uuidString)")
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let authURL = dir.appendingPathComponent("auth.json")
+  let payload = """
+    {
+      "auth_mode": "chatgpt",
+      "tokens": {
+        "access_token": "test-access",
+        "refresh_token": "test-refresh",
+        "account_id": "acct-test"
+      }
+    }
+    """
+  try payload.write(to: authURL, atomically: true, encoding: .utf8)
+  let previous = ProcessInfo.processInfo.environment["CODEX_HOME"]
+  setenv("CODEX_HOME", dir.path, 1)
+  return TempCodexHomeForHybridChat(path: dir.path, previous: previous)
 }

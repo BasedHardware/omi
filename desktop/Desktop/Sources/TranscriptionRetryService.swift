@@ -23,6 +23,9 @@ class TranscriptionRetryService {
         if session.status == .completed {
             return session.backendId
         }
+        if try await markEmptyLocalDaemonSessionExhaustedIfNeeded(sessionId: sessionId) {
+            return nil
+        }
         let conversation = try await uploadSessionToLocalDaemon(session, sessionId: sessionId)
         return conversation.id
     }
@@ -230,6 +233,9 @@ class TranscriptionRetryService {
 
         do {
             if await APIClient.shared.isUsingLocalDaemon {
+                if try await markEmptyLocalDaemonSessionExhaustedIfNeeded(sessionId: sessionId) {
+                    return
+                }
                 try await uploadSessionToLocalDaemon(session, sessionId: sessionId)
                 return
             }
@@ -279,7 +285,9 @@ class TranscriptionRetryService {
         let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
         guard !segments.isEmpty else {
             try await TranscriptionStorage.shared.markSessionFailed(
-                id: sessionId, error: "No transcript segments to upload to local daemon")
+                id: sessionId,
+                error: "No transcript segments to upload to local daemon",
+                retryCount: maxRetries)
             throw APIError.httpError(statusCode: 400)
         }
 
@@ -301,6 +309,18 @@ class TranscriptionRetryService {
         try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
         log("TranscriptionRetryService: Session \(sessionId) stored in local daemon as \(conversation.id)")
         return conversation
+    }
+
+    private func markEmptyLocalDaemonSessionExhaustedIfNeeded(sessionId: Int64) async throws -> Bool {
+        let segmentCount = try await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+        guard segmentCount == 0 else { return false }
+
+        try await TranscriptionStorage.shared.markSessionFailed(
+            id: sessionId,
+            error: "No transcript segments to upload to local daemon",
+            retryCount: maxRetries)
+        log("TranscriptionRetryService: Exhausted empty local daemon session \(sessionId) without upload")
+        return true
     }
 
 }

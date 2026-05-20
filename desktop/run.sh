@@ -27,6 +27,7 @@ Options (via environment variables):
   OMI_HYBRID_DIRECT_STT_ENABLED   Hybrid Apple Speech live transcription in local daemon (default 1 in configure_local_daemon_mode when unset)
   OMI_HYBRID_DIRECT_CHAT_ENABLED   Hybrid OpenAI-compatible chat + daemon-backed sessions/messages (default 1 in configure_local_daemon_mode when unset)
   OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED  Optional hybrid direct embeddings for vector search (default 0 in local bundle; local wiki search does not require embeddings)
+  OMI_LOCAL_ASR_MANIFEST_URL="..." Production-shaped Local Whisper add-on manifest URL
   OMI_SKIP_STALE_BUNDLE_SCAN=1   Skip scanning $HOME for stale dev app bundles
 
 Required files for cloud backend mode:
@@ -672,6 +673,10 @@ if is_local_daemon_mode; then
     set_bundle_env "OMI_HYBRID_DIRECT_STT_ENABLED" "${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"
     set_bundle_env "OMI_HYBRID_DIRECT_CHAT_ENABLED" "${OMI_HYBRID_DIRECT_CHAT_ENABLED:-1}"
     set_bundle_env "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED" "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-0}"
+    if [ -n "${OMI_LOCAL_ASR_MANIFEST_URL:-}" ]; then
+        set_bundle_env "OMI_LOCAL_ASR_MANIFEST_URL" "$OMI_LOCAL_ASR_MANIFEST_URL"
+        substep "OMI_LOCAL_ASR_MANIFEST_URL=$OMI_LOCAL_ASR_MANIFEST_URL"
+    fi
     substep "OMI_DESKTOP_BACKEND_MODE=local"
     substep "OMI_LOCAL_DAEMON_URL=$OMI_LOCAL_DAEMON_URL"
     substep "OMI_HYBRID_DIRECT_STT_ENABLED=${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"

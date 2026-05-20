@@ -12,16 +12,40 @@ cargo run --quiet --manifest-path desktop/local-asr-helper/Cargo.toml -- --capab
 
 Runtime setup:
 
-- Set `OMI_LOCAL_ASR_PYTHON` to the Python executable that has the ASR runtime.
-  It defaults to `python3`.
+- The desktop add-on manager sets `OMI_LOCAL_ASR_PYTHON` to the managed runtime
+  after installing a production-shaped runtime/model artifact manifest.
 - MLX Whisper requires native Apple Silicon, `mlx-whisper`, and either a cached
   Hugging Face model or a local model directory set with
   `OMI_MLX_WHISPER_MODEL_DIR` or `OMI_MLX_WHISPER_MODEL_DIR_SMALL`.
 - faster-whisper requires `faster-whisper` and either a cached Hugging Face model
   or a local model directory set with `OMI_FASTER_WHISPER_MODEL_DIR` or
   `OMI_FASTER_WHISPER_MODEL_DIR_SMALL`.
-- For development only, `OMI_LOCAL_ASR_ALLOW_MODEL_DOWNLOAD=1` lets the Python
-  runtime resolve the default Hugging Face model names.
+- `OMI_LOCAL_ASR_ALLOW_MODEL_DOWNLOAD` is disabled for managed installs; model
+  directories come from the verified add-on manifest.
+- For local development, point `OMI_LOCAL_ASR_MANIFEST_URL` at fixture or staging
+  artifacts to exercise the same install path as production.
+- The repo-local fixture path is `make local-asr-fixture`, which writes a
+  manifest to `/tmp/omi-local-asr-fixture/manifest.json`. `make serve-local`
+  auto-injects that manifest when it exists while keeping the local-mode Rust
+  backend sentinel invalid.
+
+Distribution recommendation:
+
+- Do not rely on the user's shell Python for production installs. A macOS app
+  launched from Finder will not inherit pyenv/Homebrew environment, and system
+  Python cannot be assumed to contain MLX packages.
+- Keep the base app install small and make local Whisper an optional add-on:
+  install a managed ASR runtime under
+  `~/Library/Application Support/Omi/LocalASR`, then point
+  `local-asr-helper` at that managed Python and a managed model cache. The
+  Settings screen offers Install/Repair/Remove actions and re-runs
+  `--capabilities` after each action.
+- The production add-on installer never invokes pip, Homebrew, pyenv, or system
+  Python. It downloads Omi-hosted runtime and model zip artifacts from the
+  desktop backend manifest, verifies SHA-256 checksums, validates
+  `--capabilities`, and then atomically promotes the install.
+- Prefer MLX Whisper on native Apple Silicon and keep faster-whisper as a
+  non-MLX fallback only where it is intentionally supported.
 
 Real PCM smoke command:
 
