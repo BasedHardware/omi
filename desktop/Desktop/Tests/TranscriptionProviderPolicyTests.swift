@@ -494,6 +494,20 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
     XCTAssertTrue(decision.unsupportedLocalReason?.contains("backend force-processing") == true)
   }
 
+  func testAutoResolvedLocalBlocksBackgroundCaptureUntilLocalFinalizeExists() {
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .auto, quality: .balanced),
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .nativeAppleSilicon,
+        physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+        availableEngines: [.mlxWhisper]
+      )
+    )
+
+    XCTAssertFalse(decision.useCloudBackend)
+    XCTAssertTrue(decision.unsupportedLocalReason?.contains("backend force-processing") == true)
+  }
+
   func testExplicitLocalWithoutEngineDoesNotSilentlyUseCloudForBackground() {
     let decision = BackgroundTranscriptionRoutingGuard().decide(
       selection: TranscriptionProviderSelection(mode: .local, quality: .balanced),

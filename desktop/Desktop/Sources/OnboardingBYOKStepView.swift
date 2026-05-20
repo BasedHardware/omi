@@ -34,7 +34,7 @@ struct OnboardingBYOKStepView: View {
       eyebrow: "Free forever",
       title: "Choose transcription.",
       description:
-        "Use local Whisper when this Mac can support it, or keep the existing cloud transcription path. API keys are optional unless you want the free-forever plan.",
+        "Use local Whisper for Push-to-Talk when this Mac can support it, or keep the existing cloud transcription path for continuous background capture. API keys are optional unless you want the free-forever plan.",
       showsSkip: true,
       onSkip: {
         AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")

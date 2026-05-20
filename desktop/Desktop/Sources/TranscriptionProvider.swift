@@ -204,7 +204,7 @@ struct TranscriptionProviderOnboardingAdvisor {
         canRecommendLocal: true,
         title: "Use Local Whisper",
         detail:
-          "Recommended for this Mac. Voice notes stay on-device with local Whisper; background capture can use cloud when you choose it.",
+          "Recommended for this Mac. Push-to-Talk transcription stays on-device with local Whisper; continuous background capture still requires cloud transcription.",
         status: Self.statusText(for: result)
       )
     }

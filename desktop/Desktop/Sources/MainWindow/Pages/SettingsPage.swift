@@ -1090,7 +1090,8 @@ struct SettingsContentView: View {
             transcriptionProviderOption(
               mode: .auto,
               title: "Local First",
-              detail: "Use local Whisper when available; otherwise use cloud transcription.",
+              detail:
+                "Use local Whisper for Push-to-Talk when available; use cloud when local is unavailable or for background capture.",
               icon: "sparkle.magnifyingglass"
             )
 
