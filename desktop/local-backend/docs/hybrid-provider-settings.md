@@ -2,9 +2,80 @@
 
 ## Context
 
-Desktop hybrid mode (`OMI_DESKTOP_BACKEND_MODE=local`) stores provider credentials in the
+Desktop hybrid mode (`OMI_DESKTOP_BACKEND_MODE=local`) stores provider policy in the
 local daemon SQLite `settings` table. Requests go **directly** to configured endpoints,
 never through Omi Python/Rust proxies.
+
+The current durable policy key is `provider_policy`. Older raw provider keys are still
+read as a compatibility bridge while desktop UI migrates to the typed policy API.
+
+## Provider policy
+
+`provider_policy` is versioned JSON:
+
+```json
+{
+  "version": 1,
+  "provider_accounts": [
+    {
+      "id": "local-ollama",
+      "kind": "openai_compatible",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key": null,
+      "display_name": "Local Ollama",
+      "capabilities": {
+        "chat_completions": true,
+        "json_mode": true,
+        "tool_calls": false,
+        "vision": false,
+        "speech_to_text": false
+      },
+      "subscription_integration": null
+    }
+  ],
+  "model_slots": {
+    "post_transcript": {
+      "provider_account_id": "local-ollama",
+      "model_id": "llama3.2",
+      "options": {
+        "json_mode": true,
+        "tool_support": false
+      }
+    },
+    "memory_search": {
+      "provider_account_id": null,
+      "model_id": "local_wiki",
+      "options": {}
+    }
+  }
+}
+```
+
+Stable slot names are:
+
+| Slot | Purpose |
+|------|---------|
+| `chat` | Ask Omi / local chat completions |
+| `post_transcript` | Conversation title, overview, memories, and action items |
+| `proactive` | Proactive local intelligence |
+| `vision` | Screenshot / OCR-adjacent multimodal model calls |
+| `stt` | Speech-to-text provider policy |
+| `memory_search` | Local memory retrieval policy |
+
+`memory_search` is `local_wiki` for this local profile and does not require
+`embedding_provider` or embeddings readiness.
+
+## Provider policy API
+
+Desktop clients should prefer these daemon APIs over manual JSON editing:
+
+- `GET /v1/provider-policy` returns the typed policy plus legacy-derived slots.
+- `PUT /v1/provider-policy` validates and persists the typed policy.
+- `GET /v1/provider-policy/resolve/{slot}` resolves one slot to its provider account,
+  model, options, and source (`provider_policy`, `legacy_setting`, or `default`).
+
+Callers should resolve `post_transcript`, `proactive`, and `chat` slots explicitly
+instead of duplicating the legacy setting-key scan order.
 
 ## Settings keys
 
@@ -18,6 +89,17 @@ never through Omi Python/Rust proxies.
 | `vision_provider` | Multimodal / screenshot models (epic 05+) | `openai_compatible`, `gemini_direct` (reserved) |
 
 Set a key to JSON `null` to clear it.
+
+Legacy mapping:
+
+| Legacy key | Typed slot |
+|------------|------------|
+| `ai_provider` | `post_transcript` |
+| `provider` | `post_transcript` fallback alias |
+| `chat_provider` | `chat` |
+| `vision_provider` | `vision` |
+| `stt_provider` | `stt` |
+| `embedding_provider` | accepted as legacy data only; not required for this profile |
 
 ## OpenAI-compatible object shape
 
@@ -36,7 +118,10 @@ Set a key to JSON `null` to clear it.
 identity/Firestore endpoints are **denied** (see `is_denied_provider_host` in
 `src/providers.rs`).
 
-Loopback and direct vendor APIs (OpenAI, Anthropic, Deepgram, etc.) are allowed.
+Loopback providers (`localhost`, `127.0.0.1`, `::1`) may omit an API key. Non-loopback
+providers must include `api_key` or an explicit `subscription_integration` value.
+Direct vendor APIs (OpenAI, Anthropic, Deepgram, etc.) are allowed when configured this
+way.
 
 ## Optional cloud tiers (desktop only)
 
@@ -82,4 +167,6 @@ Build proxy: `cd desktop/codex-proxy && cargo build --release`
 ## Test connection
 
 `POST /v1/settings/test-provider` with body `{ "key": "ai_provider" }` runs a minimal
-request against the configured provider (chat completions ping for `openai_compatible`).
+request against a legacy configured provider (chat completions ping for
+`openai_compatible`). New UI should read and write policy through `/v1/provider-policy`
+and use `/v1/provider-policy/resolve/{slot}` before making task-specific calls.

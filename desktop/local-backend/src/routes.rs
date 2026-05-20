@@ -27,6 +27,14 @@ pub fn router() -> Router<AppState> {
         .route("/v1/settings", get(list_settings).put(update_settings))
         .route("/v1/settings/test-provider", post(test_provider))
         .route(
+            "/v1/provider-policy",
+            get(get_provider_policy).put(update_provider_policy),
+        )
+        .route(
+            "/v1/provider-policy/resolve/:slot",
+            get(resolve_provider_slot),
+        )
+        .route(
             "/v1/conversations",
             get(list_conversations).post(create_conversation),
         )
@@ -306,9 +314,7 @@ async fn update_conversation(
         Some(Value::Null) => Some(None),
         Some(Value::String(s)) => Some(Some(s)),
         Some(_) => {
-            return Err(ApiError::bad_request(
-                "folder_id must be a string or null",
-            ));
+            return Err(ApiError::bad_request("folder_id must be a string or null"));
         }
     };
     if let Some(Some(ref fid)) = folder_id {
@@ -872,6 +878,29 @@ async fn test_provider(
     })))
 }
 
+async fn get_provider_policy(State(state): State<AppState>) -> ApiResult<Value> {
+    let policy = providers::load_provider_policy(&state.store).map_err(ApiError::internal)?;
+    Ok(Json(json!({ "provider_policy": policy })))
+}
+
+async fn update_provider_policy(
+    State(state): State<AppState>,
+    Json(policy): Json<providers::ProviderPolicy>,
+) -> ApiResult<Value> {
+    let policy = providers::save_provider_policy(&state.store, policy)
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({ "provider_policy": policy })))
+}
+
+async fn resolve_provider_slot(
+    State(state): State<AppState>,
+    Path(slot): Path<String>,
+) -> ApiResult<Value> {
+    let resolved =
+        providers::resolve_model_slot(&state.store, &slot).map_err(ApiError::internal)?;
+    Ok(Json(json!({ "resolved": resolved })))
+}
+
 async fn list_processing_jobs(State(state): State<AppState>) -> ApiResult<Value> {
     let jobs = state
         .store
@@ -1084,12 +1113,7 @@ async fn list_chat_sessions(
     let sessions = state
         .store
         .chat_sessions()
-        .list_sessions(
-            limit,
-            offset,
-            query.app_id.as_deref(),
-            query.starred,
-        )
+        .list_sessions(limit, offset, query.app_id.as_deref(), query.starred)
         .map_err(ApiError::internal)?;
     Ok(Json(sessions))
 }

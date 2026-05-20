@@ -352,10 +352,7 @@ pub struct ConversationFolder {
     pub is_default: bool,
     #[serde(rename = "is_system")]
     pub is_system: bool,
-    #[serde(
-        rename = "category_mapping",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "category_mapping", skip_serializing_if = "Option::is_none")]
     pub category_mapping: Option<String>,
     #[serde(rename = "conversation_count")]
     pub conversation_count: i64,
@@ -581,7 +578,11 @@ impl Store {
     }
 
     /// Merge [`source_ids.len()`] ≥ 2 conversations into one new conversation.
-    pub fn merge_conversations(&self, source_ids: &[String], _reprocess: bool) -> Result<Conversation> {
+    pub fn merge_conversations(
+        &self,
+        source_ids: &[String],
+        _reprocess: bool,
+    ) -> Result<Conversation> {
         if source_ids.len() < 2 {
             anyhow::bail!("at least two conversation_ids required");
         }
@@ -746,13 +747,7 @@ impl Store {
                     sync_version = sync_version + 1
                 WHERE id = ?5 AND deleted_at IS NULL
                 "#,
-                params![
-                    new_id,
-                    seg.session_id,
-                    idx_i,
-                    now,
-                    seg.id,
-                ],
+                params![new_id, seg.session_id, idx_i, now, seg.id,],
             )
             .context("merge: reattach transcript segment")?;
         }
@@ -810,12 +805,13 @@ impl FolderRepository {
 
     pub fn exists_active(&self, id: &str) -> Result<bool> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
-            params![id],
-            |row| row.get(0),
-        )
-        .context("folder exists")?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
+                params![id],
+                |row| row.get(0),
+            )
+            .context("folder exists")?;
         Ok(count > 0)
     }
 
@@ -910,7 +906,8 @@ impl FolderRepository {
         )
         .context("insert folder")?;
         drop(conn);
-        self.get(&new.id)?.ok_or_else(|| anyhow::anyhow!("folder missing after insert"))
+        self.get(&new.id)?
+            .ok_or_else(|| anyhow::anyhow!("folder missing after insert"))
     }
 
     pub fn update(&self, id: &str, update: UpdateFolder) -> Result<Option<ConversationFolder>> {
@@ -966,7 +963,9 @@ impl FolderRepository {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         if let Some(target) = move_to_folder_id {
             if target == id {
-                return Err(anyhow::anyhow!("move_to_folder_id must differ from deleted folder"));
+                return Err(anyhow::anyhow!(
+                    "move_to_folder_id must differ from deleted folder"
+                ));
             }
             let exists: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM folders WHERE id = ?1 AND deleted_at IS NULL",
@@ -2687,7 +2686,10 @@ impl ChatSessionsRepository {
                     "#,
                 )?;
                 let rows = stmt
-                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, limit, offset], map_row)?
+                    .query_map(
+                        params![LOCAL_DEFAULT_CHAT_SESSION_ID, limit, offset],
+                        map_row,
+                    )?
                     .collect::<Result<Vec<_>, _>>()?;
                 rows
             }
@@ -2703,7 +2705,10 @@ impl ChatSessionsRepository {
                     "#,
                 )?;
                 let rows = stmt
-                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, aid, limit, offset], map_row)?
+                    .query_map(
+                        params![LOCAL_DEFAULT_CHAT_SESSION_ID, aid, limit, offset],
+                        map_row,
+                    )?
                     .collect::<Result<Vec<_>, _>>()?;
                 rows
             }
@@ -2720,7 +2725,10 @@ impl ChatSessionsRepository {
                     "#,
                 )?;
                 let rows = stmt
-                    .query_map(params![LOCAL_DEFAULT_CHAT_SESSION_ID, st_i, limit, offset], map_row)?
+                    .query_map(
+                        params![LOCAL_DEFAULT_CHAT_SESSION_ID, st_i, limit, offset],
+                        map_row,
+                    )?
                     .collect::<Result<Vec<_>, _>>()?;
                 rows
             }
@@ -2749,7 +2757,11 @@ impl ChatSessionsRepository {
         Ok(sessions)
     }
 
-    pub fn create_session(&self, title: Option<&str>, app_id: Option<&str>) -> Result<ChatSessionDto> {
+    pub fn create_session(
+        &self,
+        title: Option<&str>,
+        app_id: Option<&str>,
+    ) -> Result<ChatSessionDto> {
         let conn = self.conn.lock().expect("SQLite connection mutex poisoned");
         let now = Utc::now();
         let id = deterministic_id(
@@ -2876,7 +2888,8 @@ impl ChatSessionsRepository {
                     LIMIT ?2 OFFSET ?3
                     "#,
                 )?;
-                let rows = stmt.query_map(params![session_id, limit, offset], Self::map_message_row)?
+                let rows = stmt
+                    .query_map(params![session_id, limit, offset], Self::map_message_row)?
                     .collect::<Result<Vec<_>, _>>()?;
                 rows
             }
@@ -2890,9 +2903,12 @@ impl ChatSessionsRepository {
                     LIMIT ?3 OFFSET ?4
                     "#,
                 )?;
-                let rows =
-                    stmt.query_map(params![session_id, aid, limit, offset], Self::map_message_row)?
-                        .collect::<Result<Vec<_>, _>>()?;
+                let rows = stmt
+                    .query_map(
+                        params![session_id, aid, limit, offset],
+                        Self::map_message_row,
+                    )?
+                    .collect::<Result<Vec<_>, _>>()?;
                 rows
             }
         };
@@ -3360,13 +3376,19 @@ mod tests {
             )?
             .expect("update");
 
-        let conv = store.conversations().get("conv-fld")?.expect("conversation");
+        let conv = store
+            .conversations()
+            .get("conv-fld")?
+            .expect("conversation");
         assert_eq!(conv.folder_id.as_deref(), Some("fld-crm"));
 
         store.folders().soft_delete("fld-crm", None)?;
         assert!(store.folders().get("fld-crm")?.is_none());
 
-        let unfiled = store.conversations().get("conv-fld")?.expect("conversation");
+        let unfiled = store
+            .conversations()
+            .get("conv-fld")?
+            .expect("conversation");
         assert!(unfiled.folder_id.is_none());
 
         Ok(())

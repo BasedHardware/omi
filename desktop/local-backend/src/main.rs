@@ -306,12 +306,76 @@ mod tests {
             Method::PUT,
             "/v1/settings",
             Some(json!({
-                "provider": {"kind": "openai"},
+                "provider": {
+                    "kind": "openai",
+                    "base_url": "http://127.0.0.1:11434/v1"
+                },
                 "local_first": true
             })),
         )
         .await?;
         assert_eq!(settings["settings"].as_array().unwrap().len(), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_policy_routes_read_update_and_resolve_slots() -> Result<()> {
+        let app = test_app()?;
+
+        let updated = request_json(
+            app.clone(),
+            Method::PUT,
+            "/v1/provider-policy",
+            Some(json!({
+                "version": 1,
+                "provider_accounts": [{
+                    "id": "local-openai",
+                    "kind": "openai_compatible",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "api_key": null,
+                    "display_name": "Local OpenAI-compatible",
+                    "capabilities": {
+                        "chat_completions": true,
+                        "json_mode": true,
+                        "tool_calls": false,
+                        "vision": false,
+                        "speech_to_text": false
+                    },
+                    "subscription_integration": null
+                }],
+                "model_slots": {
+                    "post_transcript": {
+                        "provider_account_id": "local-openai",
+                        "model_id": "llama3.2",
+                        "options": {"json_mode": true, "tool_support": false}
+                    },
+                    "memory_search": {
+                        "provider_account_id": null,
+                        "model_id": "local_wiki",
+                        "options": {}
+                    }
+                }
+            })),
+        )
+        .await?;
+        assert_eq!(
+            updated["provider_policy"]["model_slots"]["post_transcript"]["model_id"],
+            "llama3.2"
+        );
+
+        let policy = request_json(app.clone(), Method::GET, "/v1/provider-policy", None).await?;
+        assert_eq!(policy["provider_policy"]["version"], 1);
+
+        let resolved = request_json(
+            app,
+            Method::GET,
+            "/v1/provider-policy/resolve/post_transcript",
+            None,
+        )
+        .await?;
+        assert_eq!(resolved["resolved"]["model_id"], "llama3.2");
+        assert_eq!(resolved["resolved"]["source"], "provider_policy");
 
         Ok(())
     }
@@ -813,7 +877,10 @@ mod tests {
 
         let folders =
             request_json(app.clone(), Method::GET, "/v1/conversation-folders", None).await?;
-        assert_eq!(folders["folders"].as_array().expect("folders array").len(), 1);
+        assert_eq!(
+            folders["folders"].as_array().expect("folders array").len(),
+            1
+        );
 
         let conv_a = request_json(
             app.clone(),
@@ -899,9 +966,13 @@ mod tests {
         )
         .await?;
 
-        let unfiled =
-            request_json(app.clone(), Method::GET, &format!("/v1/conversations/{merged_id}"), None)
-                .await?;
+        let unfiled = request_json(
+            app.clone(),
+            Method::GET,
+            &format!("/v1/conversations/{merged_id}"),
+            None,
+        )
+        .await?;
         assert!(unfiled["conversation"]["folder_id"].is_null());
 
         Ok(())
