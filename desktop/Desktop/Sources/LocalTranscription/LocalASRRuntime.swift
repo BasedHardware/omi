@@ -133,6 +133,242 @@ struct LocalASRHelperClient {
   }
 }
 
+enum LocalASRHelperLocator {
+  static let environmentKey = "OMI_LOCAL_ASR_HELPER_PATH"
+
+  static func defaultExecutableURL(
+    environment: [String: String] = ProcessInfo.processInfo.environment,
+    bundle: Bundle = .main,
+    fileManager: FileManager = .default
+  ) -> URL? {
+    if let override = environment[environmentKey], !override.isEmpty {
+      let url = URL(fileURLWithPath: override)
+      return fileManager.isExecutableFile(atPath: url.path) ? url : nil
+    }
+
+    let bundleCandidates = [
+      bundle.url(forResource: "local-asr-helper", withExtension: nil),
+      bundle.resourceURL?.appendingPathComponent("local-asr-helper"),
+    ].compactMap { $0 }
+
+    if let bundled = bundleCandidates.first(where: {
+      fileManager.isExecutableFile(atPath: $0.path)
+    }) {
+      return bundled
+    }
+
+    #if DEBUG
+      let currentDirectory = URL(fileURLWithPath: fileManager.currentDirectoryPath)
+      let debugCandidates = [
+        currentDirectory.appendingPathComponent("local-asr-helper/target/debug/local-asr-helper"),
+        currentDirectory.appendingPathComponent(
+          "../local-asr-helper/target/debug/local-asr-helper"),
+        currentDirectory.appendingPathComponent(
+          "../../local-asr-helper/target/debug/local-asr-helper"),
+        currentDirectory.appendingPathComponent(
+          "desktop/local-asr-helper/target/debug/local-asr-helper"),
+      ]
+      return debugCandidates.first { fileManager.isExecutableFile(atPath: $0.path) }
+    #else
+      return nil
+    #endif
+  }
+
+  static func detectedEngines(executableURL: URL? = defaultExecutableURL())
+    -> Set<LocalTranscriptionEngine>
+  {
+    guard executableURL != nil else { return [] }
+    return Set(LocalTranscriptionEngine.allCases)
+  }
+}
+
+struct LocalASRBatchTranscriber {
+  typealias RequestHandler = (LocalASRTranscriptionRequest) async throws
+    -> LocalASRTranscriptionResponse
+
+  var requestHandler: RequestHandler
+  var temporaryDirectory: URL
+  var fileManager: FileManager
+  var makeRequestId: () -> String
+
+  init(
+    executableURL: URL,
+    timeoutSeconds: TimeInterval = 60,
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    fileManager: FileManager = .default,
+    makeRequestId: @escaping () -> String = { UUID().uuidString }
+  ) {
+    let client = LocalASRHelperClient(executableURL: executableURL, timeoutSeconds: timeoutSeconds)
+    self.init(
+      requestHandler: { request in
+        try await client.transcribe(request)
+      },
+      temporaryDirectory: temporaryDirectory,
+      fileManager: fileManager,
+      makeRequestId: makeRequestId
+    )
+  }
+
+  init(
+    requestHandler: @escaping RequestHandler,
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    fileManager: FileManager = .default,
+    makeRequestId: @escaping () -> String = { UUID().uuidString }
+  ) {
+    self.requestHandler = requestHandler
+    self.temporaryDirectory = temporaryDirectory
+    self.fileManager = fileManager
+    self.makeRequestId = makeRequestId
+  }
+
+  func transcribe(
+    audioData: Data,
+    language: String,
+    plan: LocalTranscriptionPlan
+  ) async throws -> [NormalizedTranscriptSegment] {
+    let requestId = makeRequestId()
+    let audioURL = temporaryDirectory.appendingPathComponent("\(requestId).pcm")
+    try audioData.write(to: audioURL, options: .atomic)
+    defer { try? fileManager.removeItem(at: audioURL) }
+
+    let response = try await requestHandler(
+      LocalASRTranscriptionRequest(
+        requestId: requestId,
+        audioPath: audioURL.path,
+        language: language,
+        sampleRate: 16000,
+        channels: 1,
+        engine: plan.engine,
+        model: plan.model,
+        fixtureSegments: nil
+      )
+    )
+
+    var merger = LocalTranscriptMerger()
+    return merger.merge(response.segments.map { $0.normalized() })
+  }
+}
+
+struct PTTBatchTranscriptionResult: Equatable {
+  var provider: TranscriptionProviderKind
+  var transcript: String?
+  var fallbackReason: String?
+}
+
+struct PTTBatchTranscriptionRouter {
+  typealias CloudTranscriber = (Data, String, [String]) async throws -> String?
+  typealias LocalTranscriber = (Data, String, LocalTranscriptionPlan) async throws
+    -> [NormalizedTranscriptSegment]
+
+  var selection: () -> TranscriptionProviderSelection
+  var capabilities: () -> LocalTranscriptionCapabilities
+  var cloudTranscribe: CloudTranscriber
+  var localTranscribe: LocalTranscriber
+  var policy: TranscriptionProviderPolicy
+
+  init(
+    selection: @escaping () -> TranscriptionProviderSelection = { .default },
+    capabilities: @escaping () -> LocalTranscriptionCapabilities = {
+      LocalTranscriptionCapabilityDetector(
+        availableEngines: { LocalASRHelperLocator.detectedEngines() }
+      ).detect()
+    },
+    cloudTranscribe: @escaping CloudTranscriber = { audioData, language, keywords in
+      try await TranscriptionService.batchTranscribe(
+        audioData: audioData,
+        language: language,
+        contextKeywords: keywords
+      )
+    },
+    localTranscribe: @escaping LocalTranscriber = { audioData, language, plan in
+      guard let executableURL = LocalASRHelperLocator.defaultExecutableURL() else {
+        throw TranscriptionService.TranscriptionError.webSocketError(
+          "Local ASR helper is not available"
+        )
+      }
+      return try await LocalASRBatchTranscriber(executableURL: executableURL).transcribe(
+        audioData: audioData,
+        language: language,
+        plan: plan
+      )
+    },
+    policy: TranscriptionProviderPolicy = TranscriptionProviderPolicy()
+  ) {
+    self.selection = selection
+    self.capabilities = capabilities
+    self.cloudTranscribe = cloudTranscribe
+    self.localTranscribe = localTranscribe
+    self.policy = policy
+  }
+
+  func transcribe(audioData: Data, language: String, contextKeywords: [String]) async throws
+    -> PTTBatchTranscriptionResult
+  {
+    let currentSelection = selection()
+    let resolved = policy.resolve(selection: currentSelection, capabilities: capabilities())
+
+    if resolved.provider == .local, let plan = resolved.localPlan {
+      let segments = try await localTranscribe(audioData, language, plan)
+      let transcript = segments.map(\.text).joined(separator: " ")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return PTTBatchTranscriptionResult(
+        provider: .local,
+        transcript: transcript.isEmpty ? nil : transcript,
+        fallbackReason: resolved.fallbackReason
+      )
+    }
+
+    if currentSelection.mode == .local {
+      throw TranscriptionService.TranscriptionError.webSocketError(
+        resolved.fallbackReason ?? "No local transcription engine is available"
+      )
+    }
+
+    let transcript = try await cloudTranscribe(audioData, language, contextKeywords)
+    return PTTBatchTranscriptionResult(
+      provider: .cloud,
+      transcript: transcript,
+      fallbackReason: resolved.fallbackReason
+    )
+  }
+}
+
+struct BackgroundTranscriptionRoutingDecision: Equatable {
+  var useCloudBackend: Bool
+  var unsupportedLocalReason: String?
+}
+
+struct BackgroundTranscriptionRoutingGuard {
+  var policy: TranscriptionProviderPolicy = TranscriptionProviderPolicy()
+
+  func decide(
+    selection: TranscriptionProviderSelection,
+    capabilities: LocalTranscriptionCapabilities
+  ) -> BackgroundTranscriptionRoutingDecision {
+    let resolved = policy.resolve(selection: selection, capabilities: capabilities)
+    if selection.mode == .local, resolved.provider != .local {
+      return BackgroundTranscriptionRoutingDecision(
+        useCloudBackend: false,
+        unsupportedLocalReason: resolved.fallbackReason
+          ?? "No local transcription engine is available"
+      )
+    }
+
+    guard resolved.provider == .local else {
+      return BackgroundTranscriptionRoutingDecision(
+        useCloudBackend: true,
+        unsupportedLocalReason: resolved.fallbackReason
+      )
+    }
+
+    return BackgroundTranscriptionRoutingDecision(
+      useCloudBackend: false,
+      unsupportedLocalReason:
+        "Local background transcription is not available until local finalization can persist conversations without backend force-processing."
+    )
+  }
+}
+
 struct LocalTranscriptMerger {
   private(set) var segments: [NormalizedTranscriptSegment] = []
   private let duplicateOverlapThreshold: Double

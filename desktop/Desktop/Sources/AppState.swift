@@ -1276,6 +1276,24 @@ class AppState: ObservableObject {
 
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource
+    let backgroundRouting = BackgroundTranscriptionRoutingGuard().decide(
+      selection: AssistantSettings.shared.transcriptionProviderSelection,
+      capabilities: LocalTranscriptionCapabilityDetector(
+        availableEngines: { LocalASRHelperLocator.detectedEngines() }
+      ).detect()
+    )
+    if !backgroundRouting.useCloudBackend {
+      let message =
+        backgroundRouting.unsupportedLocalReason
+        ?? "Local background transcription is not available yet."
+      log("Transcription: \(message)")
+      showAlert(
+        title: "Local Background Transcription Unavailable",
+        message:
+          "Local transcription is currently available for Push-to-Talk batch mode. Choose cloud transcription to use background capture."
+      )
+      return
+    }
 
     // For BLE device, check if device is connected
     if effectiveSource == .bleDevice {

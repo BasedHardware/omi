@@ -47,6 +47,7 @@ class PushToTalkManager: ObservableObject {
   private var isCurrentSessionFollowUp = false
   private var currentContextSnapshot: PTTContextSnapshot?
   private var contextCaptureTask: Task<Void, Never>?
+  private var currentTranscriptionProvider: TranscriptionProviderKind = .cloud
 
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
@@ -220,6 +221,7 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
+    currentTranscriptionProvider = .cloud
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
 
@@ -262,6 +264,7 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       lastInterimText = ""
       currentContextSnapshot = nil
+      currentTranscriptionProvider = .cloud
       let preOverlayImage = ScreenCaptureManager.captureScreenImage()
       captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     }
@@ -302,6 +305,7 @@ class PushToTalkManager: ObservableObject {
     batchAudioLock.lock()
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
+    currentTranscriptionProvider = .cloud
     isCurrentSessionFollowUp = false
     updateBarState()
   }
@@ -357,6 +361,7 @@ class PushToTalkManager: ObservableObject {
       }
 
       barState?.voiceTranscript = "Transcribing..."
+      let providerSelection = AssistantSettings.shared.transcriptionProviderSelection
 
       Task {
         do {
@@ -367,26 +372,34 @@ class PushToTalkManager: ObservableObject {
             "PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), pttLanguage=\(language), selectedLanguage=\(AssistantSettings.shared.transcriptionLanguage), autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect)"
           )
 
-          var transcript = try await TranscriptionService.batchTranscribe(
+          let router = PTTBatchTranscriptionRouter(selection: { providerSelection })
+          var result = try await router.transcribe(
             audioData: audioData,
             language: language,
             contextKeywords: self.currentContextSnapshot?.keywords ?? []
           )
+          self.currentTranscriptionProvider = result.provider
+          if let reason = result.fallbackReason {
+            log("PushToTalkManager: provider policy fallback: \(reason)")
+          }
 
-          if (transcript == nil || transcript?.isEmpty == true) && language != "en"
+          if result.provider == .cloud
+            && (result.transcript == nil || result.transcript?.isEmpty == true)
+            && language != "en"
             && language != "multi" && audioSeconds < 5.0
           {
             log(
               "PushToTalkManager: selected language returned empty on short audio, retrying with 'en'"
             )
-            transcript = try await TranscriptionService.batchTranscribe(
+            result = try await router.transcribe(
               audioData: audioData,
               language: "en",
               contextKeywords: self.currentContextSnapshot?.keywords ?? []
             )
+            self.currentTranscriptionProvider = result.provider
           }
 
-          if let transcript, !transcript.isEmpty {
+          if let transcript = result.transcript, !transcript.isEmpty {
             self.transcriptSegments = [transcript]
           } else {
             log("PushToTalkManager: transcription returned empty after retry")
@@ -451,6 +464,8 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
+    let provider = currentTranscriptionProvider
+    currentTranscriptionProvider = .cloud
     updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
@@ -462,7 +477,7 @@ class PushToTalkManager: ObservableObject {
       let cleanedQuery = await PTTTranscriptPostProcessor.process(
         query,
         keywords: contextKeywords,
-        provider: .cloud
+        provider: provider
       )
       await MainActor.run {
         self?.sendQuery(cleanedQuery, wasFollowUp: wasFollowUp)

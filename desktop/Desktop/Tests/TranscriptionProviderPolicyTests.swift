@@ -258,6 +258,217 @@ final class LocalASRRuntimeTests: XCTestCase {
     XCTAssertEqual(result[0].start, 0.0)
     XCTAssertEqual(result[0].end, 3.2)
   }
+
+  func testLocalBatchTranscriberWritesPCMAndNormalizesMergedSegments() async throws {
+    var capturedRequest: LocalASRTranscriptionRequest?
+    let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "LocalASRRuntimeTests-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(
+      at: tempDirectory,
+      withIntermediateDirectories: true
+    )
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let transcriber = LocalASRBatchTranscriber(
+      requestHandler: { request in
+        capturedRequest = request
+        XCTAssertTrue(FileManager.default.fileExists(atPath: request.audioPath))
+        return LocalASRTranscriptionResponse(
+          requestId: request.requestId,
+          engine: request.engine,
+          model: request.model,
+          language: request.language,
+          segments: [
+            LocalASRTranscriptSegment(
+              id: "a",
+              speaker: 0,
+              text: "hello local",
+              start: 0,
+              end: 1
+            ),
+            LocalASRTranscriptSegment(
+              id: "b",
+              speaker: 0,
+              text: "local whisper",
+              start: 0.9,
+              end: 2
+            ),
+          ],
+          fixture: true
+        )
+      },
+      temporaryDirectory: tempDirectory,
+      makeRequestId: { "req-1" }
+    )
+
+    let result = try await transcriber.transcribe(
+      audioData: Data([1, 2, 3]),
+      language: "en",
+      plan: LocalTranscriptionPlan(engine: .mlxWhisper, model: .small, quality: .balanced)
+    )
+
+    XCTAssertEqual(
+      capturedRequest?.audioPath, tempDirectory.appendingPathComponent("req-1.pcm").path)
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: tempDirectory.appendingPathComponent("req-1.pcm").path)
+    )
+    XCTAssertEqual(result.map(\.text), ["hello local whisper"])
+  }
+}
+
+final class PTTBatchTranscriptionRouterTests: XCTestCase {
+  func testLocalProviderUsesHelperPathAndDoesNotCallCloud() async throws {
+    var cloudCalls = 0
+    var localPlan: LocalTranscriptionPlan?
+    let router = PTTBatchTranscriptionRouter(
+      selection: { TranscriptionProviderSelection(mode: .local, quality: .balanced) },
+      capabilities: {
+        LocalTranscriptionCapabilities(
+          processor: .nativeAppleSilicon,
+          physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+          availableEngines: [.mlxWhisper]
+        )
+      },
+      cloudTranscribe: { _, _, _ in
+        cloudCalls += 1
+        return "cloud transcript"
+      },
+      localTranscribe: { _, _, plan in
+        localPlan = plan
+        return [
+          LocalASRTranscriptSegment(
+            id: "local-1",
+            speaker: 0,
+            text: "local transcript",
+            start: 0,
+            end: 1
+          ).normalized()
+        ]
+      }
+    )
+
+    let result = try await router.transcribe(
+      audioData: Data([1]),
+      language: "en",
+      contextKeywords: ["Omi"]
+    )
+
+    XCTAssertEqual(result.provider, .local)
+    XCTAssertEqual(result.transcript, "local transcript")
+    XCTAssertEqual(localPlan?.engine, .mlxWhisper)
+    XCTAssertEqual(cloudCalls, 0)
+  }
+
+  func testCloudProviderKeepsExistingBatchPath() async throws {
+    var localCalls = 0
+    var capturedKeywords: [String] = []
+    let router = PTTBatchTranscriptionRouter(
+      selection: { TranscriptionProviderSelection(mode: .cloud, quality: .auto) },
+      capabilities: {
+        LocalTranscriptionCapabilities(
+          processor: .nativeAppleSilicon,
+          physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+          availableEngines: [.mlxWhisper]
+        )
+      },
+      cloudTranscribe: { _, _, keywords in
+        capturedKeywords = keywords
+        return "cloud transcript"
+      },
+      localTranscribe: { _, _, _ in
+        localCalls += 1
+        return []
+      }
+    )
+
+    let result = try await router.transcribe(
+      audioData: Data([1]),
+      language: "en",
+      contextKeywords: ["keyword"]
+    )
+
+    XCTAssertEqual(result.provider, .cloud)
+    XCTAssertEqual(result.transcript, "cloud transcript")
+    XCTAssertEqual(capturedKeywords, ["keyword"])
+    XCTAssertEqual(localCalls, 0)
+  }
+
+  func testExplicitLocalWithoutEngineDoesNotCallCloud() async {
+    var cloudCalls = 0
+    let router = PTTBatchTranscriptionRouter(
+      selection: { TranscriptionProviderSelection(mode: .local, quality: .auto) },
+      capabilities: {
+        LocalTranscriptionCapabilities(
+          processor: .nativeAppleSilicon,
+          physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+          availableEngines: []
+        )
+      },
+      cloudTranscribe: { _, _, _ in
+        cloudCalls += 1
+        return "cloud transcript"
+      },
+      localTranscribe: { _, _, _ in [] }
+    )
+
+    do {
+      _ = try await router.transcribe(
+        audioData: Data([1]),
+        language: "en",
+        contextKeywords: []
+      )
+      XCTFail("Expected explicit local mode without an engine to fail")
+    } catch {
+      XCTAssertEqual(cloudCalls, 0)
+      XCTAssertTrue(error.localizedDescription.contains("No local transcription engine"))
+    }
+  }
+}
+
+final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
+  func testAutoCloudFallbackAllowsBackgroundCloud() {
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .auto, quality: .auto),
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .intel,
+        physicalMemoryBytes: 8 * 1024 * 1024 * 1024,
+        availableEngines: []
+      )
+    )
+
+    XCTAssertTrue(decision.useCloudBackend)
+    XCTAssertNotNil(decision.unsupportedLocalReason)
+  }
+
+  func testResolvedLocalBlocksBackgroundCaptureUntilLocalFinalizeExists() {
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .local, quality: .balanced),
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .nativeAppleSilicon,
+        physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+        availableEngines: [.mlxWhisper]
+      )
+    )
+
+    XCTAssertFalse(decision.useCloudBackend)
+    XCTAssertTrue(decision.unsupportedLocalReason?.contains("backend force-processing") == true)
+  }
+
+  func testExplicitLocalWithoutEngineDoesNotSilentlyUseCloudForBackground() {
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .local, quality: .balanced),
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .nativeAppleSilicon,
+        physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+        availableEngines: []
+      )
+    )
+
+    XCTAssertFalse(decision.useCloudBackend)
+    XCTAssertEqual(decision.unsupportedLocalReason, "No local transcription engine is available")
+  }
 }
 
 final class PTTTranscriptPostProcessorTests: XCTestCase {
