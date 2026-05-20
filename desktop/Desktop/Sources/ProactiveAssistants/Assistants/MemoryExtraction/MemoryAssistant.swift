@@ -247,7 +247,13 @@ actor MemoryAssistant: ProactiveAssistant {
             log("Memory: Saved to SQLite (id: \(inserted.id ?? -1))")
             if !MemorySearchMode.usesVectorEmbeddings {
                 let title = memory.content.prefix(80).trimmingCharacters(in: .whitespacesAndNewlines)
-                let slug = MemoryWikiStorage.slugify(String(title))
+                let baseSlug = MemoryWikiStorage.slugify(String(title))
+                let slug: String
+                if let memoryId = inserted.id {
+                    slug = "\(baseSlug)-\(memoryId)"
+                } else {
+                    slug = baseSlug
+                }
                 Task {
                     _ = try? await MemoryWikiStorage.shared.upsertPage(
                         slug: slug,
