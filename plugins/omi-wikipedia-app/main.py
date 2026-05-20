@@ -5,6 +5,8 @@ Provides chat tools for searching Wikipedia, reading concise article summaries,
 and finding a random article for exploration.
 """
 
+from html import unescape
+import re
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -57,6 +59,16 @@ async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> di
 
 def _article_url(language: str, title: str) -> str:
     return f"https://{language}.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+
+
+def _clean_snippet(value: Optional[str]) -> str:
+    if not value:
+        return ""
+
+    text = unescape(value)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def _format_summary(data: dict[str, Any], language: str) -> str:
@@ -193,7 +205,7 @@ async def search_articles(payload: dict[str, Any]):
         lines = [f"Wikipedia search results for '{query}':"]
         for index, item in enumerate(results, start=1):
             title = item.get("title") or "Untitled"
-            snippet = (item.get("snippet") or "").replace("<span class=\"searchmatch\">", "").replace("</span>", "")
+            snippet = _clean_snippet(item.get("snippet"))
             lines.append(f"\n{index}. {title}")
             if snippet:
                 lines.append(f"   {snippet}")
