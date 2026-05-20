@@ -802,8 +802,8 @@ class _ManageStorageSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingWals.length;
-    final totalCount = provider.allWals.length;
+    final pendingCount = provider.pendingDeletableWals.length;
+    final totalCount = syncedCount + pendingCount;
 
     return Container(
       decoration: const BoxDecoration(
