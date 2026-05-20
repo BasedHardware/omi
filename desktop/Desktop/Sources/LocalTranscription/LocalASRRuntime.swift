@@ -187,6 +187,16 @@ enum LocalASRHelperLocator {
   static func detectedEngines(executableURL: URL? = defaultExecutableURL())
     -> Set<LocalTranscriptionEngine>
   {
+    let probe = { detectedEnginesBlocking(executableURL: executableURL) }
+    if Thread.isMainThread {
+      return DispatchQueue.global(qos: .userInitiated).sync(execute: probe)
+    }
+    return probe()
+  }
+
+  private static func detectedEnginesBlocking(executableURL: URL?)
+    -> Set<LocalTranscriptionEngine>
+  {
     guard let executableURL else { return [] }
     let process = Process()
     process.executableURL = executableURL
@@ -202,13 +212,13 @@ enum LocalASRHelperLocator {
       return []
     }
 
-    let deadline = Date().addingTimeInterval(8)
-    while process.isRunning && Date() < deadline {
-      Thread.sleep(forTimeInterval: 0.05)
-    }
     if process.isRunning {
-      process.terminate()
-      return []
+      let finished = DispatchSemaphore(value: 0)
+      process.terminationHandler = { _ in finished.signal() }
+      if finished.wait(timeout: .now() + 8) == .timedOut {
+        process.terminate()
+        return []
+      }
     }
     guard process.terminationStatus == 0 else { return [] }
 

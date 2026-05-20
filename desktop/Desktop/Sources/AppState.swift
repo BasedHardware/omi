@@ -2632,6 +2632,7 @@ class AppState: ObservableObject {
           let translatedSegments = try JSONDecoder().decode(
             [TranscriptionService.BackendSegment].self, from: data)
           log("Transcription: Translation event with \(translatedSegments.count) segments")
+          var updatedInMemorySegments = false
           for translated in translatedSegments {
             guard let segId = translated.id else { continue }
             let newTranslations = (translated.translations ?? []).map {
@@ -2642,7 +2643,7 @@ class AppState: ObservableObject {
             // Update in-memory if the segment is still loaded
             if let idx = speakerSegments.firstIndex(where: { $0.segmentId == segId }) {
               speakerSegments[idx].translations = newTranslations
-              speakerSegmentReducer.replaceSegments(speakerSegments)
+              updatedInMemorySegments = true
             }
 
             // Always persist to SQLite — even if the segment was trimmed from
@@ -2670,6 +2671,9 @@ class AppState: ObservableObject {
                 )
               }
             }
+          }
+          if updatedInMemorySegments {
+            speakerSegmentReducer.replaceSegments(speakerSegments)
           }
           LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
         } catch {

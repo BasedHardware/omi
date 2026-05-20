@@ -471,7 +471,6 @@ struct SpeakerSegmentReducer {
 
   mutating func replaceSegments(_ replacement: [SpeakerSegment]) {
     segments = replacement
-    totalWordCount = replacement.reduce(0) { $0 + wordCount($1.text) }
   }
 
   mutating func apply(_ incomingSegments: [SpeakerSegment]) -> ApplyResult {
