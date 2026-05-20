@@ -6,6 +6,7 @@ and fetching an item with top-level comments.
 """
 
 from html import unescape
+import re
 from typing import Any, Optional
 
 import requests
@@ -39,17 +40,16 @@ def _clean_text(value: Optional[str]) -> str:
         return ""
 
     text = unescape(value)
-    return (
+    text = (
         text.replace("<p>", "\n")
-        .replace("</p>", "")
-        .replace("<i>", "")
-        .replace("</i>", "")
         .replace("<pre>", "\n")
-        .replace("</pre>", "")
         .replace("<code>", "`")
         .replace("</code>", "`")
-        .strip()
     )
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _safe_limit(limit: Optional[int]) -> int:
