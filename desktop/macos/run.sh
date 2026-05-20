@@ -470,6 +470,17 @@ else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
 
+substep "Building Codex proxy (omi-codex-proxy)"
+CODEX_PROXY_DIR="$(dirname "$0")/codex-proxy"
+if [ -d "$CODEX_PROXY_DIR" ]; then
+    (cd "$CODEX_PROXY_DIR" && cargo build --release --quiet)
+    mkdir -p "$APP_BUNDLE/Contents/Resources"
+    cp -f "$CODEX_PROXY_DIR/target/release/omi-codex-proxy" "$APP_BUNDLE/Contents/Resources/omi-codex-proxy"
+    chmod +x "$APP_BUNDLE/Contents/Resources/omi-codex-proxy"
+else
+    echo "Warning: codex-proxy not found at $CODEX_PROXY_DIR"
+fi
+
 substep "Copying .env.app"
 if [ -f ".env.app.dev" ]; then
     cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"

@@ -122,6 +122,8 @@ def _is_trial_expired_uncached(uid: str) -> bool:
             return False
         if users_db.is_byok_active(uid):
             return False
+        if users_db.is_chatgpt_active(uid):
+            return False
         user_record = firebase_auth.get_user(uid)
         creation_ms = user_record.user_metadata.creation_timestamp
         if not creation_ms:
@@ -191,7 +193,12 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
         # carrying all 4 BYOK provider headers is treated as BYOK-active even if
         # Firestore hasn't caught up yet.
-        if plan_grants_desktop(plan, subscription) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
+        if (
+            plan_grants_desktop(plan, subscription)
+            or users_db.is_byok_active(uid)
+            or users_db.is_chatgpt_active(uid)
+            or _request_has_all_byok_keys()
+        ):
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
@@ -613,6 +620,10 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
         )
 
     # BYOK users pay their own LLM provider — no Omi-side cost to cap.
+    # ChatGPT/Codex tier: user pays OpenAI via subscription; LLM quota bypass only.
+    if users_db.is_chatgpt_active(uid):
+        return
+
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
