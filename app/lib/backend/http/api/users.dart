@@ -537,13 +537,9 @@ Future<bool> deleteDailySummary(String summaryId) async {
     method: 'DELETE',
     body: '',
   );
-  
-  return response?.statusCode == 200;
-
   if (response == null) return false;
   // 200 = deleted, 404 = already gone (treat as success — user expectation matches).
   return response.statusCode == 200 || response.statusCode == 404;
-
 }
 
 /// Generate a daily summary for a specific date (or today if not specified)
