@@ -9319,7 +9319,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Optagelser gemmes lokalt og uploades derefter til Omi, hvor de transskriberes og bliver til samtaler.';
+      'Optagelser overføres fra din Omi-enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og omdannes til samtaler.';
 
   @override
   String get syncStepUpload => 'Synkroniser';

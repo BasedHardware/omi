@@ -9332,7 +9332,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Tallenteet säilytetään paikallisesti ja ladataan sitten Omiin, jossa ne litteroidaan ja muutetaan keskusteluiksi.';
+      'Tallenteet siirretään Omi-laitteestasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.';
 
   @override
   String get syncStepUpload => 'Synkronoi';

@@ -9341,7 +9341,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Rekaman disimpan secara lokal, lalu diunggah ke Omi untuk ditranskripsi dan diubah menjadi percakapan.';
+      'Rekaman ditransfer dari perangkat Omi Anda ke ponsel ini dan disimpan secara lokal, lalu diunggah ke server Omi tempat rekaman ditranskripsikan dan diubah menjadi percakapan.';
 
   @override
   String get syncStepUpload => 'Sinkronkan';

@@ -9165,7 +9165,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '录音先在本地保存,然后上传到 Omi,在那里被转写并整理为对话。';
+  String get syncFlowIntro => '录音从您的 Omi 设备传输到此手机并本地存储，然后上传到 Omi 的服务器，在那里被转写并转换为对话。';
 
   @override
   String get syncStepUpload => '同步';

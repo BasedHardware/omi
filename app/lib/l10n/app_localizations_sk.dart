@@ -9325,7 +9325,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Nahrávky sa ukladajú lokálne a potom sa nahrávajú do Omi, kde sa prepíšu a premenia na konverzácie.';
+      'Nahrávky sa prenášajú z vášho zariadenia Omi do tohto telefónu a ukladajú sa lokálne, potom sa nahrávajú na server Omi, kde sa prepisujú a menia na konverzácie.';
 
   @override
   String get syncStepUpload => 'Synchronizácia';

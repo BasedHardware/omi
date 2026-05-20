@@ -9278,7 +9278,8 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => 'تُحفظ التسجيلات محليًا، ثم تُرفع إلى Omi حيث تُنسخ كنص وتتحول إلى محادثات.';
+  String get syncFlowIntro =>
+      'تُنقل التسجيلات من جهاز Omi الخاص بك إلى هذا الهاتف وتُخزَّن محلياً، ثم تُرفَع إلى خادم Omi حيث تُفرَّغ نصياً وتُحوَّل إلى محادثات.';
 
   @override
   String get syncStepUpload => 'المزامنة';

@@ -9378,7 +9378,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Înregistrările sunt păstrate local, apoi încărcate în Omi, unde sunt transcrise și transformate în conversații.';
+      'Înregistrările sunt transferate de pe dispozitivul Omi pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.';
 
   @override
   String get syncStepUpload => 'Sincronizare';

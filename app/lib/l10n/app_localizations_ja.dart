@@ -9179,7 +9179,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '録音はまず端末内に保存され、その後Omiにアップロードされて文字起こしされ、会話に変換されます。';
+  String get syncFlowIntro => '録音はOmiデバイスからこの電話に転送されてローカルに保存され、その後Omiのサーバーにアップロードされて文字起こしされ、会話に変換されます。';
 
   @override
   String get syncStepUpload => '同期';

@@ -9355,7 +9355,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Rakaman disimpan secara setempat, kemudian dimuat naik ke Omi untuk ditranskripsi dan ditukar menjadi perbualan.';
+      'Rakaman dipindahkan daripada peranti Omi anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi di mana ia ditranskripsikan dan ditukar menjadi perbualan.';
 
   @override
   String get syncStepUpload => 'Segerak';

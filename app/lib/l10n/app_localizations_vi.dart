@@ -9331,7 +9331,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Bản ghi được lưu cục bộ, sau đó tải lên Omi để chuyển thành văn bản và biến thành cuộc trò chuyện.';
+      'Bản ghi được chuyển từ thiết bị Omi của bạn sang điện thoại này và lưu cục bộ, sau đó được tải lên máy chủ của Omi để phiên âm và chuyển thành cuộc trò chuyện.';
 
   @override
   String get syncStepUpload => 'Đồng bộ';

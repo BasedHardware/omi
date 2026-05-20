@@ -9357,7 +9357,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Nagrania są przechowywane lokalnie, a następnie przesyłane do Omi, gdzie są transkrybowane i zamieniane w rozmowy.';
+      'Nagrania są przesyłane z urządzenia Omi do tego telefonu i zapisywane lokalnie, a następnie wysyłane na serwer Omi, gdzie są transkrybowane i zamieniane w rozmowy.';
 
   @override
   String get syncStepUpload => 'Synchronizacja';

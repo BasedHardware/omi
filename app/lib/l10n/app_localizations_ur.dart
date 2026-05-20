@@ -9350,7 +9350,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'ریکارڈنگز پہلے مقامی طور پر محفوظ ہوتی ہیں، پھر Omi پر اپ لوڈ ہو کر تحریری شکل میں ڈھل کر گفتگو بن جاتی ہیں۔';
+      'ریکارڈنگز آپ کے Omi ڈیوائس سے اس فون پر منتقل ہوتی ہیں اور مقامی طور پر محفوظ کی جاتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔';
 
   @override
   String get syncStepUpload => 'سنک';

@@ -9361,7 +9361,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Opnamen worden lokaal bewaard en daarna geüpload naar Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
+      'Opnames worden van je Omi-apparaat naar deze telefoon overgezet en lokaal opgeslagen, en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
 
   @override
   String get syncStepUpload => 'Synchroniseren';

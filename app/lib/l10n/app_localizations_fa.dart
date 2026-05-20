@@ -9336,7 +9336,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'ضبط‌ها به‌صورت محلی ذخیره می‌شوند، سپس به Omi بارگذاری می‌شوند تا رونویسی و به مکالمه تبدیل شوند.';
+      'ضبط‌ها از دستگاه Omi شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا متن‌برداری شده و به مکالمه تبدیل شوند.';
 
   @override
   String get syncStepUpload => 'همگام‌سازی';

@@ -9263,7 +9263,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => 'ההקלטות נשמרות מקומית ולאחר מכן מועלות ל-Omi שם הן מתועתקות והופכות לשיחות.';
+  String get syncFlowIntro =>
+      'ההקלטות מועברות ממכשיר Omi שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi שם הן מתומללות והופכות לשיחות.';
 
   @override
   String get syncStepUpload => 'סנכרון';

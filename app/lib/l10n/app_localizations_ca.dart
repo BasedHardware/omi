@@ -9387,7 +9387,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Les gravacions es guarden localment i després es pugen a Omi, on es transcriuen i es converteixen en converses.';
+      'Els enregistraments es transfereixen del teu dispositiu Omi a aquest telèfon i s\'emmagatzemen localment, després es pugen al servidor d\'Omi on es transcriuen i es converteixen en converses.';
 
   @override
   String get syncStepUpload => 'Sincronitza';

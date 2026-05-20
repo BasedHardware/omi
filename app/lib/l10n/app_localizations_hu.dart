@@ -9372,7 +9372,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'A felvételek helyben tárolódnak, majd az Omiba kerülnek, ahol leiratot készítenek belőlük és beszélgetésekké alakítják őket.';
+      'A felvételek átkerülnek az Omi eszközödről erre a telefonra, és helyileg tárolódnak, majd feltöltődnek az Omi szerverére, ahol átírják és beszélgetésekké alakítják őket.';
 
   @override
   String get syncStepUpload => 'Szinkronizálás';

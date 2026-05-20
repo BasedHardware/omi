@@ -9365,7 +9365,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Snimke se pohranjuju lokalno, a zatim se prenose u Omi gdje se transkribiraju i pretvaraju u razgovore.';
+      'Snimke se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, zatim se učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.';
 
   @override
   String get syncStepUpload => 'Sinkronizacija';

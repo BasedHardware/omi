@@ -9333,7 +9333,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Nahrávky se ukládají lokálně a poté se nahrávají do Omi, kde jsou přepsány a převedeny na konverzace.';
+      'Nahrávky se přenášejí z vašeho zařízení Omi do tohoto telefonu a ukládají se lokálně, poté se nahrávají na server Omi, kde se přepisují a převádějí na konverzace.';
 
   @override
   String get syncStepUpload => 'Synchronizace';

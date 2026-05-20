@@ -17394,7 +17394,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncFlowIntro.
   ///
   /// In en, this message translates to:
-  /// **'Recordings are stored locally, then uploaded to Omi where they\'re transcribed and turned into conversations.'**
+  /// **'Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.'**
   String get syncFlowIntro;
 
   /// No description provided for @syncStepUpload.

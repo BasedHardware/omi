@@ -9337,7 +9337,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Inspelningar sparas lokalt och laddas sedan upp till Omi där de transkriberas och blir till samtal.';
+      'Inspelningar överförs från din Omi-enhet till den här telefonen och lagras lokalt, och laddas sedan upp till Omis server där de transkriberas och förvandlas till konversationer.';
 
   @override
   String get syncStepUpload => 'Synkronisera';

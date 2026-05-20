@@ -9361,7 +9361,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Posnetki se hranijo lokalno in se nato naložijo v Omi, kjer se prepišejo in pretvorijo v pogovore.';
+      'Posnetki se prenesejo z vaše naprave Omi v ta telefon in shranijo lokalno, nato pa naložijo na strežnik Omi, kjer se prepišejo in pretvorijo v pogovore.';
 
   @override
   String get syncStepUpload => 'Sinhronizacija';

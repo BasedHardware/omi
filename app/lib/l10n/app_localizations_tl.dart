@@ -9418,7 +9418,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Iniimbak muna ang mga recording sa device, pagkatapos ay ina-upload sa Omi para i-transcribe at gawing mga usapan.';
+      'Inililipat ang mga recording mula sa iyong Omi device papunta sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan ito tina-transcribe at ginagawang mga pag-uusap.';
 
   @override
   String get syncStepUpload => 'I-sync';

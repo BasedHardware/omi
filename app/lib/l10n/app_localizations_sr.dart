@@ -9347,7 +9347,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Снимци се чувају локално, а затим се отпремају у Omi где се транскрибују и претварају у разговоре.';
+      'Снимци се преносе са вашег Omi уређаја на овај телефон и чувају локално, а затим се отпремају на Omi сервер где се транскрибују и претварају у разговоре.';
 
   @override
   String get syncStepUpload => 'Синхронизација';

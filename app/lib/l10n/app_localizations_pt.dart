@@ -9337,7 +9337,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'As gravações ficam salvas localmente e depois são enviadas ao Omi, onde são transcritas e transformadas em conversas.';
+      'As gravações são transferidas do seu dispositivo Omi para este telefone e armazenadas localmente, depois enviadas para o servidor da Omi, onde são transcritas e transformadas em conversas.';
 
   @override
   String get syncStepUpload => 'Sincronizar';

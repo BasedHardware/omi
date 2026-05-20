@@ -9353,7 +9353,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Ieraksti tiek saglabāti lokāli un pēc tam augšupielādēti Omi, kur tie tiek pārrakstīti un pārveidoti par sarunām.';
+      'Ieraksti tiek pārsūtīti no jūsu Omi ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.';
 
   @override
   String get syncStepUpload => 'Sinhronizēt';

@@ -9354,7 +9354,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Las grabaciones se guardan localmente y luego se suben a Omi, donde se transcriben y se convierten en conversaciones.';
+      'Las grabaciones se transfieren desde tu dispositivo Omi a este teléfono y se almacenan localmente, y luego se suben al servidor de Omi, donde se transcriben y se convierten en conversaciones.';
 
   @override
   String get syncStepUpload => 'Sincronizar';

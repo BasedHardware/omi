@@ -9330,7 +9330,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Salvestised hoitakse kohapeal ja seejärel laaditakse üles Omisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
+      'Salvestused kantakse sinu Omi seadmest sellesse telefoni ja salvestatakse kohapeal, seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
 
   @override
   String get syncStepUpload => 'Sünkrooni';

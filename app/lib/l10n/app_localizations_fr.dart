@@ -9416,7 +9416,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Les enregistrements sont d\'abord stockés localement, puis envoyés à Omi qui les transcrit et les transforme en conversations.';
+      'Les enregistrements sont transférés de votre appareil Omi vers ce téléphone et stockés localement, puis téléversés sur le serveur d\'Omi où ils sont transcrits et convertis en conversations.';
 
   @override
   String get syncStepUpload => 'Synchroniser';

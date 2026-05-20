@@ -9330,7 +9330,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Recordings are stored locally, then uploaded to Omi where they\'re transcribed and turned into conversations.';
+      'Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
 
   @override
   String get syncStepUpload => 'Sync';

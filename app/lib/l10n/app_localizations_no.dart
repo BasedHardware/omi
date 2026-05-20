@@ -9329,7 +9329,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Opptak lagres lokalt og lastes deretter opp til Omi, der de transkriberes og blir til samtaler.';
+      'Opptak overføres fra Omi-enheten din til denne telefonen og lagres lokalt, og lastes deretter opp til Omis server, der de transkriberes og gjøres om til samtaler.';
 
   @override
   String get syncStepUpload => 'Synkroniser';

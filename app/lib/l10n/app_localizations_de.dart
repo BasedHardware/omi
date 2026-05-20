@@ -9410,7 +9410,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Aufnahmen werden lokal gespeichert und anschließend zu Omi hochgeladen, wo sie transkribiert und in Gespräche umgewandelt werden.';
+      'Aufnahmen werden von deinem Omi-Gerät auf dieses Telefon übertragen und lokal gespeichert, anschließend auf den Server von Omi hochgeladen, wo sie transkribiert und in Unterhaltungen umgewandelt werden.';
 
   @override
   String get syncStepUpload => 'Synchronisieren';

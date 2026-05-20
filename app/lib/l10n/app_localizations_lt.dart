@@ -9346,7 +9346,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Įrašai saugomi vietoje, tada įkeliami į Omi, kur transkribuojami ir paverčiami pokalbiais.';
+      'Įrašai perduodami iš jūsų Omi įrenginio į šį telefoną ir saugomi vietoje, paskui įkeliami į Omi serverį, kur jie transkribuojami ir paverčiami pokalbiais.';
 
   @override
   String get syncStepUpload => 'Sinchronizuoti';

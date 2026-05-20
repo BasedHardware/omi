@@ -9345,7 +9345,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Kayıtlar önce cihazda saklanır, ardından Omi\'ye yüklenir; burada metne dökülerek konuşmalara dönüştürülür.';
+      'Kayıtlar Omi cihazınızdan bu telefona aktarılır ve yerel olarak saklanır, ardından Omi\'nin sunucusuna yüklenerek metne dönüştürülür ve konuşmalara çevrilir.';
 
   @override
   String get syncStepUpload => 'Eşitle';

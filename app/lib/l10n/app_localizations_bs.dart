@@ -9359,7 +9359,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Snimke se čuvaju lokalno, a zatim se prenose u Omi gdje se transkribiraju i pretvaraju u razgovore.';
+      'Snimci se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, a zatim se učitavaju na Omijev server gdje se transkribuju i pretvaraju u razgovore.';
 
   @override
   String get syncStepUpload => 'Sinkronizacija';

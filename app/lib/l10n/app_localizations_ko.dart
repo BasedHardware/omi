@@ -9181,7 +9181,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '녹음은 기기에 저장된 다음 Omi에 업로드되어 텍스트로 변환되고 대화로 만들어집니다.';
+  String get syncFlowIntro => '녹음은 Omi 기기에서 이 휴대전화로 전송되어 로컬에 저장된 후, Omi 서버로 업로드되어 텍스트로 변환되고 대화로 만들어집니다.';
 
   @override
   String get syncStepUpload => '동기화';
