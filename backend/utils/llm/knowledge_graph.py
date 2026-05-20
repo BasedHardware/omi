@@ -260,7 +260,13 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
-    futures = [storage_executor.submit(process_memory, m) for m in memories]
+    _kg_sem = threading.Semaphore(10)
+
+    def _bounded_process_memory(m):
+        with _kg_sem:
+            return process_memory(m)
+
+    futures = [storage_executor.submit(_bounded_process_memory, m) for m in memories]
     for future in as_completed(futures):
         try:
             result = future.result()
