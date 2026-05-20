@@ -15,6 +15,9 @@ dump/
 node_modules
 yarn.lock
 
+# Cursor (agent-generated plans; rules/hooks remain tracked)
+.cursor/plans/
+
 # Coordination (AI agent collab manifests)
 .coordination/
 
@@ -30,6 +33,7 @@ yarn.lock
 build/
 dist/
 .build/
+**/.build-*/
 .swiftpm/
 **/target/
 
