@@ -10,6 +10,8 @@ venv/
 .DS_Store
 dump/
 /scripts/
+!/scripts/
+!/scripts/hybrid-local.sh
 *.zip
 *.wav
 node_modules
