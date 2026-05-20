@@ -695,7 +695,7 @@ class MemoriesViewModel: ObservableObject {
     guard !newMemoryText.isEmpty else { return }
 
     do {
-      _ = try await APIClient.shared.createMemory(content: newMemoryText)
+      _ = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
       showingAddMemory = false
       newMemoryText = ""
       await loadMemories()
