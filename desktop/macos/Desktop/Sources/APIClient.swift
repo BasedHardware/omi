@@ -98,6 +98,10 @@ actor APIClient {
       headers[provider.headerName] = entry.key
     }
 
+    if let chatgptFingerprint = CodexAuthService.enrollmentFingerprintIfActive() {
+      headers["X-ChatGPT-Fingerprint"] = chatgptFingerprint
+    }
+
     return headers
   }
 

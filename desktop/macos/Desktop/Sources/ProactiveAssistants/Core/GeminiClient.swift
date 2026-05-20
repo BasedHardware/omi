@@ -185,8 +185,11 @@ actor GeminiClient {
     case codexOpenAICompatible
   }
 
-  private let transport: Transport
   private let model: String
+
+  private var transport: Transport {
+    CodexAuthService.isActive ? .codexOpenAICompatible : .geminiProxy
+  }
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
@@ -262,15 +265,14 @@ actor GeminiClient {
     // so installed test bundles launched from Finder still have AI features.
     self.model = model
     self.fallbackModel = fallbackModel
+    if !CodexAuthService.isActive && Self.proxyBaseURL.isEmpty {
+      throw GeminiClientError.missingAPIKey
+    }
     if CodexAuthService.isActive {
       self.transport = .codexOpenAICompatible
       return
     }
-    guard !Self.proxyBaseURL.isEmpty else {
-      throw GeminiClientError.missingAPIKey
-    }
     self.transport = .geminiProxy
-  }
 
   private func mapCodexError(_ error: CodexLLMClient.ClientError) -> GeminiClientError {
     switch error {

@@ -164,8 +164,10 @@ paths_timeout = {
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
+from utils.chatgpt import ChatGPTMiddleware
 
 app.add_middleware(BYOKMiddleware)
+app.add_middleware(ChatGPTMiddleware)
 
 
 @app.on_event("startup")

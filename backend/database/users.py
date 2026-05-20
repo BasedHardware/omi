@@ -250,6 +250,15 @@ def set_chatgpt_active(uid: str, fingerprint: str):
     )
 
 
+def touch_chatgpt_heartbeat(uid: str):
+    """Refresh ChatGPT tier heartbeat (called when a valid fingerprint is on the request)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {'chatgpt': {'last_seen_at': datetime.now(timezone.utc)}},
+        merge=True,
+    )
+
+
 def clear_chatgpt_active(uid: str):
     user_ref = db.collection('users').document(uid)
     user_ref.set(

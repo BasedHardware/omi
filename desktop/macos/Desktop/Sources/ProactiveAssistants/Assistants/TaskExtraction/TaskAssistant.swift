@@ -1343,9 +1343,9 @@ actor TaskAssistant: ProactiveAssistant {
             for hit in wikiHits {
                 results.append(
                     TaskSearchResult(
-                        id: hit.id,
-                        description: "\(hit.title): \(hit.snippet)",
-                        status: "active",
+                        id: 0,
+                        description: "[Memory wiki] \(hit.title): \(hit.snippet)",
+                        status: "wiki",
                         similarity: nil,
                         matchType: "wiki_fts",
                         relevanceScore: nil
