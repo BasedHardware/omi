@@ -194,6 +194,10 @@ actor GeminiClient {
   private let model: String
 
   private var transport: Transport {
+    Self.resolveTransport()
+  }
+
+  private static func resolveTransport() -> Transport {
     if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
       || CodexAuthService.isActive
     {
@@ -277,7 +281,7 @@ actor GeminiClient {
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored for cloud proxy mode.
     self.model = model
-    if transport == .geminiProxy && Self.proxyBaseURL.isEmpty {
+    if Self.resolveTransport() == .geminiProxy && Self.proxyBaseURL.isEmpty {
       throw GeminiClientError.missingAPIKey
     }
   }

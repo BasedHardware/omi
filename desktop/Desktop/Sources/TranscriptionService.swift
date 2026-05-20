@@ -721,7 +721,7 @@ class TranscriptionService {
         do {
             let json = try JSONSerialization.jsonObject(with: data)
 
-            if let array = json as? [[String: Any]] {
+            if json is [[String: Any]] {
                 // JSON array = transcript segments
                 let segments = try JSONDecoder().decode([BackendSegment].self, from: data)
                 if !segments.isEmpty {
