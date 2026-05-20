@@ -316,6 +316,44 @@ final class LocalASRRuntimeTests: XCTestCase {
     )
     XCTAssertEqual(result.map(\.text), ["hello local whisper"])
   }
+
+  func testDetectedEnginesUsesHelperCapabilityProbe() throws {
+    let helper = try makeExecutableHelper(
+      body:
+        #"printf '{"engines":[{"engine":"mlx-whisper","available":true},{"engine":"faster-whisper","available":false,"reason":"missing model"}]}'"#
+    )
+
+    let engines = LocalASRHelperLocator.detectedEngines(executableURL: helper)
+
+    XCTAssertEqual(engines, [.mlxWhisper])
+  }
+
+  func testDetectedEnginesReturnsEmptyOnProbeFailure() throws {
+    let helper = try makeExecutableHelper(body: "exit 2")
+
+    let engines = LocalASRHelperLocator.detectedEngines(executableURL: helper)
+
+    XCTAssertTrue(engines.isEmpty)
+  }
+
+  private func makeExecutableHelper(body: String) throws -> URL {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "LocalASRHelperLocatorTests-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let helper = directory.appendingPathComponent("local-asr-helper")
+    let script = "#!/bin/sh\n\(body)\n"
+    try script.write(to: helper, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o755],
+      ofItemAtPath: helper.path
+    )
+    addTeardownBlock {
+      try? FileManager.default.removeItem(at: directory)
+    }
+    return helper
+  }
 }
 
 final class PTTBatchTranscriptionRouterTests: XCTestCase {

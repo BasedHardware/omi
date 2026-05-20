@@ -54,6 +54,16 @@ struct LocalASRTranscriptionResponse: Codable, Equatable {
   }
 }
 
+struct LocalASRCapabilityResponse: Codable, Equatable {
+  var engines: [LocalASREngineCapability]
+}
+
+struct LocalASREngineCapability: Codable, Equatable {
+  var engine: LocalTranscriptionEngine
+  var available: Bool
+  var reason: String?
+}
+
 struct LocalASRTranscriptSegment: Codable, Equatable {
   var id: String?
   var speaker: Int?
@@ -177,8 +187,40 @@ enum LocalASRHelperLocator {
   static func detectedEngines(executableURL: URL? = defaultExecutableURL())
     -> Set<LocalTranscriptionEngine>
   {
-    guard executableURL != nil else { return [] }
-    return Set(LocalTranscriptionEngine.allCases)
+    guard let executableURL else { return [] }
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = ["--capabilities"]
+
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = Pipe()
+
+    do {
+      try process.run()
+    } catch {
+      return []
+    }
+
+    let deadline = Date().addingTimeInterval(8)
+    while process.isRunning && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    if process.isRunning {
+      process.terminate()
+      return []
+    }
+    guard process.terminationStatus == 0 else { return [] }
+
+    let outputData = output.fileHandleForReading.readDataToEndOfFile()
+    guard
+      let response = try? JSONDecoder.localASR.decode(
+        LocalASRCapabilityResponse.self, from: outputData)
+    else {
+      return []
+    }
+
+    return Set(response.engines.filter(\.available).map(\.engine))
   }
 }
 
