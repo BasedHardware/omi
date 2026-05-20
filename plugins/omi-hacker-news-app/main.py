@@ -9,7 +9,7 @@ from html import unescape
 import re
 from typing import Any, Optional
 
-import requests
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -40,12 +40,10 @@ def _clean_text(value: Optional[str]) -> str:
         return ""
 
     text = unescape(value)
-    text = (
-        text.replace("<p>", "\n")
-        .replace("<pre>", "\n")
-        .replace("<code>", "`")
-        .replace("</code>", "`")
-    )
+    text = re.sub(r"</?(p|pre|blockquote|ul|ol|li)[^>]*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<code[^>]*>", "`", text, flags=re.IGNORECASE)
+    text = re.sub(r"</code>", "`", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -58,12 +56,9 @@ def _safe_limit(limit: Optional[int]) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    response = requests.get(
-        f"{ALGOLIA_BASE_URL}{path}",
-        params=params,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
+async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        response = await client.get(f"{ALGOLIA_BASE_URL}{path}", params=params)
     response.raise_for_status()
     return response.json()
 
@@ -181,7 +176,7 @@ async def get_omi_tools_manifest():
 async def get_front_page(payload: dict[str, Any]):
     try:
         limit = _safe_limit(payload.get("limit"))
-        data = _request_json("/search", {"tags": "front_page", "hitsPerPage": limit})
+        data = await _request_json("/search", {"tags": "front_page", "hitsPerPage": limit})
         hits = data.get("hits", [])[:limit]
 
         if not hits:
@@ -189,7 +184,7 @@ async def get_front_page(payload: dict[str, Any]):
 
         stories = [_format_story(hit, index) for index, hit in enumerate(hits, start=1)]
         return ChatToolResponse(result="Current Hacker News front page:\n\n" + "\n\n".join(stories))
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Hacker News request failed: {exc}")
 
 
@@ -203,7 +198,7 @@ async def search_stories(payload: dict[str, Any]):
         limit = _safe_limit(payload.get("limit"))
         sort_by = payload.get("sort_by") or "relevance"
         endpoint = "/search_by_date" if sort_by == "date" else "/search"
-        data = _request_json(endpoint, {"query": query, "tags": "story", "hitsPerPage": limit})
+        data = await _request_json(endpoint, {"query": query, "tags": "story", "hitsPerPage": limit})
         hits = data.get("hits", [])[:limit]
 
         if not hits:
@@ -211,7 +206,7 @@ async def search_stories(payload: dict[str, Any]):
 
         stories = [_format_story(hit, index) for index, hit in enumerate(hits, start=1)]
         return ChatToolResponse(result=f"Hacker News stories for '{query}':\n\n" + "\n\n".join(stories))
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Hacker News search failed: {exc}")
 
 
@@ -222,8 +217,8 @@ async def get_discussion(payload: dict[str, Any]):
         return ChatToolResponse(error="Missing required field: item_id")
 
     try:
-        comment_limit = _safe_limit(payload.get("comment_limit") or 5)
-        item = _request_json(f"/items/{int(item_id)}")
+        comment_limit = _safe_limit(payload.get("comment_limit"))
+        item = await _request_json(f"/items/{int(item_id)}")
 
         title = item.get("title") or "(untitled)"
         author = item.get("author") or "unknown"
@@ -256,5 +251,5 @@ async def get_discussion(payload: dict[str, Any]):
         return ChatToolResponse(result="\n".join(lines))
     except (ValueError, TypeError):
         return ChatToolResponse(error="item_id must be an integer")
-    except requests.RequestException as exc:
+    except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"Hacker News discussion request failed: {exc}")
