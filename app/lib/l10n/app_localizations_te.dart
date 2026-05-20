@@ -9433,4 +9433,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'మరిన్ని చెల్లింపు పద్ధతులు త్వరలో';
 }

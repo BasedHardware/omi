@@ -9387,4 +9387,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
 }

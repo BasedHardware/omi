@@ -9314,4 +9314,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'אין עדיין הקלטות מסונכרנות';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'אמצעי תשלום נוספים בקרוב';
 }

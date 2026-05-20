@@ -17486,6 +17486,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No synced recordings yet'**
   String get noSyncedRecordingsYet;
+
+  /// Placeholder card text shown under available payment methods
+  ///
+  /// In en, this message translates to:
+  /// **'More payment methods coming soon'**
+  String get morePaymentMethodsComingSoon;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9388,4 +9388,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Inga synkroniserade inspelningar än';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Fler betalningsmetoder kommer snart';
 }

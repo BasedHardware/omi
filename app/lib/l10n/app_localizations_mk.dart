@@ -9433,4 +9433,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Сè уште нема синхронизирани записи';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Наскоро повеќе начини на плаќање';
 }

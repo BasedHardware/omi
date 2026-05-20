@@ -9423,4 +9423,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
 }

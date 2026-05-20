@@ -9417,4 +9417,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Пока нет синхронизированных записей';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Скоро добавим новые способы оплаты';
 }

@@ -9396,4 +9396,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Henüz senkronize edilmiş kayıt yok';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
 }

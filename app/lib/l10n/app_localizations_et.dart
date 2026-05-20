@@ -9381,4 +9381,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Sünkroonitud salvestisi pole veel';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Peagi rohkem makseviise';
 }

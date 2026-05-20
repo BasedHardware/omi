@@ -9438,4 +9438,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Encara no hi ha enregistraments sincronitzats';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Aviat hi haurà més mètodes de pagament';
 }

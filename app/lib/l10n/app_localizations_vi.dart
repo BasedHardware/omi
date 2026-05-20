@@ -9381,4 +9381,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Chưa có bản ghi nào được đồng bộ';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Sắp có thêm phương thức thanh toán';
 }

@@ -9329,4 +9329,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'لا توجد تسجيلات متزامنة بعد';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'المزيد من طرق الدفع قريبًا';
 }

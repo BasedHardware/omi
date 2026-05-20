@@ -9380,4 +9380,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Ingen synkroniserte opptak ennå';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Flere betalingsmåter kommer snart';
 }
